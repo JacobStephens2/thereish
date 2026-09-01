@@ -1,0 +1,1 @@
+I want to make a game which plays with meaning. Maybe it could even use an LLM somehow. I want it more than anything else to be fun.
