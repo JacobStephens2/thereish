@@ -43,7 +43,7 @@ defmodule Mix.Tasks.Keeper.Bench do
               {it.id, f, r}
             end
 
-          {c, %{model: cfg.model, warm: warm, latency: latency, hedged: hedged, repeat: repeat, ordering: ordering}}
+          {c, %{model: "#{cfg.model} (#{cfg.effort})", warm: warm, latency: latency, hedged: hedged, repeat: repeat, ordering: ordering}}
         end)
       end)
       |> Task.await_many(:infinity)

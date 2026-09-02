@@ -4,7 +4,7 @@ defmodule Keeper.Config do
   Prices are $ per million tokens {input, output}, from each provider's pricing page on 2026-09-02.
   """
 
-  alias Keeper.Adapter.{Anthropic, Baseten, Fake, OpenAI}
+  alias Keeper.Adapter.{Anthropic, Baseten, Fake, Fireworks, Gemini, OpenAI}
 
   @roles %{
     # Author: frontier tier, unattended, latency irrelevant (design law 13).
@@ -23,7 +23,15 @@ defmodule Keeper.Config do
     glm: %{adapter: Baseten, model: "zai-org/GLM-5.3-Flash", effort: "low", max_tokens: 160},
     sonnet: %{adapter: Anthropic, model: "claude-sonnet-5", effort: "low", max_tokens: 400},
     opus: %{adapter: Anthropic, model: "claude-opus-5", effort: "low", max_tokens: 400},
-    luna: %{adapter: OpenAI, model: "gpt-5.6-luna", effort: "low", max_tokens: 400}
+    luna: %{adapter: OpenAI, model: "gpt-5.6-luna", effort: "low", max_tokens: 400},
+    # Added 2026-09-02 at Jacob's suggestion; thinking floor is "low" on both.
+    gemini37: %{adapter: Gemini, model: "gemini-3.7-flash", effort: "low", max_tokens: 400},
+    gemini38: %{adapter: Gemini, model: "gemini-3.8-flash", effort: "low", max_tokens: 400},
+    # Added 2026-09-02 at Jacob's suggestion ("DeepSeek V4 Flash 0731 (max)"); the low and none arms are for comparison.
+    # Reasoning tokens count against max_tokens, so the max arm gets room to think.
+    deepseek_max: %{adapter: Fireworks, model: "accounts/fireworks/models/deepseek-v4-flash-0731", effort: "max", max_tokens: 4_000},
+    deepseek_low: %{adapter: Fireworks, model: "accounts/fireworks/models/deepseek-v4-flash-0731", effort: "low", max_tokens: 1_000},
+    deepseek_none: %{adapter: Fireworks, model: "accounts/fireworks/models/deepseek-v4-flash-0731", effort: "none", max_tokens: 400}
   }
 
   @prices %{
@@ -34,6 +42,11 @@ defmodule Keeper.Config do
     "zai-org/GLM-5.3-Flash" => {0.15, 0.50},
     "gpt-5.6-sol" => {4.0, 20.0},
     "gpt-5.6-luna" => {0.20, 1.20},
+    # Google's promotional rate through 2026-12-31 ($1.50 / $7.50 after); output includes thinking tokens.
+    "gemini-3.7-flash" => {0.75, 3.75},
+    "gemini-3.8-flash" => {0.75, 3.75},
+    # Fireworks serverless standard tier; reasoning tokens are in completion_tokens.
+    "accounts/fireworks/models/deepseek-v4-flash-0731" => {0.22, 0.66},
     "fake" => {0.0, 0.0}
   }
 

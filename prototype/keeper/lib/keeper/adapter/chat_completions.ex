@@ -17,7 +17,7 @@ defmodule Keeper.Adapter.ChatCompletions do
     }
 
     case HTTP.stream_post(base_url <> "/chat/completions", headers, Jason.encode!(body(req, style)), &on_event/2, state, opts) do
-      {:ok, %{error: nil} = st} -> {:ok, Keeper.Adapter.finish(req, st)}
+      {:ok, %{error: nil} = st} -> {:ok, Keeper.Adapter.finish(req, price_thoughts(st, style))}
       {:ok, %{error: err}} -> {:error, {:stream_error, err}}
       {:error, e} -> {:error, e}
     end
@@ -39,9 +39,16 @@ defmodule Keeper.Adapter.ChatCompletions do
     )
   end
 
-  # OpenAI's reasoning models reject `max_tokens`; Baseten's vLLM-style endpoint takes `max_tokens`.
+  # OpenAI's reasoning models reject `max_tokens`; Baseten's vLLM-style endpoint and Gemini's compat layer take `max_tokens`.
   defp max_tokens_key(:openai), do: :max_completion_tokens
-  defp max_tokens_key(:baseten), do: :max_tokens
+  defp max_tokens_key(_), do: :max_tokens
+
+  # Gemini's compat usage: completion_tokens excludes thoughts, total_tokens includes them. Bill the thoughts.
+  defp price_thoughts(%{usage: %{total_tokens: total, input_tokens: input, output_tokens: out}} = st, :gemini) when is_integer(total) do
+    %{st | usage: %{st.usage | output_tokens: total - input, reasoning_tokens: total - input - out}}
+  end
+
+  defp price_thoughts(st, _style), do: st
 
   defp on_event(%{data: "[DONE]"}, st), do: st
 
@@ -65,6 +72,7 @@ defmodule Keeper.Adapter.ChatCompletions do
             | usage: %{
                 input_tokens: u["prompt_tokens"] || 0,
                 output_tokens: u["completion_tokens"] || 0,
+                total_tokens: u["total_tokens"],
                 reasoning_tokens: get_in(u, ["completion_tokens_details", "reasoning_tokens"])
               }
           }
