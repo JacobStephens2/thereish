@@ -4,7 +4,7 @@ defmodule Keeper.Config do
   Prices are $ per million tokens {input, output}, from each provider's pricing page on 2026-09-02.
   """
 
-  alias Keeper.Adapter.{Anthropic, Baseten, Fake, Fireworks, Gemini, OpenAI}
+  alias Keeper.Adapter.{Anthropic, Baseten, Fake, Fireworks, Gemini, OpenAI, Together}
 
   @roles %{
     # Author: frontier tier, unattended, latency irrelevant (design law 13).
@@ -31,7 +31,10 @@ defmodule Keeper.Config do
     # Reasoning tokens count against max_tokens, so the max arm gets room to think.
     deepseek_max: %{adapter: Fireworks, model: "accounts/fireworks/models/deepseek-v4-flash-0731", effort: "max", max_tokens: 4_000},
     deepseek_low: %{adapter: Fireworks, model: "accounts/fireworks/models/deepseek-v4-flash-0731", effort: "low", max_tokens: 1_000},
-    deepseek_none: %{adapter: Fireworks, model: "accounts/fireworks/models/deepseek-v4-flash-0731", effort: "none", max_tokens: 400}
+    deepseek_none: %{adapter: Fireworks, model: "accounts/fireworks/models/deepseek-v4-flash-0731", effort: "none", max_tokens: 400},
+    # Jacob's ask (2026-09-02): "Kimi K3 max". Not yet run: TOGETHER_AI_API_KEY was not injected into the session.
+    kimi_max: %{adapter: Together, model: "moonshotai/Kimi-K3", effort: "max", max_tokens: 8_000},
+    kimi_low: %{adapter: Together, model: "moonshotai/Kimi-K3", effort: "low", max_tokens: 2_000}
   }
 
   @prices %{
@@ -47,6 +50,8 @@ defmodule Keeper.Config do
     "gemini-3.8-flash" => {0.75, 3.75},
     # Fireworks serverless standard tier; reasoning tokens are in completion_tokens.
     "accounts/fireworks/models/deepseek-v4-flash-0731" => {0.22, 0.66},
+    # Together serverless; thinking billed as output.
+    "moonshotai/Kimi-K3" => {3.0, 15.0},
     "fake" => {0.0, 0.0}
   }
 

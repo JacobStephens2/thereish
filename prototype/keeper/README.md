@@ -26,7 +26,18 @@ mix keeper.scribe                                   # one "Last time, …" sente
 
 `mix keeper.probe` and `mix keeper.scribe` cost cents; `mix keeper.author` at the default `effort: "max"` costs up to ~$2
 and ~8 minutes per clover Page (see REPORT.md Q1). Every task also runs without keys: add `--fake` (deterministic stand-in adapter). Keys are read from
-`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BASETEN_API_KEY` and never printed or written.
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BASETEN_API_KEY`, `GEMINI_API_KEY`, `FIREWORKS_API_KEY` and never printed or written.
+Assayer candidates (`--candidates`): `glm`, `sonnet`, `opus`, `luna`, `gemini37`, `gemini38`, `deepseek_max`, `deepseek_low`, `deepseek_none`,
+`kimi_max`, `kimi_low` (the Kimi arms need `TOGETHER_AI_API_KEY`; not yet run, see REPORT.md).
+
+Still to run once `TOGETHER_AI_API_KEY` is injected (`va refresh`, relaunch):
+
+```sh
+curl -s https://api.together.xyz/v1/models -H "Authorization: Bearer $TOGETHER_AI_API_KEY" | grep -o '"id":"moonshotai/Kimi-K3"'   # confirm the id
+mix keeper.bench --n 20 --candidates kimi_max,kimi_low --label mac-3
+mix keeper.assay --candidates kimi_max,kimi_low
+# and from the VPS, with TOGETHER_AI_API_KEY added to keeper.env: keeper.bench --n 20 --candidates kimi_max,kimi_low --label vps-3
+```
 
 Every request prints one line (role, model, ttft, total, tokens, cost, stop reason) and every response its
 validated JSON. Runs append to `PROTOTYPE-calls.log` (gitignored). The verdict cache is in memory;
