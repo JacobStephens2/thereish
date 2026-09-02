@@ -9,9 +9,12 @@ S="$(cd "$(dirname "$0")/.." && pwd)"
 LABEL="${LABEL:-vps}"
 BENCH_ARGS="${BENCH_ARGS:---label vps}"
 umask 077
-printf 'ANTHROPIC_API_KEY=%s\nOPENAI_API_KEY=%s\nBASETEN_API_KEY=%s\nGEMINI_API_KEY=%s\nFIREWORKS_API_KEY=%s\n' "$ANTHROPIC_API_KEY" "$OPENAI_API_KEY" "$BASETEN_API_KEY" "$GEMINI_API_KEY" "$FIREWORKS_API_KEY" > "$S/PROTOTYPE-keeper.env"
-ssh jacob@stephens.page 'umask 077; cat > ~/keeper.env; chmod 600 ~/keeper.env; ls -l ~/keeper.env' < "$S/PROTOTYPE-keeper.env"
-rm -f "$S/PROTOTYPE-keeper.env"
+ENVFILE="$(mktemp "${TMPDIR:-/tmp}/keeper-env.XXXXXX")"   # outside the worktree, mode 600 (umask 077)
+for name in ANTHROPIC_API_KEY OPENAI_API_KEY BASETEN_API_KEY GEMINI_API_KEY FIREWORKS_API_KEY TOGETHER_AI_API_KEY; do
+  [ -n "${(P)name}" ] && printf '%s=%s\n' "$name" "${(P)name}" >> "$ENVFILE"
+done
+ssh jacob@stephens.page 'umask 077; cat > ~/keeper.env; chmod 600 ~/keeper.env; ls -l ~/keeper.env' < "$ENVFILE"
+rm -f "$ENVFILE"
 ssh jacob@stephens.page 'mkdir -p ~/keeper-results && chmod 777 ~/keeper-results; set +e; docker run --rm --env-file ~/keeper.env -v ~/keeper-results:/app/results keeper-proto keeper.bench --n 20 '"$BENCH_ARGS"'; code=$?; rm -f ~/keeper.env; echo "container exit $code; env file removed: $(ls ~/keeper.env 2>&1)"'
 scp -q jacob@stephens.page:~/keeper-results/bench-$LABEL.md jacob@stephens.page:~/keeper-results/bench-$LABEL.json "$S/results/"
 ls -l "$S/results/bench-$LABEL."*
