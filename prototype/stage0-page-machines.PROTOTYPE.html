@@ -52,6 +52,11 @@
   .tabs button[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
   .card{display:inline-block;border:1px solid #cdc4b8;border-radius:7px;padding:5px 10px;margin:0 6px 6px 0;background:#fff}
   .slotrow{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+  .ringcard{display:flex;align-items:center;gap:8px;margin:2px 0;font-weight:600}
+  .ringclue{border-left:3px solid var(--accent-soft);margin:0 0 0 26px;padding:8px 0 8px 16px;
+            display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+  .ringclue .muted{font-size:13px}
+  .wrapclue{border-left:3px dashed var(--accent-soft)}
   .muted{color:var(--dim)}
   .beat{color:var(--accent);font-weight:600}
   small{color:var(--dim)}
@@ -661,13 +666,18 @@ function renderSeat(seat){
   if(!s.page){ h += '<p class="muted">Waiting for the Author.</p>'; el.innerHTML = h; return; }
 
   if(s.kind === 'clover'){
-    h += '<p class="muted">Your clover — write one clue that fits <em>both</em> words of each pair. '+
-         '<small>(The “stand-in” buttons type deliberate nonsense so a walkthrough can skip the thinking — '+
-         'a real Author writes real clues.)</small></p>';
+    h += '<p class="muted">Your four cards sit in a <strong>ring</strong>. Each clue is written on the '+
+         '<em>edge between two neighbours</em> and must fit <strong>both</strong> of their words — '+
+         'so every card is squeezed by the clue above it and the clue below it. '+
+         '<small>(The “stand-in” buttons type deliberate nonsense so a walkthrough can skip the '+
+         'thinking — a real Author writes real clues.)</small></p>';
     v.myClover.forEach(p => {
       const ex = s.page.clovers[seat].exemplars[p.slot];
-      h += '<div class="slotrow">'+
-        '<span>pair '+(p.slot+1)+': '+chip(p.pair[0])+' + '+chip(p.pair[1])+'</span>'+
+      const last = p.slot === 3;
+      h += '<div class="ringcard">card '+(p.slot+1)+': '+chip(p.pair[0])+'</div>';
+      h += '<div class="ringclue'+(last?' wrapclue':'')+'">'+
+        '<span>clue '+(p.slot+1)+' — fits '+chip(p.pair[0])+' <em>and</em> '+chip(p.pair[1])+
+        (last ? ' <span class="muted">(card 4 back round to card 1 — the ring closes)</span>' : '')+'</span>'+
         '<input id="clue-'+seat+'-'+p.slot+'" value="'+(p.clue||'')+'" placeholder="one word">'+
         '<button data-act="clue" data-seat="'+seat+'" data-slot="'+p.slot+'">write</button>'+
         '<button data-act="clue-ex" data-seat="'+seat+'" data-slot="'+p.slot+'" title="a nonsense stand-in, so a walkthrough can skip the thinking">stand-in “'+ex+'”</button>'+
@@ -680,13 +690,20 @@ function renderSeat(seat){
       h += '<hr style="border:none;border-top:1px solid var(--line);margin:14px 0">';
       h += '<p class="muted">'+seatName(them)+"'s clues, and five cards — one is the Author's decoy.</p>";
       v.theirShuffledCards.forEach(c => h += '<span class="card">'+c.word+'</span>');
-      s.clues[them].forEach((c,i) => {
+      h += '<p class="muted">Rebuild her ring: four slots, five cards — <strong>one card is the '+
+           'decoy and belongs nowhere</strong>. Each clue sits between two slots and had to fit '+
+           '<em>both</em> the cards you put either side of it.</p>';
+      for(let i=0;i<4;i++){
         const opts = v.theirShuffledCards.map(c2 =>
           '<option value="'+c2.id+'"'+(v.myPlacements[i]===c2.id?' selected':'')+'>'+c2.word+'</option>').join('');
-        h += '<div class="slotrow">clue '+(i+1)+': <code>'+c+'</code> → slot '+(i+1)+
-             ' <select id="place-'+seat+'-'+i+'"><option value="">—</option>'+opts+'</select>'+
-             '<button data-act="place" data-seat="'+seat+'" data-slot="'+i+'">place</button></div>';
-      });
+        const last = i === 3;
+        h += '<div class="ringcard">slot '+(i+1)+': '+
+             '<select id="place-'+seat+'-'+i+'" data-act="place-select" data-seat="'+seat+'" data-slot="'+i+'">'+
+             '<option value="">—</option>'+opts+'</select></div>';
+        h += '<div class="ringclue'+(last?' wrapclue':'')+'">clue '+(i+1)+': <code>'+s.clues[them][i]+'</code> '+
+             '<span class="muted">— must fit the cards in slot '+(i+1)+' and slot '+(last?1:i+2)+
+             (last ? ' (the ring closes)' : '')+'</span></div>';
+      }
       h += '<button data-act="place-perfect" data-seat="'+seat+'">place them all correctly</button>';
       h += '<button data-act="place-decoy" data-seat="'+seat+'">fall for the decoy</button>';
       h += '<button class="primary" data-act="commit-guess" data-seat="'+seat+'">commit my guess</button>';
@@ -733,6 +750,11 @@ function renderLog(){
 }
 
 /* ------------------------------------------------------------- interaction */
+document.addEventListener('change', e => {
+  const sel = e.target.closest('select[data-act="place-select"]'); if(!sel) return;
+  dispatch({type:'place', seat:sel.dataset.seat, slot:+sel.dataset.slot, cardId:sel.value});
+});
+
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if(!b) return;
   const act = b.dataset.act; if(!act) return;
@@ -746,7 +768,6 @@ document.addEventListener('click', e => {
     return void dispatch({type:'write_clue', seat, slot, word:ex});
   }
   if(act === 'commit-clues') return void dispatch({type:'commit_clues', seat});
-  if(act === 'place') return void dispatch({type:'place', seat, slot, cardId:$('place-'+seat+'-'+slot).value});
   if(act === 'place-perfect'){
     const them = Game.other(seat);
     state.page.clovers[them].ring.forEach((id,i) => dispatch({type:'place', seat, slot:i, cardId:id}));
