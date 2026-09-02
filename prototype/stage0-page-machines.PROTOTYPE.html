@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTYPE — Page machines (Chronicle Clover &amp; Mind-Meld)</title>
+<style>
+  :root{
+    --ink:#1c1a17; --dim:#6b645c; --line:#e0dad1; --panel:#fffdfa; --bg:#f6f2ec;
+    --accent:#9a5b1e; --accent-soft:#f4e7d8; --good:#2f6b46; --bad:#8c2f2f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+  h2{font-size:17px;margin:0 0 12px;letter-spacing:-.01em}
+  h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 8px;font-weight:600}
+  p{margin:0 0 10px}
+  .lede{color:var(--dim);max-width:70ch}
+  .banner{background:var(--accent-soft);border:1px solid #e3cfb4;border-radius:8px;
+          padding:14px 16px;margin:18px 0 26px;max-width:80ch}
+  .banner strong{color:var(--accent)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
+  @media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+  button{font:inherit;background:#fff;border:1px solid #cdc4b8;border-radius:7px;
+         padding:7px 12px;cursor:pointer;color:var(--ink);margin:0 6px 6px 0}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#844d19;color:#fff}
+  button.done{opacity:.45;text-decoration:line-through}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  input,select{font:inherit;padding:6px 8px;border:1px solid #cdc4b8;border-radius:7px;background:#fff}
+  input{width:150px}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:2px 14px;font-size:14px}
+  .kv dt{color:var(--dim)}
+  .kv dd{margin:0}
+  .chip{display:inline-block;background:var(--accent-soft);border-radius:20px;padding:1px 10px;font-size:13px}
+  .phase{font-size:22px;letter-spacing:-.01em;color:var(--accent);font-weight:600}
+  .changed{background:#fff5e2;outline:2px solid #f0d9b3;border-radius:4px}
+  .private{border-top:3px solid var(--accent)}
+  .stage{border-top:3px solid #4a6b8a}
+  .log{font-size:13px;max-height:260px;overflow:auto;border-top:1px solid var(--line);padding-top:8px}
+  .log div{padding:3px 0;border-bottom:1px solid #f2ede6}
+  .refused{background:#fbeaea;border:1px solid #e8c9c9;color:var(--bad);
+           border-radius:8px;padding:10px 12px;margin-bottom:12px}
+  .ok{color:var(--good)} .no{color:var(--bad)}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+  .tabs button{margin:0}
+  .tabs button[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+  .card{display:inline-block;border:1px solid #cdc4b8;border-radius:7px;padding:5px 10px;margin:0 6px 6px 0;background:#fff}
+  .slotrow{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+  .muted{color:var(--dim)}
+  .beat{color:var(--accent);font-weight:600}
+  small{color:var(--dim)}
+  code{background:#f0ebe3;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>PROTOTYPE — the two Page machines</h1>
+<p class="lede">Throwaway Stage&nbsp;0 logic demo. Nothing here ships.</p>
+
+<div class="banner">
+  <p><strong>The question this answers:</strong> before any phones, servers or real models exist —
+  do the rules of the two prototype candidates hold up when you push them through real cases?
+  Is a <em>Page</em> of <strong>Chronicle Clover</strong> (clue-binding across word pairs, with an
+  <em>authored</em> decoy instead of a blind-drawn one) and a Page of <strong>Mind-Meld</strong>
+  (both of you secretly bridge two anchor words; failed bridges become the next anchors)
+  a shape worth building for two people on a couch?</p>
+  <p><strong>What is fake here:</strong> the Author and the Assayer are stubs with a fixed word bank
+  and a toy scoring heuristic — but they keep the real contracts: pre-generated Pages, a schema-shaped
+  verdict, a fixed <span class="beat">2.5&nbsp;s reveal beat</span>, both orderings graded, every
+  verdict cached (same inputs → same ruling, forever), reasoning always shown, and a joint overrule
+  the Chronicle records. Judge the <em>rules and the feel of the beat</em>, not the word choices.</p>
+  <p><strong>Simplifications:</strong> one word per card instead of four (so the clover ring is
+  clickable); both seats shown on one screen, so nothing is truly private yet; memory lives only
+  as long as this tab is open.</p>
+</div>
+
+<div class="panel">
+  <h3>Which Page</h3>
+  <button id="btn-kind-clover" class="primary">Chronicle Clover</button>
+  <button id="btn-kind-mindmeld">Mind-Meld</button>
+  <span style="margin-left:18px">
+    <label><input type="checkbox" id="beat-toggle" checked style="width:auto"> keep the real 2.5&nbsp;s reveal beat</label>
+  </span>
+  <button id="btn-reset" style="float:right">Start over (wipes the Chronicle)</button>
+</div>
+
+<div id="refused"></div>
+
+<div class="panel stage">
+  <h3>The stage — what the laptop shows both of you</h3>
+  <div id="stage"></div>
+</div>
+
+<div class="grid2">
+  <div class="panel private"><h3>Jacob's phone — private</h3><div id="seat-A"></div></div>
+  <div class="panel private"><h3>Mara's phone — private</h3><div id="seat-B"></div></div>
+</div>
+
+<div class="panel">
+  <h3>Free play — press anything, in any order</h3>
+  <div id="freeplay"></div>
+</div>
+
+<div class="panel">
+  <h3>Guided walkthroughs</h3>
+  <div class="tabs" id="tabs"></div>
+  <p id="scenario-blurb" class="lede"></p>
+  <div id="scenario-steps"></div>
+</div>
+
+<div class="panel">
+  <h3>The Chronicle — append-only, and everything the machine will remember</h3>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+/* ============================================================================
+   PURE MODULE — lifts into Elixir later as Game.apply/2, Game.view/2.
+   No DOM, no timers, no randomness beyond the seed it is handed.
+   apply(state, event) -> {ok:true, state, effects:[]} | {ok:false, error}
+   ========================================================================== */
+const Game = (() => {
+
+  /* ---- the deterministic gate: a linter's job, never a model's ---- */
+  const PROFANITY = ['damn','hell'];
+  function checkClue(word, pairWords, usedClues){
+    const w = (word||'').trim().toLowerCase();
+    if(!w) return {legal:false, why:'A clue needs a word.'};
+    if(!/^[a-z]+$/.test(w)) return {legal:false, why:'One word, letters only.'};
+    if(w.length > 20) return {legal:false, why:'Too long to fit on a card.'};
+    if(PROFANITY.includes(w)) return {legal:false, why:'Not at this table.'};
+    for(const kw of pairWords){
+      const k = kw.toLowerCase();
+      if(w === k) return {legal:false, why:'That is the keyword itself ("'+kw+'").'};
+      if(w.length>3 && k.length>3 && w.slice(0,4) === k.slice(0,4))
+        return {legal:false, why:'Shares a root with "'+kw+'".'};
+    }
+    if(usedClues.includes(w)) return {legal:false, why:'Already used on this Page.'};
+    return {legal:true};
+  }
+
+  const SEATS = ['A','B'];
+  const other = s => s === 'A' ? 'B' : 'A';
+
+  /* ---------------------------------------------------------------- init */
+  function init(kind, pageNumber, abArm){
+    const base = {kind, pageNumber, abArm, phase:'awaiting_page', give:null, page:null,
+                  verdict:null, overruleVotes:{A:false,B:false}, overruled:false,
+                  ratings:{A:null,B:null}};
+    if(kind === 'clover') return {...base,
+      clues:{A:[null,null,null,null], B:[null,null,null,null]},
+      cluesCommitted:{A:false,B:false},
+      placements:{A:[null,null,null,null], B:[null,null,null,null]},
+      guessCommitted:{A:false,B:false}};
+    return {...base, anchors:null, attempt:1, attempts:[],
+            draft:{A:null,B:null}, bridgeCommitted:{A:false,B:false}};
+  }
+
+  /* --------------------------------------------------------------- apply */
+  function apply(state, ev){
+    const s = structuredClone(state);
+    const fx = [];
+    const no = why => ({ok:false, error:why});
+
+    switch(ev.type){
+
+      case 'give':
+        if(s.phase !== 'awaiting_page') return no('A Give sets the Page before it is authored — this Page is already underway.');
+        s.give = {seat:ev.seat, theme:ev.theme.trim()};
+        return {ok:true, state:s, effects:[]};
+
+      case 'author_page':
+        if(s.phase !== 'awaiting_page') return no('This Page is already authored.');
+        fx.push({type:'author', kind:s.kind, theme:s.give ? s.give.theme : null});
+        return {ok:true, state:s, effects:fx};
+
+      case 'page_authored':
+        s.page = ev.page;
+        s.phase = s.kind === 'clover' ? 'clue_writing' : 'bridging';
+        if(s.kind !== 'clover') s.anchors = ev.page.anchors;
+        return {ok:true, state:s, effects:[]};
+
+      /* ---------------- Chronicle Clover ---------------- */
+      case 'write_clue': {
+        if(s.phase !== 'clue_writing') return no('Clues are only written in the clue-writing phase.');
+        if(s.cluesCommitted[ev.seat]) return no('Committed clues are final — that is the whole point of committing.');
+        const pair = pairWords(s, ev.seat, ev.slot);
+        const used = s.clues[ev.seat].filter(Boolean).map(c => c.toLowerCase());
+        const gate = checkClue(ev.word, pair, used.filter((_,i)=>i!==ev.slot));
+        if(!gate.legal) return no('Illegal clue: ' + gate.why);
+        s.clues[ev.seat][ev.slot] = ev.word.trim().toLowerCase();
+        return {ok:true, state:s, effects:[]};
+      }
+
+      case 'commit_clues':
+        if(s.phase !== 'clue_writing') return no('Nothing to commit in this phase.');
+        if(s.clues[ev.seat].some(c => !c)) return no('All four clues must be written first.');
+        s.cluesCommitted[ev.seat] = true;
+        if(SEATS.every(x => s.cluesCommitted[x])) s.phase = 'guessing';
+        return {ok:true, state:s, effects:[]};
+
+      case 'place': {
+        if(s.phase !== 'guessing') return no('You cannot place cards until both clovers are committed.');
+        if(s.guessCommitted[ev.seat]) return no('This guess is committed.');
+        const p = s.placements[ev.seat];
+        const at = p.indexOf(ev.cardId);
+        if(at !== -1) p[at] = null;            /* a card lives in one slot only */
+        p[ev.slot] = ev.cardId;
+        return {ok:true, state:s, effects:[]};
+      }
+
+      case 'commit_guess': {
+        if(s.phase !== 'guessing') return no('Nothing to commit in this phase.');
+        if(s.placements[ev.seat].some(c => !c)) return no('All four slots must be filled first.');
+        s.guessCommitted[ev.seat] = true;
+        if(SEATS.every(x => s.guessCommitted[x])){
+          s.phase = 'assaying';                 /* fires the instant the second commits */
+          fx.push({type:'assay', kind:'clover', key:cloverKey(s), payload:{
+            page:s.page, clues:s.clues, placements:s.placements}});
+        }
+        return {ok:true, state:s, effects:fx};
+      }
+
+      /* ---------------- Mind-Meld ---------------- */
+      case 'bridge':
+        if(s.phase !== 'bridging') return no('Bridges are only written in the bridging phase.');
+        if(s.bridgeCommitted[ev.seat]) return no('Committed — no peeking-then-editing.');
+        s.draft[ev.seat] = ev.word.trim().toLowerCase();
+        return {ok:true, state:s, effects:[]};
+
+      case 'commit_bridge': {
+        if(s.phase !== 'bridging') return no('Nothing to commit in this phase.');
+        if(!s.draft[ev.seat]) return no('Write a bridging word first.');
+        s.bridgeCommitted[ev.seat] = true;
+        if(SEATS.every(x => s.bridgeCommitted[x])){
+          s.phase = 'assaying';
+          fx.push({type:'assay', kind:'mindmeld', key:meldKey(s), payload:{
+            anchors:s.anchors, words:{...s.draft}}});
+        }
+        return {ok:true, state:s, effects:fx};
+      }
+
+      case 'next_attempt': {
+        if(s.phase !== 'reveal') return no('Only after a reveal.');
+        if(s.verdict.melded) return no('You already met in the middle.');
+        if(s.attempt >= 5){ s.phase = 'rating'; return {ok:true, state:s, effects:[]}; }
+        s.attempts.push({anchors:s.anchors, words:{...s.draft}, verdict:s.verdict});
+        s.anchors = [s.draft.A, s.draft.B];     /* Medium's rule: failures become the inputs */
+        s.attempt += 1;
+        s.draft = {A:null,B:null};
+        s.bridgeCommitted = {A:false,B:false};
+        s.verdict = null;
+        s.overruleVotes = {A:false,B:false};
+        s.phase = 'bridging';
+        return {ok:true, state:s, effects:[]};
+      }
+
+      /* ---------------- shared tail ---------------- */
+      case 'assayed':
+        if(s.phase !== 'assaying') return no('No assay is running.');
+        s.verdict = ev.verdict;
+        s.phase = 'reveal';
+        return {ok:true, state:s, effects:[{type:'chronicle', entry:
+          {kind:'ruling', verdict:ev.verdict}}]};
+
+      case 'overrule_vote': {
+        if(s.phase !== 'reveal') return no('Overrule only what has been revealed.');
+        s.overruleVotes[ev.seat] = true;
+        if(SEATS.every(x => s.overruleVotes[x])){
+          s.overruled = true;                   /* graded up to full marks, jointly */
+          if(s.kind === 'clover'){ s.verdict.total = s.verdict.max;
+                                   s.verdict.ladder = 'Overruled — full marks, by joint decision'; }
+          else { s.verdict.closeness = 100; s.verdict.melded = true; }
+          s.verdict.reasoning = 'Overruled jointly by both players. Recorded as precedent.';
+          fx.push({type:'chronicle', entry:{kind:'overrule', verdict:s.verdict}});
+        }
+        return {ok:true, state:s, effects:fx};
+      }
+
+      case 'to_rating':
+        if(s.phase !== 'reveal') return no('Rate after the reveal.');
+        if(s.kind === 'mindmeld' && !s.verdict.melded && s.attempt < 5)
+          return no('The Page is not over — the failed bridges become the next anchors.');
+        s.phase = 'rating';
+        return {ok:true, state:s, effects:[]};
+
+      case 'rate':
+        if(s.phase !== 'rating') return no('Rate at the end of the Page.');
+        s.ratings[ev.seat] = ev.value;
+        if(SEATS.every(x => s.ratings[x] !== null)){
+          s.phase = 'done';
+          fx.push({type:'chronicle', entry:{kind:'rating', ratings:{...s.ratings}}});
+        }
+        return {ok:true, state:s, effects:fx};
+
+      default:
+        return no('Unknown move: ' + ev.type);
+    }
+  }
+
+  /* ------------------------------------------------- derived / redaction */
+  function pairWords(s, seat, slot){
+    const ring = s.page.clovers[seat].ring;   /* card ids, in ring order */
+    const cards = s.page.clovers[seat].cards;
+    const a = cards.find(c => c.id === ring[slot]);
+    const b = cards.find(c => c.id === ring[(slot+1)%4]);
+    return [a.word, b.word];
+  }
+  function cardWord(s, seat, id){
+    const c = s.page.clovers[seat].cards.find(c => c.id === id);
+    return c ? c.word : '—';
+  }
+  function cloverKey(s){
+    return ['clover', s.page.id,
+      SEATS.map(x => s.placements[x].join('>')).join('|')].join('::');
+  }
+  function meldKey(s){
+    return ['meld', s.anchors.join('+'),
+      [s.draft.A, s.draft.B].sort().join('+')].join('::');
+  }
+
+  /* what one phone is allowed to see */
+  function view(s, seat){
+    if(s.kind === 'clover'){
+      if(!s.page) return {phase:s.phase};
+      const mine = s.page.clovers[seat];
+      const theirs = s.page.clovers[other(seat)];
+      return {
+        phase:s.phase,
+        myClover: mine.ring.map((id,i) => ({slot:i, word:cardWord(s,seat,id),
+                    pair:pairWords(s,seat,i), clue:s.clues[seat][i]})),
+        myDecoyHidden: s.phase === 'reveal' ? theirs.decoy : '(hidden)',
+        theirClues: s.phase === 'clue_writing' ? '(not yet)' : s.clues[other(seat)],
+        theirShuffledCards: s.phase === 'clue_writing' ? '(not yet)'
+                            : theirs.shuffled.map(id => ({id, word:cardWord(s,other(seat),id)})),
+        myPlacements: s.placements[seat]
+      };
+    }
+    return {phase:s.phase, anchors:s.anchors, attempt:s.attempt,
+            myWord:s.draft[seat],
+            theirWord: s.phase === 'reveal' || s.phase === 'rating' || s.phase === 'done'
+                       ? s.draft[other(seat)] : '(secret)'};
+  }
+
+  return {init, apply, view, checkClue, pairWords, cardWord, other, SEATS};
+})();
+
+/* ============================================================================
+   FAKE KEEPER — the stub Author and Assayer. Throwaway; the real one is a
+   Phoenix module with two real adapters behind it.
+   ========================================================================== */
+const Keeper = (() => {
+  const BANKS = {
+    default : ['lantern','harbour','anchor','whistle','orchard','ribbon','compass','marble','feather','kettle','thistle','beacon'],
+    kitchen : ['kettle','batter','skillet','yeast','zest','ladle','simmer','crumb','brine','peel','whisk','copper'],
+    hospital: ['scrub','chart','gurney','vial','pager','ward','suture','rounds','gown','triage','cuff','shift'],
+    winter  : ['mitten','frost','ember','sledge','pine','flurry','hearth','icicle','wool','thaw','crust','lantern'],
+    saints  : ['cloister','relic','vigil','cell','habit','psalm','rose','shrine','novice','bell','ash','pilgrim']
+  };
+  const CLUSTERS = {
+    light:['lantern','beacon','ember','hearth','vigil','candle','flare','glow'],
+    sea  :['harbour','anchor','compass','brine','pilgrim','tide','beacon'],
+    cook :['kettle','batter','skillet','yeast','ladle','simmer','crumb','whisk','peel','zest','copper'],
+    care :['scrub','chart','gurney','vial','ward','suture','rounds','gown','triage','cuff'],
+    cold :['mitten','frost','sledge','flurry','icicle','wool','thaw','pine','crust']
+  };
+  let seed = 20260902;
+  const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed>>>15, 1|seed);
+    t = t + Math.imul(t ^ t>>>7, 61|t) ^ t; return ((t ^ t>>>14)>>>0) / 4294967296; };
+  const reseed = n => { seed = n; };
+  const pick = arr => arr[Math.floor(rnd()*arr.length)];
+
+  function bankFor(theme){
+    if(!theme) return BANKS.default;
+    const t = theme.toLowerCase();
+    if(/kitchen|cook|food|bak/.test(t)) return BANKS.kitchen;
+    if(/hospital|chop|ward|nurse|lab/.test(t)) return BANKS.hospital;
+    if(/winter|snow|cold|christmas/.test(t)) return BANKS.winter;
+    if(/saint|th[eé]r[eè]se|newman|church|monas/.test(t)) return BANKS.saints;
+    return BANKS.default;
+  }
+
+  /* An exemplar clue the fake Author pre-computes per pair (law 13's spirit:
+     the Author pre-grades, so the live Assayer is mostly a lookup). It must
+     survive the game's own legality gate, so this is reject-and-regenerate --
+     the same loop the real Author will run. */
+  function exemplar(a, b, used){
+    const blends = [
+      b.slice(0,3) + a.slice(-3),
+      a.slice(-3) + b.slice(0,3),
+      b.slice(-3) + a.slice(0,3),
+      a.slice(-2) + b.slice(-2) + 'en',
+      'twixt' + a.slice(-2)
+    ];
+    for(const c of blends){
+      const w = c.toLowerCase().replace(/[^a-z]/g,'');
+      if(Game.checkClue(w, [a,b], used).legal) return w;
+    }
+    return 'clue' + used.length;          /* last resort; always legal */
+  }
+
+  function authorPage(kind, theme, pageNumber){
+    const bank = bankFor(theme).slice();
+    const take = n => { const out=[]; while(out.length<n && bank.length){
+      out.push(bank.splice(Math.floor(rnd()*bank.length),1)[0]); } return out; };
+
+    if(kind === 'mindmeld'){
+      const [a,b] = take(2);
+      return {id:'P'+pageNumber, theme:theme||'(no Give)', anchors:[a,b]};
+    }
+    const clovers = {};
+    for(const seat of ['A','B']){
+      const words = take(4);
+      const cards = words.map((w,i) => ({id:seat+i, word:w}));
+      const ring = cards.map(c => c.id);
+      /* the authored decoy: crafted to plausibly answer one real clue,
+         not drawn blind (that is the whole bet of this candidate) */
+      const target = Math.floor(rnd()*4);
+      const decoyWord = pick(bankFor(theme).filter(w => !words.includes(w)));
+      const decoy = {id:seat+'D', word:decoyWord,
+        rationale:'Crafted to sit plausibly under the clue for pair '+(target+1)+
+                  ' ("'+words[target]+'" / "'+words[(target+1)%4]+'").'};
+      const shuffled = [...ring, decoy.id].sort(() => rnd() - .5);
+      const usedClues = [];
+      const exemplars = ring.map((id,i) => {
+        const ex = exemplar(cards.find(c=>c.id===id).word,
+                            cards.find(c=>c.id===ring[(i+1)%4]).word, usedClues);
+        usedClues.push(ex);
+        return ex;
+      });
+      clovers[seat] = {cards:[...cards, decoy], ring, decoy, shuffled, exemplars};
+    }
+    return {id:'P'+pageNumber, theme:theme||'(no Give)', clovers};
+  }
+
+  /* ---- the Assayer: graded, both orderings, reasoning shown, cached ---- */
+  const cache = new Map();
+  let lastWasCacheHit = false;
+
+  function closeness(w1, w2){
+    if(w1 === w2) return 100;
+    for(const words of Object.values(CLUSTERS))
+      if(words.includes(w1) && words.includes(w2)) return 78;
+    if(w1[0] === w2[0]) return 46;
+    let h = 0; for(const c of (w1+w2)) h = (h*31 + c.charCodeAt(0)) % 41;
+    return 8 + h;
+  }
+
+  function assay(kind, key, payload){
+    if(cache.has(key)){ lastWasCacheHit = true; return structuredClone(cache.get(key)); }
+    lastWasCacheHit = false;
+    let v;
+    if(kind === 'clover'){
+      const per = {}; let total = 0;
+      let fellForDecoy = [];
+      for(const seat of ['A','B']){
+        const guesser = Game.other(seat);              /* seat's clover, guessed by the other */
+        const clover = payload.page.clovers[seat];
+        const placed = payload.placements[guesser];
+        per[seat] = clover.ring.map((id,i) => {
+          const want = [clover.ring[i], clover.ring[(i+1)%4]];
+          const got  = [placed[i], placed[(i+1)%4]];
+          const hits = want.filter((w,j) => w === got[j]).length;
+          const grade = hits === 2 ? 3 : hits === 1 ? 1 : 0;
+          total += grade;
+          return {slot:i, clue:payload.clues[seat][i], grade,
+            reason: hits === 2 ? 'Both keywords landed where the clue pointed.'
+                  : hits === 1 ? 'Half-landed — one keyword right, one adrift.'
+                  : 'The clue pointed somewhere neither card went.'};
+        });
+        if(placed.includes(clover.decoy.id)) fellForDecoy.push(guesser);
+      }
+      v = {kind:'clover', per, total, max:24, fellForDecoy,
+        ladder: total===24?'Telepathy, verified' : total>=20?'Two minds, one clover'
+              : total>=15?'Well met' : total>=9?'Crossed wires' : 'Strangers in the same house',
+        reasoning:'Graded per clue-pair, 3 for both keywords, 1 for a half-landing.'+
+          (fellForDecoy.length?' The authored decoy was placed by '+
+             fellForDecoy.map(x => x==='A'?'Jacob':'Mara').join(' and ')+'.':' Neither of you took the decoy.'),
+        orderings:'both orderings graded in parallel'};
+    } else {
+      const {A,B} = payload.words;
+      const fwd = closeness(A,B), rev = closeness(B,A);        /* position bias check */
+      const score = Math.round((fwd+rev)/2);
+      v = {kind:'mindmeld', closeness:score, melded:score >= 75,
+        forward:fwd, reverse:rev,
+        words:{...payload.words}, anchors:[...payload.anchors],
+        reasoning: score>=75 ? '"'+A+'" and "'+B+'" sit in the same pocket of meaning between '+
+                     payload.anchors[0]+' and '+payload.anchors[1]+'.'
+                 : score>=45 ? 'Adjacent but not the same: "'+A+'" leans one way, "'+B+'" the other.'
+                 : 'Two different roads out of '+payload.anchors[0]+'.',
+        orderings:'both orderings graded ('+fwd+' / '+rev+')'};
+    }
+    cache.set(key, v);
+    return structuredClone(v);
+  }
+
+  return {authorPage, assay, reseed, cacheSize:()=>cache.size,
+          wasCacheHit:()=>lastWasCacheHit};
+})();
+
+/* ============================================================================
+   THROWAWAY PAGE SHELL — DOM only. Nothing below here is worth keeping.
+   ========================================================================== */
+const REVEAL_BEAT_MS = 2500;
+let kind = 'clover';
+let state = null;
+let chronicle = [];
+let pageNumber = 0;
+let lastRefusal = null;
+let changedKeys = [];
+
+const $ = id => document.getElementById(id);
+
+function newPage(){
+  pageNumber += 1;
+  const arm = pageNumber % 2 ? 'arm-1' : 'arm-2';   /* A/B logged from day one */
+  state = Game.init(kind, pageNumber, arm);
+  logIt('page', 'Page '+pageNumber+' opened ('+kind+', '+arm+')');
+  render();
+}
+
+function dispatch(ev){
+  const before = JSON.stringify(state);
+  const res = Game.apply(state, ev);
+  if(!res.ok){ lastRefusal = res.error; render(); return false; }
+  lastRefusal = null;
+  state = res.state;
+  changedKeys = diffKeys(JSON.parse(before), state);
+  logIt('move', describe(ev));
+  for(const fx of res.effects) runEffect(fx);
+  render();
+  return true;
+}
+
+function runEffect(fx){
+  if(fx.type === 'author'){
+    const page = Keeper.authorPage(fx.kind, fx.theme, pageNumber);
+    logIt('keeper', 'Author built Page '+page.id+' — theme: '+(fx.theme||'(no Give)'));
+    dispatch({type:'page_authored', page});   /* pre-generated: no wait, by design (law 4) */
+  }
+  if(fx.type === 'assay'){
+    const wait = $('beat-toggle').checked ? REVEAL_BEAT_MS : 0;
+    const verdict = Keeper.assay(fx.kind, fx.key, fx.payload);
+    const hit = Keeper.wasCacheHit();
+    verdict.cacheHit = hit;
+    logIt('keeper', 'Assayer fired' + (hit ? ' — CACHE HIT, identical ruling returned' : ' — new ruling, cached'));
+    setTimeout(() => dispatch({type:'assayed', verdict}), wait);
+  }
+  if(fx.type === 'chronicle') logIt(fx.entry.kind, JSON.stringify(fx.entry).slice(0,220));
+}
+
+function describe(ev){
+  const who = ev.seat === 'A' ? 'Jacob' : ev.seat === 'B' ? 'Mara' : '';
+  switch(ev.type){
+    case 'give': return who+' gave the theme "'+ev.theme+'"';
+    case 'write_clue': return who+' wrote "'+ev.word+'" for pair '+(ev.slot+1);
+    case 'commit_clues': return who+' committed all four clues';
+    case 'place': return who+' placed a card in slot '+(ev.slot+1);
+    case 'commit_guess': return who+' committed the guess';
+    case 'bridge': return who+' drafted a bridge';
+    case 'commit_bridge': return who+' committed a bridge';
+    case 'assayed': return 'Assayer returned a ruling';
+    case 'overrule_vote': return who+' voted to overrule';
+    case 'rate': return who+' rated the Page '+ev.value+'/3';
+    case 'next_attempt': return 'Failed bridges became the new anchors';
+    default: return ev.type;
+  }
+}
+
+function diffKeys(a,b){
+  const out=[];
+  for(const k of Object.keys(b)) if(JSON.stringify(a[k]) !== JSON.stringify(b[k])) out.push(k);
+  return out;
+}
+
+function logIt(kindStr, text){
+  chronicle.push({n:chronicle.length+1, kind:kindStr, text, page:pageNumber});
+}
+
+/* ------------------------------------------------------------------ render */
+function render(){
+  $('refused').innerHTML = lastRefusal
+    ? '<div class="refused"><strong>Refused:</strong> '+lastRefusal+'</div>' : '';
+  renderStage(); renderSeat('A'); renderSeat('B'); renderFreeplay(); renderLog();
+}
+
+function chip(t){ return '<span class="chip">'+t+'</span>'; }
+
+function recap(){
+  const prior = chronicle.filter(e => e.kind==='rating' || e.kind==='ruling');
+  if(!prior.length || pageNumber < 2) return '';
+  const n = pageNumber - 1;
+  return '<p class="muted"><em>Last time…</em> you played '+n+' Page'+(n===1?'':'s')+
+    ' tonight; the Chronicle holds '+chronicle.length+' entries and the '+
+    'Assayer has '+Keeper.cacheSize()+' cached rulings.</p>';
+}
+
+function renderStage(){
+  if(!state){ $('stage').innerHTML = '<p>No Page open.</p>'; return; }
+  const s = state;
+  let h = '<p class="phase">'+s.phase.replace(/_/g,' ')+
+    (s.phase==='assaying' ? ' <span class="beat">— Assaying…</span>' : '')+'</p>';
+  h += recap();
+  h += '<dl class="kv">';
+  const row = (k,v,key) => h += '<dt>'+k+'</dt><dd'+(changedKeys.includes(key)?' class="changed"':'')+'>'+v+'</dd>';
+  row('Page', s.page ? s.page.id : '(not authored)', 'page');
+  row('A/B arm', s.abArm, 'abArm');
+  row('Give', s.give ? '"'+s.give.theme+'" from '+(s.give.seat==='A'?'Jacob':'Mara') : '(none)', 'give');
+  if(s.kind === 'clover'){
+    row('Clues committed', 'Jacob '+(s.cluesCommitted.A?'✔':'—')+' · Mara '+(s.cluesCommitted.B?'✔':'—'), 'cluesCommitted');
+    row('Guesses committed', 'Jacob '+(s.guessCommitted.A?'✔':'—')+' · Mara '+(s.guessCommitted.B?'✔':'—'), 'guessCommitted');
+  } else {
+    row('Anchors', s.anchors ? s.anchors.map(w=>chip(w)).join(' … ') : '(not authored)', 'anchors');
+    row('Attempt', s.attempt+' of 5', 'attempt');
+    row('Committed', 'Jacob '+(s.bridgeCommitted.A?'✔':'—')+' · Mara '+(s.bridgeCommitted.B?'✔':'—'), 'bridgeCommitted');
+  }
+  row('Ratings', 'Jacob '+(s.ratings.A??'—')+' · Mara '+(s.ratings.B??'—'), 'ratings');
+  h += '</dl>';
+
+  if(s.verdict){
+    const v = s.verdict;
+    h += '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">';
+    h += '<h3>The reveal</h3>';
+    if(v.kind === 'clover'){
+      h += '<p><strong>'+v.total+' / '+v.max+' — '+v.ladder+'</strong></p>';
+      for(const seat of ['A','B']){
+        h += '<p class="muted">'+(seat==='A'?'Jacob':'Mara')+"'s clover, guessed by "+
+             (seat==='A'?'Mara':'Jacob')+':</p>';
+        h += v.per[seat].map(p => '<div>pair '+(p.slot+1)+' — clue <code>'+p.clue+'</code> · '+
+             '<strong class="'+(p.grade===3?'ok':p.grade===0?'no':'')+'">'+p.grade+'/3</strong> — '+
+             '<span class="muted">'+p.reason+'</span></div>').join('');
+      }
+    } else {
+      h += '<p><strong>'+v.closeness+' / 100 — '+(v.melded?'<span class="ok">you met in the middle</span>':'<span class="no">not yet</span>')+'</strong></p>';
+      h += '<p>Jacob said '+chip(v.words.A)+' · Mara said '+chip(v.words.B)+'</p>';
+    }
+    h += '<p class="muted"><em>Assayer\'s reasoning:</em> '+v.reasoning+'<br>'+
+         '<small>'+v.orderings+(v.cacheHit?' · returned from cache (same inputs → same ruling)':' · cached for next time')+'</small></p>';
+    h += s.overruled ? '<p class="ok"><strong>Overruled jointly — recorded in the Chronicle as precedent.</strong></p>' : '';
+    h += '</div>';
+  }
+  $('stage').innerHTML = h;
+}
+
+function seatName(s){ return s === 'A' ? 'Jacob' : 'Mara'; }
+
+function renderSeat(seat){
+  const el = $('seat-'+seat);
+  if(!state){ el.innerHTML = '<p class="muted">No Page open.</p>'; return; }
+  const s = state, v = Game.view(s, seat);
+  let h = '';
+
+  if(!s.page){ h += '<p class="muted">Waiting for the Author.</p>'; el.innerHTML = h; return; }
+
+  if(s.kind === 'clover'){
+    h += '<p class="muted">Your clover — write one clue that fits <em>both</em> words of each pair. '+
+         '<small>(The “stand-in” buttons type deliberate nonsense so a walkthrough can skip the thinking — '+
+         'a real Author writes real clues.)</small></p>';
+    v.myClover.forEach(p => {
+      const ex = s.page.clovers[seat].exemplars[p.slot];
+      h += '<div class="slotrow">'+
+        '<span>pair '+(p.slot+1)+': '+chip(p.pair[0])+' + '+chip(p.pair[1])+'</span>'+
+        '<input id="clue-'+seat+'-'+p.slot+'" value="'+(p.clue||'')+'" placeholder="one word">'+
+        '<button data-act="clue" data-seat="'+seat+'" data-slot="'+p.slot+'">write</button>'+
+        '<button data-act="clue-ex" data-seat="'+seat+'" data-slot="'+p.slot+'" title="a nonsense stand-in, so a walkthrough can skip the thinking">stand-in “'+ex+'”</button>'+
+        '</div>';
+    });
+    h += '<button class="primary" data-act="commit-clues" data-seat="'+seat+'">commit my four clues</button>';
+
+    if(s.phase === 'guessing' || s.phase === 'assaying' || s.phase === 'reveal' || s.phase==='rating' || s.phase==='done'){
+      const them = Game.other(seat);
+      h += '<hr style="border:none;border-top:1px solid var(--line);margin:14px 0">';
+      h += '<p class="muted">'+seatName(them)+"'s clues, and five cards — one is the Author's decoy.</p>";
+      v.theirShuffledCards.forEach(c => h += '<span class="card">'+c.word+'</span>');
+      s.clues[them].forEach((c,i) => {
+        const opts = v.theirShuffledCards.map(c2 =>
+          '<option value="'+c2.id+'"'+(v.myPlacements[i]===c2.id?' selected':'')+'>'+c2.word+'</option>').join('');
+        h += '<div class="slotrow">clue '+(i+1)+': <code>'+c+'</code> → slot '+(i+1)+
+             ' <select id="place-'+seat+'-'+i+'"><option value="">—</option>'+opts+'</select>'+
+             '<button data-act="place" data-seat="'+seat+'" data-slot="'+i+'">place</button></div>';
+      });
+      h += '<button data-act="place-perfect" data-seat="'+seat+'">place them all correctly</button>';
+      h += '<button data-act="place-decoy" data-seat="'+seat+'">fall for the decoy</button>';
+      h += '<button class="primary" data-act="commit-guess" data-seat="'+seat+'">commit my guess</button>';
+    }
+  } else {
+    h += '<p>Bridge '+chip(s.anchors[0])+' and '+chip(s.anchors[1])+' with one secret word.</p>';
+    h += '<div class="slotrow"><input id="bridge-'+seat+'" value="'+(v.myWord||'')+'" placeholder="one word">'+
+         '<button data-act="bridge" data-seat="'+seat+'">draft</button>'+
+         '<button class="primary" data-act="commit-bridge" data-seat="'+seat+'">commit</button></div>';
+    h += '<p class="muted">'+seatName(Game.other(seat))+' said: '+chip(v.theirWord)+'</p>';
+  }
+
+  if(s.phase === 'reveal'){
+    h += '<hr style="border:none;border-top:1px solid var(--line);margin:14px 0">';
+    h += '<button data-act="overrule" data-seat="'+seat+'"'+(s.overruleVotes[seat]?' class="done"':'')+
+         '>overrule the Assayer</button> <small>needs both of you</small>';
+  }
+  if(s.phase === 'rating'){
+    h += '<hr style="border:none;border-top:1px solid var(--line);margin:14px 0">';
+    h += '<p class="muted">How was that Page?</p>';
+    [1,2,3].forEach(n => h += '<button data-act="rate" data-seat="'+seat+'" data-val="'+n+'">'+
+      ['meh','good','again!'][n-1]+'</button>');
+  }
+  el.innerHTML = h;
+}
+
+function renderFreeplay(){
+  let h = '';
+  h += '<div class="slotrow"><input id="give" placeholder="a theme, e.g. kitchen">'+
+       '<button data-act="give" data-seat="A">Jacob gives a theme</button>'+
+       '<button data-act="give" data-seat="B">Mara gives a theme</button>'+
+       '<button class="primary" data-act="author">Author the Page</button></div>';
+  h += '<button data-act="to-rating">go to rating</button>';
+  h += '<button data-act="next-attempt">next attempt (Mind-Meld)</button>';
+  h += '<button data-act="new-page">one more Page →</button>';
+  h += '<p><small>Themes the fake Author knows: kitchen · hospital · winter · saints — anything else uses the default bank.</small></p>';
+  $('freeplay').innerHTML = h;
+}
+
+function renderLog(){
+  $('log').innerHTML = chronicle.slice().reverse().map(e =>
+    '<div><span class="muted">#'+e.n+' · P'+e.page+' · '+e.kind+'</span> — '+e.text+'</div>').join('')
+    || '<div class="muted">empty</div>';
+}
+
+/* ------------------------------------------------------------- interaction */
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  const act = b.dataset.act; if(!act) return;
+  const seat = b.dataset.seat, slot = +b.dataset.slot;
+
+  if(act === 'give')  return void dispatch({type:'give', seat, theme:$('give').value || 'default'});
+  if(act === 'author')return void dispatch({type:'author_page'});
+  if(act === 'clue')  return void dispatch({type:'write_clue', seat, slot, word:$('clue-'+seat+'-'+slot).value});
+  if(act === 'clue-ex'){
+    const ex = state.page.clovers[seat].exemplars[slot];
+    return void dispatch({type:'write_clue', seat, slot, word:ex});
+  }
+  if(act === 'commit-clues') return void dispatch({type:'commit_clues', seat});
+  if(act === 'place') return void dispatch({type:'place', seat, slot, cardId:$('place-'+seat+'-'+slot).value});
+  if(act === 'place-perfect'){
+    const them = Game.other(seat);
+    state.page.clovers[them].ring.forEach((id,i) => dispatch({type:'place', seat, slot:i, cardId:id}));
+    return;
+  }
+  if(act === 'place-decoy'){
+    const them = Game.other(seat);
+    const ring = state.page.clovers[them].ring;
+    dispatch({type:'place', seat, slot:0, cardId:state.page.clovers[them].decoy.id});
+    dispatch({type:'place', seat, slot:1, cardId:ring[1]});
+    dispatch({type:'place', seat, slot:2, cardId:ring[2]});
+    dispatch({type:'place', seat, slot:3, cardId:ring[3]});
+    return;
+  }
+  if(act === 'commit-guess') return void dispatch({type:'commit_guess', seat});
+  if(act === 'bridge')  return void dispatch({type:'bridge', seat, word:$('bridge-'+seat).value});
+  if(act === 'commit-bridge') return void dispatch({type:'commit_bridge', seat});
+  if(act === 'overrule')return void dispatch({type:'overrule_vote', seat});
+  if(act === 'rate')    return void dispatch({type:'rate', seat, value:+b.dataset.val});
+  if(act === 'to-rating') return void dispatch({type:'to_rating'});
+  if(act === 'next-attempt') return void dispatch({type:'next_attempt'});
+  if(act === 'new-page') return void newPage();
+});
+
+$('btn-kind-clover').onclick = () => { kind='clover'; setKindButtons(); newPage(); };
+$('btn-kind-mindmeld').onclick = () => { kind='mindmeld'; setKindButtons(); newPage(); };
+$('btn-reset').onclick = () => { chronicle=[]; pageNumber=0; Keeper.reseed(20260902); newPage(); };
+function setKindButtons(){
+  $('btn-kind-clover').className   = kind==='clover'   ? 'primary' : '';
+  $('btn-kind-mindmeld').className = kind==='mindmeld' ? 'primary' : '';
+}
+
+/* ------------------------------------------------------------- scenarios */
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const beat = () => $('beat-toggle').checked ? 2700 : 60;
+
+const SCENARIOS = [
+{
+  name:'Clover — the happy path',
+  blurb:'A Give sets tonight’s Page in a kitchen, both of you write four clues for your own clover, '+
+        'then reconstruct each other’s. Watch the reveal beat and the graded ladder. This is the Page '+
+        'as it should feel when everything works.',
+  steps:[
+    ['Mara gives the theme “kitchen”', () => { kind='clover'; setKindButtons(); newPage();
+        $('give').value='kitchen'; dispatch({type:'give',seat:'B',theme:'kitchen'}); }],
+    ['Author the Page', () => dispatch({type:'author_page'})],
+    ['Jacob writes his four clues', () => useExemplars('A')],
+    ['Mara writes her four clues', () => useExemplars('B')],
+    ['Both commit', () => { dispatch({type:'commit_clues',seat:'A'}); dispatch({type:'commit_clues',seat:'B'}); }],
+    ['Both reconstruct correctly', () => { placePerfect('A'); placePerfect('B'); }],
+    ['Both commit the guess — watch the 2.5 s beat', () => {
+        dispatch({type:'commit_guess',seat:'A'}); dispatch({type:'commit_guess',seat:'B'}); }],
+    ['Go to rating', () => dispatch({type:'to_rating'})],
+    ['Both rate it “again!”', () => { dispatch({type:'rate',seat:'A',value:3}); dispatch({type:'rate',seat:'B',value:3}); }]
+  ]
+},
+{
+  name:'Clover — the authored decoy bites',
+  blurb:'The bet of this candidate: the fifth card is crafted by the Author to fit one of your clues, '+
+        'not drawn blind from a box. Here Mara takes the bait. Watch whether a half-landing (1/3) '+
+        'feels fair, and whether the Assayer naming the decoy lands as a good sting or a cheap one.',
+  steps:[
+    ['Fresh Page, no Give', () => { kind='clover'; setKindButtons(); newPage(); dispatch({type:'author_page'}); }],
+    ['Both write and commit clues', () => { useExemplars('A'); useExemplars('B');
+        dispatch({type:'commit_clues',seat:'A'}); dispatch({type:'commit_clues',seat:'B'}); }],
+    ['Jacob reconstructs correctly', () => placePerfect('A')],
+    ['Mara places the decoy in slot 1', () => placeDecoy('B')],
+    ['Both commit — see the graded damage', () => {
+        dispatch({type:'commit_guess',seat:'A'}); dispatch({type:'commit_guess',seat:'B'}); }]
+  ]
+},
+{
+  name:'Clover — an illegal clue, then a joint overrule',
+  blurb:'Two things the design promises. First: a deterministic gate refuses a clue that is the keyword '+
+        'itself or shares its root — no model involved, instant, same answer every time. Second: when the '+
+        'Assayer grades something you both think is wrong, you can jointly overrule it, and the overrule '+
+        'is written into the Chronicle as precedent.',
+  steps:[
+    ['Fresh Page', () => { kind='clover'; setKindButtons(); newPage(); dispatch({type:'author_page'}); }],
+    ['Jacob tries the keyword itself as a clue (refused)', () => {
+        const pair = Game.pairWords(state,'A',0);
+        dispatch({type:'write_clue',seat:'A',slot:0,word:pair[0]}); }],
+    ['Jacob tries a word sharing its root (refused)', () => {
+        const pair = Game.pairWords(state,'A',0);
+        dispatch({type:'write_clue',seat:'A',slot:0,word:pair[0].slice(0,4)+'ing'}); }],
+    ['Jacob tries two words (refused)', () =>
+        dispatch({type:'write_clue',seat:'A',slot:0,word:'two words'})],
+    ['A legal clue is accepted', () => useExemplars('A')],
+    ['Mara writes hers, both commit', () => { useExemplars('B');
+        dispatch({type:'commit_clues',seat:'A'}); dispatch({type:'commit_clues',seat:'B'}); }],
+    ['Both guess badly on purpose', () => { placeShifted('A'); placeShifted('B'); }],
+    ['Commit and see a harsh grade', () => {
+        dispatch({type:'commit_guess',seat:'A'}); dispatch({type:'commit_guess',seat:'B'}); }],
+    ['Jacob votes to overrule', () => dispatch({type:'overrule_vote',seat:'A'})],
+    ['Mara votes too — precedent recorded', () => dispatch({type:'overrule_vote',seat:'B'})]
+  ]
+},
+{
+  name:'Mind-Meld — converging over three attempts',
+  blurb:'Medium’s atom: two anchor words, you each secretly write one word that bridges them, and the '+
+        'Assayer grades how close you landed instead of ruling match/miss. Miss, and your two words '+
+        'become the next pair of anchors. Watch whether the ladder gives the near-misses any texture.',
+  steps:[
+    ['Fresh Mind-Meld Page', () => { kind='mindmeld'; setKindButtons(); newPage(); dispatch({type:'author_page'}); }],
+    ['Both bridge — far apart', () => bridgeBoth('marble','triage')],
+    ['Commit both — 2.5 s beat', () => { dispatch({type:'commit_bridge',seat:'A'}); dispatch({type:'commit_bridge',seat:'B'}); }],
+    ['Failed words become the new anchors', () => dispatch({type:'next_attempt'})],
+    ['Both bridge — closer, but not there', () => bridgeBoth('lantern','ladle')],
+    ['Commit both', () => { dispatch({type:'commit_bridge',seat:'A'}); dispatch({type:'commit_bridge',seat:'B'}); }],
+    ['Try again', () => dispatch({type:'next_attempt'})],
+    ['Both say the same word', () => bridgeBoth('hearth','hearth')],
+    ['Commit — the meld', () => { dispatch({type:'commit_bridge',seat:'A'}); dispatch({type:'commit_bridge',seat:'B'}); }],
+    ['Rate it', () => { dispatch({type:'to_rating'});
+        dispatch({type:'rate',seat:'A',value:3}); dispatch({type:'rate',seat:'B',value:2}); }]
+  ]
+},
+{
+  name:'The same ruling twice — consistency',
+  blurb:'Design law 1: players forgive a wrong ruling and never forgive a self-contradicting one. '+
+        'This runs the identical Mind-Meld pair twice on two Pages. The second one comes back from the '+
+        'verdict cache — same score, same words in the reasoning, instantly. Check the Chronicle log for '+
+        '“CACHE HIT”.',
+  steps:[
+    ['Page 1 — bridge lantern/ember', () => { kind='mindmeld'; setKindButtons(); newPage();
+        dispatch({type:'author_page'}); rememberedAnchors = state.anchors.slice();
+        bridgeBoth('lantern','ember'); }],
+    ['Commit both', () => { dispatch({type:'commit_bridge',seat:'A'}); dispatch({type:'commit_bridge',seat:'B'}); }],
+    ['Open a second Page', () => { dispatch({type:'to_rating'});
+        dispatch({type:'rate',seat:'A',value:2}); dispatch({type:'rate',seat:'B',value:2});
+        newPage(); dispatch({type:'author_page'}); }],
+    ['Same anchors, same two words', () => {
+        state.anchors = rememberedAnchors.slice();   /* demo poke: force a repeat of the exact question */
+        bridgeBoth('lantern','ember'); render(); }],
+    ['Commit — identical verdict, straight from cache', () => {
+        dispatch({type:'commit_bridge',seat:'A'}); dispatch({type:'commit_bridge',seat:'B'}); }]
+  ]
+},
+{
+  name:'Moves that should be illegal',
+  blurb:'Every one of these should be refused with a plain-language reason. If any of them goes through, '+
+        'or if a refusal reads as a puzzle rather than a sentence, that is a bug in the idea.',
+  steps:[
+    ['Fresh clover Page', () => { kind='clover'; setKindButtons(); newPage(); dispatch({type:'author_page'}); }],
+    ['Guess before any clues exist', () =>
+        dispatch({type:'place',seat:'A',slot:0,cardId:'B0'})],
+    ['Commit clues with blanks', () => dispatch({type:'commit_clues',seat:'A'})],
+    ['Write clues, commit', () => { useExemplars('A'); dispatch({type:'commit_clues',seat:'A'}); }],
+    ['Edit a committed clue', () => dispatch({type:'write_clue',seat:'A',slot:0,word:'sneaky'})],
+    ['Overrule before any reveal', () => dispatch({type:'overrule_vote',seat:'A'})],
+    ['Rate before the Page ends', () => dispatch({type:'rate',seat:'A',value:3})],
+    ['Give a theme mid-Page', () => dispatch({type:'give',seat:'B',theme:'winter'})]
+  ]
+}
+];
+
+function useExemplars(seat){
+  state.page.clovers[seat].exemplars.forEach((ex,i) =>
+    dispatch({type:'write_clue', seat, slot:i, word:ex}));
+}
+function placePerfect(seat){
+  const them = Game.other(seat);
+  state.page.clovers[them].ring.forEach((id,i) => dispatch({type:'place', seat, slot:i, cardId:id}));
+}
+function placeShifted(seat){
+  const them = Game.other(seat);
+  const ring = state.page.clovers[them].ring;
+  ring.forEach((_,i) => dispatch({type:'place', seat, slot:i, cardId:ring[(i+1)%4]}));
+}
+function placeDecoy(seat){
+  const them = Game.other(seat);
+  const ring = state.page.clovers[them].ring;
+  dispatch({type:'place', seat, slot:0, cardId:state.page.clovers[them].decoy.id});
+  [1,2,3].forEach(i => dispatch({type:'place', seat, slot:i, cardId:ring[i]}));
+}
+function bridgeBoth(a,b){
+  dispatch({type:'bridge', seat:'A', word:a});
+  dispatch({type:'bridge', seat:'B', word:b});
+}
+
+let rememberedAnchors = null;
+let activeScenario = 0, stepIndex = 0;
+function renderTabs(){
+  $('tabs').innerHTML = SCENARIOS.map((s,i) =>
+    '<button data-tab="'+i+'" aria-selected="'+(i===activeScenario)+'">'+s.name+'</button>').join('');
+  $('scenario-blurb').textContent = SCENARIOS[activeScenario].blurb;
+  renderSteps();
+}
+function renderSteps(){
+  $('scenario-steps').innerHTML = SCENARIOS[activeScenario].steps.map((s,i) =>
+    '<div><button data-step="'+i+'" class="'+(i<stepIndex?'done':i===stepIndex?'primary':'')+'"'+
+    (i>stepIndex?' disabled':'')+'>'+(i+1)+'. '+s[0]+'</button></div>').join('');
+}
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab]'); if(!b) return;
+  activeScenario = +b.dataset.tab; stepIndex = 0; chronicle=[]; pageNumber=0;
+  Keeper.reseed(20260902); newPage(); renderTabs();
+});
+$('scenario-steps').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-step]'); if(!b) return;
+  const i = +b.dataset.step;
+  SCENARIOS[activeScenario].steps[i][1]();
+  stepIndex = i+1; renderSteps();
+  if(state && state.phase === 'assaying'){ await wait(beat()); renderSteps(); }
+});
+
+/* ------------------------------------------------------------------- boot */
+setKindButtons(); newPage(); renderTabs();
+</script>
+</div>
+</body>
+</html>
