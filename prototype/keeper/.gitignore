@@ -1,0 +1,9 @@
+/_build/
+/deps/
+/cover/
+/doc/
+*.ez
+erl_crash.dump
+PROTOTYPE-cache.json
+PROTOTYPE-calls.log
+*.env
