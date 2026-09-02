@@ -17,13 +17,15 @@ mix keeper.author --kind clover --give "suburban family life"
 mix keeper.author --kind mindmeld --give "the world St. Thérèse of Lisieux grew up in"
 mix keeper.author --kind clover                    # no Give: the Author picks the meaning-space
 mix keeper.author --kind clover --give "..." --author both --seed 7   # blind A/B: Author A vs Author B, key at the bottom
+mix keeper.author --kind clover --give "..." --effort high             # Fable arm at a lower effort (max is ~8 min, ~$1.80 per clover Page)
 mix keeper.assay                                    # 20 hand-made Mind-Meld submissions × every Assayer candidate
 mix keeper.bench --n 20 --label mac                 # latency + consistency bench, cache off, streaming
 mix keeper.probe                                    # Q6: structured output, a refusal, fallbacks, a rejected param
 mix keeper.scribe                                   # one "Last time, …" sentence
 ```
 
-Every task also runs without keys: add `--fake` (deterministic stand-in adapter). Keys are read from
+`mix keeper.probe` and `mix keeper.scribe` cost cents; `mix keeper.author` at the default `effort: "max"` costs up to ~$2
+and ~8 minutes per clover Page (see REPORT.md Q1). Every task also runs without keys: add `--fake` (deterministic stand-in adapter). Keys are read from
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BASETEN_API_KEY` and never printed or written.
 
 Every request prints one line (role, model, ttft, total, tokens, cost, stop reason) and every response its

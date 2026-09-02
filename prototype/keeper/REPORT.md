@@ -8,7 +8,7 @@ GPT-5.6 Luna $0.20/$1.20 per MTok in/out). Costs below count every token the pro
 
 ## Verdicts in six lines
 
-- **Q1 Author quality: YES for Mind-Meld, QUALIFIED for clover.** Every Mind-Meld Page was schema-valid and clue-legal on the first try and read as genuinely authored for the Give. Clover at `effort: "max"` overran a 32k output cap twice on thinking alone; it needs a 100k cap (see Q1 for what a capped run produced). <!-- Q1-VERDICT -->
+- **Q1 Author quality: YES.** All 12 Pages (3 Gives × 2 kinds × 2 Authors) were schema-valid and clue-legal on the **first** attempt once the output cap was right; Fable's decoys are excluded by the ring's double constraint and its vocabulary is *of the Give*. The catch: at `effort: "max"` a clover Page thinks for 34.5k tokens — 7.8 min and $1.78 with a 100k cap, and a hard failure (zero text, $1.61 burned) under the 32k cap it was first given. Mind-Meld at `max` costs $0.15–0.32 and 43–87 s; clover at `high` $0.25–0.38 and 65–110 s.
 - **Q2 Assayer budget: GLM 5.3-Flash PASSES with room from both the Mac and the VPS** (VPS: first token P50 314 ms, whole verdict P95 961 ms). Sonnet 5 and GPT-5.6 Luna pass; Opus 5 at low effort fails the P50 rule from both (2.53 s Mac, 2.61 s VPS) though its P95 total is under 4 s.
 - **Q3 Consistency: no model is deterministic (law 11 confirmed); Opus is tightest, GLM loosest.** Same submission ×5 ranged up to 35 points on GLM and 6 on Opus; ordering disagreement averaged 2.5–2.8 (Opus) versus 8.8–14.5 (GLM). Hedging two identical requests cut GLM's P95 total from 1.52 s to 1.17 s.
 - **Q4 Assayer quality: Opus's grades and reasoning read as the fairest, Sonnet close behind; GLM is fast but erratic on the middle of the scale.** All four agree at the extremes.
@@ -39,7 +39,67 @@ usable as a pre-graded table (law 13). Neither needed a retry.
 
 ### Clover Pages
 
-<!-- CLOVER -->
+**What happened at `effort: "max"` with a 32,000-token cap.** Two of three clover runs (the Thérèse Give and the no-Give
+run) streamed for 431 s and 421 s, produced **zero text** (no first-token time at all) and stopped with
+`stop_reason: "max_tokens"`: 32,000 output tokens of thinking each, $1.61 each, and then the retry loop started the
+same request again. The runs were killed; the retry-on-cap behaviour was removed (a cap overrun is now terminal) and the
+Author's cap raised to 100,000. The Mind-Meld Pages at `max` used 2,600–5,900 thinking tokens; the clover schema (eight
+legal clues under a stem rule, two disjoint rings, two decoys that must tempt *and* be excludable) is a different order
+of problem for the model's deliberation.
+
+**Clover at `effort: "high"` (Fable arm), Author A at `xhigh`, 100k cap — both valid on the first attempt.**
+
+*Give: the world St. Thérèse of Lisieux grew up in.*
+
+Author B (110 s, $0.38; 7,339 out of which 6,383 thinking) — theme "Thérèse's Normandy: a lacemaker's and watchmaker's Catholic household, orchards, convent bells":
+
+- ring **lace → watch → rose → snow**; exemplar clues *wrist* (Zélie's lace cuffs and Louis's watches meet at the wrist), *stem* (a rose grows on one; a watch is wound by one), *shower* (her promised shower of roses; snow on her clothing day), *frost* (frost draws lace on a Norman window). Decoy **thorn**, aimed at *stem*: "Hearing stem, the guesser sees the rose at once and reaches for its thorn… Excluded: stem is a thing each keyword owns outright… a thorn sits on a stem but has none of its own, and a watch has nothing thorny anywhere; in the ring, watch is already locked to lace by wrist, so its other neighbour must carry a stem itself, and only the rose does."
+- ring **veil → bell → orchard → candle**; clues *wedding*, *ring* (a bell rings; orchard trees keep their years in rings), *bees* (apple blossom, and their wax becomes altar candles), *chapel*. Decoy **steeple**, aimed at *chapel*: "…it even borrows the bell's gravity, since bells hang in steeples. Excluded: chapel here names the room two small things are brought into, a veil on the head and a candle in the hand; a steeple is the building itself, not something carried in. And it can hold no second hand in the ring…"
+
+Author A (296 s, $0.33; 16,459 out, 15,870 reasoning) — theme "St. Thérèse's late-nineteenth-century Norman childhood: parental craft, domestic life, Catholic devotion, and rail pilgrimage":
+
+- ring **lace → watch → garden → linen**; clues *maker* ("Zélie was a lacemaker and Louis a watchmaker"), *spring* (a watch's coiled spring; the season that wakes a garden), *table*, *needle* (needle lace, including Alençon). Decoy **king**, aimed at *maker*: "Kingmaker is a familiar compound, and Thérèse affectionately regarded her father as her king. Excluded: a kingmaker does not craft a king and names neither parental trade."
+- ring **shrine → candle → letter → train**; clues *votive*, *wax* (a candle melts sealing wax), *mail*, *pilgrimage* (her rail pilgrimage to Rome). Decoy **crayon**, aimed at *wax*: "a crayon merely contains wax and plays no part in that lighting-and-sealing bridge."
+
+*No Give.*
+
+Author B (65 s, $0.25; 4,753 out, 3,904 thinking) — theme "A South Philly rowhouse block settling into a weeknight evening":
+
+- ring **stoop → brick → mural → alley**; clues *front*, *wall*, *graffiti*, *back*. Decoy **door**, aimed at *front*: "Front door is the most automatic completion… Excluded: stoop and brick together are the fixed masonry you can see from the sidewalk without anything moving; the door is the one part that opens, and it would fit *back* just as well, which gives away that it is not anchored to either pair."
+- ring **couch → jersey → pretzel → hoagie**; clues *game*, *soft* (jersey knit; a Philly pretzel is always the soft kind), *picnic*, *crumbs*. Decoy **cheesesteak**, aimed at *picnic*: "…the one Philly staple that cannot go on a picnic" because it comes off a hot griddle.
+
+Author A (58 s, $0.069; 3,310 out, 2,935 reasoning) — theme "a Philadelphia weeknight culture crawl":
+
+- ring **cup → book → screen → ticket**; clues *paper*, *adaptation*, *cinema*, *holder* ("cup holder and ticket holder are familiar compounds"). Decoy **camera**, aimed at *cinema*: "a camera belongs to production", the pair describes the audience side.
+- ring **coaster → draft → round → quiz**; clues *beer*, *pick* (a draft pick, identified by its round), *trivia*, *pub*. Decoy **bottle**, aimed at *beer*: "bottled beer is packaged rather than draft."
+
+*Give: suburban family life, Fable arm at `effort: "max"`, 100k cap.*
+
+Author B (468 s, $1.78; 35,297 out of which **34,535 thinking**) — theme "suburban family life: the Saturday soccer shuttle and the weeknight living room" — valid on the first attempt:
+
+- ring **minivan → carpool → cleats → mud**; clues *chauffeur* ("the parent as unpaid driver"), *practice*, *caked*, *tracked*. Decoy **piano**, aimed at *practice*: "Practice is the word shouted up the stairs every evening at the kid who has not touched the piano… Excluded: carpool and cleats together fix the sense: the practice you get driven to, on a field, in studded shoes. Piano practice happens at home in socks; nobody carpools to the living room, and piano has no other clue to lean on."
+- ring **remote → couch → blanket → thermostat**; clues *lost*, *movie*, *chilly* ("somebody says it is chilly; the answer is a blanket, never the thermostat"), *dad* ("the two sacred controls Dad alone may touch"). Decoy **retainer**, aimed at *lost*: "the household's most-lost object, wrapped in a cafeteria napkin and thrown away weekly… A retainer vanishes at the lunch table, not in the sofa, and nothing about it is chilly, movie, or dad, so it cannot close a ring."
+
+Author A (157 s, $0.18; 8,662 out, 8,194 reasoning) — theme "suburban family life":
+
+- ring **lunchbox → dinner → portrait → diploma**; clues *kitchen*, *family*, *framed*, *school*. Decoy **bus**, aimed at *school*: "a bus is recurring transport, not the finishing milestone supplied by the diploma."
+- ring **sprinkler → ball → teammate → minivan**; clues *backyard*, *soccer*, *carpool*, *hose*. Decoy **stocking**, aimed at *hose* (the hosiery sense): "minivan and sprinkler together force the water-tube sense."
+
+Same Give, same schema: Author B's Page is the one my wife would narrate afterwards (the retainer in the napkin, the
+thermostat only Dad may touch); Author A's is competent and a little institutional ("familiar household institutions").
+Compared with Author B at `high` (65–110 s, $0.25–0.38), `max` bought 4–7× the thinking, 5× the cost and 4–7× the
+wall time for a Page of similar legality and arguably sharper wit. Latency is irrelevant for the Author (it runs
+before play), so this is a taste-versus-cost call: roughly $2 versus $0.35 per clover Page.
+
+Reading, blind: both Authors produce legal, schema-valid clovers first time, and both understand what a decoy is for.
+The difference is in *how the exclusion works*. Author B's decoys are excluded by the **ring's double constraint** (a
+card must satisfy two clues at once: "watch is already locked to lace by wrist", "it would fit back just as well, which
+gives away…"), which is the fair-misdirection mechanism Stage 0's ring view was built to make visible, and its
+rationales are narratable afterwards in the So Clover way. Author A's decoys are excluded by a **category boundary**
+(production vs audience, bottle vs draft), which is fair but flatter, and two of its clues are compound-word tricks
+(*holder*, *paper*) rather than meaning bridges. Author B's vocabulary is also more *of the Give* (Zélie's lace cuffs,
+a Norman orchard's bees, a soft pretzel) where Author A's is a generic Philadelphia evening. On this evidence the
+Chronicle Clover bet (an authored decoy beats a blind-drawn one) has an Author that can carry it — at `high`.
 
 ## Q2 — Assayer budget
 
@@ -260,7 +320,26 @@ wire (which is what caught the refusal shape and the thinking overrun).
 
 ## Spend
 
-<!-- SPEND -->
+Per-call lines only, every provider's own token counts, prices as listed at the top. This excludes three killed
+in-flight Fable clover attempts (two 32k-cap retries stopped after ~3 min each and one first attempt stopped at ~10 min,
+all streamed thinking with no output), estimated at **about $3** more from their run times — so the real total is
+**about $13**, under the $25 line without an ask.
+
+| model | calls | logged $ |
+|---|---|---|
+| claude-fable-5-1 | 13 | 7.9869 |
+| claude-opus-5 | 272 | 1.2657 |
+| gpt-5.6-sol | 6 | 0.6868 |
+| claude-sonnet-5 | 279 | 0.4664 |
+| gpt-5.6-luna | 383 | 0.0461 |
+| zai-org/GLM-5.3-Flash | 445 | 0.0294 |
+| **total logged** | 1655 | **10.4812** |
+
+Mac 1003 calls $9.6021; VPS 652 calls $0.8791
+
+Where it went: 13 Fable calls ($8.0 logged + ~$3 killed) are four fifths of the bill, and one of them (the max-effort
+clover) is $1.78 on its own; the six Sol calls cost $0.69. The entire Assayer programme (two benches on two machines,
+the 20-item assay on four models, ~1,600 verdict calls) cost about $1.80, of which the Opus arm is $1.27.
 
 ## What the real Keeper should keep / change
 
@@ -282,8 +361,9 @@ wire (which is what caught the refusal shape and the thinking overrun).
 
 **Change**
 
-- **Author `max_tokens`**: 100k at `effort: "max"`, and treat a cap overrun as terminal, never as a retry. Consider
-  `effort: "high"` for clover as the default and `max` for Mind-Meld, per the Q1 numbers. <!-- KEEP-Q1 -->
+- **Author `max_tokens`**: 100k at `effort: "max"`, and treat a cap overrun as terminal, never as a retry. Decide
+  per kind: `max` for Mind-Meld ($0.15–0.32, under 90 s) is cheap; `max` for clover ($1.78, 7.8 min) versus `high`
+  ($0.25–0.38, under 2 min) is a taste call for the couple — generate a few of each blind and let them pick.
 - **Assayer choice**: keep GLM 5.3-Flash as the live Assayer for the *beat*, but seed the Chronicle's precedent with a
   second opinion from Opus 5 (or Sonnet 5) on borderline pairs (60–85) and on every overrule; or run Sonnet at low
   effort as the Assayer and accept a 2 s P50. Decide after the couple labels ~100 pairs (research §5f).
@@ -295,4 +375,6 @@ wire (which is what caught the refusal shape and the thinking overrun).
 
 ## Blind key
 
-<!-- KEY -->
+Throughout this report, **Author A = `gpt-5.6-sol` (`reasoning_effort: "xhigh"`)** and **Author B = `claude-fable-5-1`**
+(`effort: "max"` for Mind-Meld and the suburban clover; `effort: "high"` for the other two clovers). The per-run labels
+printed by `mix keeper.author --author both` were randomised by seed (`Keeper.AB.assign/2`) and re-normalised here.
