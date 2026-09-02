@@ -6,8 +6,30 @@
 <title>PROTOTYPE — Page machines (Chronicle Clover &amp; Mind-Meld)</title>
 <style>
   :root{
+    color-scheme:light;
     --ink:#1c1a17; --dim:#6b645c; --line:#e0dad1; --panel:#fffdfa; --bg:#f6f2ec;
-    --accent:#9a5b1e; --accent-soft:#f4e7d8; --good:#2f6b46; --bad:#8c2f2f;
+    --accent:#9a5b1e; --accent-hover:#844d19; --accent-soft:#f4e7d8; --on-accent:#fff;
+    --good:#2f6b46; --bad:#8c2f2f;
+    --field:#fff; --field-line:#cdc4b8;
+    --banner-line:#e3cfb4;
+    --changed-bg:#fff5e2; --changed-line:#f0d9b3;
+    --stage-line:#4a6b8a;
+    --log-line:#f2ede6;
+    --refused-bg:#fbeaea; --refused-line:#e8c9c9;
+    --code-bg:#f0ebe3;
+  }
+  :root[data-theme=dark]{
+    color-scheme:dark;
+    --ink:#ece6dd; --dim:#9b9187; --line:#3a352f; --panel:#211e1a; --bg:#171512;
+    --accent:#d99a53; --accent-hover:#eab26f; --accent-soft:#33291f; --on-accent:#1b1512;
+    --good:#79c295; --bad:#e2867f;
+    --field:#262220; --field-line:#4a443c;
+    --banner-line:#4a3a26;
+    --changed-bg:#3a2f18; --changed-line:#6b5424;
+    --stage-line:#6f93b6;
+    --log-line:#2b2723;
+    --refused-bg:#38221f; --refused-line:#5e3531;
+    --code-bg:#2b2723;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -18,39 +40,40 @@
   h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 8px;font-weight:600}
   p{margin:0 0 10px}
   .lede{color:var(--dim);max-width:70ch}
-  .banner{background:var(--accent-soft);border:1px solid #e3cfb4;border-radius:8px;
+  .banner{background:var(--accent-soft);border:1px solid var(--banner-line);border-radius:8px;
           padding:14px 16px;margin:18px 0 26px;max-width:80ch}
   .banner strong{color:var(--accent)}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
   @media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
-  button{font:inherit;background:#fff;border:1px solid #cdc4b8;border-radius:7px;
+  button{font:inherit;background:var(--field);border:1px solid var(--field-line);border-radius:7px;
          padding:7px 12px;cursor:pointer;color:var(--ink);margin:0 6px 6px 0}
   button:hover{border-color:var(--accent);color:var(--accent)}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-  button.primary:hover{background:#844d19;color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  button.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:var(--on-accent)}
   button.done{opacity:.45;text-decoration:line-through}
   button:disabled{opacity:.35;cursor:not-allowed}
-  input,select{font:inherit;padding:6px 8px;border:1px solid #cdc4b8;border-radius:7px;background:#fff}
+  input,select{font:inherit;padding:6px 8px;border:1px solid var(--field-line);border-radius:7px;
+               background:var(--field);color:var(--ink)}
   input{width:150px}
   .kv{display:grid;grid-template-columns:150px 1fr;gap:2px 14px;font-size:14px}
   .kv dt{color:var(--dim)}
   .kv dd{margin:0}
   .chip{display:inline-block;background:var(--accent-soft);border-radius:20px;padding:1px 10px;font-size:13px}
   .phase{font-size:22px;letter-spacing:-.01em;color:var(--accent);font-weight:600}
-  .changed{background:#fff5e2;outline:2px solid #f0d9b3;border-radius:4px}
+  .changed{background:var(--changed-bg);outline:2px solid var(--changed-line);border-radius:4px}
   .private{border-top:3px solid var(--accent)}
-  .stage{border-top:3px solid #4a6b8a}
+  .stage{border-top:3px solid var(--stage-line)}
   .log{font-size:13px;max-height:260px;overflow:auto;border-top:1px solid var(--line);padding-top:8px}
-  .log div{padding:3px 0;border-bottom:1px solid #f2ede6}
-  .refused{background:#fbeaea;border:1px solid #e8c9c9;color:var(--bad);
+  .log div{padding:3px 0;border-bottom:1px solid var(--log-line)}
+  .refused{background:var(--refused-bg);border:1px solid var(--refused-line);color:var(--bad);
            border-radius:8px;padding:10px 12px;margin-bottom:12px}
   .ok{color:var(--good)} .no{color:var(--bad)}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
   .tabs button{margin:0}
-  .tabs button[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
-  .card{display:inline-block;border:1px solid #cdc4b8;border-radius:7px;padding:5px 10px;margin:0 6px 6px 0;background:#fff}
+  .tabs button[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .card{display:inline-block;border:1px solid var(--field-line);border-radius:7px;padding:5px 10px;margin:0 6px 6px 0;background:var(--field)}
   .slotrow{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
   .ringcard{display:flex;align-items:center;gap:8px;margin:2px 0;font-weight:600}
   .ringclue{border-left:3px solid var(--accent-soft);margin:0 0 0 26px;padding:8px 0 8px 16px;
@@ -60,8 +83,21 @@
   .muted{color:var(--dim)}
   .beat{color:var(--accent);font-weight:600}
   small{color:var(--dim)}
-  code{background:#f0ebe3;padding:1px 5px;border-radius:4px;font-size:13px}
+  code{background:var(--code-bg);padding:1px 5px;border-radius:4px;font-size:13px}
+  #theme-toggle{float:right;margin-left:8px}
 </style>
+<script>
+/* theme: system by default, remembered once the reader picks one */
+(() => {
+  const stored = (() => { try { return localStorage.getItem('proto-theme'); } catch(e){ return null; } })();
+  const sys = () => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  document.documentElement.dataset.theme = stored || sys();
+  window.__themePref = stored;              /* null = follow the system */
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if(!window.__themePref) document.documentElement.dataset.theme = sys();
+  });
+})();
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -93,6 +129,7 @@
   <span style="margin-left:18px">
     <label><input type="checkbox" id="beat-toggle" checked style="width:auto"> keep the real 2.5&nbsp;s reveal beat</label>
   </span>
+  <button id="theme-toggle" title="Light / dark">◑ Dark</button>
   <button id="btn-reset" style="float:right">Start over (wipes the Chronicle)</button>
 </div>
 
@@ -794,6 +831,18 @@ document.addEventListener('click', e => {
 
 $('btn-kind-clover').onclick = () => { kind='clover'; setKindButtons(); newPage(); };
 $('btn-kind-mindmeld').onclick = () => { kind='mindmeld'; setKindButtons(); newPage(); };
+const themeBtn = $('theme-toggle');
+const paintThemeBtn = () =>
+  themeBtn.textContent = document.documentElement.dataset.theme === 'dark' ? '◐ Light' : '◑ Dark';
+paintThemeBtn();
+themeBtn.onclick = () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  window.__themePref = next;
+  try { localStorage.setItem('proto-theme', next); } catch(e) {}
+  paintThemeBtn();
+};
+
 $('btn-reset').onclick = () => { chronicle=[]; pageNumber=0; Keeper.reseed(20260902); newPage(); };
 function setKindButtons(){
   $('btn-kind-clover').className   = kind==='clover'   ? 'primary' : '';
