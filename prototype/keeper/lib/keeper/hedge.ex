@@ -14,7 +14,14 @@ defmodule Keeper.Hedge do
           {Map.fetch!(refs, ref), result}
       end
 
-    for t <- tasks, t != winner, do: Task.shutdown(t, :brutal_kill)
+    # Losers are told to halt their stream on the next chunk (Keeper.HTTP honours :keeper_cancel), which lets
+    # Finch close the connection properly. Killing a process mid-stream exhausted the pool on the VPS.
+    for t <- tasks, t != winner do
+      Process.unlink(t.pid)
+      Process.demonitor(t.ref, [:flush])
+      send(t.pid, :keeper_cancel)
+    end
+
     result
   end
 end

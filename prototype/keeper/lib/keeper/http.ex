@@ -11,6 +11,12 @@ defmodule Keeper.HTTP do
     into = fn {:data, chunk}, {req, resp} ->
       st = Req.Response.get_private(resp, :st) || state
 
+      receive do
+        :keeper_cancel -> throw({:keeper_cancelled, st})
+      after
+        0 -> :ok
+      end
+
       st =
         if resp.status == 200 do
           {events, rest} = Keeper.SSE.feed(st.sse_buf, chunk)
@@ -23,14 +29,19 @@ defmodule Keeper.HTTP do
     end
 
     result =
-      Req.post(url,
-        headers: headers,
-        body: body,
-        into: into,
-        retry: false,
-        receive_timeout: Keyword.get(opts, :timeout, 900_000),
-        connect_options: [timeout: 30_000]
-      )
+      try do
+        Req.post(url,
+          headers: headers,
+          body: body,
+          into: into,
+          retry: false,
+          pool_timeout: 30_000,
+          receive_timeout: Keyword.get(opts, :timeout, 900_000),
+          connect_options: [timeout: 30_000]
+        )
+      catch
+        {:keeper_cancelled, _st} -> {:error, :cancelled}
+      end
 
     total = System.monotonic_time(:millisecond) - t0
 

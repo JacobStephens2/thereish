@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Keeper.Author do
   @moduledoc @shortdoc
   use Mix.Task
 
-  @switches [kind: :string, give: :string, author: :string, fake: :boolean, seed: :integer, digest: :string, persist: :boolean]
+  @switches [kind: :string, give: :string, author: :string, fake: :boolean, seed: :integer, digest: :string, persist: :boolean, effort: :string, max_tokens: :integer]
 
   def run(args) do
     {opts, _, _} = OptionParser.parse(args, switches: @switches)
@@ -27,7 +27,10 @@ defmodule Mix.Tasks.Keeper.Author do
     for arm <- arms do
       IO.puts("\n=== #{labels[arm]} authoring a #{kind} Page. Give: #{inspect(give)} ===")
 
-      case Keeper.author_page(%{kind: kind, give: give, chronicle_digest: digest}, author: arm, fake: opts[:fake], seed: seed) do
+      config = override(arm, opts)
+      if arm == :author and (opts[:effort] || opts[:max_tokens]), do: IO.puts("(override for this arm: effort=#{config.effort} max_tokens=#{config.max_tokens})")
+
+      case Keeper.author_page(%{kind: kind, give: give, chronicle_digest: digest}, author: arm, config: config, fake: opts[:fake], seed: seed) do
         {:ok, page} -> print_page(labels[arm], page)
         {:error, why, attempts} -> IO.puts("FAILED after #{length(attempts)} attempt(s): #{inspect(why)}")
       end
@@ -39,6 +42,15 @@ defmodule Mix.Tasks.Keeper.Author do
       IO.puts("\n(blind key, keep at the very bottom: " <> Enum.map_join(arms, "; ", fn a -> "#{labels[a]} = #{Keeper.Config.role(a).model}" end) <> ")")
     end
   end
+
+  # --effort / --max-tokens apply to the Fable arm only; the OpenAI arm always runs at its own top effort.
+  defp override(:author, opts) do
+    Keeper.Config.role(:author)
+    |> Map.merge(if(opts[:effort], do: %{effort: opts[:effort]}, else: %{}))
+    |> Map.merge(if(opts[:max_tokens], do: %{max_tokens: opts[:max_tokens]}, else: %{}))
+  end
+
+  defp override(arm, _opts), do: Keeper.Config.role(arm)
 
   defp blind_labels([arm], _seed), do: %{arm => "Author (#{Keeper.Config.role(arm).model})"}
 

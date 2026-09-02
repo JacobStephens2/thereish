@@ -8,7 +8,14 @@ defmodule Keeper.Bench do
     req = Prompts.assay(item.anchors, p1, p2)
     t0 = System.monotonic_time(:millisecond)
 
-    case Hedge.race(hedge, fn -> Schema.generate(cfg, req, &Prompts.check_verdict/1, 0) end) do
+    outcome =
+      try do
+        Hedge.race(hedge, fn -> Schema.generate(cfg, req, &Prompts.check_verdict/1, 0) end)
+      rescue
+        e -> {:error, {:transport, Exception.message(e)}, []}
+      end
+
+    case outcome do
       {:ok, r, _} ->
         %{ok: true, ttft: r.timings.ttft_ms, total: r.timings.total_ms, out: r.usage[:output_tokens] || 0, closeness: r.json["closeness"], reasoning: r.json["reasoning"], cost: r.cost, wall: System.monotonic_time(:millisecond) - t0}
 

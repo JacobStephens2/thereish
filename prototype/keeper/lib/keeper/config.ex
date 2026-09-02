@@ -8,7 +8,8 @@ defmodule Keeper.Config do
 
   @roles %{
     # Author: frontier tier, unattended, latency irrelevant (design law 13).
-    author: %{adapter: Anthropic, model: "claude-fable-5-1", effort: "max", max_tokens: 32_000, fallbacks: true},
+    # 32_000 was not enough: at "max" the clover Page thinks past the cap (see REPORT.md Q1), so 100_000.
+    author: %{adapter: Anthropic, model: "claude-fable-5-1", effort: "max", max_tokens: 100_000, fallbacks: true},
     # A/B arm for the Author: OpenAI's top effort for this model is "xhigh" (no "max"; verified 2026-09-02).
     author_b: %{adapter: OpenAI, model: "gpt-5.6-sol", effort: "xhigh", max_tokens: 32_000},
     # Assayer: the model policy's v1 pick; thinking cannot be disabled on GLM 5.3, "low" is the floor.

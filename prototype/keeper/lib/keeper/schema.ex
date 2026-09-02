@@ -24,6 +24,10 @@ defmodule Keeper.Schema do
       {:ok, %{stop_reason: "refusal"} = res} ->
         {:error, {:refusal, res.meta[:stop_details]}, Enum.reverse([{:refusal, res} | attempts])}
 
+      {:ok, %{stop_reason: cap} = res} when cap in ["max_tokens", "length"] ->
+        # Retrying the same request under the same cap just burns the same tokens again.
+        {:error, {:max_tokens, "hit the #{req.max_tokens}-token output cap (stop_reason=#{cap}); raise max_tokens or lower effort"}, Enum.reverse([{:max_tokens, res} | attempts])}
+
       {:ok, %{json: nil} = res} ->
         why = "The output was not a JSON object (stop_reason=#{res.stop_reason})."
         retry(cfg, req, check, left, [{:rejected, why, res} | attempts], why)
