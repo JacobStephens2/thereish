@@ -35,7 +35,7 @@ defmodule Keeper.HTTP do
           body: body,
           into: into,
           retry: false,
-          pool_timeout: 30_000,
+          finch: [pool_timeout: 30_000],
           receive_timeout: Keyword.get(opts, :timeout, 900_000),
           connect_options: [timeout: 30_000]
         )
