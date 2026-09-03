@@ -70,24 +70,34 @@ ENV
   echo "wrote ${ENV_FILE}"
 fi
 
+say "Apache proxy fragment"
+# Always synced, because this is the file that changes. Both the :80 vhost and
+# certbot's :443 vhost include it, so one copy configures both.
+sudo install -d -m 0755 "/etc/apache2/${HOST}.d"
+sudo install -m 0644 "${APP_DIR}/deploy/apache/proxy.conf" "/etc/apache2/${HOST}.d/proxy.conf"
+echo "synced /etc/apache2/${HOST}.d/proxy.conf"
+
 say "Apache vhost"
 if [ -f "/etc/apache2/sites-available/${HOST}.conf" ]; then
   echo "vhost already installed"
 else
   sudo install -m 0644 "${APP_DIR}/deploy/${HOST}.conf" "/etc/apache2/sites-available/${HOST}.conf"
   sudo a2ensite "${HOST}.conf"
-  sudo apache2ctl configtest
-  sudo systemctl reload apache2
   echo "installed and enabled the vhost"
 fi
+sudo apache2ctl configtest
+sudo systemctl reload apache2
 
 say "TLS certificate"
-if [ -f "/etc/letsencrypt/live/${HOST}/fullchain.pem" ]; then
-  echo "certificate already issued"
+# Guarded on the vhost certbot writes rather than on the certificate, so that a
+# missing :443 vhost is repaired even when the certificate is already issued.
+# --keep-until-expiring makes that repair a no-op for the certificate itself.
+if [ -f "/etc/apache2/sites-available/${HOST}-le-ssl.conf" ]; then
+  echo "TLS vhost already in place"
 else
-  sudo certbot --apache --non-interactive --agree-tos \
+  sudo certbot --apache --non-interactive --agree-tos --keep-until-expiring \
     -m "${CERTBOT_EMAIL}" --redirect -d "${HOST}"
-  echo "issued the certificate"
+  echo "issued the certificate and installed the TLS vhost"
 fi
 
 say "Done. Deploy with bin/deploy from the Mac."
