@@ -8,8 +8,13 @@ defmodule MeaningGameWeb.CheckLive do
   Screen Wake Lock the stage view needs in ticket 02.
 
   The socket answer is the server's own: `connected?/1` is false in the dead
-  render and true when mount runs again over the socket. The other two are facts
-  only the browser knows, so the `BrowserReport` hook pushes them back.
+  render and true when mount runs again over the socket. The other facts are
+  ones only the browser knows, so the `BrowserReport` hook pushes them back.
+
+  The transport is reported because `connected?/1` cannot tell a working
+  websocket upgrade from LiveView's silent long-poll fallback, and the fallback
+  is exactly what a missing `upgrade=websocket` in the Apache vhost produces —
+  a working page hiding a broken deployment. See `deploy/apache/proxy.conf`.
   """
   use MeaningGameWeb, :live_view
 
@@ -18,6 +23,7 @@ defmodule MeaningGameWeb.CheckLive do
     {:ok,
      socket
      |> assign(:connected, connected?(socket))
+     |> assign(:transport, nil)
      |> assign(:secure_context, :unknown)
      |> assign(:wake_lock, :unknown)}
   end
@@ -26,21 +32,27 @@ defmodule MeaningGameWeb.CheckLive do
   def handle_event("browser_reported", params, socket) do
     {:noreply,
      socket
-     |> assign(:secure_context, answer(params["secure_context"]))
-     |> assign(:wake_lock, answer(params["wake_lock"]))}
+     |> assign(:transport, transport(params["transport"]))
+     |> assign(:secure_context, reported(params["secure_context"]))
+     |> assign(:wake_lock, reported(params["wake_lock"]))}
   end
 
-  defp answer(true), do: :yes
-  defp answer(false), do: :no
-  defp answer(_), do: :unknown
+  # Only the two transports LiveView actually uses are named, so a surprise
+  # value shows up as a surprise rather than being rendered as if expected.
+  defp transport("WebSocket"), do: "WebSocket"
+  defp transport("LongPoll"), do: "LongPoll (the websocket upgrade is not working)"
+  defp transport(other) when is_binary(other), do: other
+  defp transport(_), do: nil
 
-  defp secure_context_label(:yes), do: "yes"
-  defp secure_context_label(:no), do: "no"
-  defp secure_context_label(:unknown), do: "unknown"
+  # Tri-state, not a boolean: "the browser has not told us yet" is a distinct
+  # answer from "no", and only one of the two is a problem.
+  defp reported(true), do: :yes
+  defp reported(false), do: :no
+  defp reported(_), do: :unknown
 
-  defp wake_lock_label(:yes), do: "available"
-  defp wake_lock_label(:no), do: "unavailable"
-  defp wake_lock_label(:unknown), do: "unknown"
+  defp label(:yes, yes_word, _no_word), do: yes_word
+  defp label(:no, _yes_word, no_word), do: no_word
+  defp label(:unknown, _yes_word, _no_word), do: "unknown"
 
   @impl true
   def render(assigns) do
@@ -60,15 +72,21 @@ defmodule MeaningGameWeb.CheckLive do
           </dd>
         </div>
         <div>
+          <dt class="sr-only">Transport</dt>
+          <dd data-check="transport">
+            Transport: {@transport || "unknown"}
+          </dd>
+        </div>
+        <div>
           <dt class="sr-only">Secure context</dt>
           <dd data-check="secure-context">
-            Secure context: {secure_context_label(@secure_context)}
+            Secure context: {label(@secure_context, "yes", "no")}
           </dd>
         </div>
         <div>
           <dt class="sr-only">Screen Wake Lock</dt>
           <dd data-check="wake-lock">
-            Screen Wake Lock: {wake_lock_label(@wake_lock)}
+            Screen Wake Lock: {label(@wake_lock, "available", "unavailable")}
           </dd>
         </div>
       </dl>
@@ -76,7 +94,9 @@ defmodule MeaningGameWeb.CheckLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".BrowserReport">
         export default {
           mounted() {
+            const transport = this.liveSocket.getSocket().transport
             this.pushEvent("browser_reported", {
+              transport: transport && transport.name,
               secure_context: window.isSecureContext === true,
               wake_lock: "wakeLock" in navigator
             })
