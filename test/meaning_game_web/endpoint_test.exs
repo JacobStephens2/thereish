@@ -12,7 +12,7 @@ defmodule MeaningGameWeb.EndpointTest do
   end
 
   test "the endpoint serves the check page over real HTTP" do
-    url = String.to_charlist(MeaningGameWeb.Endpoint.url() <> "/")
+    url = String.to_charlist(MeaningGameWeb.Endpoint.url() <> "/check")
 
     assert {:ok, {{_version, 200, _reason}, _headers, body}} =
              :httpc.request(:get, {url, []}, [], [])

@@ -8,6 +8,10 @@ Shared language for a two-player couch word game for Jacob and his wife with a m
 Where a set of Seats plays Pages together — N seats, two by default — with private phone views and a public stage view.
 _Avoid_: game, session, lobby, table
 
+**Game**:
+The rules themselves, as a pure function: what a Room's state is, what each event does to it, and what a given Seat may see. It is not a synonym for Room — a Room is the process and the people; the Game is only the ruling.
+_Avoid_: engine, state machine, logic, rules service
+
 **Seat**:
 A place in a Room held by a player under a name. It carries a stable id and its own Chronicle history, and may be claimed by an Account later.
 _Avoid_: player (the person), user, slot

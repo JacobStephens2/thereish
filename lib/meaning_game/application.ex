@@ -12,8 +12,11 @@ defmodule MeaningGame.Application do
       MeaningGame.Repo,
       {DNSCluster, query: Application.get_env(:meaning_game, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: MeaningGame.PubSub},
-      # Start a worker by calling: MeaningGame.Worker.start_link(arg)
-      # {MeaningGame.Worker, arg},
+      # A Room is one supervised process, found by its slug. Rooms are started on
+      # demand rather than listed here, because which Rooms exist is a question
+      # for Postgres and for whoever just opened a URL.
+      {Registry, keys: :unique, name: MeaningGame.Rooms.Registry},
+      {DynamicSupervisor, strategy: :one_for_one, name: MeaningGame.Rooms.Supervisor},
       # Start to serve requests, typically the last entry
       MeaningGameWeb.Endpoint
     ]

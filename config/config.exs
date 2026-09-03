@@ -9,7 +9,12 @@ import Config
 
 config :meaning_game,
   ecto_repos: [MeaningGame.Repo],
-  generators: [timestamp_type: :utc_datetime, binary_id: true]
+  generators: [timestamp_type: :utc_datetime, binary_id: true],
+  # How many Seats a new Room holds. Two is a setting, not an assumption: no
+  # rule anywhere is written for a pair rather than for a list (ADR-0007).
+  seats_per_room: 2,
+  # The Room the bare URL opens, so the couch needs no path to remember.
+  default_room_slug: "couch"
 
 # Configure the endpoint
 config :meaning_game, MeaningGameWeb.Endpoint,
