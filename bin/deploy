@@ -13,15 +13,17 @@ HOST="meld.stephens.page"
 APP_DIR="/var/www/${HOST}"
 COMPOSE="docker compose -f docker-compose.app.yml"
 
-if [ -n "$(git status --porcelain)" ]; then
-  echo "Working tree is dirty. Commit or stash before deploying." >&2
-  exit 1
-fi
-
 LOCAL_HEAD="$(git rev-parse master)"
 if [ "${LOCAL_HEAD}" != "$(git rev-parse origin/master)" ]; then
   echo "master and origin/master differ. Push first — the server deploys from origin." >&2
   exit 1
+fi
+
+# A dirty tree is a warning, not a failure: design docs are edited in this repo
+# alongside the build, and none of it reaches the server anyway — the deploy is
+# origin/master and nothing else.
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Note: uncommitted changes here will not be deployed."
 fi
 
 echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"
@@ -34,7 +36,9 @@ git reset --quiet --hard origin/master
 test "\$(git rev-parse HEAD)" = "${LOCAL_HEAD}" || { echo "server HEAD is not ${LOCAL_HEAD}" >&2; exit 1; }
 
 ${COMPOSE} build
-${COMPOSE} run --rm app /app/bin/migrate
+# -T and </dev/null both matter: docker compose run reads stdin, and stdin here
+# is the rest of this script arriving over ssh.
+${COMPOSE} run --rm -T app /app/bin/migrate </dev/null
 ${COMPOSE} up -d
 REMOTE
 
