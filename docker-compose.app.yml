@@ -9,6 +9,12 @@
 #   VPS:  docker compose -f docker-compose.app.yml up -d --build
 #   Mac:  ENV_FILE=.env.local APP_PORT=4001 \
 #           docker compose -f docker-compose.app.yml up -d --build
+#
+# The explicit project name keeps this stack separate from docker-compose.yml's
+# dev Postgres, which otherwise shares the directory-derived name and shows up
+# here as an orphan — one `--remove-orphans` away from being deleted.
+name: meaning-game-app
+
 services:
   app:
     build: .
