@@ -19,3 +19,18 @@ then joint overrule · Mind-Meld converging over three attempts · the same ruli
 (cache) · moves that should be illegal.
 
 Verdicts from couch night go back into `docs/design-brief.md` on `master`.
+
+## Verdict (Jacob, 2026-09-02 — Stage 0, laptop, solo click-through)
+
+**Mind-Meld beat Chronicle Clover, and the graded number is why.** Jacob got "a pang of
+smirk" at a 24/100 closeness rating — the Assayer's score landed as a *punchline*, not as
+a referee's ruling. That is the clever-aha the whole project is aimed at, produced by a
+stub Assayer with a toy heuristic.
+
+**Chronicle Clover left him wanting the physical cards.** So Clover's pleasure is spatial:
+you shuffle cards around and *see* the relationships resolve. Four dropdowns in a list
+kill it. Simulable in UI (drag, rotate, a real clover layout) — but that is significant
+work, and it means the candidate cannot be fairly judged until it is built.
+
+Caveat: this is Jacob's read, not my wife's, and she is the So Clover lover and the
+actual bar.
