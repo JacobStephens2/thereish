@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Deploy master to meld.stephens.page. One command, from a clean master.
+#
+#   bin/deploy
+#
+# Fetches master on the VPS, rebuilds the release image from the same Dockerfile
+# used on the Mac, migrates, restarts, and does not return until the deployed
+# page answers over TLS.
+set -euo pipefail
+
+SERVER="jacob@stephens.page"
+HOST="meld.stephens.page"
+APP_DIR="/var/www/${HOST}"
+COMPOSE="docker compose -f docker-compose.app.yml"
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Working tree is dirty. Commit or stash before deploying." >&2
+  exit 1
+fi
+
+LOCAL_HEAD="$(git rev-parse master)"
+if [ "${LOCAL_HEAD}" != "$(git rev-parse origin/master)" ]; then
+  echo "master and origin/master differ. Push first — the server deploys from origin." >&2
+  exit 1
+fi
+
+echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"
+ssh "${SERVER}" bash -s <<REMOTE
+set -euo pipefail
+cd "${APP_DIR}"
+git fetch --quiet origin
+git checkout --quiet master
+git reset --quiet --hard origin/master
+test "\$(git rev-parse HEAD)" = "${LOCAL_HEAD}" || { echo "server HEAD is not ${LOCAL_HEAD}" >&2; exit 1; }
+
+${COMPOSE} build
+${COMPOSE} run --rm app /app/bin/migrate
+${COMPOSE} up -d
+REMOTE
+
+echo "== Waiting for ${HOST} to answer"
+for _ in $(seq 1 30); do
+  if curl -fsS --max-time 5 "https://${HOST}/" | grep -q "Socket not connected"; then
+    echo "== Live: https://${HOST}/"
+    exit 0
+  fi
+  sleep 2
+done
+
+echo "Deployed, but https://${HOST}/ did not serve the check page within 60s." >&2
+echo "Logs: ssh ${SERVER} 'cd ${APP_DIR} && ${COMPOSE} logs --tail=50 app'" >&2
+exit 1

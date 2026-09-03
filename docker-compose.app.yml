@@ -1,0 +1,23 @@
+# The released app image, run the same way on the Mac and on the VPS.
+#
+# Postgres is never in this file: on the VPS the app talks to the host's own
+# Postgres 16 cluster, and on the Mac to the one in docker-compose.yml. Either
+# way it is reached at host.docker.internal, and `network_mode: bridge` puts the
+# container on docker0 so its source address falls in the 172.17.0.0/16 range
+# the VPS's pg_hba.conf grants to this database.
+#
+#   VPS:  docker compose -f docker-compose.app.yml up -d --build
+#   Mac:  ENV_FILE=.env.local APP_PORT=4001 \
+#           docker compose -f docker-compose.app.yml up -d --build
+services:
+  app:
+    build: .
+    image: meaning-game:latest
+    network_mode: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ${ENV_FILE:-.env}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3530}:4000"
+    restart: unless-stopped
