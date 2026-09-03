@@ -32,6 +32,26 @@ _Avoid_: judge, referee, grader, meter, reader, umpire
 The machine role that writes the Chronicle after play — records, recaps, callbacks.
 _Avoid_: logger, narrator, historian
 
+**Anchors**:
+The two words a Mind-Meld Page shows; each player writes the Bridge between them.
+_Avoid_: prompt (collides with the model-prompt sense), pair, cue
+
+**Bridge**:
+A player's answer — the word whose meaning spans the Anchors.
+_Avoid_: answer, guess, submission
+
+**Meld**:
+A converged Bridge — the players' Bridges assayed close enough to count as one mind.
+_Avoid_: match, hit, win
+
+**Bait**:
+The obvious Bridge the Author plants; converging on it is a Meld on the lowest rung.
+_Avoid_: decoy (the clover's word), trap, red herring
+
+**Precedent**:
+The cached verdict that future identical inputs inherit — the grade the players saw. Only a joint overrule rewrites it.
+_Avoid_: cache entry, ruling, second opinion
+
 **Chronicle**:
 The persistent, player-visible and player-editable record of the couple's play history — every Page, every ruling, every overrule — kept by the machine and woven back into future Pages.
 _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)
