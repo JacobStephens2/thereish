@@ -4,6 +4,18 @@ Shared language for a two-player couch word game for Jacob and his wife with a m
 
 ## Language
 
+**Room**:
+Where a set of Seats plays Pages together — N seats, two by default — with private phone views and a public stage view.
+_Avoid_: game, session, lobby, table
+
+**Seat**:
+A place in a Room held by a player under a name. It carries a stable id and its own Chronicle history, and may be claimed by an Account later.
+_Avoid_: player (the person), user, slot
+
+**Account**:
+An identity that has claimed one or more Seats' histories, so a person's play across rooms and evenings can be read together. Never required to join a Room.
+_Avoid_: user, login, profile
+
 **Page**:
 One self-contained unit of play — ends cleanly in one sitting (about 10–15 minutes) and chains into the next. Every Page played is written into the Chronicle.
 _Avoid_: board, round, hand, session, match
