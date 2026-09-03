@@ -4,11 +4,15 @@ defmodule MeaningGameWeb.Endpoint do
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
   # Set :encryption_salt if you would also like to encrypt it.
+  # `max_age` is a decade rather than the one-day default because the session
+  # carries the device token that finds a player's Seat, and Seats never expire.
+  # A cookie that lapses would hand Melissa a name form instead of her own Seat.
   @session_options [
     store: :cookie,
     key: "_meaning_game_key",
     signing_salt: "7oltjxex",
-    same_site: "Lax"
+    same_site: "Lax",
+    max_age: 60 * 60 * 24 * 365 * 10
   ]
 
   socket "/live", Phoenix.LiveView.Socket,

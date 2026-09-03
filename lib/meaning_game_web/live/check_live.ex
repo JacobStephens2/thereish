@@ -5,7 +5,7 @@ defmodule MeaningGameWeb.CheckLive do
   It answers the three questions ticket 01 asks of the real deployment: does a
   page reach a phone, does the live socket come up through Apache's websocket
   upgrade, and is the browser in a secure context — the precondition for the
-  Screen Wake Lock the stage view needs in ticket 02.
+  Screen Wake Lock `MeaningGameWeb.StageLive` takes.
 
   The socket answer is the server's own: `connected?/1` is false in the dead
   render and true when mount runs again over the socket. The other facts are

@@ -4,7 +4,7 @@ defmodule MeaningGameWeb.CheckLiveTest do
   import Phoenix.LiveViewTest
 
   test "the dead render says the socket is not connected yet", %{conn: conn} do
-    conn = get(conn, ~p"/")
+    conn = get(conn, ~p"/check")
     html = html_response(conn, 200)
 
     assert html =~ "Socket not connected"
@@ -12,14 +12,14 @@ defmodule MeaningGameWeb.CheckLiveTest do
   end
 
   test "the live render says the socket is connected", %{conn: conn} do
-    {:ok, _live, html} = live(conn, ~p"/")
+    {:ok, _live, html} = live(conn, ~p"/check")
 
     assert html =~ "Socket connected"
     refute html =~ "Socket not connected"
   end
 
   test "browser capabilities read as unknown until the browser reports them", %{conn: conn} do
-    {:ok, live, _html} = live(conn, ~p"/")
+    {:ok, live, _html} = live(conn, ~p"/check")
     html = render(live)
 
     assert html =~ "Transport: unknown"
@@ -28,7 +28,7 @@ defmodule MeaningGameWeb.CheckLiveTest do
   end
 
   test "the browser's report of a secure context with wake lock is rendered", %{conn: conn} do
-    {:ok, live, _html} = live(conn, ~p"/")
+    {:ok, live, _html} = live(conn, ~p"/check")
 
     html =
       render_hook(live, "browser_reported", %{
@@ -43,7 +43,7 @@ defmodule MeaningGameWeb.CheckLiveTest do
   end
 
   test "an insecure context without wake lock is rendered as such", %{conn: conn} do
-    {:ok, live, _html} = live(conn, ~p"/")
+    {:ok, live, _html} = live(conn, ~p"/check")
 
     html =
       render_hook(live, "browser_reported", %{
@@ -57,7 +57,7 @@ defmodule MeaningGameWeb.CheckLiveTest do
   end
 
   test "falling back to long polling is named as the broken thing it is", %{conn: conn} do
-    {:ok, live, _html} = live(conn, ~p"/")
+    {:ok, live, _html} = live(conn, ~p"/check")
 
     html = render_hook(live, "browser_reported", %{"transport" => "LongPoll"})
 

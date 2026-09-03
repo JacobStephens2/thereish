@@ -18,7 +18,7 @@ bin/deploy
 
 It fetches `master` on the VPS, rebuilds the image from the same `Dockerfile`
 used on the Mac, runs migrations, restarts the container, and does not return
-until `https://meld.stephens.page/` actually serves the check page. An unpushed
+until `https://meld.stephens.page/check` actually serves the check page. An unpushed
 `master` stops it before it touches the server; a dirty working tree is only a
 warning, since design docs are edited in this repo alongside the build and none
 of that reaches the server anyway.
@@ -99,10 +99,21 @@ polling, which is exactly the latency the couch-night hosting decision exists to
 measure honestly. It needs Apache 2.4.47+; the VPS runs 2.4.58. If that role
 ever grows a websocket option, this vhost should move back onto it.
 
+## The URLs
+
+| | |
+|---|---|
+| `https://meld.stephens.page/` | a phone: the couch's Room, joined by typing a name |
+| `https://meld.stephens.page/stage` | the laptop: the same Room as the stage |
+| `https://meld.stephens.page/check` | the deployment's proof of life |
+
+The bare URL is the phone's, because that is the one a player types. `/r/<slug>`
+and `/r/<slug>/stage` open any other Room; nothing needs one yet.
+
 ## Checking it
 
-`https://meld.stephens.page/` is `MeaningGameWeb.CheckLive`, the deployment's
-proof of life and nothing game-shaped. It reports three things:
+`https://meld.stephens.page/check` is `MeaningGameWeb.CheckLive`, the
+deployment's proof of life and nothing game-shaped. It reports four things:
 
 - **Socket connected** — the server's own `connected?/1`, so it only says this
   once the client has upgraded through Apache. "Socket not connected" is the

@@ -53,13 +53,13 @@ for _ in $(seq 1 30); do
   #
   # -s not -sS: a 502 while the old container is still going down is expected
   # here, and printing it every two seconds makes a normal deploy look broken.
-  if curl -fs --max-time 5 "https://${HOST}/" | grep -q 'data-check="socket"'; then
+  if curl -fs --max-time 5 "https://${HOST}/check" | grep -q 'data-check="socket"'; then
     echo "== Live: https://${HOST}/"
     exit 0
   fi
   sleep 2
 done
 
-echo "Deployed, but https://${HOST}/ did not serve the check page within 60s." >&2
+echo "Deployed, but https://${HOST}/check did not serve the check page within 60s." >&2
 echo "Logs: ssh ${SERVER} 'cd ${APP_DIR} && ${COMPOSE} logs --tail=50 app'" >&2
 exit 1
