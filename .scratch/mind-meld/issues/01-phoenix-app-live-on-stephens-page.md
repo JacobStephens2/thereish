@@ -13,7 +13,7 @@ Nothing game-shaped is in this ticket. It is the prefactor that makes every late
 - [x] Ecto configured against Postgres; a migration runs clean on both machines. No game tables yet
 - [x] A Docker release built with `mix phx.gen.release --docker`; the identical image runs on the Mac and the VPS
 - [x] Apache vhost proxying to the app's localhost port with `ProxyPreserveHost On` and websocket upgrade; certbot TLS
-- [x] A LiveView page loads on a phone over HTTPS and visibly reports its socket as connected
+- [ ] A LiveView page loads on a phone over HTTPS and visibly reports its socket as connected — served and verified over TLS, but in desktop Chrome and at a phone viewport, not on a phone
 - [x] Secure context confirmed, so the Screen Wake Lock API is available to later tickets
 - [x] A one-command deploy path from `master` documented in the repo
 - [x] `mix test` runs green, including one test that boots the endpoint
