@@ -9,9 +9,9 @@ GPT-5.6 Luna $0.20/$1.20 per MTok in/out). Costs below count every token the pro
 ## Verdicts in six lines
 
 - **Q1 Author quality: YES.** All 12 Pages (3 Gives × 2 kinds × 2 Authors) were schema-valid and clue-legal on the **first** attempt once the output cap was right; Fable's decoys are excluded by the ring's double constraint and its vocabulary is *of the Give*. The catch: at `effort: "max"` a clover Page thinks for 34.5k tokens — 7.8 min and $1.78 with a 100k cap, and a hard failure (zero text, $1.61 burned) under the 32k cap it was first given. Mind-Meld at `max` costs $0.15–0.32 and 43–87 s; clover at `high` $0.25–0.38 and 65–110 s.
-- **Q2 Assayer budget: GLM 5.3-Flash PASSES with room from both the Mac and the VPS** (VPS: first token P50 314 ms, whole verdict P95 961 ms). Sonnet 5 and GPT-5.6 Luna pass; Opus 5 at low effort fails the P50 rule from both (2.53 s Mac, 2.61 s VPS) though its P95 total is under 4 s.
-- **Q3 Consistency: no model is deterministic (law 11 confirmed); Opus is tightest, GLM loosest.** Same submission ×5 ranged up to 35 points on GLM and 6 on Opus; ordering disagreement averaged 2.5–2.8 (Opus) versus 8.8–14.5 (GLM). Hedging two identical requests cut GLM's P95 total from 1.52 s to 1.17 s.
-- **Q4 Assayer quality: Opus's grades and reasoning read as the fairest, Sonnet close behind; GLM is fast but erratic on the middle of the scale.** All four agree at the extremes.
+- **Q2 Assayer budget: GLM 5.3-Flash PASSES with room from both the Mac and the VPS** (VPS: first token P50 314 ms, whole verdict P95 961 ms). Sonnet 5 and GPT-5.6 Luna pass; Opus 5 at low effort fails the P50 rule from both (2.53 s Mac, 2.61 s VPS) though its P95 total is under 4 s. Added later: **Gemini 3.8 Flash passes from both machines** (VPS 594 ms first token, 961 ms P95 total), Gemini 3.7 passes, and DeepSeek V4 Flash 0731 fits the beat only with reasoning off (at `max` it is 7–9 s P50).
+- **Q3 Consistency: no model is deterministic (law 11 confirmed); Opus is tightest, GLM loosest; Gemini 3.8 Flash comes closest to Opus (repeat ranges 0–8).** Same submission ×5 ranged up to 35 points on GLM and 6 on Opus; ordering disagreement averaged 2.5–2.8 (Opus) versus 8.8–14.5 (GLM). Hedging two identical requests cut GLM's P95 total from 1.52 s to 1.17 s.
+- **Q4 Assayer quality: Opus's grades and reasoning read as the fairest, Sonnet close behind; GLM is fast but erratic on the middle of the scale.** All four agree at the extremes. Added later: Gemini 3.7/3.8 Flash are stable but 10–15 points more generous than Opus in the 40–75 band (water/steam melds under Gemini); DeepSeek V4 Flash is Opus-like when it thinks and GLM-noisy when it doesn't.
 - **Q5 Elixir friction: LOW.** Raw HTTP + SSE to three providers is ~250 lines including the parser; `jsv` installed and validated cleanly; nothing here worries ADR-0002.
 - **Q6 Fable 5.1 features from raw HTTP: structured output works exactly as documented; a refusal is HTTP 200 with `stop_reason: "refusal"` and a `stop_details` category; `fallbacks: "default"` was accepted but did not rescue a `reasoning_extraction` refusal.**
 
@@ -320,10 +320,10 @@ wire (which is what caught the refusal shape and the thinking overrun).
 
 ## Spend
 
-Per-call lines only, every provider's own token counts, prices as listed at the top. This excludes three killed
-in-flight Fable clover attempts (two 32k-cap retries stopped after ~3 min each and one first attempt stopped at ~10 min,
-all streamed thinking with no output), estimated at **about $3** more from their run times — so the real total is
-**about $13**, under the $25 line without an ask.
+Per-call lines only, every provider's own token counts, prices as listed at the top (Gemini and DeepSeek from the
+addendum). This excludes three killed in-flight Fable clover attempts (two 32k-cap retries stopped after ~3 min each and
+one first attempt stopped at ~10 min, all streamed thinking with no output), estimated at **about $3** more from their run
+times, so the real total is **about $14**, under the $25 line without an ask.
 
 | model | calls | logged $ |
 |---|---|---|
@@ -331,15 +331,19 @@ all streamed thinking with no output), estimated at **about $3** more from their
 | claude-opus-5 | 272 | 1.2657 |
 | gpt-5.6-sol | 6 | 0.6868 |
 | claude-sonnet-5 | 279 | 0.4664 |
+| accounts/fireworks/models/deepseek-v4-flash-0731 | 722 | 0.2633 |
+| gemini-3.7-flash | 244 | 0.1273 |
+| gemini-3.8-flash | 245 | 0.0810 |
 | gpt-5.6-luna | 383 | 0.0461 |
-| zai-org/GLM-5.3-Flash | 445 | 0.0294 |
-| **total logged** | 1655 | **10.4812** |
+| zai-org/GLM-5.3-Flash | 446 | 0.0294 |
+| **total logged** | 2918 | **10.9529** |
 
-Mac 1003 calls $9.6021; VPS 652 calls $0.8791
+Mac 1762 calls $9.8783; VPS 1156 calls $1.0746
 
-Where it went: 13 Fable calls ($8.0 logged + ~$3 killed) are four fifths of the bill, and one of them (the max-effort
-clover) is $1.78 on its own; the six Sol calls cost $0.69. The entire Assayer programme (two benches on two machines,
-the 20-item assay on four models, ~1,600 verdict calls) cost about $1.80, of which the Opus arm is $1.27.
+Where it went: 13 Fable calls ($8.0 logged + ~$3 killed) are three quarters of the bill, and one of them (the max-effort
+clover) is $1.78 on its own; the six Sol calls cost $0.69. The entire Assayer programme (four benches on two machines, the
+20-item assay on nine model/effort arms, ~2,300 verdict calls) cost about $2.10, of which the Opus arm is $1.27 and all of
+Gemini and DeepSeek together about $0.45.
 
 ## What the real Keeper should keep / change
 
@@ -364,14 +368,209 @@ the 20-item assay on four models, ~1,600 verdict calls) cost about $1.80, of whi
 - **Author `max_tokens`**: 100k at `effort: "max"`, and treat a cap overrun as terminal, never as a retry. Decide
   per kind: `max` for Mind-Meld ($0.15–0.32, under 90 s) is cheap; `max` for clover ($1.78, 7.8 min) versus `high`
   ($0.25–0.38, under 2 min) is a taste call for the couple — generate a few of each blind and let them pick.
-- **Assayer choice**: keep GLM 5.3-Flash as the live Assayer for the *beat*, but seed the Chronicle's precedent with a
-  second opinion from Opus 5 (or Sonnet 5) on borderline pairs (60–85) and on every overrule; or run Sonnet at low
-  effort as the Assayer and accept a 2 s P50. Decide after the couple labels ~100 pairs (research §5f).
+- **Assayer choice**: three live options now, decide after the couple labels ~100 pairs (research §5f): (a) GLM 5.3-Flash,
+  fastest, noisiest; (b) **Gemini 3.8 Flash at `low`, nearly as fast, Opus-like repeatability, but generous by 10–15 points
+  in the middle band, so re-tune the 75 threshold or the rubric**; (c) Sonnet 5 at low effort, fairest of the three that fit,
+  at a 2 s P50. Whichever runs live, seed the Chronicle's precedent with an Opus 5 second opinion on borderline pairs
+  (60–85) and on every overrule.
 - **GLM cap**: 160 tokens was hit once in 40; either 200 or a firmer "under 25 words" instruction.
 - Cancel hedge losers cooperatively (done here) and keep `pool_timeout` generous; watch the VPS.
 - Scribe output through the Vale gate (length, em dashes, AI tells) before it reaches the Chronicle, as planned.
 - Log `thinking_tokens` and `reasoning_tokens` per call into the Chronicle's call record; they are the cost.
 - The Fake adapter should serve golden JSON from files so Stage 0-style walkthroughs can run against the real seam.
+
+## Addendum — Gemini 3.7 / 3.8 Flash and DeepSeek V4 Flash 0731, added at Jacob's request
+
+Added after the first report. `gemini-3.7-flash` and `gemini-3.8-flash` (Google, OpenAI-compatible endpoint,
+`reasoning_effort: "low"`; thinking cannot be turned off and `minimal` is rejected on these two; $0.75 / $3.75 per MTok
+through 2026-12-31, output priced with thoughts) and `accounts/fireworks/models/deepseek-v4-flash-0731` on Fireworks
+serverless ($0.22 / $0.66 per MTok) at `reasoning_effort` **max** (Jacob's ask), **low** and **none**. Same bench, same
+assay set, same evening (Mac and VPS runs about an hour after the first ones).
+
+### Latency (Mac, n=20, item 9, cache off)
+
+| candidate | model (effort) | ttft p50 | ttft p95 | total p50 | total p95 | out tok | tok/s p50 | ttft+60/tps | p50 rule ≤2.5s | p95 rule ≤4s | failures |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| gemini37 | gemini-3.7-flash (low) | 1,264 | 2,203 | 1,408 | 2,277 | 104.3 | 921.9 | 1,329.1 | PASS | PASS | 0/20 |
+| gemini38 | gemini-3.8-flash (low) | 656 | 3,051 | 760 | 3,198 | 39.9 | 324.1 | 841.1 | PASS | PASS | 0/20 |
+| deepseek_max | accounts/fireworks/models/deepseek-v4-flash-0731 (max) | 7,151 | 15,241 | 7,514 | 15,413 | 685.9 | 3,222.2 | 7,169.6 | **FAIL** | **FAIL** | 1/20 |
+| deepseek_low | accounts/fireworks/models/deepseek-v4-flash-0731 (low) | 2,747 | 5,647 | 3,163 | 5,828 | 289.7 | 1,009.7 | 2,806.4 | **FAIL** | **FAIL** | 0/20 |
+| deepseek_none | accounts/fireworks/models/deepseek-v4-flash-0731 (none) | 315 | 1,533 | 972 | 2,200 | 36.6 | 57.8 | 1,352.6 | PASS | PASS | 0/20 |
+
+Warm-up (discarded): gemini37 ttft=1,576 total=1,633; gemini38 ttft=2,047 total=2,115; deepseek_max ttft=9,566 total=9,774; deepseek_low ttft=8,845 total=9,037; deepseek_none ttft=1,227 total=1,913
+
+### Latency (VPS, n=20, item 9, cache off)
+
+| candidate | model (effort) | ttft p50 | ttft p95 | total p50 | total p95 | out tok | tok/s p50 | ttft+60/tps | p50 rule ≤2.5s | p95 rule ≤4s | failures |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| gemini37 | gemini-3.7-flash (low) | 1,234 | 1,674 | 1,347 | 1,845 | 131.3 | 760.2 | 1,312.9 | PASS | PASS | 0/20 |
+| gemini38 | gemini-3.8-flash (low) | 594 | 804 | 718 | 959 | 39.4 | 310.3 | 787.3 | PASS | PASS | 0/20 |
+| deepseek_max | accounts/fireworks/models/deepseek-v4-flash-0731 (max) | 9,288 | 27,955 | 9,508 | 28,105 | 979.4 | 3,690.9 | 9,304.3 | **FAIL** | **FAIL** | 0/20 |
+| deepseek_low | accounts/fireworks/models/deepseek-v4-flash-0731 (low) | 2,849 | 4,788 | 3,041 | 4,992 | 273.4 | 1,112.9 | 2,902.9 | **FAIL** | **FAIL** | 0/20 |
+| deepseek_none | accounts/fireworks/models/deepseek-v4-flash-0731 (none) | 378 | 1,125 | 1,030 | 2,515 | 36.8 | 58.8 | 1,398.0 | PASS | PASS | 0/20 |
+
+Warm-up (discarded): gemini37 ttft=1,684 total=1,854; gemini38 ttft=919 total=1,063; deepseek_max ttft=4,290 total=4,479; deepseek_low ttft=4,171 total=4,324; deepseek_none ttft=685 total=1,259
+
+### Hedging (Mac, 2 identical requests, first wins, n=20)
+
+| candidate | unhedged total p95 | hedged total p95 | unhedged total p50 | hedged total p50 | unhedged ttft p95 | hedged ttft p95 |
+|---|---|---|---|---|---|---|
+| gemini37 | 2,277 | 1,511 | 1,408 | 1,307 | 2,203 | 1,413 |
+| gemini38 | 3,198 | 864 | 760 | 738 | 3,051 | 769 |
+| deepseek_max | 15,413 | 19,100 | 7,514 | 6,226 | 15,241 | 18,919 |
+| deepseek_low | 5,828 | 4,165 | 3,163 | 3,109 | 5,647 | 3,885 |
+| deepseek_none | 2,200 | 1,515 | 972 | 1,022 | 1,533 | 1,428 |
+
+### Hedging (VPS, 2 identical requests, first wins, n=20)
+
+| candidate | unhedged total p95 | hedged total p95 | unhedged total p50 | hedged total p50 | unhedged ttft p95 | hedged ttft p95 |
+|---|---|---|---|---|---|---|
+| gemini37 | 1,845 | 1,475 | 1,347 | 1,289 | 1,674 | 1,424 |
+| gemini38 | 959 | 920 | 718 | 681 | 804 | 841 |
+| deepseek_max | 28,105 | 18,310 | 9,508 | 6,289 | 27,955 | 18,094 |
+| deepseek_low | 4,992 | 5,257 | 3,041 | 3,001 | 4,788 | 5,089 |
+| deepseek_none | 2,515 | 1,036 | 1,030 | 851 | 1,125 | 386 |
+
+### Repeat agreement (Mac, same submission ×5, cache off)
+
+| candidate | item 1 moon/moon | item 7 butter/spread | item 9 tide/moon | item 18 paper/scar |
+|---|---|---|---|---|
+| gemini37 | 100 ×5 | 85, 85, 82, 78, 82 (range 7) | 68, 68, 72, 72, 65 (range 7) | 10, 8, 12, 12, 10 (range 4) |
+| gemini38 | 100 ×5 | 85, 85, 78, 85, 84 (range 7) | 72, 72, 72, 72, 72 (range 0) | 12, 12, 12, 12, 15 (range 3) |
+| deepseek_max | 100 ×5 | 70, 70, 65, 70, 85 (range 20) | 60, 60, 60, 65, 55 (range 10) | 25, 30, 55, 30 (range 30) |
+| deepseek_low | 100 ×5 | 65, 65, 65, 70, 65 (range 5) | 60, 80, 65, 60, 60 (range 20) | 10, 20, 25, 20, 20 (range 15) |
+| deepseek_none | 100 ×5 | 80, 70, 65, 80, 65 (range 15) | 45, 55, 55, 35, 45 (range 20) | 25, 35, 35, 15, 15 (range 20) |
+
+### Repeat agreement (VPS, same submission ×5, cache off)
+
+| candidate | item 1 moon/moon | item 7 butter/spread | item 9 tide/moon | item 18 paper/scar |
+|---|---|---|---|---|
+| gemini37 | 100 ×5 | 85, 78, 85, 82, 85 (range 7) | 68, 70, 70, 65, 68 (range 5) | 10, 12, 15, 10, 12 (range 5) |
+| gemini38 | 100 ×5 | 85, 82, 85, 78, 85 (range 7) | 72, 72, 68, 72, 76 (range 8) | 12, 5, 10, 12, 12 (range 7) |
+| deepseek_max | 100 ×5 | 70, 80, 65, 78, 70 (range 15) | 60, 60, 65, 58, 60 (range 7) | 25, 45, 15, 30, 20 (range 30) |
+| deepseek_low | 100 ×5 | 65, 65, 60, 70, 75 (range 15) | 60, 60, 60, 65, 60 (range 5) | 20, 25, 50, 20, 20 (range 30) |
+| deepseek_none | 100 ×5 | 65, 70, 70, 60, 78 (range 18) | 45, 55, 45, 55, 35 (range 20) | 15, 35, 15, 35, 15 (range 20) |
+
+### Ordering agreement (Mac, (A,B) vs (B,A), 20 items)
+
+| candidate | mean abs diff | max abs diff | within 5 | graded pairs |
+|---|---|---|---|---|
+| gemini37 | 4.0 | 15 | 75.0% | 20 |
+| gemini38 | 4.3 | 27 | 75.0% | 20 |
+| deepseek_max | 5.7 | 20 | 65.0% | 20 |
+| deepseek_low | 9.2 | 35 | 68.4% | 19 |
+| deepseek_none | 7.4 | 25 | 57.9% | 19 |
+
+### Ordering agreement (VPS, (A,B) vs (B,A), 20 items)
+
+| candidate | mean abs diff | max abs diff | within 5 | graded pairs |
+|---|---|---|---|---|
+| gemini37 | 2.8 | 13 | 80.0% | 20 |
+| gemini38 | 4.3 | 40 | 80.0% | 20 |
+| deepseek_max | 3.1 | 10 | 88.2% | 17 |
+| deepseek_low | 5.5 | 15 | 68.4% | 19 |
+| deepseek_none | 8.3 | 35 | 57.9% | 19 |
+
+### Assay (Mac, cache off, both orderings; reconciled closeness (forward/reverse))
+
+
+
+| # | anchors | A / B | expected | gemini37 | gemini38 | deepseek_max | deepseek_low | deepseek_none |
+|---|---|---|---|---|---|---|---|---|
+| 1 | ocean+night | moon / moon | 100 identical | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) |
+| 2 | ocean+night | tide / tides | ~100 inflection | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) |
+| 3 | mirror+river | reflection / reflect | ~95 | 98 (98/98) | 99 (100/98) | 90 (90/90) | 90 (90/90) | 90 (85/95) |
+| 4 | coffee+morning | cup / mug | ~90 synonyms | 93 (95/90) | 91 (90/92) | 90 (90/90) | 93 (90/95) | 83 (85/80) |
+| 5 | fire+ice | melt / thaw | ~90 synonyms | 95 (95/95) | 95 (94/95) | 90 (90/90) | 85 (85/85) | 83 (75/90) |
+| 6 | garden+prison | wall / fence | ~80 near | 89 (88/90) | 88 (88/88) | 74 (65/82) | 73 (60/85) | 70 (70/70) |
+| 7 | bread+knife | butter / spread | ~75 borderline meld | 80 (82/78) | 79 (80/78) | 68 (65/70) | 80 (80/80) | 63 (60/65) |
+| 8 | king+castle | throne / crown | ~70 related | 83 (80/85) | 84 (85/82) | 75 (80/70) | 75 (70/80) | 68 (70/65) |
+| 9 | ocean+night | tide / moon | ~55 related | 70 (70/70) | 72 (72/72) | 58 (55/60) | 60 (55/65) | 45 (35/55) |
+| 10 | coffee+morning | alarm / awake | ~60 related | 72 (78/65) | 69 (72/65) | 58 (60/55) | 60 (65/55) | 50 (65/35) |
+| 11 | fire+ice | water / steam | ~60 related | 78 (78/78) | 76 (72/80) | ERR | ERR | 70 (65/75) |
+| 12 | doctor+silence | waiting / hospital | ~45 | 49 (45/52) | 52 (58/45) | 48 (30/65) | 43 (40/45) | 40 (35/45) |
+| 13 | doctor+silence | oath / secret | ~50 | 72 (72/72) | 68 (72/64) | 58 (55/60) | 59 (50/68) | 50 (45/55) |
+| 14 | letter+wound | open / seal | ~35 antonym-ish | 52 (48/55) | 58 (70/45) | 50 (50/50) | 58 (60/55) | 25 (20/30) |
+| 15 | train+dream | journey / sleep | ~30 | 20 (25/15) | 23 (25/20) | ERR | 15 (15/15) | 23 (20/25) |
+| 16 | king+castle | moat / queen | ~30 | 23 (25/20) | 23 (25/20) | 23 (30/15) | 20 (30/10) | 23 (20/25) |
+| 17 | train+dream | track / drift | ~25 | 21 (24/18) | 19 (15/22) | ERR | 45 (45/45) | 40 (35/45) |
+| 18 | letter+wound | paper / scar | ~15 miss | 8 (10/5) | 14 (12/15) | 20 (20/20) | 13 (20/5) | 30 (45/15) |
+| 19 | garden+prison | weed / cell | ~15 miss | 10 (15/5) | 10 (10/10) | 18 (20/15) | 15 (15/15) | 15 (20/10) |
+| 20 | mirror+river | glass / bank | ~10 miss | 10 (10/10) | 8 (5/10) | 13 (15/10) | 13 (10/15) | 25 (15/35) |
+
+
+
+| candidate | mean | max | within 5 | melded (≥75) | errors |
+|---|---|---|---|---|---|
+| gemini37 | 4.0 | 13 | 70.0% | 9 | 0 |
+| gemini38 | 4.8 | 25 | 70.0% | 9 | 0 |
+| deepseek_max | 6.3 | 35 | 76.5% | 6 | 3 |
+| deepseek_low | 6.7 | 25 | 63.2% | 7 | 1 |
+| deepseek_none | 10.5 | 30 | 40.0% | 5 | 0 |
+
+
+
+Reasoning samples (forward ordering):
+
+
+
+- **7 bread + knife: butter / spread**
+  - gemini37: Butter is the archetypal spread applied to bread with a knife, linking them closely in the same functional context.
+  - gemini38: Butter is the quintessential spread applied to bread with a knife, making them closely linked as a noun and its direct category or action.
+  - deepseek_max: Butter is a specific kind of spread; both share the bread-and-knife context, but 'spread' is broader.
+  - deepseek_low: Both refer to something put on bread with a knife; butter is a type of spread, so they share the same core idea.
+  - deepseek_none: Butter is a specific spread, so they're related but not the same idea.
+- **9 ocean + night: tide / moon**
+  - gemini37: The moon directly governs the tide, making these closely related physical phenomena that both naturally connect the ocean to the night.
+  - gemini38: Tide and moon are intimately connected concepts through lunar gravity, representing closely related associations to the night ocean.
+  - deepseek_max: Tide is an ocean effect caused by the moon; the moon is a night sky body. Connected, yet distinct ideas.
+  - deepseek_low: Both evoke ocean and night, but moon is the cause, tide the effect, making them related yet distinct ideas.
+  - deepseek_none: Tide and moon are distinct natural phenomena linked to ocean and night, but only conceptually related, not the same idea.
+- **14 letter + wound: open / seal**
+  - gemini37: The players targeted the exact same conceptual axis relating to letters and wounds, but chose direct antonyms for their bridge.
+  - gemini38: Open and seal are direct antonyms acting on the exact same domain, representing opposite states of the anchors.
+  - deepseek_max: Open and seal are opposite actions, yet each naturally applies to both a letter and a wound; related but not melded.
+  - deepseek_low: Both are common actions performed on letters and wounds, but they are opposites, making them related yet distinct.
+  - deepseek_none: Open and seal are opposites (as verbs for wounds/letters), but not the same idea in bridging meaning.
+- **18 letter + wound: paper / scar**
+  - gemini37: Paper and scar represent completely different concepts with essentially no shared meaning.
+  - gemini38: Paper and scar represent completely different concepts, sharing little meaning aside from tangential associations to the anchors.
+  - deepseek_max: Paper relates to letter as material, scar to wound as remnant; they share no common idea.
+  - deepseek_low: Paper and scar are both associated with cuts, but they are otherwise distinct objects with little semantic overlap.
+  - deepseek_none: Both relate to physical marks, but paper suggests a cut while scar implies healed tissue, distinct ideas.
+- **20 mirror + river: glass / bank**
+  - gemini37: Glass and bank connect to the anchors in completely different ways (material/surface versus landscape feature) and share little meaning.
+  - gemini38: Glass refers to the reflective material of a mirror, while bank refers to the physical edge of a river, representing completely distinct concepts.
+  - deepseek_max: Glass leans toward mirror, bank toward river; they occupy different semantic paths with little overlap.
+  - deepseek_low: Glass and bank share little beyond vague physical associations with the anchors; they are different ideas.
+  - deepseek_none: Glass reflects like a mirror; bank is a river's edge. They share no direct conceptual overlap.
+
+Addendum spend: Mac bench gemini37 $0.0522; gemini38 $0.0331; deepseek_max $0.0695; deepseek_low $0.0233; deepseek_none $0.0092; VPS bench gemini37 $0.0537; gemini38 $0.0333; deepseek_max $0.0666; deepseek_low $0.0227; deepseek_none $0.0092.
+
+### Reading
+
+- **Gemini 3.8 Flash at `low` is the new front-runner for the live Assayer.** From the VPS its first answer token lands at
+  594 ms P50 and the whole verdict at 961 ms P95 (Mac: 656 ms / 3.2 s, one tail event), second only to GLM on speed, and it
+  is the most repeatable non-Anthropic grader measured tonight: five identical grades on tide/moon on the Mac, repeat
+  ranges 0–8 everywhere else, ordering disagreement 4.3 mean on both machines with one outlier each (27 and 40). Cost per
+  verdict was about $0.0003 (thinking billed).
+- **Gemini 3.7 Flash** passes both rules too, with equally tight repeat (4–7) and ordering (2.8–4.0), but its first token
+  takes twice as long (1.2–1.3 s P50), so 3.8 dominates it. Note that for both Gemini arms the `out tok` and `tok/s`
+  columns include thinking tokens (the OpenAI-compatible endpoint reports `total − prompt`), so tok/s is inflated; the
+  pass rule is carried by TTFT anyway.
+- **DeepSeek V4 Flash 0731 at `max`** (Jacob's ask) is out of the question for the beat: 7–9 s P50, 15–28 s P95, and
+  3 of 20 ordering pairs overran a 4,000-token cap on thinking alone. At `low` it still fails both rules (2.7–2.8 s P50,
+  5–5.8 s P95). At `none` it fits (315–378 ms first token, P95 total 2.2–2.5 s) but grades as noisily as GLM (repeat
+  ranges 15–20, ordering 7–8 mean). Fireworks also served two 504 gateway timeouts and several 20 s queue waits during
+  the assay, and hedging rescued its tail (VPS `none` P95 2.5 s → 1.0 s), which says the tail is the queue, not the model.
+- **Assay quality.** Both Gemini arms agree with everyone at the extremes (items 1–6, 15–20) and are *stable* in the
+  middle, but they grade the middle **10–15 points more generously than Opus and Sonnet**: tide/moon 70–72 (Opus 55),
+  throne/crown 83–84 (Opus 64), oath/secret 68–72 (Opus 53), open/seal 52–58 (Opus 42), and water/steam 76–78, which
+  makes it a *meld* under Gemini and not under any Anthropic grader (9 melds out of 20 versus 7). That is a calibration
+  offset, not noise: the same pairs land in the same order, just higher. If Gemini becomes the Assayer, the 75 threshold
+  or the rubric in the prompt needs re-tuning against the couple's labels. Its reasoning reads plainly and fairly (see
+  samples above). DeepSeek at `max` and `low` grade close to Opus where they completed (wall/fence 73–74, tide/moon
+  58–60) but with 4 errors in 40; at `none` it is loose and noisy (paper/scar 45 in one ordering, 15 in the other).
 
 ## Blind key
 

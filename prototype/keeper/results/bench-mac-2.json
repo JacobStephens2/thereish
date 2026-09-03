@@ -1,0 +1,5808 @@
+{
+  "label": "mac-2",
+  "raw": {
+    "gemini37": {
+      "latency": [
+        {
+          "ok": true,
+          "out": 91,
+          "total": 1323,
+          "cost": 5.22e-4,
+          "closeness": 68,
+          "ttft": 1243,
+          "reasoning": "The moon and tides share a direct physical and conceptual connection between ocean waters and the night sky.",
+          "wall": 1323
+        },
+        {
+          "ok": true,
+          "out": 118,
+          "total": 8977,
+          "cost": 6.2325e-4,
+          "closeness": 65,
+          "ttft": 8849,
+          "reasoning": "Tide and moon are distinct concepts but intimately linked through the moon's gravitational pull causing ocean tides.",
+          "wall": 8977
+        },
+        {
+          "ok": true,
+          "out": 119,
+          "total": 1440,
+          "cost": 6.270000000000001e-4,
+          "closeness": 65,
+          "ttft": 1336,
+          "reasoning": "The moon directly causes oceanic tides, making them tightly connected and highly complementary concepts.",
+          "wall": 1440
+        },
+        {
+          "ok": true,
+          "out": 95,
+          "total": 1177,
+          "cost": 5.37e-4,
+          "closeness": 68,
+          "ttft": 1175,
+          "reasoning": "The moon and tides share an intimate physical connection, representing closely related concepts.",
+          "wall": 1178
+        },
+        {
+          "ok": true,
+          "out": 96,
+          "total": 1202,
+          "cost": 5.4075e-4,
+          "closeness": 68,
+          "ttft": 1141,
+          "reasoning": "Moon and tide are distinct concepts closely linked by the gravitational cause of ocean tides at night.",
+          "wall": 1203
+        },
+        {
+          "ok": true,
+          "out": 103,
+          "total": 2277,
+          "cost": 5.67e-4,
+          "closeness": 72,
+          "ttft": 2203,
+          "reasoning": "The moon directly drives oceanic tides, making these distinct but closely linked concepts in the same thematic domain.",
+          "wall": 2277
+        },
+        {
+          "ok": true,
+          "out": 104,
+          "total": 1408,
+          "cost": 5.7075e-4,
+          "closeness": 68,
+          "ttft": 1280,
+          "reasoning": "The moon causes ocean tides, creating a direct and powerful thematic association between these distinct concepts.",
+          "wall": 1408
+        },
+        {
+          "ok": true,
+          "out": 97,
+          "total": 910,
+          "cost": 5.445e-4,
+          "closeness": 65,
+          "ttft": 754,
+          "reasoning": "The moon directly governs the ocean tides, linking these two concepts closely through natural cause and effect.",
+          "wall": 911
+        },
+        {
+          "ok": true,
+          "out": 116,
+          "total": 1448,
+          "cost": 6.1575e-4,
+          "closeness": 72,
+          "ttft": 1264,
+          "reasoning": "Tide and moon share a strong causal and thematic connection, representing closely related concepts bridging ocean and night.",
+          "wall": 1448
+        },
+        {
+          "ok": true,
+          "out": 114,
+          "total": 1702,
+          "cost": 6.082500000000001e-4,
+          "closeness": 68,
+          "ttft": 1517,
+          "reasoning": "The moon directly drives the ocean's tide, making these concepts strongly linked natural associations.",
+          "wall": 1703
+        },
+        {
+          "ok": true,
+          "out": 42,
+          "total": 836,
+          "cost": 3.3825e-4,
+          "closeness": 72,
+          "ttft": 694,
+          "reasoning": "Tide and moon are closely linked concepts, as the moon directly causes ocean tides, sharing strong associative meaning.",
+          "wall": 836
+        },
+        {
+          "ok": true,
+          "out": 102,
+          "total": 1188,
+          "cost": 5.6325e-4,
+          "closeness": 68,
+          "ttft": 1000,
+          "reasoning": "The moon and tides are inextricably linked natural concepts, representing strongly connected but distinct physical entities.",
+          "wall": 1189
+        },
+        {
+          "ok": true,
+          "out": 106,
+          "total": 1635,
+          "cost": 5.7825e-4,
+          "closeness": 68,
+          "ttft": 1476,
+          "reasoning": "The moon causes oceanic tides, making these deeply connected concepts though they represent different physical phenomena.",
+          "wall": 1636
+        },
+        {
+          "ok": true,
+          "out": 145,
+          "total": 1625,
+          "cost": 7.245e-4,
+          "closeness": 70,
+          "ttft": 1472,
+          "reasoning": "Moon and tide are deeply connected through gravitational forces and nighttime ocean phenomena, representing distinct yet strongly linked concepts.",
+          "wall": 1625
+        },
+        {
+          "ok": true,
+          "out": 121,
+          "total": 1741,
+          "cost": 6.345e-4,
+          "closeness": 65,
+          "ttft": 1680,
+          "reasoning": "Moon and tide are distinct concepts that share a direct, well-known causal relationship in nature.",
+          "wall": 1741
+        },
+        {
+          "ok": true,
+          "out": 125,
+          "total": 1518,
+          "cost": 6.495e-4,
+          "closeness": 72,
+          "ttft": 1345,
+          "reasoning": "Tide and moon are deeply linked physical concepts, directly connecting night and the ocean through gravitational interaction.",
+          "wall": 1520
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 970,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 835,
+          "reasoning": "Tide and moon share an intimate physical connection and evoke the same natural rhythm bridging the ocean and night.",
+          "wall": 970
+        },
+        {
+          "ok": true,
+          "out": 141,
+          "total": 1807,
+          "cost": 7.095000000000001e-4,
+          "closeness": 72,
+          "ttft": 1658,
+          "reasoning": "Moon and tide are strongly linked concepts, as the moon directly causes oceanic tides and is prominent at night.",
+          "wall": 1807
+        },
+        {
+          "ok": true,
+          "out": 105,
+          "total": 1146,
+          "cost": 5.745e-4,
+          "closeness": 68,
+          "ttft": 1042,
+          "reasoning": "The moon and tides share a direct causal and associative link, representing closely related but distinct concepts.",
+          "wall": 1147
+        },
+        {
+          "ok": true,
+          "out": 105,
+          "total": 1076,
+          "cost": 5.745e-4,
+          "closeness": 65,
+          "ttft": 1011,
+          "reasoning": "The moon directly causes oceanic tides, linking the two concepts strongly while remaining distinct physical entities.",
+          "wall": 1077
+        }
+      ],
+      "hedged": [
+        {
+          "ok": true,
+          "out": 116,
+          "total": 1057,
+          "cost": 6.1575e-4,
+          "closeness": 70,
+          "ttft": 1052,
+          "reasoning": "Moon and tide share a strong thematic and causal connection, though they remain distinct concepts.",
+          "wall": 1058
+        },
+        {
+          "ok": true,
+          "out": 181,
+          "total": 1667,
+          "cost": 8.595e-4,
+          "closeness": 68,
+          "ttft": 1437,
+          "reasoning": "Tide and moon share a strong causal and conceptual connection, representing closely linked ideas connecting ocean and night.",
+          "wall": 1668
+        },
+        {
+          "ok": true,
+          "out": 134,
+          "total": 1384,
+          "cost": 6.8325e-4,
+          "closeness": 65,
+          "ttft": 1266,
+          "reasoning": "Tide and moon are closely related through gravitational influence and ocean cycles, though one is a phenomenon and the other a celestial body.",
+          "wall": 1384
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 1202,
+          "cost": 3.2324999999999997e-4,
+          "closeness": 72,
+          "ttft": 1024,
+          "reasoning": "Tide and moon share a direct causal and thematic relationship linking the ocean to the night.",
+          "wall": 1202
+        },
+        {
+          "ok": true,
+          "out": 104,
+          "total": 1145,
+          "cost": 5.7075e-4,
+          "closeness": 70,
+          "ttft": 1054,
+          "reasoning": "Tide and moon are closely linked natural concepts with a direct causal relationship, though they remain distinct entities.",
+          "wall": 1146
+        },
+        {
+          "ok": true,
+          "out": 120,
+          "total": 1325,
+          "cost": 6.3075e-4,
+          "closeness": 68,
+          "ttft": 1279,
+          "reasoning": "The moon directly drives the ocean's tides, making these deeply related yet distinct physical concepts.",
+          "wall": 1325
+        },
+        {
+          "ok": true,
+          "out": 124,
+          "total": 1511,
+          "cost": 6.457500000000001e-4,
+          "closeness": 70,
+          "ttft": 1413,
+          "reasoning": "The moon directly controls the tides, linking these two closely related celestial and oceanic concepts.",
+          "wall": 1512
+        },
+        {
+          "ok": true,
+          "out": 109,
+          "total": 1327,
+          "cost": 5.895000000000001e-4,
+          "closeness": 65,
+          "ttft": 1204,
+          "reasoning": "The moon and tides are closely linked through gravitational pull and ocean cycles, though they remain distinct concepts.",
+          "wall": 1329
+        },
+        {
+          "ok": true,
+          "out": 84,
+          "total": 1416,
+          "cost": 4.9575e-4,
+          "closeness": 68,
+          "ttft": 1247,
+          "reasoning": "The moon and the tide are distinct concepts that share a powerful, direct causal relationship in this context.",
+          "wall": 1416
+        },
+        {
+          "ok": true,
+          "out": 100,
+          "total": 908,
+          "cost": 5.5575e-4,
+          "closeness": 65,
+          "ttft": 766,
+          "reasoning": "The moon and tides are closely linked natural phenomena strongly associated with both anchors, representing closely related but distinct concepts.",
+          "wall": 909
+        },
+        {
+          "ok": true,
+          "out": 133,
+          "total": 1250,
+          "cost": 6.795000000000001e-4,
+          "closeness": 68,
+          "ttft": 1089,
+          "reasoning": "The moon directly causes oceanic tides, making these distinct but closely linked concepts that bridge both night and the ocean.",
+          "wall": 1251
+        },
+        {
+          "ok": true,
+          "out": 137,
+          "total": 1394,
+          "cost": 6.945e-4,
+          "closeness": 68,
+          "ttft": 1293,
+          "reasoning": "Tide and moon are strongly linked through gravitational causation and ocean phenomena, but remain distinct concepts.",
+          "wall": 1395
+        },
+        {
+          "ok": true,
+          "out": 99,
+          "total": 1157,
+          "cost": 5.52e-4,
+          "closeness": 68,
+          "ttft": 1039,
+          "reasoning": "The moon and tides share a strong direct causal link and closely related thematic territory.",
+          "wall": 1157
+        },
+        {
+          "ok": true,
+          "out": 133,
+          "total": 1275,
+          "cost": 6.795000000000001e-4,
+          "closeness": 68,
+          "ttft": 1041,
+          "reasoning": "The moon and tides share an immediate causal and thematic link connecting the night sky to the ocean.",
+          "wall": 1275
+        },
+        {
+          "ok": true,
+          "out": 120,
+          "total": 1402,
+          "cost": 6.3075e-4,
+          "closeness": 68,
+          "ttft": 1269,
+          "reasoning": "Tide and moon are strongly linked cause-and-effect concepts relating the ocean to the night sky, though they remain distinct entities.",
+          "wall": 1403
+        },
+        {
+          "ok": true,
+          "out": 108,
+          "total": 1138,
+          "cost": 5.8575e-4,
+          "closeness": 65,
+          "ttft": 1064,
+          "reasoning": "Moon and tide share a direct physical and conceptual relationship, representing closely related but distinct ideas.",
+          "wall": 1139
+        },
+        {
+          "ok": true,
+          "out": 115,
+          "total": 1405,
+          "cost": 6.12e-4,
+          "closeness": 70,
+          "ttft": 1287,
+          "reasoning": "The moon directly causes oceanic tides, making them tightly connected though distinct concepts.",
+          "wall": 1405
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 696,
+          "cost": 3.1575e-4,
+          "closeness": 72,
+          "ttft": 684,
+          "reasoning": "Tide and moon share a direct causal and thematic relationship connected to both anchors.",
+          "wall": 697
+        },
+        {
+          "ok": true,
+          "out": 113,
+          "total": 1307,
+          "cost": 6.045e-4,
+          "closeness": 72,
+          "ttft": 1155,
+          "reasoning": "The moon and tides are fundamentally linked through gravitational pull, representing closely related marine and nocturnal concepts.",
+          "wall": 1307
+        },
+        {
+          "ok": true,
+          "out": 135,
+          "total": 1426,
+          "cost": 6.87e-4,
+          "closeness": 68,
+          "ttft": 1259,
+          "reasoning": "The moon and tides share a strong direct causal link connecting ocean phenomena with the night sky.",
+          "wall": 1426
+        }
+      ],
+      "model": "gemini-3.7-flash (low)",
+      "repeat": {
+        "1": [
+          {
+            "ok": true,
+            "out": 62,
+            "total": 885,
+            "cost": 4.1325e-4,
+            "closeness": 100,
+            "ttft": 845,
+            "reasoning": "Both players submitted the exact same word.",
+            "wall": 886
+          },
+          {
+            "ok": true,
+            "out": 21,
+            "total": 603,
+            "cost": 2.5949999999999997e-4,
+            "closeness": 100,
+            "ttft": 555,
+            "reasoning": "Both players provided the exact same word.",
+            "wall": 604
+          },
+          {
+            "ok": true,
+            "out": 73,
+            "total": 2070,
+            "cost": 4.5450000000000004e-4,
+            "closeness": 100,
+            "ttft": 2011,
+            "reasoning": "Both players submitted the exact same word.",
+            "wall": 2071
+          },
+          {
+            "ok": true,
+            "out": 21,
+            "total": 894,
+            "cost": 2.5949999999999997e-4,
+            "closeness": 100,
+            "ttft": 767,
+            "reasoning": "Both players provided the exact same word.",
+            "wall": 895
+          },
+          {
+            "ok": true,
+            "out": 30,
+            "total": 1036,
+            "cost": 2.9325e-4,
+            "closeness": 100,
+            "ttft": 974,
+            "reasoning": "Both players provided the exact same bridging word.",
+            "wall": 1036
+          }
+        ],
+        "7": [
+          {
+            "ok": true,
+            "out": 43,
+            "total": 952,
+            "cost": 3.4350000000000006e-4,
+            "closeness": 85,
+            "ttft": 773,
+            "reasoning": "\"Butter\" is a primary example of a \"spread,\" making the two bridging concepts extremely closely related in this context.",
+            "wall": 952
+          },
+          {
+            "ok": true,
+            "out": 31,
+            "total": 919,
+            "cost": 2.9850000000000005e-4,
+            "closeness": 85,
+            "ttft": 802,
+            "reasoning": "Butter is a primary example of a spread, both strongly associated with using a knife on bread.",
+            "wall": 921
+          },
+          {
+            "ok": true,
+            "out": 137,
+            "total": 1494,
+            "cost": 6.96e-4,
+            "closeness": 82,
+            "ttft": 1386,
+            "reasoning": "Butter is the quintessential spread applied to bread with a knife, making the two concepts very closely aligned.",
+            "wall": 1495
+          },
+          {
+            "ok": true,
+            "out": 45,
+            "total": 1009,
+            "cost": 3.51e-4,
+            "closeness": 78,
+            "ttft": 755,
+            "reasoning": "Butter is the archetypal spread applied to bread with a knife, linking the substance directly to the action or broader food category.",
+            "wall": 1010
+          },
+          {
+            "ok": true,
+            "out": 39,
+            "total": 953,
+            "cost": 3.285e-4,
+            "closeness": 82,
+            "ttft": 840,
+            "reasoning": "Butter is the quintessential spread applied to bread with a knife, linking the two concepts very closely.",
+            "wall": 954
+          }
+        ],
+        "9": [
+          {
+            "ok": true,
+            "out": 108,
+            "total": 1223,
+            "cost": 5.8575e-4,
+            "closeness": 68,
+            "ttft": 991,
+            "reasoning": "Moon and tide are distinct concepts but share an intimate, direct causal relationship tied to both anchors.",
+            "wall": 1223
+          },
+          {
+            "ok": true,
+            "out": 138,
+            "total": 1389,
+            "cost": 6.9825e-4,
+            "closeness": 68,
+            "ttft": 1222,
+            "reasoning": "Tides and the moon share a strong, direct causal relationship linking the ocean and the night, though they remain distinct concepts.",
+            "wall": 1389
+          },
+          {
+            "ok": true,
+            "out": 106,
+            "total": 1257,
+            "cost": 5.7825e-4,
+            "closeness": 72,
+            "ttft": 1056,
+            "reasoning": "Tides and the moon are deeply linked physical concepts, though one is a phenomenon and the other a celestial body.",
+            "wall": 1258
+          },
+          {
+            "ok": true,
+            "out": 94,
+            "total": 1228,
+            "cost": 5.3325e-4,
+            "closeness": 72,
+            "ttft": 993,
+            "reasoning": "Tides and the moon share a direct causal and associative link in this context.",
+            "wall": 1228
+          },
+          {
+            "ok": true,
+            "out": 183,
+            "total": 1486,
+            "cost": 8.67e-4,
+            "closeness": 65,
+            "ttft": 1428,
+            "reasoning": "The moon directly causes tides, creating a strong physical and conceptual association between the two distinct ideas.",
+            "wall": 1487
+          }
+        ],
+        "18": [
+          {
+            "ok": true,
+            "out": 41,
+            "total": 1507,
+            "cost": 3.3525e-4,
+            "closeness": 10,
+            "ttft": 1306,
+            "reasoning": "Paper focuses on the medium of a letter, whereas scar relates directly to injury, representing entirely different concepts.",
+            "wall": 1508
+          },
+          {
+            "ok": true,
+            "out": 113,
+            "total": 1117,
+            "cost": 6.0525e-4,
+            "closeness": 8,
+            "ttft": 973,
+            "reasoning": "Paper and scar represent completely different concepts with essentially no shared meaning.",
+            "wall": 1118
+          },
+          {
+            "ok": true,
+            "out": 109,
+            "total": 1211,
+            "cost": 5.902500000000001e-4,
+            "closeness": 12,
+            "ttft": 1124,
+            "reasoning": "Paper and scar represent completely different concepts with little semantic connection outside of the specific anchor prompts.",
+            "wall": 1212
+          },
+          {
+            "ok": true,
+            "out": 105,
+            "total": 1301,
+            "cost": 5.7525e-4,
+            "closeness": 12,
+            "ttft": 1198,
+            "reasoning": "Paper relates to the medium of writing, while scar relates to the lasting mark of an injury.",
+            "wall": 1302
+          },
+          {
+            "ok": true,
+            "out": 100,
+            "total": 1141,
+            "cost": 5.565e-4,
+            "closeness": 10,
+            "ttft": 1071,
+            "reasoning": "Paper and scar represent completely different concepts with virtually no semantic overlap.",
+            "wall": 1142
+          }
+        ]
+      },
+      "ordering": [
+        {
+          "reverse": {
+            "ok": true,
+            "out": 21,
+            "total": 1267,
+            "cost": 2.5949999999999997e-4,
+            "closeness": 100,
+            "ttft": 1186,
+            "reasoning": "Both players provided the exact same word.",
+            "wall": 1268
+          },
+          "item": 1,
+          "forward": {
+            "ok": true,
+            "out": 67,
+            "total": 1060,
+            "cost": 4.32e-4,
+            "closeness": 100,
+            "ttft": 1028,
+            "reasoning": "Both players provided the exact same bridging word.",
+            "wall": 1061
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 65,
+            "total": 943,
+            "cost": 4.2449999999999996e-4,
+            "closeness": 100,
+            "ttft": 897,
+            "reasoning": "'Tides' and 'tide' are plain inflections of the exact same word.",
+            "wall": 943
+          },
+          "item": 2,
+          "forward": {
+            "ok": true,
+            "out": 38,
+            "total": 835,
+            "cost": 3.2324999999999997e-4,
+            "closeness": 100,
+            "ttft": 719,
+            "reasoning": "The two bridging words are simple singular and plural inflections of the exact same word.",
+            "wall": 836
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 123,
+            "total": 1664,
+            "cost": 6.4275e-4,
+            "closeness": 100,
+            "ttft": 1514,
+            "reasoning": "Reflect and reflection represent the exact same core concept, differing only by part of speech.",
+            "wall": 1664
+          },
+          "item": 3,
+          "forward": {
+            "ok": true,
+            "out": 115,
+            "total": 1981,
+            "cost": 6.1275e-4,
+            "closeness": 100,
+            "ttft": 1843,
+            "reasoning": "These are direct inflections and parts of speech of the exact same root concept.",
+            "wall": 1982
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 36,
+            "total": 883,
+            "cost": 3.1725000000000004e-4,
+            "closeness": 90,
+            "ttft": 809,
+            "reasoning": "Mug and cup are nearly synonymous drinking vessels commonly used interchangeably in this context.",
+            "wall": 884
+          },
+          "item": 4,
+          "forward": {
+            "ok": true,
+            "out": 146,
+            "total": 1361,
+            "cost": 7.2975e-4,
+            "closeness": 92,
+            "ttft": 1204,
+            "reasoning": "Cup and mug are near-synonyms referring to essentially the same drinking vessel used in this context.",
+            "wall": 1362
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 100,
+            "total": 1305,
+            "cost": 5.5575e-4,
+            "closeness": 95,
+            "ttft": 1085,
+            "reasoning": "\"Thaw\" and \"melt\" are near-perfect synonyms describing the transition of ice to water through heat.",
+            "wall": 1306
+          },
+          "item": 5,
+          "forward": {
+            "ok": true,
+            "out": 43,
+            "total": 3807,
+            "cost": 3.42e-4,
+            "closeness": 94,
+            "ttft": 3664,
+            "reasoning": "\"Melt\" and \"thaw\" are near-perfect synonyms describing the transition of a frozen state into liquid.",
+            "wall": 3807
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 37,
+            "total": 921,
+            "cost": 3.21e-4,
+            "closeness": 88,
+            "ttft": 792,
+            "reasoning": "Fence and wall are direct synonyms representing physical perimeter barriers used for both gardens and prisons.",
+            "wall": 921
+          },
+          "item": 6,
+          "forward": {
+            "ok": true,
+            "out": 25,
+            "total": 913,
+            "cost": 2.76e-4,
+            "closeness": 88,
+            "ttft": 803,
+            "reasoning": "Wall and fence are both physical perimeter boundaries serving identical barrier functions.",
+            "wall": 914
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 42,
+            "total": 995,
+            "cost": 3.3975e-4,
+            "closeness": 78,
+            "ttft": 803,
+            "reasoning": "Butter is a quintessential spread, making the two words very closely linked in the context of bread and a knife.",
+            "wall": 996
+          },
+          "item": 7,
+          "forward": {
+            "ok": true,
+            "out": 45,
+            "total": 831,
+            "cost": 3.51e-4,
+            "closeness": 78,
+            "ttft": 637,
+            "reasoning": "Butter is the quintessential spread applied with a bread knife, making these closely aligned as a specific substance and its category or action.",
+            "wall": 832
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 39,
+            "total": 889,
+            "cost": 3.2775e-4,
+            "closeness": 78,
+            "ttft": 742,
+            "reasoning": "Crown and throne are both primary regal symbols closely associated with a monarch's authority and palace.",
+            "wall": 889
+          },
+          "item": 8,
+          "forward": {
+            "ok": true,
+            "out": 36,
+            "total": 826,
+            "cost": 3.165e-4,
+            "closeness": 85,
+            "ttft": 685,
+            "reasoning": "Both words represent iconic symbols of royal power and monarchy associated with kings and castles.",
+            "wall": 826
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 97,
+            "total": 3868,
+            "cost": 5.445e-4,
+            "closeness": 68,
+            "ttft": 3669,
+            "reasoning": "The moon directly drives the ocean's tides, making these closely linked concepts in this context.",
+            "wall": 3869
+          },
+          "item": 9,
+          "forward": {
+            "ok": true,
+            "out": 135,
+            "total": 2072,
+            "cost": 6.87e-4,
+            "closeness": 65,
+            "ttft": 1873,
+            "reasoning": "The moon and ocean tides are closely linked natural phenomena, making these related but distinct concepts.",
+            "wall": 2073
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 37,
+            "total": 867,
+            "cost": 3.21e-4,
+            "closeness": 72,
+            "ttft": 735,
+            "reasoning": "Both words relate closely to the process of waking up at the start of the day.",
+            "wall": 868
+          },
+          "item": 10,
+          "forward": {
+            "ok": true,
+            "out": 41,
+            "total": 814,
+            "cost": 3.3600000000000004e-4,
+            "closeness": 72,
+            "ttft": 721,
+            "reasoning": "Both words revolve around waking up at the start of the day, connecting the device to the resulting state.",
+            "wall": 814
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 167,
+            "total": 1769,
+            "cost": 8.07e-4,
+            "closeness": 78,
+            "ttft": 1684,
+            "reasoning": "Steam and water represent different states of the same physical substance produced by temperature changes.",
+            "wall": 1769
+          },
+          "item": 11,
+          "forward": {
+            "ok": true,
+            "out": 146,
+            "total": 1435,
+            "cost": 7.282500000000001e-4,
+            "closeness": 72,
+            "ttft": 1312,
+            "reasoning": "Both players chose different physical states of the same chemical compound resulting from the interplay of heat and ice.",
+            "wall": 1435
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 74,
+            "total": 1096,
+            "cost": 4.5975e-4,
+            "closeness": 58,
+            "ttft": 1038,
+            "reasoning": "Both words draw on the quiet medical context of a clinic or waiting room, representing closely related concepts.",
+            "wall": 1096
+          },
+          "item": 12,
+          "forward": {
+            "ok": true,
+            "out": 143,
+            "total": 1561,
+            "cost": 7.185000000000001e-4,
+            "closeness": 45,
+            "ttft": 1398,
+            "reasoning": "Both words evoke the healthcare environment where one experiences quiet anticipation, though one is an action/state and the other is a location.",
+            "wall": 1563
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 327,
+            "total": 2271,
+            "cost": 0.0014085,
+            "closeness": 58,
+            "ttft": 2139,
+            "reasoning": "Both words draw from the concept of doctor-patient confidentiality, though an oath is a formal pledge and a secret is concealed information.",
+            "wall": 2271
+          },
+          "item": 13,
+          "forward": {
+            "ok": true,
+            "out": 45,
+            "total": 1026,
+            "cost": 3.51e-4,
+            "closeness": 68,
+            "ttft": 796,
+            "reasoning": "Both words touch on confidentiality and solemn commitments to keep quiet, though one is a formal vow and the other is withheld information.",
+            "wall": 1026
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 109,
+            "total": 1793,
+            "cost": 5.902500000000001e-4,
+            "closeness": 70,
+            "ttft": 1668,
+            "reasoning": "The two words are direct antonyms that share the exact same conceptual framework regarding both letters and wounds.",
+            "wall": 1794
+          },
+          "item": 14,
+          "forward": {
+            "ok": true,
+            "out": 41,
+            "total": 656,
+            "cost": 3.3525e-4,
+            "closeness": 55,
+            "ttft": 569,
+            "reasoning": "Open and seal are direct antonyms representing opposite actions applied to the same contexts of letters and wounds.",
+            "wall": 657
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 155,
+            "total": 1658,
+            "cost": 7.6275e-4,
+            "closeness": 15,
+            "ttft": 1537,
+            "reasoning": "'Sleep' focuses on the physiological state tied to dreaming, while 'journey' relates to travel and transit, representing distinct concepts.",
+            "wall": 1658
+          },
+          "item": 15,
+          "forward": {
+            "ok": true,
+            "out": 113,
+            "total": 1248,
+            "cost": 6.0525e-4,
+            "closeness": 20,
+            "ttft": 1066,
+            "reasoning": "Journey and sleep represent distinct concepts with minimal semantic overlap despite both relating broadly to the anchors.",
+            "wall": 1248
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 34,
+            "total": 902,
+            "cost": 3.0900000000000003e-4,
+            "closeness": 30,
+            "ttft": 710,
+            "reasoning": "Queen focuses on royalty, while moat focuses on castle architecture, making them related only via the shared medieval theme.",
+            "wall": 902
+          },
+          "item": 16,
+          "forward": {
+            "ok": true,
+            "out": 44,
+            "total": 809,
+            "cost": 3.465e-4,
+            "closeness": 25,
+            "ttft": 674,
+            "reasoning": "Moat focuses on the castle's architecture, while queen relates to royalty, representing distinct associations connected to the anchors.",
+            "wall": 810
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 38,
+            "total": 2060,
+            "cost": 3.2399999999999996e-4,
+            "closeness": 15,
+            "ttft": 1762,
+            "reasoning": "Drift leans toward the ethereal realm of dreams, while track relates to the physical infrastructure of trains, making their meanings quite distant.",
+            "wall": 2061
+          },
+          "item": 17,
+          "forward": {
+            "ok": true,
+            "out": 44,
+            "total": 1183,
+            "cost": 3.465e-4,
+            "closeness": 20,
+            "ttft": 982,
+            "reasoning": "\"Track\" focuses on the physical or metaphorical path, while \"drift\" evokes wandering or sleep, representing very different concepts.",
+            "wall": 1184
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 80,
+            "total": 1238,
+            "cost": 4.8150000000000005e-4,
+            "closeness": 8,
+            "ttft": 1094,
+            "reasoning": "Paper and scar represent completely different concepts and share almost no semantic relation.",
+            "wall": 1239
+          },
+          "item": 18,
+          "forward": {
+            "ok": true,
+            "out": 45,
+            "total": 1314,
+            "cost": 3.5025e-4,
+            "closeness": 10,
+            "ttft": 1238,
+            "reasoning": "Paper and scar represent completely different concepts, one relating to the physical medium of a letter and the other to an injury mark.",
+            "wall": 1315
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 46,
+            "total": 926,
+            "cost": 3.5475000000000003e-4,
+            "closeness": 20,
+            "ttft": 734,
+            "reasoning": "While both words relate to the anchors in biological or institutional contexts, 'cell' and 'weed' share minimal direct semantic overlap.",
+            "wall": 926
+          },
+          "item": 19,
+          "forward": {
+            "ok": true,
+            "out": 95,
+            "total": 1189,
+            "cost": 5.385e-4,
+            "closeness": 15,
+            "ttft": 976,
+            "reasoning": "Weed relates primarily to unwanted plants while cell relates to prison confinement or biological units, sharing very little direct meaning.",
+            "wall": 1189
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 99,
+            "total": 1234,
+            "cost": 5.5275e-4,
+            "closeness": 12,
+            "ttft": 1070,
+            "reasoning": "Bank relates to the river's edge while glass relates to the mirror's material, sharing very little direct meaning.",
+            "wall": 1234
+          },
+          "item": 20,
+          "forward": {
+            "ok": true,
+            "out": 41,
+            "total": 1071,
+            "cost": 3.3525e-4,
+            "closeness": 12,
+            "ttft": 869,
+            "reasoning": "Glass focuses on reflection and smooth surfaces, whereas bank focuses on the geographical boundary of a body of water.",
+            "wall": 1072
+          }
+        }
+      ],
+      "warm": {
+        "ok": true,
+        "out": 118,
+        "total": 1633,
+        "cost": 6.2325e-4,
+        "closeness": 68,
+        "ttft": 1576,
+        "reasoning": "Moon and tide are deeply connected concepts, as the moon directly causes ocean tides.",
+        "wall": 1672
+      }
+    },
+    "gemini38": {
+      "latency": [
+        {
+          "ok": true,
+          "out": 40,
+          "total": 664,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 547,
+          "reasoning": "The moon directly causes ocean tides, making these deeply connected natural concepts that share the same associative path.",
+          "wall": 665
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 801,
+          "cost": 3.2700000000000003e-4,
+          "closeness": 72,
+          "ttft": 801,
+          "reasoning": "The moon directly causes oceanic tides, making these two celestial and marine concepts closely linked in meaning.",
+          "wall": 802
+        },
+        {
+          "ok": true,
+          "out": 42,
+          "total": 1190,
+          "cost": 3.3825e-4,
+          "closeness": 72,
+          "ttft": 1068,
+          "reasoning": "The moon directly causes the tides, making these deeply related celestial and oceanic concepts that share a strong thematic link.",
+          "wall": 1190
+        },
+        {
+          "ok": true,
+          "out": 35,
+          "total": 639,
+          "cost": 3.12e-4,
+          "closeness": 72,
+          "ttft": 531,
+          "reasoning": "The moon directly causes ocean tides, linking these concepts closely through natural association.",
+          "wall": 639
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 705,
+          "cost": 3.2324999999999997e-4,
+          "closeness": 72,
+          "ttft": 575,
+          "reasoning": "Tide and moon are closely linked natural concepts, with the moon directly causing oceanic tides.",
+          "wall": 706
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 1032,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 926,
+          "reasoning": "Tides are directly caused by the moon, creating a strong physical and conceptual association between the two words.",
+          "wall": 1032
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 731,
+          "cost": 3.1575e-4,
+          "closeness": 72,
+          "ttft": 656,
+          "reasoning": "The moon directly causes oceanic tides, making these two concepts strongly and naturally linked.",
+          "wall": 731
+        },
+        {
+          "ok": true,
+          "out": 46,
+          "total": 1145,
+          "cost": 3.5325e-4,
+          "closeness": 76,
+          "ttft": 965,
+          "reasoning": "Tide and moon are closely linked concepts, as the moon directly causes ocean tides, representing complementary steps along the same associative path.",
+          "wall": 1145
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 765,
+          "cost": 3.2324999999999997e-4,
+          "closeness": 72,
+          "ttft": 642,
+          "reasoning": "The moon directly causes the tides, making these deeply related concepts that often evoke each other.",
+          "wall": 766
+        },
+        {
+          "ok": true,
+          "out": 43,
+          "total": 630,
+          "cost": 3.42e-4,
+          "closeness": 70,
+          "ttft": 616,
+          "reasoning": "Tide and moon are intimately linked natural concepts with the moon directly driving the tides, though they remain distinct entities.",
+          "wall": 632
+        },
+        {
+          "ok": true,
+          "out": 42,
+          "total": 716,
+          "cost": 3.3825e-4,
+          "closeness": 72,
+          "ttft": 580,
+          "reasoning": "Tide and moon are intimately linked causal concepts bridging ocean and night, sharing strong associative overlap without being synonymous.",
+          "wall": 717
+        },
+        {
+          "ok": true,
+          "out": 40,
+          "total": 595,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 573,
+          "reasoning": "The moon directly causes ocean tides, linking these concepts closely in the context of night and the sea.",
+          "wall": 596
+        },
+        {
+          "ok": true,
+          "out": 40,
+          "total": 3413,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 3279,
+          "reasoning": "Tides are directly caused by the moon, making these two concepts intrinsically linked oceanic and nocturnal phenomena.",
+          "wall": 3414
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 795,
+          "cost": 3.2700000000000003e-4,
+          "closeness": 72,
+          "ttft": 662,
+          "reasoning": "The moon directly governs ocean tides, making them closely linked and complementary celestial-aquatic concepts.",
+          "wall": 796
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 760,
+          "cost": 3.2324999999999997e-4,
+          "closeness": 72,
+          "ttft": 686,
+          "reasoning": "The moon directly causes ocean tides, making them tightly connected physical concepts despite being distinct entities.",
+          "wall": 761
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 718,
+          "cost": 3.2324999999999997e-4,
+          "closeness": 72,
+          "ttft": 718,
+          "reasoning": "Tide and moon are closely linked natural concepts, with the moon directly causing oceanic tides.",
+          "wall": 718
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 862,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 844,
+          "reasoning": "The moon directly causes ocean tides and is a nocturnal fixture, making the concepts closely linked through both anchors.",
+          "wall": 863
+        },
+        {
+          "ok": true,
+          "out": 40,
+          "total": 776,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 565,
+          "reasoning": "The moon and the tide share an intimate causal relationship and frequent thematic association, representing closely linked ideas.",
+          "wall": 776
+        },
+        {
+          "ok": true,
+          "out": 40,
+          "total": 3198,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 3051,
+          "reasoning": "The moon causes the ocean tides, making these deeply connected natural concepts that directly relate to both anchors.",
+          "wall": 3198
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 697,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 645,
+          "reasoning": "Tides are directly caused by the moon, making these two concepts very closely linked through natural physical association.",
+          "wall": 699
+        }
+      ],
+      "hedged": [
+        {
+          "ok": true,
+          "out": 36,
+          "total": 864,
+          "cost": 3.1575e-4,
+          "closeness": 72,
+          "ttft": 769,
+          "reasoning": "The moon directly causes the tides, making them tightly linked oceanic and nighttime concepts.",
+          "wall": 865
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 747,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 586,
+          "reasoning": "The moon causes the tides, making these deeply related natural concepts strongly associated with both night and the ocean.",
+          "wall": 747
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 638,
+          "cost": 3.2700000000000003e-4,
+          "closeness": 72,
+          "ttft": 576,
+          "reasoning": "The moon directly governs the ocean tides, making these two concepts deeply linked by cause and effect.",
+          "wall": 638
+        },
+        {
+          "ok": true,
+          "out": 43,
+          "total": 760,
+          "cost": 3.42e-4,
+          "closeness": 72,
+          "ttft": 758,
+          "reasoning": "The moon directly governs the ocean's tide, making these highly related concepts closely tied through physics and natural imagery.",
+          "wall": 761
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 675,
+          "cost": 3.2700000000000003e-4,
+          "closeness": 72,
+          "ttft": 672,
+          "reasoning": "The moon directly causes the tides, making them tightly linked natural phenomena connecting night and the ocean.",
+          "wall": 676
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 801,
+          "cost": 3.2700000000000003e-4,
+          "closeness": 72,
+          "ttft": 693,
+          "reasoning": "The moon directly causes the tides, making them closely linked concepts bridging the night sky and ocean.",
+          "wall": 802
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 811,
+          "cost": 3.2324999999999997e-4,
+          "closeness": 72,
+          "ttft": 727,
+          "reasoning": "The moon directly causes the tides, making these two concepts intrinsically and strongly linked in meaning.",
+          "wall": 812
+        },
+        {
+          "ok": true,
+          "out": 40,
+          "total": 738,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 729,
+          "reasoning": "Tides and the moon share an intimate causal and thematic link connecting the ocean to the night sky.",
+          "wall": 738
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 655,
+          "cost": 3.2700000000000003e-4,
+          "closeness": 72,
+          "ttft": 589,
+          "reasoning": "The moon directly causes the tides, making them deeply linked concepts bridging the celestial and oceanic themes.",
+          "wall": 657
+        },
+        {
+          "ok": true,
+          "out": 40,
+          "total": 701,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 619,
+          "reasoning": "The moon directly governs ocean tides and appears at night, making these concepts intimately and causally linked.",
+          "wall": 702
+        },
+        {
+          "ok": true,
+          "out": 43,
+          "total": 721,
+          "cost": 3.42e-4,
+          "closeness": 72,
+          "ttft": 564,
+          "reasoning": "Tide and moon are closely linked concepts, as the moon directly causes oceanic tides, representing a strong conceptual connection.",
+          "wall": 721
+        },
+        {
+          "ok": true,
+          "out": 43,
+          "total": 916,
+          "cost": 3.42e-4,
+          "closeness": 70,
+          "ttft": 789,
+          "reasoning": "The moon directly drives ocean tides and is the primary light of night, making the two concepts strongly linked yet distinct.",
+          "wall": 917
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 796,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 638,
+          "reasoning": "Tide and moon are closely linked concepts intrinsically tied to each other through the ocean and the night sky.",
+          "wall": 797
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 838,
+          "cost": 3.345e-4,
+          "closeness": 75,
+          "ttft": 648,
+          "reasoning": "Tide and moon are intimately linked both physically and conceptually, representing closely related facets of the night ocean.",
+          "wall": 839
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 833,
+          "cost": 3.2324999999999997e-4,
+          "closeness": 70,
+          "ttft": 732,
+          "reasoning": "The moon directly causes oceanic tides, making them tightly connected physical concepts despite being distinct entities.",
+          "wall": 834
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 632,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 516,
+          "reasoning": "Tides are directly caused by the moon, making these closely related concepts that naturally bridge ocean and night.",
+          "wall": 632
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 680,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 507,
+          "reasoning": "Tides are directly caused by the moon, making these strongly related and overlapping concepts between ocean and night.",
+          "wall": 681
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 671,
+          "cost": 3.345e-4,
+          "closeness": 72,
+          "ttft": 557,
+          "reasoning": "The moon directly causes the tides, making these deeply related concepts that connect the night sky to the ocean.",
+          "wall": 671
+        },
+        {
+          "ok": true,
+          "out": 45,
+          "total": 864,
+          "cost": 3.495e-4,
+          "closeness": 72,
+          "ttft": 747,
+          "reasoning": "Tides are directly caused by the moon's gravitational pull, making these closely related concepts that naturally connect ocean and night.",
+          "wall": 865
+        },
+        {
+          "ok": true,
+          "out": 40,
+          "total": 660,
+          "cost": 3.3075e-4,
+          "closeness": 72,
+          "ttft": 614,
+          "reasoning": "The moon directly drives ocean tides, creating an extremely strong thematic and physical association between the two concepts.",
+          "wall": 661
+        }
+      ],
+      "model": "gemini-3.8-flash (low)",
+      "repeat": {
+        "1": [
+          {
+            "ok": true,
+            "out": 29,
+            "total": 772,
+            "cost": 2.895e-4,
+            "closeness": 100,
+            "ttft": 688,
+            "reasoning": "Both players chose the exact same word.",
+            "wall": 773
+          },
+          {
+            "ok": true,
+            "out": 21,
+            "total": 846,
+            "cost": 2.5949999999999997e-4,
+            "closeness": 100,
+            "ttft": 824,
+            "reasoning": "Both players chose the exact same word.",
+            "wall": 847
+          },
+          {
+            "ok": true,
+            "out": 21,
+            "total": 726,
+            "cost": 2.5949999999999997e-4,
+            "closeness": 100,
+            "ttft": 655,
+            "reasoning": "Both players selected the exact same word.",
+            "wall": 726
+          },
+          {
+            "ok": true,
+            "out": 29,
+            "total": 1663,
+            "cost": 2.895e-4,
+            "closeness": 100,
+            "ttft": 1618,
+            "reasoning": "Both players chose the exact same word.",
+            "wall": 1665
+          },
+          {
+            "ok": true,
+            "out": 21,
+            "total": 662,
+            "cost": 2.5949999999999997e-4,
+            "closeness": 100,
+            "ttft": 610,
+            "reasoning": "Both players selected the exact same word.",
+            "wall": 663
+          }
+        ],
+        "7": [
+          {
+            "ok": true,
+            "out": 41,
+            "total": 808,
+            "cost": 3.3600000000000004e-4,
+            "closeness": 85,
+            "ttft": 655,
+            "reasoning": "Butter is the quintessential spread, and both words represent the primary substance and action linking bread and a knife.",
+            "wall": 809
+          },
+          {
+            "ok": true,
+            "out": 39,
+            "total": 658,
+            "cost": 3.285e-4,
+            "closeness": 85,
+            "ttft": 569,
+            "reasoning": "Butter is the quintessential spread applied with a knife to bread, making them extremely closely aligned concepts.",
+            "wall": 659
+          },
+          {
+            "ok": true,
+            "out": 44,
+            "total": 798,
+            "cost": 3.4725e-4,
+            "closeness": 78,
+            "ttft": 643,
+            "reasoning": "Butter is the quintessential spread applied with a knife to bread, making the concepts closely aligned as noun and action or category.",
+            "wall": 798
+          },
+          {
+            "ok": true,
+            "out": 44,
+            "total": 903,
+            "cost": 3.4725e-4,
+            "closeness": 85,
+            "ttft": 797,
+            "reasoning": "Butter is the quintessential spread, and both words function directly as things spread on bread with a knife or the act itself.",
+            "wall": 904
+          },
+          {
+            "ok": true,
+            "out": 38,
+            "total": 3478,
+            "cost": 3.2475e-4,
+            "closeness": 84,
+            "ttft": 3393,
+            "reasoning": "Butter is a primary example of a spread, sharing strong semantic overlap as both food items and actions performed with a knife on bread.",
+            "wall": 3478
+          }
+        ],
+        "9": [
+          {
+            "ok": true,
+            "out": 41,
+            "total": 680,
+            "cost": 3.345e-4,
+            "closeness": 72,
+            "ttft": 528,
+            "reasoning": "The moon directly causes the tides, making them closely linked celestial and oceanic concepts sharing the same thematic space.",
+            "wall": 681
+          },
+          {
+            "ok": true,
+            "out": 43,
+            "total": 650,
+            "cost": 3.42e-4,
+            "closeness": 72,
+            "ttft": 516,
+            "reasoning": "Tides are directly caused by the moon, making these strongly linked physical phenomena connecting the ocean to the night sky.",
+            "wall": 650
+          },
+          {
+            "ok": true,
+            "out": 41,
+            "total": 789,
+            "cost": 3.345e-4,
+            "closeness": 72,
+            "ttft": 653,
+            "reasoning": "The moon directly causes ocean tides and is a central symbol of night, making the two concepts strongly linked.",
+            "wall": 790
+          },
+          {
+            "ok": true,
+            "out": 41,
+            "total": 672,
+            "cost": 3.345e-4,
+            "closeness": 72,
+            "ttft": 666,
+            "reasoning": "The moon directly causes the tides, making these two concepts intrinsically linked natural phenomena associated with ocean and night.",
+            "wall": 672
+          },
+          {
+            "ok": true,
+            "out": 37,
+            "total": 795,
+            "cost": 3.195e-4,
+            "closeness": 72,
+            "ttft": 722,
+            "reasoning": "The moon and tides are closely connected natural phenomena, strongly linked both physically and symbolically.",
+            "wall": 797
+          }
+        ],
+        "18": [
+          {
+            "ok": true,
+            "out": 39,
+            "total": 634,
+            "cost": 3.2775e-4,
+            "closeness": 12,
+            "ttft": 629,
+            "reasoning": "Paper and scar represent completely different concepts, sharing little meaning aside from tangential associations like paper cuts.",
+            "wall": 634
+          },
+          {
+            "ok": true,
+            "out": 40,
+            "total": 626,
+            "cost": 3.315e-4,
+            "closeness": 12,
+            "ttft": 613,
+            "reasoning": "Paper and scar represent completely different concepts, sharing little direct relationship outside of a tenuous paper cut connection.",
+            "wall": 627
+          },
+          {
+            "ok": true,
+            "out": 92,
+            "total": 887,
+            "cost": 5.265e-4,
+            "closeness": 12,
+            "ttft": 806,
+            "reasoning": "Paper and scar represent completely different concepts, one relating to the physical medium of a letter and the other to the mark left by a wound.",
+            "wall": 887
+          },
+          {
+            "ok": true,
+            "out": 41,
+            "total": 628,
+            "cost": 3.3525e-4,
+            "closeness": 12,
+            "ttft": 625,
+            "reasoning": "Paper and scar represent completely different concepts, sharing little meaning aside from indirect associations through papercuts or marks.",
+            "wall": 629
+          },
+          {
+            "ok": true,
+            "out": 42,
+            "total": 804,
+            "cost": 3.39e-4,
+            "closeness": 15,
+            "ttft": 700,
+            "reasoning": "Paper connects to a letter or paper cut, while scar relates to a healed wound, representing two distinct concepts.",
+            "wall": 805
+          }
+        ]
+      },
+      "ordering": [
+        {
+          "reverse": {
+            "ok": true,
+            "out": 21,
+            "total": 991,
+            "cost": 2.5949999999999997e-4,
+            "closeness": 100,
+            "ttft": 937,
+            "reasoning": "Both players selected the exact same word.",
+            "wall": 991
+          },
+          "item": 1,
+          "forward": {
+            "ok": true,
+            "out": 29,
+            "total": 813,
+            "cost": 2.895e-4,
+            "closeness": 100,
+            "ttft": 714,
+            "reasoning": "Both players chose the exact same word.",
+            "wall": 814
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 97,
+            "total": 958,
+            "cost": 5.445e-4,
+            "closeness": 100,
+            "ttft": 897,
+            "reasoning": "The two bridging words are identical except for a simple plural inflection.",
+            "wall": 959
+          },
+          "item": 2,
+          "forward": {
+            "ok": true,
+            "out": 36,
+            "total": 2346,
+            "cost": 3.1575e-4,
+            "closeness": 100,
+            "ttft": 2238,
+            "reasoning": "The two words are simply singular and plural forms of the exact same concept.",
+            "wall": 2347
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 38,
+            "total": 821,
+            "cost": 3.2399999999999996e-4,
+            "closeness": 98,
+            "ttft": 704,
+            "reasoning": "\"Reflect\" and \"reflection\" are different grammatical forms of the exact same core concept.",
+            "wall": 822
+          },
+          "item": 3,
+          "forward": {
+            "ok": true,
+            "out": 35,
+            "total": 999,
+            "cost": 3.1275e-4,
+            "closeness": 98,
+            "ttft": 915,
+            "reasoning": "These words are the noun and verb forms of the exact same core concept.",
+            "wall": 1000
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 27,
+            "total": 548,
+            "cost": 2.835e-4,
+            "closeness": 93,
+            "ttft": 548,
+            "reasoning": "Mug and cup are nearly synonymous drinking vessels used interchangeably in this context.",
+            "wall": 549
+          },
+          "item": 4,
+          "forward": {
+            "ok": true,
+            "out": 39,
+            "total": 2833,
+            "cost": 3.285e-4,
+            "closeness": 90,
+            "ttft": 2831,
+            "reasoning": "Cup and mug are near-synonyms referring to essentially the same drinking vessel in this context.",
+            "wall": 2833
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 41,
+            "total": 736,
+            "cost": 3.345e-4,
+            "closeness": 93,
+            "ttft": 732,
+            "reasoning": "\"Thaw\" and \"melt\" describe essentially the same physical transition from frozen to liquid caused by heat.",
+            "wall": 737
+          },
+          "item": 5,
+          "forward": {
+            "ok": true,
+            "out": 44,
+            "total": 604,
+            "cost": 3.4575000000000003e-4,
+            "closeness": 90,
+            "ttft": 578,
+            "reasoning": "\"Melt\" and \"thaw\" are near-synonyms referring to the same phase change from frozen to liquid.",
+            "wall": 605
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 35,
+            "total": 586,
+            "cost": 3.135e-4,
+            "closeness": 88,
+            "ttft": 501,
+            "reasoning": "Both words represent physical vertical barriers used to enclose spaces like gardens and prisons.",
+            "wall": 587
+          },
+          "item": 6,
+          "forward": {
+            "ok": true,
+            "out": 35,
+            "total": 894,
+            "cost": 3.135e-4,
+            "closeness": 88,
+            "ttft": 736,
+            "reasoning": "Wall and fence are near-synonyms denoting physical enclosures or perimeter barriers.",
+            "wall": 894
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 41,
+            "total": 597,
+            "cost": 3.3600000000000004e-4,
+            "closeness": 78,
+            "ttft": 595,
+            "reasoning": "Butter is a quintessential spread, making the two words strongly linked through an action-and-object relationship.",
+            "wall": 598
+          },
+          "item": 7,
+          "forward": {
+            "ok": true,
+            "out": 37,
+            "total": 15668,
+            "cost": 3.21e-4,
+            "closeness": 85,
+            "ttft": 15533,
+            "reasoning": "Butter is the quintessential spread, representing nearly identical food and action concepts in this context.",
+            "wall": 15670
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 35,
+            "total": 832,
+            "cost": 3.1275e-4,
+            "closeness": 82,
+            "ttft": 683,
+            "reasoning": "Both words are iconic physical symbols and metonyms of royal power and monarchy.",
+            "wall": 833
+          },
+          "item": 8,
+          "forward": {
+            "ok": true,
+            "out": 36,
+            "total": 1463,
+            "cost": 3.165e-4,
+            "closeness": 82,
+            "ttft": 1350,
+            "reasoning": "Throne and crown are both iconic, tangible symbols of royal power and sovereignty.",
+            "wall": 1463
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 39,
+            "total": 1437,
+            "cost": 3.2700000000000003e-4,
+            "closeness": 72,
+            "ttft": 1317,
+            "reasoning": "The moon directly causes ocean tides, creating a strong physical and conceptual connection between the two ideas.",
+            "wall": 1437
+          },
+          "item": 9,
+          "forward": {
+            "ok": true,
+            "out": 38,
+            "total": 2730,
+            "cost": 3.2324999999999997e-4,
+            "closeness": 72,
+            "ttft": 2628,
+            "reasoning": "The moon directly governs the ocean's tide, making them strongly associated and conceptually intertwined.",
+            "wall": 2730
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 43,
+            "total": 657,
+            "cost": 3.4350000000000006e-4,
+            "closeness": 65,
+            "ttft": 541,
+            "reasoning": "Both words strongly relate to waking up in the morning, though one represents the state while the other is the trigger.",
+            "wall": 657
+          },
+          "item": 10,
+          "forward": {
+            "ok": true,
+            "out": 43,
+            "total": 734,
+            "cost": 3.4350000000000006e-4,
+            "closeness": 70,
+            "ttft": 635,
+            "reasoning": "Both words focus on the transition out of sleep, though one is the instrument and the other is the resulting state.",
+            "wall": 735
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 40,
+            "total": 789,
+            "cost": 3.3075e-4,
+            "closeness": 82,
+            "ttft": 657,
+            "reasoning": "Both players chose physical states of the exact same chemical substance produced when ice interacts with heat or fire.",
+            "wall": 790
+          },
+          "item": 11,
+          "forward": {
+            "ok": true,
+            "out": 39,
+            "total": 612,
+            "cost": 3.2700000000000003e-4,
+            "closeness": 72,
+            "ttft": 597,
+            "reasoning": "Both players chose physical states of H2O directly tied to the interaction of fire and ice.",
+            "wall": 613
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 42,
+            "total": 667,
+            "cost": 3.3975e-4,
+            "closeness": 52,
+            "ttft": 665,
+            "reasoning": "Hospital and waiting are contextually linked via medical waiting rooms, but represent a location versus an action or delay.",
+            "wall": 668
+          },
+          "item": 12,
+          "forward": {
+            "ok": true,
+            "out": 42,
+            "total": 880,
+            "cost": 3.3975e-4,
+            "closeness": 55,
+            "ttft": 770,
+            "reasoning": "Both players linked the concepts through medical settings, with waiting specifically evoking a doctor's quiet hospital waiting room.",
+            "wall": 880
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 39,
+            "total": 719,
+            "cost": 3.285e-4,
+            "closeness": 72,
+            "ttft": 587,
+            "reasoning": "Both players keyed into medical confidentiality, with oath and secret representing closely related aspects of professional silence.",
+            "wall": 719
+          },
+          "item": 13,
+          "forward": {
+            "ok": true,
+            "out": 42,
+            "total": 888,
+            "cost": 3.3975e-4,
+            "closeness": 68,
+            "ttft": 739,
+            "reasoning": "Both words evoke doctor-patient confidentiality, though an oath is a formal promise while a secret is withheld information.",
+            "wall": 889
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 40,
+            "total": 605,
+            "cost": 3.315e-4,
+            "closeness": 45,
+            "ttft": 527,
+            "reasoning": "The words represent direct opposites in the same conceptual domain of closing or exposing an envelope or an injury.",
+            "wall": 605
+          },
+          "item": 14,
+          "forward": {
+            "ok": true,
+            "out": 40,
+            "total": 687,
+            "cost": 3.315e-4,
+            "closeness": 72,
+            "ttft": 680,
+            "reasoning": "Open and seal are direct antonyms that share the exact same contextual frames regarding letters and wounds.",
+            "wall": 687
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 39,
+            "total": 1623,
+            "cost": 3.2775e-4,
+            "closeness": 20,
+            "ttft": 1432,
+            "reasoning": "Sleep connects directly to dreaming while journey connects to train travel, representing two entirely different conceptual pathways.",
+            "wall": 1624
+          },
+          "item": 15,
+          "forward": {
+            "ok": true,
+            "out": 44,
+            "total": 834,
+            "cost": 3.465e-4,
+            "closeness": 28,
+            "ttft": 705,
+            "reasoning": "Journey connects through travel and waking life, while sleep focuses directly on the biological state of dreaming, making them distinct concepts.",
+            "wall": 834
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 41,
+            "total": 912,
+            "cost": 3.3525e-4,
+            "closeness": 25,
+            "ttft": 747,
+            "reasoning": "Queen refers to royalty while moat refers to castle architecture, representing very different categories despite the shared medieval theme.",
+            "wall": 913
+          },
+          "item": 16,
+          "forward": {
+            "ok": true,
+            "out": 40,
+            "total": 1309,
+            "cost": 3.315e-4,
+            "closeness": 22,
+            "ttft": 1227,
+            "reasoning": "One player focused on the architectural defenses of a castle, while the other focused on the royal monarchy.",
+            "wall": 1309
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 44,
+            "total": 665,
+            "cost": 3.465e-4,
+            "closeness": 18,
+            "ttft": 663,
+            "reasoning": "\"Drift\" and \"track\" represent nearly opposite concepts regarding guided versus unguided motion, sharing very little direct meaning.",
+            "wall": 666
+          },
+          "item": 17,
+          "forward": {
+            "ok": true,
+            "out": 42,
+            "total": 632,
+            "cost": 3.39e-4,
+            "closeness": 24,
+            "ttft": 621,
+            "reasoning": "Track and drift share a vague association with motion or following a course, but their core meanings are quite distant.",
+            "wall": 633
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 44,
+            "total": 713,
+            "cost": 3.465e-4,
+            "closeness": 10,
+            "ttft": 652,
+            "reasoning": "Scar focuses on the physical damage of a wound, while paper relates directly to a physical letter, sharing virtually no meaning.",
+            "wall": 713
+          },
+          "item": 18,
+          "forward": {
+            "ok": true,
+            "out": 40,
+            "total": 899,
+            "cost": 3.315e-4,
+            "closeness": 8,
+            "ttft": 794,
+            "reasoning": "Paper and scar represent completely different concepts, sharing essentially no semantic overlap beyond their respective links to the anchors.",
+            "wall": 899
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 36,
+            "total": 816,
+            "cost": 3.1725000000000004e-4,
+            "closeness": 12,
+            "ttft": 735,
+            "reasoning": "Cell targets the prison anchor while weed targets the garden anchor, representing unrelated concepts.",
+            "wall": 817
+          },
+          "item": 19,
+          "forward": {
+            "ok": true,
+            "out": 45,
+            "total": 2717,
+            "cost": 3.51e-4,
+            "closeness": 15,
+            "ttft": 2585,
+            "reasoning": "One player targeted the botanical side with 'weed' while the other targeted incarceration with 'cell', sharing minimal direct semantic overlap.",
+            "wall": 2717
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 37,
+            "total": 641,
+            "cost": 3.2025e-4,
+            "closeness": 10,
+            "ttft": 513,
+            "reasoning": "Bank refers to river geography while glass refers to mirror material, representing completely different concepts.",
+            "wall": 642
+          },
+          "item": 20,
+          "forward": {
+            "ok": true,
+            "out": 38,
+            "total": 753,
+            "cost": 3.2399999999999996e-4,
+            "closeness": 12,
+            "ttft": 688,
+            "reasoning": "Glass connects to mirror's material and river's surface, while bank relates to geography, resulting in very little shared meaning.",
+            "wall": 754
+          }
+        }
+      ],
+      "warm": {
+        "ok": true,
+        "out": 38,
+        "total": 2115,
+        "cost": 3.2324999999999997e-4,
+        "closeness": 72,
+        "ttft": 2047,
+        "reasoning": "The moon directly causes the tides, making them tightly linked natural phenomena connecting ocean and night.",
+        "wall": 2121
+      }
+    },
+    "deepseek_max": {
+      "latency": [
+        {
+          "ok": true,
+          "out": 894,
+          "total": 10421,
+          "cost": 6.793600000000001e-4,
+          "closeness": 60,
+          "ttft": 10211,
+          "reasoning": "Tide is the ocean's response to the moon; they share the lunar/ocean-night link but are distinct concepts.",
+          "wall": 10421
+        },
+        {
+          "ok": true,
+          "out": 565,
+          "total": 7514,
+          "cost": 4.6222e-4,
+          "closeness": 55,
+          "ttft": 7151,
+          "reasoning": "Tide and moon share a causal link, but one is an ocean movement and the other a celestial body.",
+          "wall": 7514
+        },
+        {
+          "ok": true,
+          "out": 529,
+          "total": 9388,
+          "cost": 4.3846e-4,
+          "closeness": 65,
+          "ttft": 9197,
+          "reasoning": "Tide and moon are causally connected, but one is an oceanic movement and the other a celestial body.",
+          "wall": 9388
+        },
+        {
+          "ok": true,
+          "out": 528,
+          "total": 6883,
+          "cost": 4.378e-4,
+          "closeness": 60,
+          "ttft": 6689,
+          "reasoning": "Moon causes tides, and both evoke ocean and night, but they are distinct concepts rather than the same idea.",
+          "wall": 6884
+        },
+        {
+          "ok": true,
+          "out": 817,
+          "total": 9547,
+          "cost": 6.285400000000001e-4,
+          "closeness": 65,
+          "ttft": 9395,
+          "reasoning": "Tide and moon are causally linked through lunar gravity, but one is an oceanic process and the other a celestial body.",
+          "wall": 9547
+        },
+        {
+          "ok": true,
+          "out": 609,
+          "total": 6525,
+          "cost": 4.9126e-4,
+          "closeness": 60,
+          "ttft": 6336,
+          "reasoning": "Tide is the ocean effect; moon is the celestial cause, so they are related but distinct.",
+          "wall": 6525
+        },
+        {
+          "ok": true,
+          "out": 783,
+          "total": 8639,
+          "cost": 6.061e-4,
+          "closeness": 55,
+          "ttft": 8434,
+          "reasoning": "Tide and moon are directly associated—the moon drives tides—but they name distinct physical phenomena, not the same idea.",
+          "wall": 8639
+        },
+        {
+          "ok": true,
+          "out": 623,
+          "total": 6647,
+          "cost": 5.005e-4,
+          "closeness": 65,
+          "ttft": 6468,
+          "reasoning": "Tide and moon are causally linked—the moon drives tides—but they name distinct phenomena.",
+          "wall": 6648
+        },
+        {
+          "ok": true,
+          "out": 1584,
+          "total": 15413,
+          "cost": 0.0011347599999999998,
+          "closeness": 60,
+          "ttft": 15241,
+          "reasoning": "Moon causes tides, and both bridge ocean and night, but one is a celestial body and the other an ocean movement.",
+          "wall": 15413
+        },
+        {
+          "ok": false,
+          "wall": 41455,
+          "why": "{:max_tokens, \"hit the 4000-token output cap (stop_reason=length); raise max_tokens or lower effort\"}"
+        },
+        {
+          "ok": true,
+          "out": 1077,
+          "total": 11025,
+          "cost": 8.001400000000001e-4,
+          "closeness": 70,
+          "ttft": 10783,
+          "reasoning": "Moon and tide are causally linked—the moon drives the tides—and both fit the ocean/night anchors, though they denote different things.",
+          "wall": 11026
+        },
+        {
+          "ok": true,
+          "out": 479,
+          "total": 5721,
+          "cost": 4.0546e-4,
+          "closeness": 60,
+          "ttft": 5550,
+          "reasoning": "Tide and moon are causally linked in the same ocean-night scene, but one is the effect and the other its driver.",
+          "wall": 5721
+        },
+        {
+          "ok": true,
+          "out": 461,
+          "total": 7819,
+          "cost": 3.9358e-4,
+          "closeness": 60,
+          "ttft": 7756,
+          "reasoning": "The moon drives the tides, so they are causally linked, yet they remain distinct concepts rather than the same idea.",
+          "wall": 7819
+        },
+        {
+          "ok": true,
+          "out": 223,
+          "total": 2622,
+          "cost": 2.365e-4,
+          "closeness": 65,
+          "ttft": 2301,
+          "reasoning": "Tide is the moon's effect on the ocean, so the ideas are closely linked but distinct—cause versus phenomenon.",
+          "wall": 2623
+        },
+        {
+          "ok": true,
+          "out": 372,
+          "total": 4733,
+          "cost": 3.3484e-4,
+          "closeness": 60,
+          "ttft": 4560,
+          "reasoning": "Tide is the ocean's response to the moon; both connect ocean and night, but name different things.",
+          "wall": 4734
+        },
+        {
+          "ok": true,
+          "out": 203,
+          "total": 2661,
+          "cost": 2.233e-4,
+          "closeness": 60,
+          "ttft": 2439,
+          "reasoning": "Tide and moon are causally linked but distinct; one evokes ocean, the other night, sharing a connection.",
+          "wall": 2663
+        },
+        {
+          "ok": true,
+          "out": 467,
+          "total": 6275,
+          "cost": 3.9754000000000005e-4,
+          "closeness": 60,
+          "ttft": 6015,
+          "reasoning": "Tide and moon are distinct concepts, but intimately linked since the moon drives ocean tides; both fit the anchors.",
+          "wall": 6276
+        },
+        {
+          "ok": true,
+          "out": 1167,
+          "total": 13340,
+          "cost": 8.595400000000001e-4,
+          "closeness": 60,
+          "ttft": 13139,
+          "reasoning": "Tide and moon are strongly linked through lunar gravity, but they name distinct concepts: one ocean phenomenon, one celestial body.",
+          "wall": 13341
+        },
+        {
+          "ok": true,
+          "out": 1149,
+          "total": 14703,
+          "cost": 8.476600000000001e-4,
+          "closeness": 65,
+          "ttft": 14516,
+          "reasoning": "Tide is caused by the moon, and both evoke ocean-night connection, but they name cause versus effect.",
+          "wall": 14703
+        },
+        {
+          "ok": true,
+          "out": 502,
+          "total": 5683,
+          "cost": 4.2063999999999996e-4,
+          "closeness": 60,
+          "ttft": 5510,
+          "reasoning": "Tide and moon are causally linked—the moon drives tides—but they name different things, so related yet distinct.",
+          "wall": 5685
+        }
+      ],
+      "hedged": [
+        {
+          "ok": true,
+          "out": 433,
+          "total": 4965,
+          "cost": 3.751e-4,
+          "closeness": 65,
+          "ttft": 4788,
+          "reasoning": "Both evoke the ocean-night link through lunar influence, but tide is the effect and moon the cause.",
+          "wall": 4966
+        },
+        {
+          "ok": true,
+          "out": 292,
+          "total": 11485,
+          "cost": 2.8204e-4,
+          "closeness": 65,
+          "ttft": 11253,
+          "reasoning": "Both evoke night and ocean, but tide is the ocean's movement while moon is its celestial cause; related yet distinct.",
+          "wall": 11486
+        },
+        {
+          "ok": true,
+          "out": 806,
+          "total": 9883,
+          "cost": 6.212800000000001e-4,
+          "closeness": 70,
+          "ttft": 9668,
+          "reasoning": "Tide is the ocean's response to the moon; one names cause, the other effect, so they're related but distinct.",
+          "wall": 9883
+        },
+        {
+          "ok": true,
+          "out": 364,
+          "total": 5398,
+          "cost": 3.2956e-4,
+          "closeness": 60,
+          "ttft": 5118,
+          "reasoning": "Tide and moon are causally linked—the moon drives tides—but they are distinct natural phenomena rather than the same idea.",
+          "wall": 5400
+        },
+        {
+          "ok": true,
+          "out": 250,
+          "total": 3521,
+          "cost": 2.5432e-4,
+          "closeness": 55,
+          "ttft": 3249,
+          "reasoning": "Tide is the ocean's movement caused by the moon; moon is the night sky body causing it. Related but distinct.",
+          "wall": 3522
+        },
+        {
+          "ok": true,
+          "out": 228,
+          "total": 3673,
+          "cost": 2.3980000000000003e-4,
+          "closeness": 60,
+          "ttft": 3603,
+          "reasoning": "Tide and moon are causally linked and both evoke ocean and night, but they are distinct concepts.",
+          "wall": 3673
+        },
+        {
+          "ok": true,
+          "out": 611,
+          "total": 7173,
+          "cost": 4.925800000000001e-4,
+          "closeness": 60,
+          "ttft": 6934,
+          "reasoning": "Tide is the moon's effect on the ocean; moon is the cause, so they are related but distinct ideas.",
+          "wall": 7175
+        },
+        {
+          "ok": true,
+          "out": 301,
+          "total": 4140,
+          "cost": 2.8798e-4,
+          "closeness": 65,
+          "ttft": 3969,
+          "reasoning": "Both invoke the moon's influence on the sea, but one names the effect and the other the cause.",
+          "wall": 4141
+        },
+        {
+          "ok": true,
+          "out": 233,
+          "total": 2753,
+          "cost": 2.431e-4,
+          "closeness": 55,
+          "ttft": 2526,
+          "reasoning": "Tide and moon are linked through lunar influence on oceans, but one is a water movement and the other a celestial body.",
+          "wall": 2755
+        },
+        {
+          "ok": true,
+          "out": 599,
+          "total": 6491,
+          "cost": 4.8466000000000004e-4,
+          "closeness": 68,
+          "ttft": 6257,
+          "reasoning": "Tide and moon are strongly linked because the moon drives the tides, but they are distinct phenomena.",
+          "wall": 6491
+        },
+        {
+          "ok": true,
+          "out": 1871,
+          "total": 19100,
+          "cost": 0.00132418,
+          "closeness": 55,
+          "ttft": 18919,
+          "reasoning": "Tide and moon are directly connected (the moon drives tides), but they are still distinct concepts: an effect and its celestial cause.",
+          "wall": 19102
+        },
+        {
+          "ok": true,
+          "out": 945,
+          "total": 11879,
+          "cost": 7.130200000000001e-4,
+          "closeness": 60,
+          "ttft": 11714,
+          "reasoning": "Both invoke the moon’s gravitational effect on the ocean, but they name different things: the cause versus the resulting phenomenon.",
+          "wall": 11880
+        },
+        {
+          "ok": true,
+          "out": 227,
+          "total": 6226,
+          "cost": 2.3914e-4,
+          "closeness": 65,
+          "ttft": 5953,
+          "reasoning": "Tide and moon are causally linked but distinct concepts; both relate to ocean and night.",
+          "wall": 6227
+        },
+        {
+          "ok": true,
+          "out": 263,
+          "total": 3552,
+          "cost": 2.629e-4,
+          "closeness": 60,
+          "ttft": 3317,
+          "reasoning": "Tide and moon are causally linked via ocean and night, but they name distinct phenomena rather than the same idea.",
+          "wall": 3553
+        },
+        {
+          "ok": true,
+          "out": 877,
+          "total": 12666,
+          "cost": 6.6814e-4,
+          "closeness": 60,
+          "ttft": 12450,
+          "reasoning": "Tide is the ocean's rise caused by the moon, so they share a causal link but name different things.",
+          "wall": 12667
+        },
+        {
+          "ok": true,
+          "out": 291,
+          "total": 4055,
+          "cost": 2.8138e-4,
+          "closeness": 60,
+          "ttft": 3713,
+          "reasoning": "Both connect ocean and night, but tide is the moon's effect on the sea, while moon is the cause; distinct ideas.",
+          "wall": 4056
+        },
+        {
+          "ok": true,
+          "out": 2512,
+          "total": 27769,
+          "cost": 0.00174724,
+          "closeness": 65,
+          "ttft": 27560,
+          "reasoning": "Tide is caused by the moon, so the words point to the same lunar-ocean connection, but they are distinct ideas.",
+          "wall": 27770
+        },
+        {
+          "ok": true,
+          "out": 319,
+          "total": 3927,
+          "cost": 2.9986e-4,
+          "closeness": 60,
+          "ttft": 3669,
+          "reasoning": "Tide and moon are causally linked—the moon drives tides—and both fit ocean and night, but remain distinct concepts.",
+          "wall": 3928
+        },
+        {
+          "ok": true,
+          "out": 321,
+          "total": 8054,
+          "cost": 3.0118e-4,
+          "closeness": 60,
+          "ttft": 7991,
+          "reasoning": "Both tie to ocean and night, and the moon drives tides, but tide is a phenomenon, moon an object.",
+          "wall": 8056
+        },
+        {
+          "ok": true,
+          "out": 602,
+          "total": 14024,
+          "cost": 4.8664e-4,
+          "closeness": 65,
+          "ttft": 13868,
+          "reasoning": "Moon drives tides; they share ocean/night associations but are distinct concepts.",
+          "wall": 14027
+        }
+      ],
+      "model": "accounts/fireworks/models/deepseek-v4-flash-0731 (max)",
+      "repeat": {
+        "1": [
+          {
+            "ok": true,
+            "out": 101,
+            "total": 1546,
+            "cost": 1.5598e-4,
+            "closeness": 100,
+            "ttft": 1289,
+            "reasoning": "Both players chose the same word 'moon', which bridges ocean and night via tides and moonlight.",
+            "wall": 1547
+          },
+          {
+            "ok": true,
+            "out": 77,
+            "total": 1166,
+            "cost": 1.4014000000000002e-4,
+            "closeness": 100,
+            "ttft": 975,
+            "reasoning": "Both players wrote the identical word, a perfect meld.",
+            "wall": 1167
+          },
+          {
+            "ok": true,
+            "out": 80,
+            "total": 1421,
+            "cost": 1.4212000000000003e-4,
+            "closeness": 100,
+            "ttft": 1114,
+            "reasoning": "Both players chose the exact same bridging word, 'moon'.",
+            "wall": 1422
+          },
+          {
+            "ok": true,
+            "out": 60,
+            "total": 1464,
+            "cost": 1.2892e-4,
+            "closeness": 100,
+            "ttft": 1029,
+            "reasoning": "Both players wrote the exact same bridging word, ",
+            "wall": 1464
+          },
+          {
+            "ok": true,
+            "out": 69,
+            "total": 920,
+            "cost": 1.3486e-4,
+            "closeness": 100,
+            "ttft": 713,
+            "reasoning": "Both players chose the identical word, so the bridging words are exactly the same.",
+            "wall": 921
+          }
+        ],
+        "7": [
+          {
+            "ok": true,
+            "out": 857,
+            "total": 9233,
+            "cost": 6.547200000000001e-4,
+            "closeness": 70,
+            "ttft": 9065,
+            "reasoning": "Butter is a specific spread, so the ideas overlap strongly but one is general and the other specific.",
+            "wall": 9234
+          },
+          {
+            "ok": true,
+            "out": 3572,
+            "total": 36185,
+            "cost": 0.00244662,
+            "closeness": 70,
+            "ttft": 36019,
+            "reasoning": "Butter is a type of spread and both fit bread and knife, but one is specific, the other general.",
+            "wall": 36186
+          },
+          {
+            "ok": true,
+            "out": 1320,
+            "total": 15804,
+            "cost": 9.603000000000001e-4,
+            "closeness": 65,
+            "ttft": 15582,
+            "reasoning": "Butter is a specific spread; both are food items applied to bread with a knife, but one is narrower.",
+            "wall": 15805
+          },
+          {
+            "ok": true,
+            "out": 2107,
+            "total": 22007,
+            "cost": 0.00147972,
+            "closeness": 70,
+            "ttft": 21822,
+            "reasoning": "Butter is a specific kind of spread; both are bread toppings applied with a knife, but one is broader.",
+            "wall": 22008
+          },
+          {
+            "ok": true,
+            "out": 231,
+            "total": 2653,
+            "cost": 2.4156e-4,
+            "closeness": 85,
+            "ttft": 2483,
+            "reasoning": "Both name the same concept—a bread topping applied with a knife—one specifically, one generally.",
+            "wall": 2654
+          }
+        ],
+        "9": [
+          {
+            "ok": true,
+            "out": 621,
+            "total": 6141,
+            "cost": 4.9918e-4,
+            "closeness": 60,
+            "ttft": 5905,
+            "reasoning": "Tide and moon are related through the moon's gravitational pull, but one is an ocean event and the other a night sky object.",
+            "wall": 6141
+          },
+          {
+            "ok": true,
+            "out": 214,
+            "total": 2992,
+            "cost": 2.3056e-4,
+            "closeness": 60,
+            "ttft": 2763,
+            "reasoning": "Both relate to ocean and night, but tide is a process and moon is a celestial body, distinct yet connected.",
+            "wall": 2993
+          },
+          {
+            "ok": true,
+            "out": 312,
+            "total": 3364,
+            "cost": 2.9524e-4,
+            "closeness": 60,
+            "ttft": 3151,
+            "reasoning": "Tide and moon are distinct but linked: the moon drives tides, and both connect to ocean and night.",
+            "wall": 3365
+          },
+          {
+            "ok": true,
+            "out": 2218,
+            "total": 25332,
+            "cost": 0.0015532,
+            "closeness": 65,
+            "ttft": 25078,
+            "reasoning": "Tide and moon are causally linked, but they name distinct concepts: one is an ocean movement, the other a night sky object.",
+            "wall": 25332
+          },
+          {
+            "ok": true,
+            "out": 582,
+            "total": 37740,
+            "cost": 4.7344000000000005e-4,
+            "closeness": 55,
+            "ttft": 37532,
+            "reasoning": "Tide and moon are causally linked and both evoke ocean and night, but one is an event, one a celestial object.",
+            "wall": 37741
+          }
+        ],
+        "18": [
+          {
+            "ok": true,
+            "out": 2458,
+            "total": 24677,
+            "cost": 0.0017111600000000002,
+            "closeness": 25,
+            "ttft": 24507,
+            "reasoning": "Paper is a surface for letters and can cause a cut; scar is a wound's aftermath—different roles, only loosely connected through wound.",
+            "wall": 24678
+          },
+          {
+            "ok": true,
+            "out": 1494,
+            "total": 16002,
+            "cost": 0.00107492,
+            "closeness": 30,
+            "ttft": 15794,
+            "reasoning": "Paper is an object/material; a scar is a wound's healed mark. Their only bond is an indirect paper-cut/scar association.",
+            "wall": 16003
+          },
+          {
+            "ok": true,
+            "out": 1020,
+            "total": 18708,
+            "cost": 7.6208e-4,
+            "closeness": 55,
+            "ttft": 18504,
+            "reasoning": "Paper causes a wound; scar is its result. They share the wound context but are distinct ideas.",
+            "wall": 18709
+          },
+          {
+            "ok": true,
+            "out": 2424,
+            "total": 25038,
+            "cost": 0.0016887199999999999,
+            "closeness": 30,
+            "ttft": 24846,
+            "reasoning": "Paper is a material; a scar is a healed wound mark. They meet only through the wound axis, not as similar ideas.",
+            "wall": 25039
+          },
+          {
+            "ok": false,
+            "wall": 45350,
+            "why": "{:max_tokens, \"hit the 4000-token output cap (stop_reason=length); raise max_tokens or lower effort\"}"
+          }
+        ]
+      },
+      "ordering": [
+        {
+          "reverse": {
+            "ok": true,
+            "out": 84,
+            "total": 3854,
+            "cost": 1.4476000000000002e-4,
+            "closeness": 100,
+            "ttft": 3720,
+            "reasoning": "Both players chose the same word, perfectly melding.",
+            "wall": 3855
+          },
+          "item": 1,
+          "forward": {
+            "ok": true,
+            "out": 73,
+            "total": 3689,
+            "cost": 1.375e-4,
+            "closeness": 100,
+            "ttft": 3527,
+            "reasoning": "Both players chose the same word, so they melded perfectly.",
+            "wall": 3689
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 80,
+            "total": 1455,
+            "cost": 1.4212000000000003e-4,
+            "closeness": 100,
+            "ttft": 1124,
+            "reasoning": "Tides and tide are the same word; one is just the plural form.",
+            "wall": 1456
+          },
+          "item": 2,
+          "forward": {
+            "ok": true,
+            "out": 150,
+            "total": 2200,
+            "cost": 1.8832e-4,
+            "closeness": 100,
+            "ttft": 1962,
+            "reasoning": "“tide” and “tides” are the same word; one is simply the plural inflection of the other.",
+            "wall": 2200
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 485,
+            "total": 164109,
+            "cost": 4.0964e-4,
+            "closeness": 90,
+            "ttft": 163483,
+            "reasoning": "Both express the same mirror/water image-casting idea, differing only as verb and noun forms.",
+            "wall": 164110
+          },
+          "item": 3,
+          "forward": {
+            "ok": true,
+            "out": 677,
+            "total": 378634,
+            "cost": 5.3636e-4,
+            "closeness": 90,
+            "ttft": 378504,
+            "reasoning": "Both denote the act or result of light bouncing back, as in mirrors and rivers; only part of speech differs.",
+            "wall": 378635
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 426,
+            "total": 4402,
+            "cost": 3.707e-4,
+            "closeness": 88,
+            "ttft": 4202,
+            "reasoning": "Both are common coffee vessels; mug and cup are near synonyms in this context, so the players melded.",
+            "wall": 4403
+          },
+          "item": 4,
+          "forward": {
+            "ok": true,
+            "out": 106,
+            "total": 10031,
+            "cost": 1.595e-4,
+            "closeness": 85,
+            "ttft": 9822,
+            "reasoning": "Cup and mug are near-synonyms for a coffee vessel, clearly the same idea with minor variation.",
+            "wall": 10032
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 216,
+            "total": 8012,
+            "cost": 2.3144e-4,
+            "closeness": 85,
+            "ttft": 7789,
+            "reasoning": "Thaw and melt both describe ice turning to liquid, essentially the same idea with only minor usage differences.",
+            "wall": 8013
+          },
+          "item": 5,
+          "forward": {
+            "ok": true,
+            "out": 161,
+            "total": 1781,
+            "cost": 1.9514e-4,
+            "closeness": 85,
+            "ttft": 1659,
+            "reasoning": "Both describe ice turning to liquid under warmth; melt and thaw are near-synonyms, so the players melded.",
+            "wall": 1782
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 2092,
+            "total": 41152,
+            "cost": 0.0014700400000000001,
+            "closeness": 68,
+            "ttft": 40980,
+            "reasoning": "Both are enclosing barriers for a garden or prison, but fences and walls are structurally distinct.",
+            "wall": 41154
+          },
+          "item": 6,
+          "forward": {
+            "ok": true,
+            "out": 681,
+            "total": 8271,
+            "cost": 5.3878e-4,
+            "closeness": 62,
+            "ttft": 7926,
+            "reasoning": "Both are boundary structures common to gardens and prisons, but walls are solid and fences are open, so related yet distinct.",
+            "wall": 8274
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 2028,
+            "total": 22449,
+            "cost": 0.00142758,
+            "closeness": 70,
+            "ttft": 22247,
+            "reasoning": "Butter is a type of spread, so they name the same bread-and-knife idea at different levels of specificity.",
+            "wall": 22449
+          },
+          "item": 7,
+          "forward": {
+            "ok": true,
+            "out": 818,
+            "total": 8890,
+            "cost": 6.289800000000001e-4,
+            "closeness": 85,
+            "ttft": 8660,
+            "reasoning": "Both name something applied to bread with a knife, though butter is specific and spread is the category.",
+            "wall": 8891
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 855,
+            "total": 10919,
+            "cost": 6.533999999999999e-4,
+            "closeness": 70,
+            "ttft": 10678,
+            "reasoning": "Both are royal objects tied to kingship, but crown and throne are distinct items rather than the same idea.",
+            "wall": 10920
+          },
+          "item": 8,
+          "forward": {
+            "ok": true,
+            "out": 375,
+            "total": 4129,
+            "cost": 3.366e-4,
+            "closeness": 60,
+            "ttft": 3961,
+            "reasoning": "Both are royal symbols of monarchy, but throne is a seat and crown is headwear; related, not identical.",
+            "wall": 4130
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 537,
+            "total": 6725,
+            "cost": 4.4374000000000003e-4,
+            "closeness": 65,
+            "ttft": 6531,
+            "reasoning": "Moon and tide are distinct but causally linked: the moon drives ocean tides and shines at night.",
+            "wall": 6725
+          },
+          "item": 9,
+          "forward": {
+            "ok": true,
+            "out": 801,
+            "total": 30720,
+            "cost": 6.179800000000001e-4,
+            "closeness": 68,
+            "ttft": 30465,
+            "reasoning": "Tide and moon are causally linked—the moon drives ocean tides—but they name different phenomena, so they’re related yet distinct.",
+            "wall": 30720
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 2260,
+            "total": 24062,
+            "cost": 0.00158114,
+            "closeness": 55,
+            "ttft": 23880,
+            "reasoning": "Alarm causes waking; awake is the waking state. They share a morning-wake-up link but are distinct ideas.",
+            "wall": 24064
+          },
+          "item": 10,
+          "forward": {
+            "ok": true,
+            "out": 748,
+            "total": 8967,
+            "cost": 5.832200000000001e-4,
+            "closeness": 60,
+            "ttft": 8769,
+            "reasoning": "Alarm triggers the morning awakening; awake is the resulting state, so they share context but are distinct ideas.",
+            "wall": 8968
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 471,
+            "total": 6880,
+            "cost": 3.9974000000000005e-4,
+            "closeness": 65,
+            "ttft": 6807,
+            "reasoning": "Both are forms of water, but one is vapor and the other liquid; related yet distinct states.",
+            "wall": 6880
+          },
+          "item": 11,
+          "forward": {
+            "ok": true,
+            "out": 3744,
+            "total": 38675,
+            "cost": 0.00255992,
+            "closeness": 72,
+            "ttft": 38481,
+            "reasoning": "Both are forms of H2O, differing only in physical state, so they are closely related but distinct.",
+            "wall": 38676
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 832,
+            "total": 14303,
+            "cost": 6.3844e-4,
+            "closeness": 50,
+            "ttft": 14120,
+            "reasoning": "Both point to a medical waiting context, but one names the place, the other the action; distinct but connected.",
+            "wall": 14305
+          },
+          "item": 12,
+          "forward": {
+            "ok": true,
+            "out": 315,
+            "total": 4214,
+            "cost": 2.9722e-4,
+            "closeness": 60,
+            "ttft": 3867,
+            "reasoning": "Both evoke a quiet medical context, but waiting is an action/state while hospital is a place; related yet distinct.",
+            "wall": 4214
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 663,
+            "total": 6474,
+            "cost": 5.269000000000001e-4,
+            "closeness": 55,
+            "ttft": 6347,
+            "reasoning": "Both evoke doctor-patient confidentiality, but secret is the hidden information while oath is the promise to protect it.",
+            "wall": 6475
+          },
+          "item": 13,
+          "forward": {
+            "ok": true,
+            "out": 641,
+            "total": 7024,
+            "cost": 5.1238e-4,
+            "closeness": 55,
+            "ttft": 6833,
+            "reasoning": "Both evoke sworn confidentiality, but oath is a formal promise and secret is what is concealed, so related yet distinct.",
+            "wall": 7025
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 750,
+            "total": 6996,
+            "cost": 5.8388e-4,
+            "closeness": 45,
+            "ttft": 6816,
+            "reasoning": "Both apply to letters and wounds as closure versus exposure, but they are opposites rather than convergent directions.",
+            "wall": 6997
+          },
+          "item": 14,
+          "forward": {
+            "ok": true,
+            "out": 906,
+            "total": 9196,
+            "cost": 6.8684e-4,
+            "closeness": 50,
+            "ttft": 8942,
+            "reasoning": "Open and seal are opposites on the same axis, both describing the opening or closing of letters and wounds.",
+            "wall": 9197
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 2335,
+            "total": 28529,
+            "cost": 0.0016301999999999998,
+            "closeness": 25,
+            "ttft": 28383,
+            "reasoning": "Sleep ties to dreaming; journey ties to trains. They are distinct concepts and share little meaning beyond these different anchor links.",
+            "wall": 28529
+          },
+          "item": 15,
+          "forward": {
+            "ok": true,
+            "out": 3463,
+            "total": 34889,
+            "cost": 0.00237468,
+            "closeness": 45,
+            "ttft": 34640,
+            "reasoning": "Both touch the dream/travel frame, but journey is active movement while sleep is passive rest.",
+            "wall": 34890
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 254,
+            "total": 2997,
+            "cost": 2.5696000000000003e-4,
+            "closeness": 25,
+            "ttft": 2776,
+            "reasoning": "Both evoke royal castle imagery, but one is a person and the other a defensive feature, sharing little direct meaning.",
+            "wall": 2998
+          },
+          "item": 16,
+          "forward": {
+            "ok": true,
+            "out": 523,
+            "total": 5026,
+            "cost": 4.3450000000000004e-4,
+            "closeness": 45,
+            "ttft": 4825,
+            "reasoning": "Moat is a castle feature; queen is a royal person. They share medieval-castle context but are distinct ideas.",
+            "wall": 5026
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 2945,
+            "total": 38481,
+            "cost": 0.0020328000000000004,
+            "closeness": 55,
+            "ttft": 38292,
+            "reasoning": "Both concern movement along a course, but drift is aimless and gradual while track implies a defined path or following it.",
+            "wall": 38482
+          },
+          "item": 17,
+          "forward": {
+            "ok": true,
+            "out": 3328,
+            "total": 31678,
+            "cost": 0.0022855799999999997,
+            "closeness": 50,
+            "ttft": 31476,
+            "reasoning": "Both suggest a course or direction, but track is a fixed path while drift is aimless movement, so only loosely related.",
+            "wall": 31680
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 607,
+            "total": 6149,
+            "cost": 4.895e-4,
+            "closeness": 15,
+            "ttft": 5950,
+            "reasoning": "Scar is a mark left by healing; paper is a material for writing. They share no significant meaning beyond their separate anchor associations.",
+            "wall": 6150
+          },
+          "item": 18,
+          "forward": {
+            "ok": true,
+            "out": 3114,
+            "total": 37506,
+            "cost": 0.0021441200000000002,
+            "closeness": 20,
+            "ttft": 37308,
+            "reasoning": "Paper is tied to the letter, scar to the wound; they don't share a common bridging idea beyond these separate anchors.",
+            "wall": 37507
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 1836,
+            "total": 24506,
+            "cost": 0.00130108,
+            "closeness": 20,
+            "ttft": 24231,
+            "reasoning": "Cell evokes prison rooms and plant biology; weed evokes gardens and cannabis. They share no core meaning beyond the anchors.",
+            "wall": 24507
+          },
+          "item": 19,
+          "forward": {
+            "ok": true,
+            "out": 3520,
+            "total": 69731,
+            "cost": 0.00241252,
+            "closeness": 20,
+            "ttft": 69529,
+            "reasoning": "Weed is a garden plant; cell is a prison room. They share only vague anchor-level context, not a common idea.",
+            "wall": 69733
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 1410,
+            "total": 55457,
+            "cost": 0.0010201400000000001,
+            "closeness": 20,
+            "ttft": 55193,
+            "reasoning": "Bank names a river edge; glass names a mirror surface, so the bridges share little beyond the anchors.",
+            "wall": 55458
+          },
+          "item": 20,
+          "forward": {
+            "ok": true,
+            "out": 1479,
+            "total": 13733,
+            "cost": 0.00106568,
+            "closeness": 20,
+            "ttft": 13499,
+            "reasoning": "Glass ties to mirror and bank to river; the two words themselves share no real meaning, so they took different paths.",
+            "wall": 13734
+          }
+        }
+      ],
+      "warm": {
+        "ok": true,
+        "out": 838,
+        "total": 9774,
+        "cost": 6.424000000000001e-4,
+        "closeness": 60,
+        "ttft": 9566,
+        "reasoning": "Tide and moon are causally linked—the moon drives the tides—but one is a phenomenon and the other an object.",
+        "wall": 9781
+      }
+    },
+    "deepseek_low": {
+      "latency": [
+        {
+          "ok": true,
+          "out": 512,
+          "total": 5979,
+          "cost": 4.07e-4,
+          "closeness": 55,
+          "ttft": 5751,
+          "reasoning": "Tide and moon are causally linked but distinct concepts, sharing a partial connection via ocean and night.",
+          "wall": 5979
+        },
+        {
+          "ok": true,
+          "out": 351,
+          "total": 4557,
+          "cost": 3.0074e-4,
+          "closeness": 45,
+          "ttft": 4456,
+          "reasoning": "Both relate to ocean and night, but tide is a phenomenon and moon is a celestial body; they are connected but distinct.",
+          "wall": 4558
+        },
+        {
+          "ok": true,
+          "out": 159,
+          "total": 2750,
+          "cost": 1.7402e-4,
+          "closeness": 60,
+          "ttft": 2537,
+          "reasoning": "Both evoke natural cycles tied to ocean and night, but tide is water movement while moon is celestial body; related but distinct.",
+          "wall": 2751
+        },
+        {
+          "ok": true,
+          "out": 193,
+          "total": 3131,
+          "cost": 1.9646000000000003e-4,
+          "closeness": 65,
+          "ttft": 2747,
+          "reasoning": "Tide and moon are related through the ocean's tides, but they are distinct concepts, sharing only a causal link.",
+          "wall": 3132
+        },
+        {
+          "ok": true,
+          "out": 169,
+          "total": 5312,
+          "cost": 1.8062e-4,
+          "closeness": 55,
+          "ttft": 2334,
+          "reasoning": "Both connect to ocean (tides) and night (moonlight), but tide is an effect while moon is a celestial body; related yet distinct.",
+          "wall": 5312
+        },
+        {
+          "ok": true,
+          "out": 291,
+          "total": 4140,
+          "cost": 2.6114000000000004e-4,
+          "closeness": 50,
+          "ttft": 3906,
+          "reasoning": "Tide and moon are distinct phenomena, but moon causes tides, linking them via common anchors. They share related but separate meanings.",
+          "wall": 4141
+        },
+        {
+          "ok": true,
+          "out": 215,
+          "total": 2682,
+          "cost": 2.1098e-4,
+          "closeness": 60,
+          "ttft": 2343,
+          "reasoning": "Tide and moon are distinct concepts, though moon causes tides and both connect ocean and night.",
+          "wall": 2683
+        },
+        {
+          "ok": true,
+          "out": 511,
+          "total": 5828,
+          "cost": 4.0634e-4,
+          "closeness": 50,
+          "ttft": 5647,
+          "reasoning": "Tide and moon are causally linked through gravity, but they are distinct concepts—one is an ocean movement, the other a celestial body.",
+          "wall": 5829
+        },
+        {
+          "ok": true,
+          "out": 350,
+          "total": 3858,
+          "cost": 3.0008e-4,
+          "closeness": 70,
+          "ttft": 3553,
+          "reasoning": "Tide and moon are distinct concepts, but the moon directly causes tides, linking them closely through both anchors.",
+          "wall": 3858
+        },
+        {
+          "ok": true,
+          "out": 188,
+          "total": 2741,
+          "cost": 1.9316e-4,
+          "closeness": 55,
+          "ttft": 2411,
+          "reasoning": "Tide and moon are linked (moon causes tides) and both evoke ocean and night, but they are distinct concepts.",
+          "wall": 2742
+        },
+        {
+          "ok": true,
+          "out": 268,
+          "total": 3563,
+          "cost": 2.4596000000000004e-4,
+          "closeness": 60,
+          "ttft": 3414,
+          "reasoning": "Tide and moon are causally linked through ocean and night, yet they are distinct concepts.",
+          "wall": 3563
+        },
+        {
+          "ok": true,
+          "out": 208,
+          "total": 2593,
+          "cost": 2.0636e-4,
+          "closeness": 55,
+          "ttft": 2387,
+          "reasoning": "Tide is ocean's rhythm; moon is its celestial driver. Related but distinct facets of the nocturnal ocean.",
+          "wall": 2593
+        },
+        {
+          "ok": true,
+          "out": 230,
+          "total": 2907,
+          "cost": 2.2088e-4,
+          "closeness": 55,
+          "ttft": 2662,
+          "reasoning": "Both relate to ocean and night, but moon causes tides; they are distinct concepts, not synonyms.",
+          "wall": 2907
+        },
+        {
+          "ok": true,
+          "out": 503,
+          "total": 5088,
+          "cost": 4.0106e-4,
+          "closeness": 60,
+          "ttft": 4973,
+          "reasoning": "Tide and moon are distinct yet causally linked, sharing a close but not identical idea.",
+          "wall": 5089
+        },
+        {
+          "ok": true,
+          "out": 278,
+          "total": 3163,
+          "cost": 2.5256e-4,
+          "closeness": 60,
+          "ttft": 3009,
+          "reasoning": "Both are natural phenomena tied to ocean and night, but they are distinct concepts.",
+          "wall": 3164
+        },
+        {
+          "ok": true,
+          "out": 312,
+          "total": 3315,
+          "cost": 2.75e-4,
+          "closeness": 65,
+          "ttft": 3153,
+          "reasoning": "Both evoke the moon's influence on the ocean, but tide is the effect and moon is the cause.",
+          "wall": 3316
+        },
+        {
+          "ok": true,
+          "out": 488,
+          "total": 5270,
+          "cost": 3.9116000000000004e-4,
+          "closeness": 55,
+          "ttft": 5005,
+          "reasoning": "Both relate to ocean and night, but tide is a water movement and moon is a celestial body; distinct yet connected.",
+          "wall": 5270
+        },
+        {
+          "ok": true,
+          "out": 244,
+          "total": 2472,
+          "cost": 2.3012e-4,
+          "closeness": 55,
+          "ttft": 2221,
+          "reasoning": "Both relate to ocean and night, but tide is a phenomenon while moon is an object; distinct yet linked.",
+          "wall": 2473
+        },
+        {
+          "ok": true,
+          "out": 172,
+          "total": 2368,
+          "cost": 1.826e-4,
+          "closeness": 55,
+          "ttft": 2047,
+          "reasoning": "Tide and moon are distinct concepts, though causally linked via the ocean's response to the moon, a night feature.",
+          "wall": 2369
+        },
+        {
+          "ok": true,
+          "out": 152,
+          "total": 1955,
+          "cost": 1.694e-4,
+          "closeness": 55,
+          "ttft": 1678,
+          "reasoning": "Tide and moon are closely linked (moon causes tides) and both relate to ocean and night, but they are distinct concepts.",
+          "wall": 1956
+        }
+      ],
+      "hedged": [
+        {
+          "ok": true,
+          "out": 225,
+          "total": 3109,
+          "cost": 2.1758e-4,
+          "closeness": 50,
+          "ttft": 2793,
+          "reasoning": "Tide and moon are causally linked but each primarily ties to a different anchor, making them related yet distinct.",
+          "wall": 3109
+        },
+        {
+          "ok": true,
+          "out": 146,
+          "total": 1942,
+          "cost": 1.6544e-4,
+          "closeness": 60,
+          "ttft": 1669,
+          "reasoning": "Tide and moon are linked (moon causes tides) and both fit the anchors, but they are distinct concepts.",
+          "wall": 1943
+        },
+        {
+          "ok": true,
+          "out": 130,
+          "total": 1947,
+          "cost": 1.5487999999999998e-4,
+          "closeness": 60,
+          "ttft": 1664,
+          "reasoning": "Tide and moon are both linked to ocean and night, but refer to distinct phenomena.",
+          "wall": 1948
+        },
+        {
+          "ok": true,
+          "out": 306,
+          "total": 2989,
+          "cost": 2.7104e-4,
+          "closeness": 55,
+          "ttft": 2821,
+          "reasoning": "Tide and moon are causally linked but distinct concepts—a water movement and a celestial body.",
+          "wall": 2990
+        },
+        {
+          "ok": true,
+          "out": 180,
+          "total": 2031,
+          "cost": 1.8788000000000002e-4,
+          "closeness": 50,
+          "ttft": 1864,
+          "reasoning": "Both evoke ocean and night, but tide is a phenomenon while moon is a celestial body; related but distinct.",
+          "wall": 2032
+        },
+        {
+          "ok": true,
+          "out": 309,
+          "total": 7060,
+          "cost": 2.7302e-4,
+          "closeness": 65,
+          "ttft": 6862,
+          "reasoning": "Both evoke the ocean-night connection, but tide is a phenomenon while moon is the cause; distinct yet tightly linked.",
+          "wall": 7061
+        },
+        {
+          "ok": true,
+          "out": 229,
+          "total": 2867,
+          "cost": 2.2022000000000003e-4,
+          "closeness": 60,
+          "ttft": 2620,
+          "reasoning": "Tide and moon are related through ocean and night, but they are distinct concepts—one a phenomenon, one a celestial body.",
+          "wall": 2868
+        },
+        {
+          "ok": true,
+          "out": 243,
+          "total": 3503,
+          "cost": 2.2946000000000002e-4,
+          "closeness": 65,
+          "ttft": 3255,
+          "reasoning": "Both relate to ocean and night, but one is a water movement, the other a celestial body; connected yet distinct.",
+          "wall": 3504
+        },
+        {
+          "ok": true,
+          "out": 137,
+          "total": 2911,
+          "cost": 1.595e-4,
+          "closeness": 60,
+          "ttft": 2306,
+          "reasoning": "Tide is an ocean phenomenon; moon is a celestial body affecting tides, related but distinct ideas.",
+          "wall": 2912
+        },
+        {
+          "ok": true,
+          "out": 202,
+          "total": 4165,
+          "cost": 2.024e-4,
+          "closeness": 55,
+          "ttft": 3885,
+          "reasoning": "Tide and moon are distinct concepts but strongly linked through the ocean and night, sharing a common natural cycle.",
+          "wall": 4166
+        },
+        {
+          "ok": true,
+          "out": 303,
+          "total": 3714,
+          "cost": 2.6906e-4,
+          "closeness": 65,
+          "ttft": 3548,
+          "reasoning": "Tide and moon are causally linked, both fitting between ocean and night, but they name distinct phenomena.",
+          "wall": 3715
+        },
+        {
+          "ok": true,
+          "out": 142,
+          "total": 3904,
+          "cost": 1.628e-4,
+          "closeness": 55,
+          "ttft": 3562,
+          "reasoning": "Both tide and moon connect to ocean and night, but they are distinct concepts, sharing only an indirect causal link.",
+          "wall": 3904
+        },
+        {
+          "ok": true,
+          "out": 187,
+          "total": 2510,
+          "cost": 1.9250000000000002e-4,
+          "closeness": 50,
+          "ttft": 2182,
+          "reasoning": "Tide and moon are related through ocean and night but represent distinct concepts, sharing only an indirect connection.",
+          "wall": 2511
+        },
+        {
+          "ok": true,
+          "out": 234,
+          "total": 3140,
+          "cost": 2.2352e-4,
+          "closeness": 60,
+          "ttft": 2917,
+          "reasoning": "Both relate to ocean and night, with moon causing tides, but they are distinct concepts.",
+          "wall": 3141
+        },
+        {
+          "ok": true,
+          "out": 203,
+          "total": 3315,
+          "cost": 2.0306000000000002e-4,
+          "closeness": 55,
+          "ttft": 3021,
+          "reasoning": "Both relate to ocean and night, but tide is a phenomenon and moon a celestial body, linked causally yet distinct.",
+          "wall": 3316
+        },
+        {
+          "ok": true,
+          "out": 289,
+          "total": 3800,
+          "cost": 2.5982e-4,
+          "closeness": 55,
+          "ttft": 3575,
+          "reasoning": "Both relate to ocean and night, but tide is an effect while moon is its cause; related but distinct ideas.",
+          "wall": 3801
+        },
+        {
+          "ok": true,
+          "out": 215,
+          "total": 2572,
+          "cost": 2.1098e-4,
+          "closeness": 55,
+          "ttft": 2405,
+          "reasoning": "Tide and moon are both tied to ocean and night, but they represent different concepts—cause vs effect.",
+          "wall": 2573
+        },
+        {
+          "ok": true,
+          "out": 271,
+          "total": 3523,
+          "cost": 2.4794e-4,
+          "closeness": 55,
+          "ttft": 3220,
+          "reasoning": "Both connect ocean and night, but tide is a physical phenomenon while moon is a celestial object; they share a causal link yet are distinct ideas.",
+          "wall": 3524
+        },
+        {
+          "ok": true,
+          "out": 156,
+          "total": 2285,
+          "cost": 1.7203999999999999e-4,
+          "closeness": 60,
+          "ttft": 1978,
+          "reasoning": "Distinct concepts but both naturally link ocean and night; moon causes tides, so related yet separate ideas.",
+          "wall": 2285
+        },
+        {
+          "ok": true,
+          "out": 298,
+          "total": 4009,
+          "cost": 2.6576e-4,
+          "closeness": 60,
+          "ttft": 3752,
+          "reasoning": "Tide and moon are distinct but causally linked, both strongly tied to ocean and night through gravity and visibility.",
+          "wall": 4010
+        }
+      ],
+      "model": "accounts/fireworks/models/deepseek-v4-flash-0731 (low)",
+      "repeat": {
+        "1": [
+          {
+            "ok": true,
+            "out": 104,
+            "total": 1229,
+            "cost": 1.3771999999999998e-4,
+            "closeness": 100,
+            "ttft": 1103,
+            "reasoning": "Both players chose the same word, 'moon'.",
+            "wall": 1230
+          },
+          {
+            "ok": true,
+            "out": 79,
+            "total": 1475,
+            "cost": 1.2122e-4,
+            "closeness": 100,
+            "ttft": 1072,
+            "reasoning": "Both players chose the identical word 'moon', so the meld is perfect.",
+            "wall": 1475
+          },
+          {
+            "ok": true,
+            "out": 102,
+            "total": 1472,
+            "cost": 1.364e-4,
+            "closeness": 100,
+            "ttft": 1320,
+            "reasoning": "Both players chose the same bridging word, a perfect match.",
+            "wall": 1473
+          },
+          {
+            "ok": true,
+            "out": 61,
+            "total": 1352,
+            "cost": 1.0934000000000001e-4,
+            "closeness": 100,
+            "ttft": 1180,
+            "reasoning": "Identical bridging words, so the meld is exact.",
+            "wall": 1353
+          },
+          {
+            "ok": true,
+            "out": 63,
+            "total": 1100,
+            "cost": 1.1066e-4,
+            "closeness": 100,
+            "ttft": 856,
+            "reasoning": "Both players chose the exact same word, so the bridges are identical.",
+            "wall": 1100
+          }
+        ],
+        "7": [
+          {
+            "ok": true,
+            "out": 206,
+            "total": 3118,
+            "cost": 2.0481999999999998e-4,
+            "closeness": 65,
+            "ttft": 2732,
+            "reasoning": "Both are edible things put on bread, but butter is specific while spread is a general category, so they're related but distinct.",
+            "wall": 3119
+          },
+          {
+            "ok": true,
+            "out": 158,
+            "total": 2167,
+            "cost": 1.7314e-4,
+            "closeness": 65,
+            "ttft": 1903,
+            "reasoning": "Both refer to something applied to bread, but butter is a specific food while spread is a general category.",
+            "wall": 2168
+          },
+          {
+            "ok": true,
+            "out": 359,
+            "total": 4341,
+            "cost": 3.058e-4,
+            "closeness": 65,
+            "ttft": 4135,
+            "reasoning": "Both are what you put on bread, but butter is a specific spread, while spread is the general category.",
+            "wall": 4342
+          },
+          {
+            "ok": true,
+            "out": 621,
+            "total": 9046,
+            "cost": 4.7872e-4,
+            "closeness": 70,
+            "ttft": 8822,
+            "reasoning": "Both are typical bread spreads, though 'spread' is generic while 'butter' is specific.",
+            "wall": 9046
+          },
+          {
+            "ok": true,
+            "out": 282,
+            "total": 4237,
+            "cost": 2.5498000000000003e-4,
+            "closeness": 65,
+            "ttft": 4047,
+            "reasoning": "Butter is a type of spread, sharing the exact use of being applied to bread with a knife.",
+            "wall": 4237
+          }
+        ],
+        "9": [
+          {
+            "ok": true,
+            "out": 348,
+            "total": 4180,
+            "cost": 2.9876e-4,
+            "closeness": 60,
+            "ttft": 3974,
+            "reasoning": "Both relate to ocean and night, but tide is a water movement while moon is a celestial body; distinct but causally linked.",
+            "wall": 4181
+          },
+          {
+            "ok": true,
+            "out": 189,
+            "total": 3616,
+            "cost": 1.9381999999999998e-4,
+            "closeness": 80,
+            "ttft": 3448,
+            "reasoning": "The moon drives the tides, linking both to ocean and night, so the bridge ideas strongly overlap.",
+            "wall": 3616
+          },
+          {
+            "ok": true,
+            "out": 251,
+            "total": 2804,
+            "cost": 2.3474e-4,
+            "closeness": 65,
+            "ttft": 2639,
+            "reasoning": "Both are tied to ocean and night, and the moon drives tides, but they name different things.",
+            "wall": 2805
+          },
+          {
+            "ok": true,
+            "out": 462,
+            "total": 5117,
+            "cost": 3.7400000000000004e-4,
+            "closeness": 60,
+            "ttft": 4875,
+            "reasoning": "Both words sit in the ocean-night constellation, but tide is an effect and moon is its cause, so they are distinct yet closely linked.",
+            "wall": 5118
+          },
+          {
+            "ok": true,
+            "out": 444,
+            "total": 5387,
+            "cost": 3.6212e-4,
+            "closeness": 60,
+            "ttft": 5195,
+            "reasoning": "Tide and moon are causally linked, both tied to ocean and night, yet distinct phenomena.",
+            "wall": 5388
+          }
+        ],
+        "18": [
+          {
+            "ok": true,
+            "out": 125,
+            "total": 2368,
+            "cost": 1.5114e-4,
+            "closeness": 10,
+            "ttft": 2116,
+            "reasoning": "Paper relates to letter, scar to wound, but the bridging words share no direct meaning.",
+            "wall": 2369
+          },
+          {
+            "ok": true,
+            "out": 546,
+            "total": 5273,
+            "cost": 4.29e-4,
+            "closeness": 20,
+            "ttft": 5149,
+            "reasoning": "Paper and scar are unrelated ideas; one is a medium, the other a healed wound mark.",
+            "wall": 5273
+          },
+          {
+            "ok": true,
+            "out": 667,
+            "total": 6358,
+            "cost": 5.0886e-4,
+            "closeness": 25,
+            "ttft": 6227,
+            "reasoning": "Paper (for letters) and scar (from wounds) are distinct concepts with no meaningful overlap.",
+            "wall": 6359
+          },
+          {
+            "ok": true,
+            "out": 123,
+            "total": 1910,
+            "cost": 1.4982e-4,
+            "closeness": 20,
+            "ttft": 1622,
+            "reasoning": "Paper and scar share only indirect links to the anchors; they evoke different concepts with minimal overlap.",
+            "wall": 1910
+          },
+          {
+            "ok": true,
+            "out": 115,
+            "total": 2168,
+            "cost": 1.4454e-4,
+            "closeness": 20,
+            "ttft": 1885,
+            "reasoning": "Paper relates to letters as medium, scar to wounds as healing; they share little beyond the anchors.",
+            "wall": 2169
+          }
+        ]
+      },
+      "ordering": [
+        {
+          "reverse": {
+            "ok": true,
+            "out": 75,
+            "total": 1312,
+            "cost": 1.1857999999999999e-4,
+            "closeness": 100,
+            "ttft": 1041,
+            "reasoning": "Identical bridging words; players melded perfectly.",
+            "wall": 1313
+          },
+          "item": 1,
+          "forward": {
+            "ok": true,
+            "out": 74,
+            "total": 1744,
+            "cost": 1.1792e-4,
+            "closeness": 100,
+            "ttft": 1395,
+            "reasoning": "Both players gave the exact same bridging word, 'moon', so they perfectly melded.",
+            "wall": 1745
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 74,
+            "total": 1523,
+            "cost": 1.1792e-4,
+            "closeness": 100,
+            "ttft": 1287,
+            "reasoning": "Same word with only a number inflection; identical meaning.",
+            "wall": 1523
+          },
+          "item": 2,
+          "forward": {
+            "ok": true,
+            "out": 132,
+            "total": 1858,
+            "cost": 1.562e-4,
+            "closeness": 100,
+            "ttft": 1740,
+            "reasoning": "Both words are the same noun, differing only in number, so they are identical in meaning.",
+            "wall": 1860
+          }
+        },
+        {
+          "reverse": {
+            "ok": false,
+            "wall": 600058,
+            "why": "{:http, 504, \"{\\\"error\\\":{\\\"message\\\":\\\"Gateway timeout\\\",\\\"param\\\":null,\\\"code\\\":\\\"GATEWAY_TIMEOUT\\\",\\\"type\\\":\\\"error\\\"},\\\"request_id\\\":\\\"chatcmpl-605c1a2a5e834ac3af40c1a89c787d40\\\"}\"}"
+          },
+          "item": 3,
+          "forward": {
+            "ok": true,
+            "out": 225,
+            "total": 3288,
+            "cost": 2.178e-4,
+            "closeness": 90,
+            "ttft": 3129,
+            "reasoning": "Reflection and reflect are the same concept, just noun and verb forms of the same root.",
+            "wall": 3288
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 138,
+            "total": 1793,
+            "cost": 1.6038e-4,
+            "closeness": 90,
+            "ttft": 1548,
+            "reasoning": "Both are common vessels for coffee, nearly interchangeable, differing only in specific type.",
+            "wall": 1794
+          },
+          "item": 4,
+          "forward": {
+            "ok": true,
+            "out": 124,
+            "total": 1489,
+            "cost": 1.5114000000000002e-4,
+            "closeness": 85,
+            "ttft": 1294,
+            "reasoning": "Cup and mug are near-synonyms for a coffee vessel, so the players clearly melded.",
+            "wall": 1490
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 152,
+            "total": 2121,
+            "cost": 1.6896e-4,
+            "closeness": 90,
+            "ttft": 1995,
+            "reasoning": "Both describe ice turning to liquid under warmth; the words are near synonyms.",
+            "wall": 2122
+          },
+          "item": 5,
+          "forward": {
+            "ok": true,
+            "out": 242,
+            "total": 2768,
+            "cost": 2.2836e-4,
+            "closeness": 95,
+            "ttft": 2618,
+            "reasoning": "Both denote the transformation from ice to liquid via warmth, the core of the fire-ice bridge.",
+            "wall": 2768
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 121,
+            "total": 2456,
+            "cost": 1.4894e-4,
+            "closeness": 80,
+            "ttft": 2187,
+            "reasoning": "Both are enclosing barriers typical of garden and prison, nearly the same concept.",
+            "wall": 2457
+          },
+          "item": 6,
+          "forward": {
+            "ok": true,
+            "out": 233,
+            "total": 2623,
+            "cost": 2.2286000000000002e-4,
+            "closeness": 55,
+            "ttft": 2476,
+            "reasoning": "Both describe garden and prison boundaries, but wall implies solid, fence implies open.",
+            "wall": 2623
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 235,
+            "total": 2687,
+            "cost": 2.2396e-4,
+            "closeness": 80,
+            "ttft": 2495,
+            "reasoning": "Both refer to the substance spread on bread with a knife; they're synonymous in this context.",
+            "wall": 2687
+          },
+          "item": 7,
+          "forward": {
+            "ok": true,
+            "out": 176,
+            "total": 1904,
+            "cost": 1.8502e-4,
+            "closeness": 65,
+            "ttft": 1700,
+            "reasoning": "Both are bread toppings, but 'butter' is specific while 'spread' is general.",
+            "wall": 1904
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 129,
+            "total": 6548,
+            "cost": 1.54e-4,
+            "closeness": 65,
+            "ttft": 6212,
+            "reasoning": "Both are royal symbols tied to kingship, but they are distinct objects, sharing a close thematic link.",
+            "wall": 6549
+          },
+          "item": 8,
+          "forward": {
+            "ok": true,
+            "out": 211,
+            "total": 2312,
+            "cost": 2.0812e-4,
+            "closeness": 70,
+            "ttft": 2079,
+            "reasoning": "Both are royal symbols tied to kingship, but they represent distinct objects: a seat vs. a headpiece.",
+            "wall": 2312
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 178,
+            "total": 2284,
+            "cost": 1.8656e-4,
+            "closeness": 50,
+            "ttft": 1879,
+            "reasoning": "Both relate to the moon's effect on the ocean at night, but they name cause and effect distinctively.",
+            "wall": 2284
+          },
+          "item": 9,
+          "forward": {
+            "ok": true,
+            "out": 679,
+            "total": 9639,
+            "cost": 5.1722e-4,
+            "closeness": 65,
+            "ttft": 9404,
+            "reasoning": "Tide and moon are causally linked but distinct concepts, both tied to ocean and night, so they share a common context but not the same idea.",
+            "wall": 9640
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 225,
+            "total": 2729,
+            "cost": 2.178e-4,
+            "closeness": 65,
+            "ttft": 2414,
+            "reasoning": "Both relate to morning wakefulness, but one is the state and the other the trigger, making them connected yet distinct.",
+            "wall": 2729
+          },
+          "item": 10,
+          "forward": {
+            "ok": true,
+            "out": 164,
+            "total": 1962,
+            "cost": 1.7754e-4,
+            "closeness": 65,
+            "ttft": 1746,
+            "reasoning": "Both relate to waking, but alarm is the trigger and awake is the state; closely related yet distinct.",
+            "wall": 1962
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 160,
+            "total": 2030,
+            "cost": 1.7424e-4,
+            "closeness": 65,
+            "ttft": 1763,
+            "reasoning": "Both are forms of water, but different phases—steam is gas, water is liquid—so related yet distinct.",
+            "wall": 2031
+          },
+          "item": 11,
+          "forward": {
+            "ok": true,
+            "out": 135,
+            "total": 1699,
+            "cost": 1.5774000000000002e-4,
+            "closeness": 65,
+            "ttft": 1382,
+            "reasoning": "Both relate to water's states under temperature extremes, but as distinct phases, they are related yet not melded.",
+            "wall": 1700
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 208,
+            "total": 1780,
+            "cost": 2.0636e-4,
+            "closeness": 50,
+            "ttft": 1658,
+            "reasoning": "Both evoke the doctor's waiting room, but one is a place and the other an activity.",
+            "wall": 1781
+          },
+          "item": 12,
+          "forward": {
+            "ok": true,
+            "out": 195,
+            "total": 2353,
+            "cost": 1.9778e-4,
+            "closeness": 50,
+            "ttft": 2100,
+            "reasoning": "Both evoke a medical setting, but 'waiting' is an action and 'hospital' is a place, making them related yet distinct.",
+            "wall": 2354
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 271,
+            "total": 3098,
+            "cost": 2.4794e-4,
+            "closeness": 70,
+            "ttft": 2906,
+            "reasoning": "Both relate to confidentiality, but secret is the hidden fact while oath is the promise to stay silent.",
+            "wall": 3098
+          },
+          "item": 13,
+          "forward": {
+            "ok": true,
+            "out": 194,
+            "total": 2527,
+            "cost": 1.9712e-4,
+            "closeness": 65,
+            "ttft": 2293,
+            "reasoning": "Both involve confidentiality, but oath is a pledge while secret is the hidden information itself. Related yet distinct.",
+            "wall": 2528
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 485,
+            "total": 4536,
+            "cost": 3.8874000000000005e-4,
+            "closeness": 20,
+            "ttft": 4350,
+            "reasoning": "Seal and open are antonyms; one closes while the other opens, so the bridges head opposite ways despite both touching the anchors.",
+            "wall": 4536
+          },
+          "item": 14,
+          "forward": {
+            "ok": true,
+            "out": 677,
+            "total": 4947,
+            "cost": 5.1546e-4,
+            "closeness": 45,
+            "ttft": 4788,
+            "reasoning": "Both words describe a condition of letters and wounds—open vs. sealed—so they share an axis but are opposites.",
+            "wall": 4948
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 151,
+            "total": 2389,
+            "cost": 1.6852000000000002e-4,
+            "closeness": 20,
+            "ttft": 2065,
+            "reasoning": "Sleep ties to dream, journey to train; they approach opposite anchors and share little.",
+            "wall": 2390
+          },
+          "item": 15,
+          "forward": {
+            "ok": true,
+            "out": 176,
+            "total": 2589,
+            "cost": 1.8502e-4,
+            "closeness": 20,
+            "ttft": 2191,
+            "reasoning": "Journey and sleep are distinct concepts, each tied to a different anchor, sharing little direct meaning.",
+            "wall": 2589
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 309,
+            "total": 3171,
+            "cost": 2.7302e-4,
+            "closeness": 15,
+            "ttft": 2876,
+            "reasoning": "Queen and moat share only a loose castle/royalty theme, but are distinct unrelated ideas.",
+            "wall": 3172
+          },
+          "item": 16,
+          "forward": {
+            "ok": true,
+            "out": 153,
+            "total": 4473,
+            "cost": 1.7006e-4,
+            "closeness": 45,
+            "ttft": 4294,
+            "reasoning": "Both relate to castles or royalty, but distinct elements.",
+            "wall": 4474
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 356,
+            "total": 4542,
+            "cost": 3.0382e-4,
+            "closeness": 55,
+            "ttft": 4371,
+            "reasoning": "Both suggest a path or movement, but drift is aimless while track is deliberate; related yet distinct.",
+            "wall": 4542
+          },
+          "item": 17,
+          "forward": {
+            "ok": true,
+            "out": 404,
+            "total": 4678,
+            "cost": 3.355e-4,
+            "closeness": 20,
+            "ttft": 4502,
+            "reasoning": "Track and drift share only a vague sense of direction; one is concrete, the other abstract, so they diverge.",
+            "wall": 4678
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 169,
+            "total": 1837,
+            "cost": 1.8018e-4,
+            "closeness": 30,
+            "ttft": 1607,
+            "reasoning": "Scar is a wound remnant; paper is a letter medium. Distinct ideas with minimal overlap beyond the anchors.",
+            "wall": 1838
+          },
+          "item": 18,
+          "forward": {
+            "ok": true,
+            "out": 174,
+            "total": 2182,
+            "cost": 1.8348e-4,
+            "closeness": 25,
+            "ttft": 1894,
+            "reasoning": "Paper relates to letter, scar to wound; the words share no common bridge and diverge semantically.",
+            "wall": 2183
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 475,
+            "total": 205008,
+            "cost": 3.8258000000000004e-4,
+            "closeness": 20,
+            "ttft": 204816,
+            "reasoning": "Cell and weed are unrelated; cell suggests a prison compartment, weed a garden plant.",
+            "wall": 205009
+          },
+          "item": 19,
+          "forward": {
+            "ok": true,
+            "out": 211,
+            "total": 2894,
+            "cost": 2.0834e-4,
+            "closeness": 25,
+            "ttft": 2588,
+            "reasoning": "Weed and cell hit different senses: weed leans to garden, cell to prison, with no shared idea.",
+            "wall": 2895
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 124,
+            "total": 5081,
+            "cost": 1.5114000000000002e-4,
+            "closeness": 20,
+            "ttft": 4809,
+            "reasoning": "One touches river (bank), the other mirror (glass); they share no direct meaning overlap.",
+            "wall": 5082
+          },
+          "item": 20,
+          "forward": {
+            "ok": true,
+            "out": 795,
+            "total": 7923,
+            "cost": 5.94e-4,
+            "closeness": 20,
+            "ttft": 7778,
+            "reasoning": "Glass relates to mirror's surface, bank to river's edge; they share little common ground beyond the anchors.",
+            "wall": 7924
+          }
+        }
+      ],
+      "warm": {
+        "ok": true,
+        "out": 834,
+        "total": 9037,
+        "cost": 6.1952e-4,
+        "closeness": 70,
+        "ttft": 8845,
+        "reasoning": "Both relate to the ocean-night nexus: tide is caused by the moon, so they're closely connected but distinct concepts.",
+        "wall": 9043
+      }
+    },
+    "deepseek_none": {
+      "latency": [
+        {
+          "ok": true,
+          "out": 36,
+          "total": 708,
+          "cost": 9.284e-5,
+          "closeness": 45,
+          "ttft": 307,
+          "reasoning": "Tide relates to ocean directly, moon relates to night and tides, but the concepts are distinct.",
+          "wall": 709
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 958,
+          "cost": 9.614e-5,
+          "closeness": 45,
+          "ttft": 309,
+          "reasoning": "Tide is an ocean phenomenon, while moon is a celestial body linked to night; related through lunar tides, but distinct core ideas.",
+          "wall": 958
+        },
+        {
+          "ok": true,
+          "out": 33,
+          "total": 1195,
+          "cost": 9.086e-5,
+          "closeness": 45,
+          "ttft": 560,
+          "reasoning": "Tide and moon are both celestial/lunar-related but distinct concepts, sharing moderate thematic overlap.",
+          "wall": 1196
+        },
+        {
+          "ok": true,
+          "out": 34,
+          "total": 850,
+          "cost": 9.151999999999999e-5,
+          "closeness": 45,
+          "ttft": 262,
+          "reasoning": "Tide and moon are distinct natural phenomena, though both connect to ocean and night weakly.",
+          "wall": 850
+        },
+        {
+          "ok": true,
+          "out": 37,
+          "total": 896,
+          "cost": 9.35e-5,
+          "closeness": 55,
+          "ttft": 279,
+          "reasoning": "Tide and moon are both ocean-night associations, but distinct concepts; they share context yet differ in referent.",
+          "wall": 896
+        },
+        {
+          "ok": true,
+          "out": 35,
+          "total": 1359,
+          "cost": 9.218e-5,
+          "closeness": 55,
+          "ttft": 671,
+          "reasoning": "Tide is ocean-related and moon-driven, but moon is celestial night imagery; related yet distinct directions.",
+          "wall": 1360
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 870,
+          "cost": 9.284e-5,
+          "closeness": 55,
+          "ttft": 315,
+          "reasoning": "Tide is an ocean phenomenon; moon causes tides, linking ocean and night, yet they are distinct concepts.",
+          "wall": 871
+        },
+        {
+          "ok": true,
+          "out": 35,
+          "total": 989,
+          "cost": 9.218e-5,
+          "closeness": 75,
+          "ttft": 280,
+          "reasoning": "Tide and moon are closely linked through ocean gravitation and nightly cycles, though distinct phenomena.",
+          "wall": 990
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 1433,
+          "cost": 9.284e-5,
+          "closeness": 55,
+          "ttft": 947,
+          "reasoning": "Tide and moon are related through oceanic and nocturnal contexts, but represent distinct concepts rather than the same idea.",
+          "wall": 1433
+        },
+        {
+          "ok": true,
+          "out": 35,
+          "total": 934,
+          "cost": 9.218e-5,
+          "closeness": 62,
+          "ttft": 370,
+          "reasoning": "Tide relates to ocean's movement, moon causes tides; distinct but closely linked natural phenomena.",
+          "wall": 934
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 1091,
+          "cost": 9.284e-5,
+          "closeness": 50,
+          "ttft": 309,
+          "reasoning": "Tide is ocean's movement; moon drives tides but also evokes night. Related but distinct concepts.",
+          "wall": 1092
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 871,
+          "cost": 9.284e-5,
+          "closeness": 45,
+          "ttft": 337,
+          "reasoning": "Tide and moon are distinct natural phenomena, both connected to ocean and night, but not the same idea.",
+          "wall": 871
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 972,
+          "cost": 9.416e-5,
+          "closeness": 45,
+          "ttft": 292,
+          "reasoning": "Tide and moon are both ocean-night related but distinct phenomena; tide is water movement, moon is a celestial body.",
+          "wall": 973
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 816,
+          "cost": 9.614e-5,
+          "closeness": 55,
+          "ttft": 285,
+          "reasoning": "Tide and moon are both connected to the ocean and night, but they are distinct natural phenomena, not the same idea.",
+          "wall": 817
+        },
+        {
+          "ok": true,
+          "out": 33,
+          "total": 2200,
+          "cost": 9.086e-5,
+          "closeness": 55,
+          "ttft": 1791,
+          "reasoning": "Tide and moon are both ocean-night concepts but distinct phenomena; related yet not identical ideas.",
+          "wall": 2200
+        },
+        {
+          "ok": true,
+          "out": 37,
+          "total": 1365,
+          "cost": 9.35e-5,
+          "closeness": 42,
+          "ttft": 463,
+          "reasoning": "Tide is ocean-linked and moon is night-linked; both orbit water and lunar pull, but are distinct concepts.",
+          "wall": 1366
+        },
+        {
+          "ok": true,
+          "out": 34,
+          "total": 1145,
+          "cost": 9.151999999999999e-5,
+          "closeness": 62,
+          "ttft": 499,
+          "reasoning": "Tide and moon are both ocean-night phenomena, but are distinct concepts rather than the same idea.",
+          "wall": 1146
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 923,
+          "cost": 9.481999999999999e-5,
+          "closeness": 50,
+          "ttft": 308,
+          "reasoning": "Tide and moon are distinct natural phenomena, though both connect ocean and night; they're related but not the same idea.",
+          "wall": 924
+        },
+        {
+          "ok": true,
+          "out": 45,
+          "total": 2417,
+          "cost": 9.878e-5,
+          "closeness": 35,
+          "ttft": 1533,
+          "reasoning": "Tide is ocean-related but not a night concept, while moon is night-related but not oceanic; they share only the anchors' vague overlap.",
+          "wall": 2418
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 1253,
+          "cost": 9.284e-5,
+          "closeness": 55,
+          "ttft": 548,
+          "reasoning": "Tide and moon are related through ocean and night, but they are distinct concepts rather than melded ideas.",
+          "wall": 1254
+        }
+      ],
+      "hedged": [
+        {
+          "ok": true,
+          "out": 34,
+          "total": 1515,
+          "cost": 9.151999999999999e-5,
+          "closeness": 65,
+          "ttft": 1428,
+          "reasoning": "Tide and moon are both ocean-night linked phenomena, but they are distinct concepts rather than synonyms.",
+          "wall": 1516
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 1022,
+          "cost": 9.284e-5,
+          "closeness": 55,
+          "ttft": 327,
+          "reasoning": "Tide is a specific ocean phenomenon, while moon is a celestial body; they are related but distinct ideas.",
+          "wall": 1022
+        },
+        {
+          "ok": true,
+          "out": 34,
+          "total": 3743,
+          "cost": 9.151999999999999e-5,
+          "closeness": 45,
+          "ttft": 2850,
+          "reasoning": "Tide and moon are related through ocean gravity, but distinct concepts with different primary senses.",
+          "wall": 3744
+        },
+        {
+          "ok": true,
+          "out": 35,
+          "total": 907,
+          "cost": 9.218e-5,
+          "closeness": 60,
+          "ttft": 291,
+          "reasoning": "Tide and moon are related through ocean and night, but are distinct concepts rather than the same idea.",
+          "wall": 907
+        },
+        {
+          "ok": true,
+          "out": 35,
+          "total": 1062,
+          "cost": 9.218e-5,
+          "closeness": 45,
+          "ttft": 318,
+          "reasoning": "Tide is ocean-related, moon is night-related; they connect via lunar tides but are distinct concepts.",
+          "wall": 1062
+        },
+        {
+          "ok": true,
+          "out": 41,
+          "total": 1232,
+          "cost": 9.614e-5,
+          "closeness": 55,
+          "ttft": 335,
+          "reasoning": "Tide is directly tied to the ocean, while moon influences tides but is more celestial; sharing the night sky connects them.",
+          "wall": 1233
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 1207,
+          "cost": 9.481999999999999e-5,
+          "closeness": 55,
+          "ttft": 487,
+          "reasoning": "Tide and moon are related coastal/lunar concepts, but distinct ideas; both connect to ocean, yet not night equally.",
+          "wall": 1208
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 1013,
+          "cost": 9.416e-5,
+          "closeness": 55,
+          "ttft": 475,
+          "reasoning": "Tide is a direct ocean phenomenon; moon is a celestial body linked to night, related but not the same idea.",
+          "wall": 1014
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 1025,
+          "cost": 9.416e-5,
+          "closeness": 55,
+          "ttft": 317,
+          "reasoning": "Tide and moon are both ocean-night phenomena but distinct concepts, sharing a causal link rather than identical meaning.",
+          "wall": 1025
+        },
+        {
+          "ok": true,
+          "out": 34,
+          "total": 1057,
+          "cost": 9.151999999999999e-5,
+          "closeness": 55,
+          "ttft": 488,
+          "reasoning": "Tide is ocean-specific, moon is celestial but affects tides; related but distinct ideas.",
+          "wall": 1059
+        },
+        {
+          "ok": true,
+          "out": 34,
+          "total": 1139,
+          "cost": 9.151999999999999e-5,
+          "closeness": 45,
+          "ttft": 641,
+          "reasoning": "Tide is ocean-specific, moon affects tides but is separate; related but distinct ideas.",
+          "wall": 1140
+        },
+        {
+          "ok": true,
+          "out": 38,
+          "total": 838,
+          "cost": 9.416e-5,
+          "closeness": 55,
+          "ttft": 498,
+          "reasoning": "Tide and moon are both ocean-night related, but distinct phenomena; tide is water movement, moon is celestial body.",
+          "wall": 839
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 1017,
+          "cost": 9.284e-5,
+          "closeness": 55,
+          "ttft": 604,
+          "reasoning": "Tide is ocean-specific, while moon is a celestial body affecting tides; related but distinct concepts.",
+          "wall": 1018
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 990,
+          "cost": 9.481999999999999e-5,
+          "closeness": 55,
+          "ttft": 313,
+          "reasoning": "Tide is an ocean phenomenon tied to the moon, but moon is a celestial body; related but distinct ideas.",
+          "wall": 990
+        },
+        {
+          "ok": true,
+          "out": 39,
+          "total": 849,
+          "cost": 9.481999999999999e-5,
+          "closeness": 45,
+          "ttft": 309,
+          "reasoning": "Tide is ocean-related, moon is night-related; both are linked to the ocean's tides, sharing an indirect connection.",
+          "wall": 850
+        },
+        {
+          "ok": true,
+          "out": 35,
+          "total": 940,
+          "cost": 9.218e-5,
+          "closeness": 55,
+          "ttft": 302,
+          "reasoning": "Tide and moon are both ocean-night phenomena but not the same concept; related yet distinct.",
+          "wall": 941
+        },
+        {
+          "ok": true,
+          "out": 32,
+          "total": 814,
+          "cost": 9.02e-5,
+          "closeness": 45,
+          "ttft": 292,
+          "reasoning": "Tide is a specific ocean effect; moon causes tides, but they are distinct concepts.",
+          "wall": 814
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 1203,
+          "cost": 9.284e-5,
+          "closeness": 55,
+          "ttft": 515,
+          "reasoning": "Tide is ocean-related and moon-related, but moon is also celestial for night; they share moderate overlap.",
+          "wall": 1203
+        },
+        {
+          "ok": true,
+          "out": 36,
+          "total": 901,
+          "cost": 9.284e-5,
+          "closeness": 55,
+          "ttft": 311,
+          "reasoning": "Tide and moon are related through ocean and night, but distinct concepts, not the same idea.",
+          "wall": 903
+        },
+        {
+          "ok": true,
+          "out": 37,
+          "total": 1041,
+          "cost": 9.35e-5,
+          "closeness": 55,
+          "ttft": 305,
+          "reasoning": "Tide and moon are related coastal/night concepts but not the same idea; they share a loose associative link.",
+          "wall": 1041
+        }
+      ],
+      "model": "accounts/fireworks/models/deepseek-v4-flash-0731 (none)",
+      "repeat": {
+        "1": [
+          {
+            "ok": true,
+            "out": 28,
+            "total": 874,
+            "cost": 8.756e-5,
+            "closeness": 100,
+            "ttft": 524,
+            "reasoning": "Identical bridging words indicate a perfect meld between players.",
+            "wall": 876
+          },
+          {
+            "ok": true,
+            "out": 31,
+            "total": 694,
+            "cost": 8.954e-5,
+            "closeness": 100,
+            "ttft": 277,
+            "reasoning": "Both players chose the identical word 'moon', creating a perfect semantic meld.",
+            "wall": 695
+          },
+          {
+            "ok": true,
+            "out": 29,
+            "total": 848,
+            "cost": 8.821999999999999e-5,
+            "closeness": 100,
+            "ttft": 292,
+            "reasoning": "Both players submitted the exact same bridging word, indicating a complete meld.",
+            "wall": 849
+          },
+          {
+            "ok": true,
+            "out": 28,
+            "total": 739,
+            "cost": 8.756e-5,
+            "closeness": 100,
+            "ttft": 266,
+            "reasoning": "Both players chose the identical bridging word, directly linking ocean and night.",
+            "wall": 740
+          },
+          {
+            "ok": true,
+            "out": 23,
+            "total": 531,
+            "cost": 8.426e-5,
+            "closeness": 100,
+            "ttft": 304,
+            "reasoning": "Identical bridging word, so maximum closeness.",
+            "wall": 532
+          }
+        ],
+        "7": [
+          {
+            "ok": true,
+            "out": 38,
+            "total": 1249,
+            "cost": 9.394000000000001e-5,
+            "closeness": 80,
+            "ttft": 542,
+            "reasoning": "Butter and spread are closely related, with butter being a common type of spread, thus melding well.",
+            "wall": 1250
+          },
+          {
+            "ok": true,
+            "out": 34,
+            "total": 877,
+            "cost": 9.13e-5,
+            "closeness": 70,
+            "ttft": 281,
+            "reasoning": "Butter is a type of spread, so they are closely related but not identical ideas.",
+            "wall": 877
+          },
+          {
+            "ok": true,
+            "out": 35,
+            "total": 738,
+            "cost": 9.196000000000001e-5,
+            "closeness": 65,
+            "ttft": 337,
+            "reasoning": "Butter is a specific spread, so they are related but distinct ideas in the food context.",
+            "wall": 738
+          },
+          {
+            "ok": true,
+            "out": 38,
+            "total": 834,
+            "cost": 9.394000000000001e-5,
+            "closeness": 80,
+            "ttft": 311,
+            "reasoning": "Butter is a specific spread; the meld is close but not identical, sharing a common bridge sense.",
+            "wall": 834
+          },
+          {
+            "ok": true,
+            "out": 38,
+            "total": 620,
+            "cost": 9.394000000000001e-5,
+            "closeness": 65,
+            "ttft": 289,
+            "reasoning": "Butter and spread are different items, but both are common bread toppings, indicating closely related but distinct ideas.",
+            "wall": 621
+          }
+        ],
+        "9": [
+          {
+            "ok": true,
+            "out": 34,
+            "total": 877,
+            "cost": 9.151999999999999e-5,
+            "closeness": 45,
+            "ttft": 295,
+            "reasoning": "Tide and moon are distinct natural phenomena associated with ocean and night, but not the same idea.",
+            "wall": 878
+          },
+          {
+            "ok": true,
+            "out": 36,
+            "total": 922,
+            "cost": 9.284e-5,
+            "closeness": 55,
+            "ttft": 324,
+            "reasoning": "Both evoke natural cycles tied to the ocean and night, but tide is water movement, moon is celestial body.",
+            "wall": 922
+          },
+          {
+            "ok": true,
+            "out": 34,
+            "total": 815,
+            "cost": 9.151999999999999e-5,
+            "closeness": 55,
+            "ttft": 294,
+            "reasoning": "Tide is ocean-specific, moon relates to night; they are related but distinct concepts.",
+            "wall": 816
+          },
+          {
+            "ok": true,
+            "out": 38,
+            "total": 802,
+            "cost": 9.416e-5,
+            "closeness": 35,
+            "ttft": 310,
+            "reasoning": "Tide is ocean-related while moon is night-related; both connect to ocean but not directly to each other.",
+            "wall": 802
+          },
+          {
+            "ok": true,
+            "out": 34,
+            "total": 879,
+            "cost": 9.151999999999999e-5,
+            "closeness": 45,
+            "ttft": 296,
+            "reasoning": "Tide and moon are both ocean-night phenomena but distinct concepts; they share indirect connection through gravity.",
+            "wall": 880
+          }
+        ],
+        "18": [
+          {
+            "ok": true,
+            "out": 39,
+            "total": 1472,
+            "cost": 9.438e-5,
+            "closeness": 25,
+            "ttft": 545,
+            "reasoning": "Paper relates to letters via material, scar to wounds via mark. Both connect to different anchor senses, sharing little.",
+            "wall": 1472
+          },
+          {
+            "ok": true,
+            "out": 37,
+            "total": 741,
+            "cost": 9.306e-5,
+            "closeness": 35,
+            "ttft": 266,
+            "reasoning": "Paper cut and scar are both consequences of wounds, but paper is the cause while scar is the result.",
+            "wall": 743
+          },
+          {
+            "ok": true,
+            "out": 38,
+            "total": 725,
+            "cost": 9.371999999999999e-5,
+            "closeness": 35,
+            "ttft": 284,
+            "reasoning": "Paper is a surface for letters; scar is a mark from a wound. Both are tangible traces, but conceptually distant.",
+            "wall": 726
+          },
+          {
+            "ok": true,
+            "out": 32,
+            "total": 824,
+            "cost": 8.976e-5,
+            "closeness": 15,
+            "ttft": 278,
+            "reasoning": "Paper and scar are different semantic associates of letters and wounds, sharing no direct conceptual overlap.",
+            "wall": 824
+          },
+          {
+            "ok": true,
+            "out": 31,
+            "total": 826,
+            "cost": 8.91e-5,
+            "closeness": 15,
+            "ttft": 351,
+            "reasoning": "Paper and scar relate to letter/wound via distinct metaphors, sharing little direct meaning.",
+            "wall": 827
+          }
+        ]
+      },
+      "ordering": [
+        {
+          "reverse": {
+            "ok": true,
+            "out": 28,
+            "total": 1225,
+            "cost": 8.756e-5,
+            "closeness": 100,
+            "ttft": 906,
+            "reasoning": "Both players chose the identical word 'moon' as their bridge.",
+            "wall": 1226
+          },
+          "item": 1,
+          "forward": {
+            "ok": true,
+            "out": 29,
+            "total": 1464,
+            "cost": 8.821999999999999e-5,
+            "closeness": 100,
+            "ttft": 833,
+            "reasoning": "Both players chose the exact same bridging word, indicating a perfect meld.",
+            "wall": 1464
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 35,
+            "total": 1093,
+            "cost": 9.218e-5,
+            "closeness": 100,
+            "ttft": 453,
+            "reasoning": "These are the same word; 'tides' is just the plural form of 'tide'.",
+            "wall": 1094
+          },
+          "item": 2,
+          "forward": {
+            "ok": true,
+            "out": 32,
+            "total": 1387,
+            "cost": 9.02e-5,
+            "closeness": 100,
+            "ttft": 950,
+            "reasoning": "These are the same word with only pluralization differing, so they have essentially identical meaning.",
+            "wall": 1388
+          }
+        },
+        {
+          "reverse": {
+            "ok": false,
+            "wall": 600092,
+            "why": "{:http, 504, \"{\\\"error\\\":{\\\"message\\\":\\\"Gateway timeout\\\",\\\"param\\\":null,\\\"code\\\":\\\"GATEWAY_TIMEOUT\\\",\\\"type\\\":\\\"error\\\"},\\\"request_id\\\":\\\"chatcmpl-d8d5a093f3b24907bb279d952eb1e44a\\\"}\"}"
+          },
+          "item": 3,
+          "forward": {
+            "ok": true,
+            "out": 27,
+            "total": 986,
+            "cost": 8.712e-5,
+            "closeness": 90,
+            "ttft": 518,
+            "reasoning": "Same root word and identical sense, differing only in grammatical form.",
+            "wall": 986
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 34,
+            "total": 1024,
+            "cost": 9.174000000000001e-5,
+            "closeness": 90,
+            "ttft": 711,
+            "reasoning": "Mug and cup are near-synonyms in the context of coffee, showing strong melding.",
+            "wall": 1025
+          },
+          "item": 4,
+          "forward": {
+            "ok": true,
+            "out": 38,
+            "total": 2553,
+            "cost": 9.438e-5,
+            "closeness": 85,
+            "ttft": 2110,
+            "reasoning": "Cup and mug are near-synonyms for the same vessel, both fitting the coffee-morning context.",
+            "wall": 2554
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 37,
+            "total": 1587,
+            "cost": 9.306e-5,
+            "closeness": 85,
+            "ttft": 985,
+            "reasoning": "Thaw and melt both describe the transition from ice to liquid due to warmth, sharing the same core idea closely.",
+            "wall": 1587
+          },
+          "item": 5,
+          "forward": {
+            "ok": true,
+            "out": 36,
+            "total": 1001,
+            "cost": 9.24e-5,
+            "closeness": 80,
+            "ttft": 600,
+            "reasoning": "Melt and thaw both describe transitions from frozen to liquid, so they are close synonyms in this bridging context.",
+            "wall": 1002
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 39,
+            "total": 1539,
+            "cost": 9.481999999999999e-5,
+            "closeness": 65,
+            "ttft": 747,
+            "reasoning": "Both are perimeter barriers for enclosures, but wall implies more solidity than fence, marking them as related but distinct ideas.",
+            "wall": 1539
+          },
+          "item": 6,
+          "forward": {
+            "ok": true,
+            "out": 42,
+            "total": 991,
+            "cost": 9.68e-5,
+            "closeness": 55,
+            "ttft": 484,
+            "reasoning": "A wall and a fence are both enclosure barriers, but walls are solid and fences are open, so they are related yet distinct.",
+            "wall": 992
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 38,
+            "total": 1383,
+            "cost": 9.394000000000001e-5,
+            "closeness": 75,
+            "ttft": 881,
+            "reasoning": "Spread and butter are closely related in the context of bread, though butter is more specific and spread is broader.",
+            "wall": 1385
+          },
+          "item": 7,
+          "forward": {
+            "ok": true,
+            "out": 34,
+            "total": 986,
+            "cost": 9.13e-5,
+            "closeness": 65,
+            "ttft": 347,
+            "reasoning": "Butter is a specific spread, making them related with butter being a subset of spread.",
+            "wall": 986
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 34,
+            "total": 1242,
+            "cost": 9.13e-5,
+            "closeness": 65,
+            "ttft": 648,
+            "reasoning": "Both evoke monarchy, but crown is an object worn, throne is a seat; related but distinct.",
+            "wall": 1242
+          },
+          "item": 8,
+          "forward": {
+            "ok": true,
+            "out": 35,
+            "total": 1036,
+            "cost": 9.196000000000001e-5,
+            "closeness": 80,
+            "ttft": 497,
+            "reasoning": "Both evoke royal power and monarchy, closely linked symbols of kingship, nearly the same idea.",
+            "wall": 1037
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 36,
+            "total": 3567,
+            "cost": 9.284e-5,
+            "closeness": 65,
+            "ttft": 2886,
+            "reasoning": "Moon and tide are connected through gravitational pull, both oceanic/night phenomena, but are distinct concepts.",
+            "wall": 3567
+          },
+          "item": 9,
+          "forward": {
+            "ok": true,
+            "out": 42,
+            "total": 1017,
+            "cost": 9.68e-5,
+            "closeness": 55,
+            "ttft": 698,
+            "reasoning": "Tide and moon relate to ocean and night but are distinct natural phenomena; they share a thematic link yet not the same concept.",
+            "wall": 1017
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 37,
+            "total": 837,
+            "cost": 9.372e-5,
+            "closeness": 45,
+            "ttft": 456,
+            "reasoning": "Awake is a state of being conscious, while alarm is a device that wakes you; related but distinct ideas.",
+            "wall": 837
+          },
+          "item": 10,
+          "forward": {
+            "ok": true,
+            "out": 37,
+            "total": 803,
+            "cost": 9.372e-5,
+            "closeness": 50,
+            "ttft": 469,
+            "reasoning": "Alarm is a device that wakes you, while awake is the state itself; related but not the same idea.",
+            "wall": 804
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 32,
+            "total": 901,
+            "cost": 8.976e-5,
+            "closeness": 70,
+            "ttft": 529,
+            "reasoning": "Steam and water are different states of the same substance, closely linked but distinct ideas.",
+            "wall": 902
+          },
+          "item": 11,
+          "forward": {
+            "ok": true,
+            "out": 29,
+            "total": 1038,
+            "cost": 8.777999999999999e-5,
+            "closeness": 65,
+            "ttft": 706,
+            "reasoning": "Both are states of water bridging fire and ice, but distinct physical forms.",
+            "wall": 1038
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 32,
+            "total": 1089,
+            "cost": 9.02e-5,
+            "closeness": 55,
+            "ttft": 466,
+            "reasoning": "Hospital and waiting are related but distinct concepts, sharing only the general context of medical care.",
+            "wall": 1089
+          },
+          "item": 12,
+          "forward": {
+            "ok": true,
+            "out": 42,
+            "total": 878,
+            "cost": 9.68e-5,
+            "closeness": 55,
+            "ttft": 488,
+            "reasoning": "Waiting and hospital are both associated with doctor visits, but one is a temporal state and the other a place, making them related yet distinct.",
+            "wall": 879
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 40,
+            "total": 1135,
+            "cost": 9.548e-5,
+            "closeness": 60,
+            "ttft": 520,
+            "reasoning": "Secret and oath both imply confidentiality, but one is a fact and the other a promise, a related yet distinct idea.",
+            "wall": 1136
+          },
+          "item": 13,
+          "forward": {
+            "ok": true,
+            "out": 35,
+            "total": 9373,
+            "cost": 9.218e-5,
+            "closeness": 45,
+            "ttft": 8716,
+            "reasoning": "Oath and secret both relate to confidentiality but differ: oath involves a pledge, secret involves hidden information.",
+            "wall": 9374
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 33,
+            "total": 1020,
+            "cost": 9.041999999999999e-5,
+            "closeness": 20,
+            "ttft": 573,
+            "reasoning": "Seal and open are opposite actions regarding a letter/wound, sharing only tangential anchor context.",
+            "wall": 1020
+          },
+          "item": 14,
+          "forward": {
+            "ok": true,
+            "out": 43,
+            "total": 1064,
+            "cost": 9.701999999999999e-5,
+            "closeness": 45,
+            "ttft": 486,
+            "reasoning": "Open and seal are opposite actions for letters, yet both relate to starting or closing a communication wound conceptually linked. They are related but distinct ideas.",
+            "wall": 1064
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 38,
+            "total": 778,
+            "cost": 9.394000000000001e-5,
+            "closeness": 20,
+            "ttft": 518,
+            "reasoning": "Sleep is a direct component of dreams, while journey is a direct component of trains; they are distinct, unrelated concepts.",
+            "wall": 779
+          },
+          "item": 15,
+          "forward": {
+            "ok": true,
+            "out": 39,
+            "total": 870,
+            "cost": 9.46e-5,
+            "closeness": 35,
+            "ttft": 426,
+            "reasoning": "Journey relates to trains and dreams as a path; sleep is a dream state but only loosely linked to trains.",
+            "wall": 871
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 39,
+            "total": 972,
+            "cost": 9.481999999999999e-5,
+            "closeness": 35,
+            "ttft": 528,
+            "reasoning": "Queen is a royal person, moat is a castle defense; both relate to anchors but diverge in category.",
+            "wall": 973
+          },
+          "item": 16,
+          "forward": {
+            "ok": true,
+            "out": 48,
+            "total": 1366,
+            "cost": 1.0076e-4,
+            "closeness": 35,
+            "ttft": 755,
+            "reasoning": "Moat is part of a castle's defenses, while queen is a royal figure linked to a king; they are only loosely related through the castle/kingdom theme.",
+            "wall": 1366
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 33,
+            "total": 1047,
+            "cost": 9.064e-5,
+            "closeness": 25,
+            "ttft": 515,
+            "reasoning": "Drift and track are distinct actions tied to train and dream respectively, sharing little conceptual overlap.",
+            "wall": 1047
+          },
+          "item": 17,
+          "forward": {
+            "ok": true,
+            "out": 40,
+            "total": 827,
+            "cost": 9.526e-5,
+            "closeness": 20,
+            "ttft": 484,
+            "reasoning": "Track and drift are distinct concepts, sharing only a loose link to movement or trains. Their meanings do not significantly overlap.",
+            "wall": 828
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 41,
+            "total": 1030,
+            "cost": 9.57e-5,
+            "closeness": 20,
+            "ttft": 703,
+            "reasoning": "Scar is a mark on skin; paper is material for letters, both connect to wound/letter but via different senses.",
+            "wall": 1031
+          },
+          "item": 18,
+          "forward": {
+            "ok": true,
+            "out": 37,
+            "total": 778,
+            "cost": 9.306e-5,
+            "closeness": 20,
+            "ttft": 409,
+            "reasoning": "Paper is a surface for letters, while scar is a wound's mark; distinct ideas, related only through anchors.",
+            "wall": 779
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 41,
+            "total": 360530,
+            "cost": 9.614e-5,
+            "closeness": 25,
+            "ttft": 360432,
+            "reasoning": "Cell relates to prison and garden (plant cell), weed relates to garden and prison (slang for tobacco/pot), differing routes.",
+            "wall": 360531
+          },
+          "item": 19,
+          "forward": {
+            "ok": true,
+            "out": 34,
+            "total": 1212,
+            "cost": 9.151999999999999e-5,
+            "closeness": 35,
+            "ttft": 454,
+            "reasoning": "Both words relate to prison settings, but weed implies gardens, while cell is a distinct prison element.",
+            "wall": 1212
+          }
+        },
+        {
+          "reverse": {
+            "ok": true,
+            "out": 35,
+            "total": 6680,
+            "cost": 9.24e-5,
+            "closeness": 15,
+            "ttft": 5857,
+            "reasoning": "Bank relates to river's edge; glass to mirror's surface. They share no direct overlap of meaning.",
+            "wall": 6680
+          },
+          "item": 20,
+          "forward": {
+            "ok": true,
+            "out": 34,
+            "total": 16584,
+            "cost": 9.174000000000001e-5,
+            "closeness": 20,
+            "ttft": 16231,
+            "reasoning": "Glass reflects like a mirror, while bank is a river's edge; these are unrelated secondary meanings.",
+            "wall": 16585
+          }
+        }
+      ],
+      "warm": {
+        "ok": true,
+        "out": 36,
+        "total": 1913,
+        "cost": 9.284e-5,
+        "closeness": 35,
+        "ttft": 1227,
+        "reasoning": "Tide is ocean-specific motion; moon affects both ocean and night, sharing less direct semantic overlap.",
+        "wall": 1920
+      }
+    }
+  },
+  "report": {
+    "gemini37": {
+      "model": "gemini-3.7-flash (low)",
+      "repeat": [
+        {
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "range": 0,
+          "item": 1,
+          "identical": true
+        },
+        {
+          "values": [
+            85,
+            85,
+            82,
+            78,
+            82
+          ],
+          "range": 7,
+          "item": 7,
+          "identical": false
+        },
+        {
+          "values": [
+            68,
+            68,
+            72,
+            72,
+            65
+          ],
+          "range": 7,
+          "item": 9,
+          "identical": false
+        },
+        {
+          "values": [
+            10,
+            8,
+            12,
+            12,
+            10
+          ],
+          "range": 4,
+          "item": 18,
+          "identical": false
+        }
+      ],
+      "ordering": {
+        "n": 20,
+        "max_abs": 15,
+        "mean_abs": 3.95,
+        "within5_pct": 75.0
+      },
+      "calls": 20,
+      "cost": 0.052236750000000005,
+      "failures": 0,
+      "hedged_failures": 0,
+      "hedged_total_p50": 1307,
+      "hedged_total_p95": 1511,
+      "hedged_ttft_p95": 1413,
+      "out_tokens_mean": 104.3,
+      "pass_p50": true,
+      "pass_p95": true,
+      "rule_ms": 1329.084745762712,
+      "total_p50": 1408,
+      "total_p95": 2277,
+      "tps_p50": 921.875,
+      "ttft_p50": 1264,
+      "ttft_p95": 2203
+    },
+    "gemini38": {
+      "model": "gemini-3.8-flash (low)",
+      "repeat": [
+        {
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "range": 0,
+          "item": 1,
+          "identical": true
+        },
+        {
+          "values": [
+            85,
+            85,
+            78,
+            85,
+            84
+          ],
+          "range": 7,
+          "item": 7,
+          "identical": false
+        },
+        {
+          "values": [
+            72,
+            72,
+            72,
+            72,
+            72
+          ],
+          "range": 0,
+          "item": 9,
+          "identical": true
+        },
+        {
+          "values": [
+            12,
+            12,
+            12,
+            12,
+            15
+          ],
+          "range": 3,
+          "item": 18,
+          "identical": false
+        }
+      ],
+      "ordering": {
+        "n": 20,
+        "max_abs": 27,
+        "mean_abs": 4.3,
+        "within5_pct": 75.0
+      },
+      "calls": 20,
+      "cost": 0.03308924999999999,
+      "failures": 0,
+      "hedged_failures": 0,
+      "hedged_total_p50": 738,
+      "hedged_total_p95": 864,
+      "hedged_ttft_p95": 769,
+      "out_tokens_mean": 39.85,
+      "pass_p50": true,
+      "pass_p95": true,
+      "rule_ms": 841.1428571428571,
+      "total_p50": 760,
+      "total_p95": 3198,
+      "tps_p50": 324.0740740740741,
+      "ttft_p50": 656,
+      "ttft_p95": 3051
+    },
+    "deepseek_max": {
+      "model": "accounts/fireworks/models/deepseek-v4-flash-0731 (max)",
+      "repeat": [
+        {
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "range": 0,
+          "item": 1,
+          "identical": true
+        },
+        {
+          "values": [
+            70,
+            70,
+            65,
+            70,
+            85
+          ],
+          "range": 20,
+          "item": 7,
+          "identical": false
+        },
+        {
+          "values": [
+            60,
+            60,
+            60,
+            65,
+            55
+          ],
+          "range": 10,
+          "item": 9,
+          "identical": false
+        },
+        {
+          "values": [
+            25,
+            30,
+            55,
+            30
+          ],
+          "range": 30,
+          "item": 18,
+          "identical": false
+        }
+      ],
+      "ordering": {
+        "n": 20,
+        "max_abs": 20,
+        "mean_abs": 5.7,
+        "within5_pct": 65.0
+      },
+      "calls": 20,
+      "cost": 0.06945576,
+      "failures": 1,
+      "hedged_failures": 0,
+      "hedged_total_p50": 6226,
+      "hedged_total_p95": 19100,
+      "hedged_ttft_p95": 18919,
+      "out_tokens_mean": 685.8947368421053,
+      "pass_p50": false,
+      "pass_p95": false,
+      "rule_ms": 7169.620689655172,
+      "total_p50": 7514,
+      "total_p95": 15413,
+      "tps_p50": 3222.222222222222,
+      "ttft_p50": 7151,
+      "ttft_p95": 15241
+    },
+    "deepseek_low": {
+      "model": "accounts/fireworks/models/deepseek-v4-flash-0731 (low)",
+      "repeat": [
+        {
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "range": 0,
+          "item": 1,
+          "identical": true
+        },
+        {
+          "values": [
+            65,
+            65,
+            65,
+            70,
+            65
+          ],
+          "range": 5,
+          "item": 7,
+          "identical": false
+        },
+        {
+          "values": [
+            60,
+            80,
+            65,
+            60,
+            60
+          ],
+          "range": 20,
+          "item": 9,
+          "identical": false
+        },
+        {
+          "values": [
+            10,
+            20,
+            25,
+            20,
+            20
+          ],
+          "range": 15,
+          "item": 18,
+          "identical": false
+        }
+      ],
+      "ordering": {
+        "n": 19,
+        "max_abs": 35,
+        "mean_abs": 9.210526315789474,
+        "within5_pct": 68.42105263157895
+      },
+      "calls": 20,
+      "cost": 0.02327445999999999,
+      "failures": 0,
+      "hedged_failures": 0,
+      "hedged_total_p50": 3109,
+      "hedged_total_p95": 4165,
+      "hedged_ttft_p95": 3885,
+      "out_tokens_mean": 289.7,
+      "pass_p50": false,
+      "pass_p95": false,
+      "rule_ms": 2806.423076923077,
+      "total_p50": 3163,
+      "total_p95": 5828,
+      "tps_p50": 1009.7087378640778,
+      "ttft_p50": 2747,
+      "ttft_p95": 5647
+    },
+    "deepseek_none": {
+      "model": "accounts/fireworks/models/deepseek-v4-flash-0731 (none)",
+      "repeat": [
+        {
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "range": 0,
+          "item": 1,
+          "identical": true
+        },
+        {
+          "values": [
+            80,
+            70,
+            65,
+            80,
+            65
+          ],
+          "range": 15,
+          "item": 7,
+          "identical": false
+        },
+        {
+          "values": [
+            45,
+            55,
+            55,
+            35,
+            45
+          ],
+          "range": 20,
+          "item": 9,
+          "identical": false
+        },
+        {
+          "values": [
+            25,
+            35,
+            35,
+            15,
+            15
+          ],
+          "range": 20,
+          "item": 18,
+          "identical": false
+        }
+      ],
+      "ordering": {
+        "n": 19,
+        "max_abs": 25,
+        "mean_abs": 7.368421052631579,
+        "within5_pct": 57.89473684210527
+      },
+      "calls": 20,
+      "cost": 0.009174220000000004,
+      "failures": 0,
+      "hedged_failures": 0,
+      "hedged_total_p50": 1022,
+      "hedged_total_p95": 1515,
+      "hedged_ttft_p95": 1428,
+      "out_tokens_mean": 36.65,
+      "pass_p50": true,
+      "pass_p95": true,
+      "rule_ms": 1352.6470588235293,
+      "total_p50": 972,
+      "total_p95": 2200,
+      "tps_p50": 57.823129251700685,
+      "ttft_p50": 315,
+      "ttft_p95": 1533
+    }
+  },
+  "n": 20,
+  "hedge": 2
+}

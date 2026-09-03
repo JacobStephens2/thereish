@@ -1,0 +1,292 @@
+-rw------- 1 jacob jacob 365 Sep  2 23:06 /home/jacob/keeper.env
+bench vps: n=20, hedge=2, repeats=5, candidates=[:glm, :luna, :opus, :sonnet]; cache OFF, streaming, retries OFF
+
+[assayer] zai-org/GLM-5.3-Flash ttft=996ms total=1255ms in=242 out=79 $0.00008 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=286ms total=536ms in=242 out=61 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=1686ms total=2042ms in=285 out=91 $0.00017 stop=stop
+[assayer] claude-sonnet-5 ttft=1878ms total=2433ms in=578 out=53 $0.00169 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=290ms total=656ms in=242 out=39 $0.00006 stop=stop
+[assayer] claude-opus-5 ttft=2358ms total=3043ms in=578 out=69 $0.00461 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=325ms total=551ms in=242 out=64 $0.00007 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=295ms total=624ms in=242 out=61 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=1460ms total=1786ms in=285 out=104 $0.00018 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=167ms total=430ms in=242 out=41 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1631ms total=2152ms in=578 out=56 $0.00172 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=282ms total=484ms in=242 out=54 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=683ms total=1009ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=275ms total=486ms in=242 out=65 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=1789ms total=2508ms in=578 out=74 $0.00474 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=478ms total=823ms in=242 out=76 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=1077ms total=1356ms in=285 out=82 $0.00016 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=273ms total=508ms in=242 out=64 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1474ms total=2083ms in=578 out=64 $0.00180 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=211ms total=457ms in=242 out=42 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=873ms total=1146ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=336ms total=1008ms in=242 out=44 $0.00006 stop=stop
+[assayer] claude-opus-5 ttft=1868ms total=2648ms in=578 out=79 $0.00486 stop=end_turn
+[assayer] gpt-5.6-luna ttft=685ms total=1038ms in=285 out=36 $0.00010 stop=stop
+[assayer] claude-sonnet-5 ttft=1517ms total=2079ms in=578 out=54 $0.00170 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=378ms total=1320ms in=242 out=63 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=886ms total=1326ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=409ms total=1208ms in=242 out=83 $0.00008 stop=stop
+[assayer] claude-opus-5 ttft=1909ms total=2728ms in=578 out=79 $0.00486 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=203ms total=507ms in=242 out=41 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1968ms total=2623ms in=578 out=56 $0.00172 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=274ms total=453ms in=242 out=55 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=1462ms total=1728ms in=285 out=92 $0.00017 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=312ms total=510ms in=242 out=70 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=770ms total=1205ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=786ms total=1183ms in=242 out=65 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=1983ms total=2701ms in=578 out=75 $0.00477 stop=end_turn
+[assayer] gpt-5.6-luna ttft=641ms total=1019ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=552ms total=822ms in=242 out=62 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=2018ms total=2730ms in=578 out=55 $0.00171 stop=end_turn
+[assayer] gpt-5.6-luna ttft=1869ms total=2271ms in=285 out=117 $0.00020 stop=stop
+[assayer] claude-sonnet-5 ttft=1592ms total=2101ms in=578 out=62 $0.00178 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=1044ms total=2493ms in=242 out=59 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=2025ms total=2877ms in=578 out=84 $0.00499 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=503ms total=768ms in=242 out=84 $0.00008 stop=stop
+[assayer] gpt-5.6-luna ttft=726ms total=1327ms in=285 out=35 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=460ms total=669ms in=242 out=62 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=775ms total=1113ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=367ms total=656ms in=242 out=52 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1814ms total=2352ms in=578 out=55 $0.00171 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=413ms total=659ms in=242 out=68 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=1940ms total=2943ms in=578 out=68 $0.00459 stop=end_turn
+[assayer] gpt-5.6-luna ttft=718ms total=1147ms in=285 out=38 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=386ms total=844ms in=242 out=51 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=328ms total=505ms in=242 out=58 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=655ms total=1070ms in=285 out=39 $0.00010 stop=stop
+[assayer] claude-sonnet-5 ttft=1516ms total=2111ms in=578 out=60 $0.00176 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=448ms total=636ms in=242 out=90 $0.00008 stop=stop
+[assayer] gpt-5.6-luna ttft=484ms total=760ms in=285 out=36 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=295ms total=533ms in=242 out=67 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=1847ms total=2611ms in=578 out=74 $0.00474 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=366ms total=678ms in=242 out=52 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1324ms total=1758ms in=578 out=53 $0.00169 stop=end_turn
+[assayer] gpt-5.6-luna ttft=740ms total=1099ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=170ms total=378ms in=242 out=38 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=310ms total=523ms in=242 out=61 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=955ms total=1344ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=341ms total=633ms in=242 out=62 $0.00007 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=188ms total=447ms in=242 out=42 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1410ms total=2125ms in=578 out=61 $0.00177 stop=end_turn
+[assayer] claude-opus-5 ttft=1846ms total=2750ms in=578 out=72 $0.00469 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=378ms total=694ms in=242 out=61 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=1143ms total=1394ms in=285 out=82 $0.00016 stop=stop
+[assayer] gpt-5.6-luna ttft=519ms total=861ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=217ms total=1254ms in=242 out=46 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1565ms total=2354ms in=578 out=53 $0.00169 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=384ms total=645ms in=242 out=53 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=774ms total=1162ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=194ms total=430ms in=242 out=44 $0.00006 stop=stop
+[assayer] claude-opus-5 ttft=1895ms total=2591ms in=578 out=70 $0.00464 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=218ms total=520ms in=242 out=47 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=798ms total=1156ms in=285 out=36 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=608ms total=820ms in=242 out=66 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1415ms total=1933ms in=578 out=58 $0.00174 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=450ms total=654ms in=242 out=60 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=784ms total=1107ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=264ms total=478ms in=242 out=57 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=564ms total=815ms in=285 out=38 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=1870ms total=2999ms in=578 out=83 $0.00497 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=224ms total=681ms in=242 out=29 $0.00005 stop=stop
+[assayer] claude-sonnet-5 ttft=1461ms total=2200ms in=578 out=54 $0.00170 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=299ms total=556ms in=242 out=34 $0.00005 stop=stop
+[assayer] gpt-5.6-luna ttft=610ms total=912ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=239ms total=403ms in=242 out=29 $0.00005 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=266ms total=502ms in=242 out=24 $0.00005 stop=stop
+[assayer] gpt-5.6-luna ttft=774ms total=1154ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=171ms total=418ms in=242 out=43 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=347ms total=600ms in=242 out=68 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=1794ms total=2669ms in=578 out=77 $0.00482 stop=end_turn
+[assayer] gpt-5.6-luna ttft=620ms total=857ms in=285 out=39 $0.00010 stop=stop
+[assayer] claude-sonnet-5 ttft=1608ms total=2223ms in=578 out=55 $0.00171 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=166ms total=714ms in=242 out=37 $0.00005 stop=stop
+[assayer] gpt-5.6-luna ttft=677ms total=1011ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=547ms total=783ms in=242 out=106 $0.00009 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=269ms total=458ms in=242 out=49 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1416ms total=1957ms in=578 out=55 $0.00171 stop=end_turn
+[assayer] gpt-5.6-luna ttft=803ms total=1201ms in=285 out=38 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=323ms total=625ms in=242 out=61 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=2506ms total=2726ms in=578 out=66 $0.00454 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=313ms total=590ms in=242 out=65 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=607ms total=1065ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=325ms total=690ms in=242 out=64 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1558ms total=2222ms in=578 out=55 $0.00171 stop=end_turn
+[assayer] gpt-5.6-luna ttft=759ms total=1182ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=459ms total=1074ms in=242 out=61 $0.00007 stop=stop
+[assayer] claude-opus-5 ttft=1842ms total=2639ms in=578 out=74 $0.00474 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=411ms total=783ms in=242 out=63 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=828ms total=1266ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=260ms total=450ms in=242 out=61 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1528ms total=2131ms in=578 out=57 $0.00173 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=368ms total=580ms in=241 out=65 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=549ms total=895ms in=285 out=39 $0.00010 stop=stop
+[assayer] gpt-5.6-luna ttft=747ms total=1133ms in=285 out=43 $0.00011 stop=stop
+[assayer] claude-opus-5 ttft=2254ms total=2613ms in=578 out=67 $0.00456 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=1029ms total=1274ms in=241 out=147 $0.00011 stop=stop
+[assayer] claude-sonnet-5 ttft=1541ms total=2294ms in=578 out=65 $0.00181 stop=end_turn
+[assayer] gpt-5.6-luna ttft=750ms total=1066ms in=285 out=37 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=951ms total=1289ms in=241 out=68 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=758ms total=1065ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=454ms total=771ms in=241 out=55 $0.00006 stop=stop
+[assayer] claude-opus-5 ttft=1830ms total=2537ms in=578 out=71 $0.00467 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=305ms total=520ms in=241 out=67 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1462ms total=2013ms in=578 out=50 $0.00166 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=168ms total=267ms in=242 out=22 $0.00005 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=202ms total=330ms in=242 out=30 $0.00005 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=204ms total=347ms in=243 out=24 $0.00005 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=211ms total=386ms in=243 out=36 $0.00005 stop=stop
+[assayer] gpt-5.6-luna ttft=924ms total=1444ms in=285 out=38 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=163ms total=353ms in=242 out=33 $0.00005 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=349ms total=550ms in=242 out=55 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=260ms total=533ms in=243 out=42 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=209ms total=608ms in=243 out=44 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=1072ms total=1466ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=304ms total=503ms in=240 out=48 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1453ms total=2245ms in=578 out=62 $0.00178 stop=end_turn
+[assayer] claude-opus-5 ttft=1881ms total=2759ms in=578 out=72 $0.00469 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=201ms total=1019ms in=240 out=39 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=619ms total=870ms in=285 out=39 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=361ms total=477ms in=243 out=54 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=221ms total=1217ms in=243 out=39 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=773ms total=1123ms in=285 out=41 $0.00011 stop=stop
+[assayer] claude-sonnet-5 ttft=1509ms total=2070ms in=578 out=54 $0.00170 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=408ms total=590ms in=242 out=67 $0.00007 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=769ms total=1052ms in=242 out=59 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=599ms total=913ms in=285 out=37 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=1902ms total=2739ms in=578 out=86 $0.00504 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=171ms total=471ms in=241 out=58 $0.00007 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=207ms total=483ms in=241 out=43 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=388ms total=496ms in=242 out=60 $0.00007 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=192ms total=520ms in=242 out=38 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1578ms total=2023ms in=578 out=44 $0.00160 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=169ms total=468ms in=243 out=47 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=313ms total=584ms in=243 out=66 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=1345ms total=1607ms in=285 out=31 $0.00009 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=369ms total=584ms in=240 out=60 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=718ms total=962ms in=285 out=31 $0.00009 stop=stop
+[assayer] claude-opus-5 ttft=1787ms total=2571ms in=578 out=79 $0.00486 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=1108ms total=1304ms in=240 out=55 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=325ms total=574ms in=244 out=74 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1392ms total=2097ms in=578 out=60 $0.00176 stop=end_turn
+[assayer] gpt-5.6-luna ttft=658ms total=864ms in=285 out=31 $0.00009 stop=stop
+[assayer] gpt-5.6-luna ttft=864ms total=1187ms in=285 out=31 $0.00009 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=203ms total=2010ms in=244 out=41 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=317ms total=595ms in=244 out=58 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1415ms total=2187ms in=578 out=57 $0.00173 stop=end_turn
+[assayer] claude-opus-5 ttft=1221ms total=2967ms in=578 out=50 $0.00414 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=332ms total=1058ms in=244 out=69 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=1129ms total=1360ms in=285 out=31 $0.00009 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=325ms total=661ms in=241 out=55 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=630ms total=921ms in=241 out=84 $0.00008 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=300ms total=554ms in=241 out=63 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=953ms total=1346ms in=285 out=38 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=408ms total=743ms in=241 out=48 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1558ms total=2269ms in=578 out=63 $0.00179 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=300ms total=587ms in=242 out=64 $0.00007 stop=stop
+[assayer] gpt-5.6-luna ttft=516ms total=780ms in=285 out=39 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=1092ms total=2894ms in=578 out=52 $0.00419 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=471ms total=1129ms in=242 out=63 $0.00007 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=374ms total=611ms in=241 out=81 $0.00008 stop=stop
+[assayer] gpt-5.6-luna ttft=1107ms total=1407ms in=285 out=38 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=826ms total=1114ms in=241 out=84 $0.00008 stop=stop
+[assayer] claude-sonnet-5 ttft=1483ms total=2095ms in=578 out=52 $0.00168 stop=end_turn
+[assayer] zai-org/GLM-5.3-Flash ttft=283ms total=458ms in=241 out=57 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=523ms total=861ms in=285 out=43 $0.00011 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=548ms total=990ms in=241 out=122 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=1729ms total=2632ms in=578 out=76 $0.00479 stop=end_turn
+[assayer] gpt-5.6-luna ttft=516ms total=838ms in=285 out=36 $0.00010 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=211ms total=571ms in=243 out=41 $0.00006 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=274ms total=705ms in=243 out=50 $0.00006 stop=stop
+[assayer] gpt-5.6-luna ttft=551ms total=952ms in=285 out=40 $0.00011 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=334ms total=724ms in=242 out=40 $0.00006 stop=stop
+[assayer] claude-sonnet-5 ttft=1558ms total=2351ms in=578 out=62 $0.00178 stop=end_turn
+[assayer] gpt-5.6-luna ttft=581ms total=871ms in=285 out=37 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=2046ms total=2918ms in=578 out=79 $0.00486 stop=end_turn
+[assayer] gpt-5.6-luna ttft=834ms total=1192ms in=285 out=41 $0.00011 stop=stop
+[assayer] zai-org/GLM-5.3-Flash ttft=2616ms total=3025ms in=242 out=67 $0.00007 stop=stop
+[assayer] claude-sonnet-5 ttft=1487ms total=2201ms in=578 out=54 $0.00170 stop=end_turn
+[assayer] gpt-5.6-luna ttft=467ms total=690ms in=285 out=38 $0.00010 stop=stop
+[assayer] claude-sonnet-5 ttft=1477ms total=2079ms in=578 out=57 $0.00173 stop=end_turn
+[assayer] claude-opus-5 ttft=2000ms total=2844ms in=578 out=82 $0.00494 stop=end_turn
+[assayer] gpt-5.6-luna ttft=1914ms total=2290ms in=285 out=92 $0.00017 stop=stop
+[assayer] gpt-5.6-luna ttft=761ms total=1244ms in=284 out=41 $0.00011 stop=stop
+[assayer] claude-sonnet-5 ttft=1508ms total=1986ms in=578 out=54 $0.00170 stop=end_turn
+[assayer] gpt-5.6-luna ttft=653ms total=1111ms in=284 out=38 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=1895ms total=2660ms in=578 out=76 $0.00479 stop=end_turn
+[assayer] claude-sonnet-5 ttft=1511ms total=1993ms in=578 out=46 $0.00162 stop=end_turn
+[assayer] gpt-5.6-luna ttft=1740ms total=2059ms in=284 out=118 $0.00020 stop=stop
+[assayer] claude-opus-5 ttft=2024ms total=2766ms in=578 out=75 $0.00477 stop=end_turn
+[assayer] claude-sonnet-5 ttft=1614ms total=2094ms in=578 out=50 $0.00166 stop=end_turn
+[assayer] gpt-5.6-luna ttft=720ms total=1100ms in=284 out=38 $0.00010 stop=stop
+[assayer] gpt-5.6-luna ttft=681ms total=1018ms in=284 out=39 $0.00010 stop=stop
+[assayer] claude-sonnet-5 ttft=1493ms total=1968ms in=578 out=58 $0.00174 stop=end_turn
+[assayer] gpt-5.6-luna ttft=735ms total=926ms in=285 out=31 $0.00009 stop=stop
+[assayer] gpt-5.6-luna ttft=816ms total=1069ms in=285 out=31 $0.00009 stop=stop
+[assayer] claude-opus-5 ttft=1883ms total=2615ms in=578 out=75 $0.00477 stop=end_turn
+[assayer] gpt-5.6-luna ttft=646ms total=943ms in=285 out=39 $0.00010 stop=stop
+[assayer] gpt-5.6-luna ttft=742ms total=1033ms in=285 out=38 $0.00010 stop=stop
+[assayer] claude-sonnet-5 ttft=1498ms total=2070ms in=578 out=58 $0.00174 stop=end_turn
+[assayer] gpt-5.6-luna ttft=551ms total=827ms in=285 out=37 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=1945ms total=2504ms in=578 out=72 $0.00469 stop=end_turn
+[assayer] gpt-5.6-luna ttft=1649ms total=2054ms in=285 out=97 $0.00017 stop=stop
+[assayer] claude-sonnet-5 ttft=1401ms total=1924ms in=578 out=55 $0.00171 stop=end_turn
+[assayer] gpt-5.6-luna ttft=683ms total=1011ms in=286 out=38 $0.00010 stop=stop
+[assayer] gpt-5.6-luna ttft=651ms total=1065ms in=286 out=43 $0.00011 stop=stop
+[assayer] claude-opus-5 ttft=1803ms total=2619ms in=578 out=78 $0.00484 stop=end_turn
+[assayer] gpt-5.6-luna ttft=1302ms total=1630ms in=283 out=93 $0.00017 stop=stop
+[assayer] claude-sonnet-5 ttft=1674ms total=2427ms in=578 out=68 $0.00184 stop=end_turn
+[assayer] gpt-5.6-luna ttft=1787ms total=2339ms in=283 out=115 $0.00019 stop=stop
+[assayer] gpt-5.6-luna ttft=718ms total=981ms in=286 out=34 $0.00010 stop=stop
+[assayer] gpt-5.6-luna ttft=752ms total=1157ms in=286 out=36 $0.00010 stop=stop
+[assayer] claude-opus-5 ttft=2566ms total=3172ms in=578 out=81 $0.00491 stop=end_turn
+[assayer] gpt-5.6-luna ttft=618ms total=1288ms in=285 out=41 $0.00011 stop=stop
+[assayer] gpt-5.6-luna ttft=929ms total=1353ms in=285 out=37 $0.00010 stop=stop
+[assayer] gpt-5.6-luna ttft=697ms total=1134ms in=284 out=39 $0.00010 stop=stop
+[assayer] gpt-5.6-luna ttft=984ms total=1318ms in=284 out=65 $0.00013 stop=stop
+[assayer] gpt-5.6-luna ttft=490ms total=743ms in=285 out=38 $0.00010 stop=stop
+
+23:08:26.102 [error] Task #PID<0.904.0> started from #PID<0.192.0> terminating
+** (RuntimeError) Finch was unable to provide a connection within the timeout due to excess queuing for connections. Consider adjusting the pool size, count, timeout or reducing the rate of requests if it is possible that the downstream service is unable to keep up with the current rate.
+
+    (nimble_pool 1.1.0) lib/nimble_pool.ex:518: NimblePool.exit!/3
+    (finch 0.23.0) lib/finch/http1/pool.ex:52: Finch.HTTP1.Pool.request/6
+    (finch 0.23.0) lib/finch.ex:829: Finch.__stream__/6
+    (finch 0.23.0) lib/finch.ex:820: anonymous fn/6 in Finch.stream_while/5
+    (telemetry 1.4.2) /app/deps/telemetry/src/telemetry.erl:359: :telemetry.span/3
+    (req 0.7.4) lib/req/finch.ex:491: Req.Finch.run_stream_while/6
+    (req 0.7.4) lib/req/finch.ex:301: Req.Finch.finch_stream_into_fun/5
+    (req 0.7.4) lib/req/request.ex:1053: Req.Request.run_request/2
+Function: #Function<0.25964009/0 in Keeper.Bench.call/4>
+    Args: []
+
+23:08:26.102 [error] Task #PID<0.905.0> started from #PID<0.192.0> terminating
+** (RuntimeError) Finch was unable to provide a connection within the timeout due to excess queuing for connections. Consider adjusting the pool size, count, timeout or reducing the rate of requests if it is possible that the downstream service is unable to keep up with the current rate.
+
+    (nimble_pool 1.1.0) lib/nimble_pool.ex:518: NimblePool.exit!/3
+    (finch 0.23.0) lib/finch/http1/pool.ex:52: Finch.HTTP1.Pool.request/6
+    (finch 0.23.0) lib/finch.ex:829: Finch.__stream__/6
+    (finch 0.23.0) lib/finch.ex:820: anonymous fn/6 in Finch.stream_while/5
+    (telemetry 1.4.2) /app/deps/telemetry/src/telemetry.erl:359: :telemetry.span/3
+    (req 0.7.4) lib/req/finch.ex:491: Req.Finch.run_stream_while/6
+    (req 0.7.4) lib/req/finch.ex:301: Req.Finch.finch_stream_into_fun/5
+    (req 0.7.4) lib/req/request.ex:1053: Req.Request.run_request/2
+Function: #Function<0.25964009/0 in Keeper.Bench.call/4>
+    Args: []
+** (EXIT from #PID<0.95.0>) an exception was raised:
+    ** (RuntimeError) Finch was unable to provide a connection within the timeout due to excess queuing for connections. Consider adjusting the pool size, count, timeout or reducing the rate of requests if it is possible that the downstream service is unable to keep up with the current rate.
+
+        (nimble_pool 1.1.0) lib/nimble_pool.ex:518: NimblePool.exit!/3
+        (finch 0.23.0) lib/finch/http1/pool.ex:52: Finch.HTTP1.Pool.request/6
+        (finch 0.23.0) lib/finch.ex:829: Finch.__stream__/6
+        (finch 0.23.0) lib/finch.ex:820: anonymous fn/6 in Finch.stream_while/5
+        (telemetry 1.4.2) /app/deps/telemetry/src/telemetry.erl:359: :telemetry.span/3
+        (req 0.7.4) lib/req/finch.ex:491: Req.Finch.run_stream_while/6
+        (req 0.7.4) lib/req/finch.ex:301: Req.Finch.finch_stream_into_fun/5
+        (req 0.7.4) lib/req/request.ex:1053: Req.Request.run_request/2
+
+container exit 1; env file removed: ls: cannot access '/home/jacob/keeper.env': No such file or directory
+scp: ~/keeper-results/bench-vps.md: No such file or directory
+scp: ~/keeper-results/bench-vps.json: No such file or directory

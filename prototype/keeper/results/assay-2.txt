@@ -1,0 +1,381 @@
+Assaying 20 submissions with [:gemini37, :gemini38, :deepseek_max, :deepseek_low, :deepseek_none]; cache OFF; hedge 1
+
+[assayer] gemini-3.8-flash ttft=926ms total=966ms in=241 out=29 $0.00029 stop=stop
+[assayer] gemini-3.8-flash ttft=999ms total=1038ms in=241 out=21 $0.00026 stop=stop
+[assayer] gemini-3.7-flash ttft=959ms total=1060ms in=241 out=29 $0.00029 stop=stop
+[assayer] gemini-3.7-flash ttft=1240ms total=1309ms in=241 out=30 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1311ms total=1639ms in=314 out=23 $0.00008 stop=stop
+[assayer] gemini-3.7-flash ttft=530ms total=613ms in=241 out=34 $0.00031 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1790ms total=2044ms in=314 out=22 $0.00008 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2039ms total=2298ms in=314 out=72 $0.00012 stop=stop
+[assayer] gemini-3.7-flash ttft=939ms total=1022ms in=241 out=88 $0.00051 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2160ms total=2397ms in=406 out=67 $0.00013 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2228ms total=2439ms in=406 out=90 $0.00015 stop=stop
+[assayer] gemini-3.8-flash ttft=1363ms total=1415ms in=241 out=37 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=1503ms total=1563ms in=241 out=38 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=530ms total=861ms in=314 out=32 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=434ms total=876ms in=314 out=26 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=538ms total=638ms in=242 out=38 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=520ms total=592ms in=242 out=32 $0.00030 stop=stop
+[assayer] gemini-3.7-flash ttft=971ms total=992ms in=242 out=99 $0.00055 stop=stop
+[assayer] gemini-3.8-flash ttft=753ms total=838ms in=242 out=37 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=550ms total=636ms in=243 out=31 $0.00030 stop=stop
+[assayer] gemini-3.7-flash ttft=928ms total=936ms in=243 out=123 $0.00064 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1689ms total=1833ms in=406 out=118 $0.00017 stop=stop
+[assayer] gemini-3.7-flash ttft=814ms total=963ms in=243 out=96 $0.00054 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=647ms total=1494ms in=315 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4181ms total=4478ms in=314 out=71 $0.00012 stop=stop
+[assayer] gemini-3.8-flash ttft=1389ms total=1453ms in=243 out=36 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=584ms total=704ms in=241 out=41 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=770ms total=772ms in=241 out=91 $0.00052 stop=stop
+[assayer] gemini-3.8-flash ttft=634ms total=710ms in=241 out=39 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2858ms total=3188ms in=406 out=138 $0.00018 stop=stop
+[assayer] gemini-3.8-flash ttft=646ms total=760ms in=241 out=40 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=673ms total=694ms in=243 out=39 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=877ms total=1001ms in=243 out=34 $0.00031 stop=stop
+[assayer] gemini-3.8-flash ttft=843ms total=939ms in=243 out=40 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=927ms total=1005ms in=243 out=33 $0.00031 stop=stop
+[assayer] gemini-3.7-flash ttft=634ms total=745ms in=243 out=35 $0.00031 stop=stop
+[assayer] gemini-3.7-flash ttft=677ms total=811ms in=243 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2663ms total=2870ms in=314 out=169 $0.00018 stop=stop
+[assayer] gemini-3.8-flash ttft=606ms total=697ms in=243 out=40 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=598ms total=746ms in=242 out=38 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=829ms total=973ms in=243 out=46 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3014ms total=3188ms in=314 out=99 $0.00013 stop=stop
+[assayer] gemini-3.7-flash ttft=1038ms total=1186ms in=242 out=117 $0.00062 stop=stop
+[assayer] gemini-3.8-flash ttft=629ms total=735ms in=242 out=36 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=1091ms total=1176ms in=242 out=37 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5771ms total=6234ms in=315 out=25 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=991ms total=1165ms in=241 out=103 $0.00057 stop=stop
+[assayer] gemini-3.7-flash ttft=1138ms total=1271ms in=241 out=159 $0.00078 stop=stop
+[assayer] gemini-3.8-flash ttft=834ms total=1036ms in=241 out=41 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4135ms total=4328ms in=407 out=337 $0.00031 stop=stop
+[assayer] gemini-3.7-flash ttft=588ms total=738ms in=243 out=41 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=486ms total=966ms in=315 out=37 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=581ms total=1071ms in=315 out=35 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=1548ms total=1669ms in=241 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=253ms total=770ms in=312 out=37 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1703ms total=1787ms in=243 out=26 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=482ms total=1078ms in=312 out=39 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=683ms total=844ms in=243 out=43 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=795ms total=897ms in=241 out=106 $0.00058 stop=stop
+[assayer] gemini-3.7-flash ttft=1016ms total=1118ms in=241 out=108 $0.00059 stop=stop
+[assayer] gemini-3.8-flash ttft=1736ms total=1845ms in=243 out=44 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5074ms total=5265ms in=315 out=553 $0.00043 stop=stop
+[assayer] gemini-3.8-flash ttft=702ms total=827ms in=241 out=40 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=824ms total=973ms in=243 out=83 $0.00049 stop=stop
+[assayer] gemini-3.8-flash ttft=856ms total=1042ms in=241 out=40 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1083ms total=1169ms in=243 out=134 $0.00068 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1806ms total=2288ms in=314 out=33 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=660ms total=741ms in=243 out=30 $0.00029 stop=stop
+[assayer] gemini-3.7-flash ttft=593ms total=703ms in=243 out=45 $0.00035 stop=stop
+[assayer] gemini-3.7-flash ttft=557ms total=755ms in=243 out=41 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=781ms total=915ms in=243 out=43 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=845ms total=862ms in=243 out=47 $0.00036 stop=stop
+[assayer] gemini-3.7-flash ttft=1002ms total=1109ms in=242 out=86 $0.00050 stop=stop
+[assayer] gemini-3.8-flash ttft=872ms total=1017ms in=243 out=43 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1217ms total=1338ms in=242 out=136 $0.00069 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9895ms total=10084ms in=407 out=268 $0.00027 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4132ms total=4571ms in=314 out=32 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=661ms total=754ms in=242 out=38 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=578ms total=810ms in=242 out=43 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=851ms total=950ms in=242 out=94 $0.00053 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=583ms total=1168ms in=313 out=33 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=531ms total=623ms in=242 out=42 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=693ms total=732ms in=242 out=43 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9934ms total=10099ms in=315 out=319 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1914ms total=2130ms in=407 out=219 $0.00023 stop=stop
+[assayer] gemini-3.7-flash ttft=1009ms total=1097ms in=242 out=123 $0.00064 stop=stop
+[assayer] gemini-3.7-flash ttft=1011ms total=1111ms in=242 out=148 $0.00074 stop=stop
+[assayer] gemini-3.8-flash ttft=3027ms total=3183ms in=242 out=42 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=853ms total=930ms in=242 out=122 $0.00064 stop=stop
+[assayer] gemini-3.7-flash ttft=896ms total=1009ms in=242 out=112 $0.00060 stop=stop
+[assayer] gemini-3.8-flash ttft=794ms total=946ms in=242 out=41 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=811ms total=961ms in=242 out=41 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1954ms total=2294ms in=315 out=114 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3898ms total=4319ms in=313 out=34 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=1147ms total=1298ms in=242 out=38 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=268ms total=668ms in=313 out=35 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1741ms total=1810ms in=243 out=129 $0.00067 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=602ms total=991ms in=313 out=33 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1928ms total=2030ms in=243 out=32 $0.00030 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6081ms total=6119ms in=407 out=281 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4146ms total=4168ms in=315 out=142 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=296ms total=748ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=548ms total=696ms in=242 out=44 $0.00035 stop=stop
+[assayer] gemini-3.7-flash ttft=896ms total=1020ms in=242 out=117 $0.00062 stop=stop
+[assayer] gemini-3.8-flash ttft=3064ms total=3129ms in=242 out=34 $0.00031 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1690ms total=2069ms in=314 out=32 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=619ms total=792ms in=242 out=45 $0.00035 stop=stop
+[assayer] gemini-3.8-flash ttft=846ms total=935ms in=242 out=34 $0.00031 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1719ms total=1931ms in=312 out=200 $0.00020 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=533ms total=846ms in=315 out=35 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=705ms total=729ms in=242 out=39 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=504ms total=1028ms in=315 out=34 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2455ms total=2621ms in=404 out=268 $0.00027 stop=stop
+[assayer] gemini-3.8-flash ttft=836ms total=1066ms in=242 out=46 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=368ms total=799ms in=312 out=36 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=635ms total=791ms in=243 out=34 $0.00031 stop=stop
+[assayer] gemini-3.8-flash ttft=655ms total=813ms in=243 out=37 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=593ms total=672ms in=242 out=45 $0.00035 stop=stop
+[assayer] gemini-3.8-flash ttft=1833ms total=2030ms in=242 out=45 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8419ms total=8621ms in=404 out=213 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9645ms total=9789ms in=312 out=182 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2670ms total=2990ms in=314 out=112 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=11279ms total=11305ms in=406 out=718 $0.00056 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=29077ms total=29256ms in=314 out=445 $0.00036 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=30872ms total=31079ms in=406 out=622 $0.00050 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2299ms total=2482ms in=313 out=178 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=11640ms total=11974ms in=313 out=246 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1571ms total=1801ms in=313 out=137 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3769ms total=3970ms in=313 out=321 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=15282ms total=15455ms in=405 out=1592 $0.00114 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2008ms total=2249ms in=314 out=173 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3405ms total=3617ms in=314 out=257 $0.00024 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1574ms total=1808ms in=315 out=144 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2276ms total=2721ms in=315 out=130 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2414ms total=2618ms in=312 out=178 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=25509ms total=25762ms in=405 out=1877 $0.00133 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=15848ms total=15899ms in=405 out=1523 $0.00109 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=15794ms total=15965ms in=405 out=1442 $0.00104 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6917ms total=7128ms in=406 out=681 $0.00054 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8564ms total=8748ms in=406 out=551 $0.00045 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3571ms total=3804ms in=407 out=394 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=13049ms total=13215ms in=407 out=1347 $0.00098 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10363ms total=10540ms in=404 out=1019 $0.00076 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=283023ms total=283656ms in=312 out=31 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=424ms total=816ms in=314 out=33 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=897ms total=1552ms in=314 out=31 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=450ms total=747ms in=314 out=41 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=498ms total=908ms in=314 out=33 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=677ms total=1088ms in=312 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=525ms total=1236ms in=312 out=40 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=577ms total=1007ms in=313 out=38 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=721ms total=1065ms in=313 out=39 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=446ms total=1060ms in=314 out=39 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=525ms total=1197ms in=314 out=39 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=552ms total=1076ms in=313 out=38 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=553ms total=1085ms in=313 out=42 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=502ms total=1092ms in=312 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=585ms total=1398ms in=312 out=34 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=541ms total=1093ms in=314 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=20567ms total=20908ms in=314 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=735ms total=1056ms in=315 out=34 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=19332ms total=19958ms in=315 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2157ms total=2363ms in=314 out=176 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2432ms total=2631ms in=314 out=170 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4260ms total=4541ms in=314 out=212 $0.00021 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6325ms total=6492ms in=314 out=381 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3670ms total=4025ms in=312 out=274 $0.00025 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4805ms total=4843ms in=312 out=325 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1730ms total=1990ms in=313 out=145 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2771ms total=3064ms in=313 out=283 $0.00026 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1652ms total=1972ms in=314 out=124 $0.00015 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1877ms total=2112ms in=314 out=167 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2338ms total=2597ms in=313 out=176 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6572ms total=6771ms in=313 out=629 $0.00048 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6996ms total=7161ms in=312 out=538 $0.00042 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7224ms total=7449ms in=312 out=661 $0.00050 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2310ms total=2571ms in=314 out=174 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9227ms total=9453ms in=314 out=132 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2509ms total=2648ms in=315 out=271 $0.00025 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5418ms total=5566ms in=406 out=568 $0.00046 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=11949ms total=12122ms in=406 out=1366 $0.00099 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=14349ms total=14557ms in=315 out=518 $0.00041 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=14740ms total=14959ms in=406 out=1223 $0.00090 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=21575ms total=21822ms in=406 out=1977 $0.00139 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8992ms total=9235ms in=404 out=883 $0.00067 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=28714ms total=28946ms in=404 out=2831 $0.00196 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2916ms total=3173ms in=405 out=195 $0.00022 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=n/a total=35889ms in=405 out=4000 $0.00273 stop=length
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3073ms total=3325ms in=406 out=240 $0.00025 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=25165ms total=25341ms in=406 out=2461 $0.00171 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=25122ms total=25303ms in=405 out=2826 $0.00195 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=n/a total=38984ms in=405 out=4000 $0.00273 stop=length
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7493ms total=7724ms in=404 out=612 $0.00049 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10535ms total=10542ms in=404 out=804 $0.00062 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=18419ms total=18572ms in=406 out=1869 $0.00132 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=36835ms total=36848ms in=406 out=3279 $0.00225 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=25713ms total=25967ms in=407 out=1178 $0.00087 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=58161ms total=58316ms in=407 out=1959 $0.00138 stop=stop
+| # | anchors | A / B | expected | gemini37 | gemini38 | deepseek_max | deepseek_low | deepseek_none |
+|---|---|---|---|---|---|---|---|---|
+| 1 | ocean+night | moon / moon | 100 identical | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) |
+| 2 | ocean+night | tide / tides | ~100 inflection | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) | 100 (100/100) |
+| 3 | mirror+river | reflection / reflect | ~95 | 98 (98/98) | 99 (100/98) | 90 (90/90) | 90 (90/90) | 90 (85/95) |
+| 4 | coffee+morning | cup / mug | ~90 synonyms | 93 (95/90) | 91 (90/92) | 90 (90/90) | 93 (90/95) | 83 (85/80) |
+| 5 | fire+ice | melt / thaw | ~90 synonyms | 95 (95/95) | 95 (94/95) | 90 (90/90) | 85 (85/85) | 83 (75/90) |
+| 6 | garden+prison | wall / fence | ~80 near | 89 (88/90) | 88 (88/88) | 74 (65/82) | 73 (60/85) | 70 (70/70) |
+| 7 | bread+knife | butter / spread | ~75 borderline meld | 80 (82/78) | 79 (80/78) | 68 (65/70) | 80 (80/80) | 63 (60/65) |
+| 8 | king+castle | throne / crown | ~70 related | 83 (80/85) | 84 (85/82) | 75 (80/70) | 75 (70/80) | 68 (70/65) |
+| 9 | ocean+night | tide / moon | ~55 related | 70 (70/70) | 72 (72/72) | 58 (55/60) | 60 (55/65) | 45 (35/55) |
+| 10 | coffee+morning | alarm / awake | ~60 related | 72 (78/65) | 69 (72/65) | 58 (60/55) | 60 (65/55) | 50 (65/35) |
+| 11 | fire+ice | water / steam | ~60 related | 78 (78/78) | 76 (72/80) | ERR | ERR | 70 (65/75) |
+| 12 | doctor+silence | waiting / hospital | ~45 | 49 (45/52) | 52 (58/45) | 48 (30/65) | 43 (40/45) | 40 (35/45) |
+| 13 | doctor+silence | oath / secret | ~50 | 72 (72/72) | 68 (72/64) | 58 (55/60) | 59 (50/68) | 50 (45/55) |
+| 14 | letter+wound | open / seal | ~35 antonym-ish | 52 (48/55) | 58 (70/45) | 50 (50/50) | 58 (60/55) | 25 (20/30) |
+| 15 | train+dream | journey / sleep | ~30 | 20 (25/15) | 23 (25/20) | ERR | 15 (15/15) | 23 (20/25) |
+| 16 | king+castle | moat / queen | ~30 | 23 (25/20) | 23 (25/20) | 23 (30/15) | 20 (30/10) | 23 (20/25) |
+| 17 | train+dream | track / drift | ~25 | 21 (24/18) | 19 (15/22) | ERR | 45 (45/45) | 40 (35/45) |
+| 18 | letter+wound | paper / scar | ~15 miss | 8 (10/5) | 14 (12/15) | 20 (20/20) | 13 (20/5) | 30 (45/15) |
+| 19 | garden+prison | weed / cell | ~15 miss | 10 (15/5) | 10 (10/10) | 18 (20/15) | 15 (15/15) | 15 (20/10) |
+| 20 | mirror+river | glass / bank | ~10 miss | 10 (10/10) | 8 (5/10) | 13 (15/10) | 13 (10/15) | 25 (15/35) |
+
+cells: reconciled closeness (forward/reverse); † = served from cache
+
+## Reasoning (forward ordering)
+
+**1. ocean + night: moon / moon**
+- gemini37: Both players provided the exact same bridging word.
+- gemini38: Both players selected the exact same word.
+- deepseek_max: Both players chose the exact same word, so they melded perfectly.
+- deepseek_low: Both players used the identical word, indicating a perfect meld.
+- deepseek_none: Both players chose the identical bridging word.
+
+**2. ocean + night: tide / tides**
+- gemini37: The two bridging words are identical except for a simple plural inflection.
+- gemini38: The two bridging words are simple singular and plural inflections of the exact same word.
+- deepseek_max: Tide and tides are the same word, differing only by number; a plain inflection.
+- deepseek_low: Tide and tides are the same word, differing only in number, so the players melded perfectly.
+- deepseek_none: Both used the same word, differing only by plural inflection, so they clearly melded.
+
+**3. mirror + river: reflection / reflect**
+- gemini37: These are different parts of speech of the exact same underlying concept.
+- gemini38: "Reflection" and "reflect" are mere grammatical variations of the exact same concept.
+- deepseek_max: Both express the same mirroring image on water; one is the noun form, the other the verb.
+- deepseek_low: Both capture the same concept of reflecting, as in a mirror or water, differing only in grammatical form.
+- deepseek_none: Same core idea of reflecting, just different inflections.
+
+**4. coffee + morning: cup / mug**
+- gemini37: Cup and mug refer to essentially the same type of drinking vessel commonly used for coffee.
+- gemini38: A mug is a specific type of cup typically used for coffee, representing virtually the same concept.
+- deepseek_max: Both chose a common coffee vessel for the morning ritual; cup and mug are near-synonyms.
+- deepseek_low: Both refer to the same coffee-drinking vessel, nearly identical in meaning here.
+- deepseek_none: Cup and mug are near-synonyms for a coffee container, clearly the same idea.
+
+**5. fire + ice: melt / thaw**
+- gemini37: "Melt" and "thaw" are direct synonyms representing the transition of ice to liquid via heat.
+- gemini38: Melt and thaw are near-perfect synonyms representing the process of ice turning to liquid via heat.
+- deepseek_max: Both describe ice warming and losing its frozen state; near-synonyms in context, though thaw emphasizes gradual warming.
+- deepseek_low: Both words describe ice turning to water via heat; they are near-synonyms, so the meld is strong.
+- deepseek_none: Both describe the transition from ice to water, but melt is broader while thaw specifically refers to ice warming.
+
+**6. garden + prison: wall / fence**
+- gemini37: Wall and fence are both physical barriers used to enclose spaces, representing the exact same conceptual bridge.
+- gemini38: Both words represent physical barriers used to enclose boundaries, making them near-synonyms in this context.
+- deepseek_max: Both are enclosing barriers around a garden or prison, but a wall is solid while a fence is lighter, so related yet distinct.
+- deepseek_low: Both are boundary structures, but wall is solid and prison-like, fence is open and garden-like; related yet distinct.
+- deepseek_none: Both are physical barriers around a space, though a wall is more solid than a fence.
+
+**7. bread + knife: butter / spread**
+- gemini37: Butter is the archetypal spread applied to bread with a knife, linking them closely in the same functional context.
+- gemini38: Butter is the quintessential spread applied to bread with a knife, making them closely linked as a noun and its direct category or action.
+- deepseek_max: Butter is a specific kind of spread; both share the bread-and-knife context, but 'spread' is broader.
+- deepseek_low: Both refer to something put on bread with a knife; butter is a type of spread, so they share the same core idea.
+- deepseek_none: Butter is a specific spread, so they're related but not the same idea.
+
+**8. king + castle: throne / crown**
+- gemini37: Throne and crown are both classic royal symbols associated with monarchs and their seats of power.
+- gemini38: Throne and crown are both iconic physical regalia symbolizing royal power and the monarchy.
+- deepseek_max: Both are royal objects and symbols tied to a king and castle, distinct items but the same broad idea.
+- deepseek_low: Throne and crown are both royal symbols of kingship, but they denote distinct objects.
+- deepseek_none: Both are royal symbols and parts of a monarch's regalia, but distinct objects.
+
+**9. ocean + night: tide / moon**
+- gemini37: The moon directly governs the tide, making these closely related physical phenomena that both naturally connect the ocean to the night.
+- gemini38: Tide and moon are intimately connected concepts through lunar gravity, representing closely related associations to the night ocean.
+- deepseek_max: Tide is an ocean effect caused by the moon; the moon is a night sky body. Connected, yet distinct ideas.
+- deepseek_low: Both evoke ocean and night, but moon is the cause, tide the effect, making them related yet distinct ideas.
+- deepseek_none: Tide and moon are distinct natural phenomena linked to ocean and night, but only conceptually related, not the same idea.
+
+**10. coffee + morning: alarm / awake**
+- gemini37: Both words center directly on the act of waking up in the morning.
+- gemini38: Both words revolve around the process of waking up at the start of the day, representing the cause and the resulting state.
+- deepseek_max: Both evoke the morning waking ritual—alarm triggers waking, awake is the result—but one is a cause, the other a state.
+- deepseek_low: Both relate to waking up, but alarm is the device and awake is the state, so they are related but distinct.
+- deepseek_none: Alarm and awake both relate to waking up, but one is a device, the other a state.
+
+**11. fire + ice: water / steam**
+- gemini37: Water and steam are distinct physical states of the exact same substance, representing very closely related ideas.
+- gemini38: Both players chose physical states of H2O, with steam directly produced by heating water or ice.
+- deepseek_max: {:http, 504, "{\"error\":{\"message\":\"Gateway timeout\",\"param\":null,\"code\":\"GATEWAY_TIMEOUT\",\"type\":\"error\"},\"request_id\":\"chatcmpl-cf6860aa59a44a29a67ebad7653d8f60\"}"}
+- deepseek_low: {:http, 504, "{\"error\":{\"message\":\"Gateway timeout\",\"param\":null,\"code\":\"GATEWAY_TIMEOUT\",\"type\":\"error\"},\"request_id\":\"chatcmpl-5d91daa870a94ef6bd871a053b8d4578\"}"}
+- deepseek_none: Water and steam are the same substance in different states, closely linked but not identical.
+
+**12. doctor + silence: waiting / hospital**
+- gemini37: Hospital and waiting are strongly associated in a medical context, but they represent distinct concepts.
+- gemini38: Waiting and hospital are closely linked concepts in medical care, specifically evoking a hospital waiting room.
+- deepseek_max: Waiting is an activity/state; hospital is a place, related only through waiting rooms.
+- deepseek_low: Both relate to the doctor context, but one is an action, the other a place. Distinct ideas.
+- deepseek_none: Waiting and hospital are both associated with doctors but represent different facets: time versus place.
+
+**13. doctor + silence: oath / secret**
+- gemini37: Both words strongly evoke doctor-patient confidentiality, though an oath is a formal promise while a secret is the hidden information itself.
+- gemini38: Both words tap into the concept of medical confidentiality and doctor-patient privilege, representing closely aligned aspects of sworn discretion.
+- deepseek_max: Both touch doctor-patient confidentiality and keeping silent, but an oath is a promise while a secret is the hidden thing itself.
+- deepseek_low: Both relate to confidentiality, but oath is a promise while secret is the hidden information, so they are related but distinct.
+- deepseek_none: Both relate to confidentiality, but 'oath' is a promise while 'secret' is information kept hidden; related but distinct ideas.
+
+**14. letter + wound: open / seal**
+- gemini37: The players targeted the exact same conceptual axis relating to letters and wounds, but chose direct antonyms for their bridge.
+- gemini38: Open and seal are direct antonyms acting on the exact same domain, representing opposite states of the anchors.
+- deepseek_max: Open and seal are opposite actions, yet each naturally applies to both a letter and a wound; related but not melded.
+- deepseek_low: Both are common actions performed on letters and wounds, but they are opposites, making them related yet distinct.
+- deepseek_none: Open and seal are opposites (as verbs for wounds/letters), but not the same idea in bridging meaning.
+
+**15. train + dream: journey / sleep**
+- gemini37: Journey connects to the waking travel sense of train, whereas sleep relates directly to dreaming, making these two distinct concepts.
+- gemini38: Journey connects to the travel aspect of trains, while sleep connects directly to dreams, representing distinct semantic directions.
+- deepseek_max: {:max_tokens, "hit the 4000-token output cap (stop_reason=length); raise max_tokens or lower effort"}
+- deepseek_low: Journey and sleep are distinct concepts with little semantic overlap; they only loosely connect via the anchors.
+- deepseek_none: Journey and sleep are distinct concepts, only loosely connected through the anchors, so the meld is weak.
+
+**16. king + castle: moat / queen**
+- gemini37: Both words fit the medieval royalty and fortress theme, but one is a defensive structure while the other is a monarch.
+- gemini38: One player focused on medieval architectural defenses while the other chose royalty, representing very different categories.
+- deepseek_max: Both evoke the royal-castle setting, but moat is a physical defensive feature while queen is a person or title, so they share only context.
+- deepseek_low: Moat is a castle structure, queen is royalty; distinct ideas with only the anchors connecting them.
+- deepseek_none: Moat is a castle feature; queen is royalty related to king. Both connect to anchors but share little meaning.
+
+**17. train + dream: track / drift**
+- gemini37: Track suggests a fixed, guided path while drift suggests unguided, wandering movement, representing very different concepts.
+- gemini38: Track suggests rigid direction or train rails, whereas drift implies aimless, floating movement, representing almost opposite concepts.
+- deepseek_max: {:max_tokens, "hit the 4000-token output cap (stop_reason=length); raise max_tokens or lower effort"}
+- deepseek_low: Both evoke paths or movement, but 'track' is literal and 'drift' suggests aimless wandering; distinct ideas.
+- deepseek_none: Track and drift both involve movement but diverge: track implies a set path, drift implies aimless deviation.
+
+**18. letter + wound: paper / scar**
+- gemini37: Paper and scar represent completely different concepts with essentially no shared meaning.
+- gemini38: Paper and scar represent completely different concepts, sharing little meaning aside from tangential associations to the anchors.
+- deepseek_max: Paper relates to letter as material, scar to wound as remnant; they share no common idea.
+- deepseek_low: Paper and scar are both associated with cuts, but they are otherwise distinct objects with little semantic overlap.
+- deepseek_none: Both relate to physical marks, but paper suggests a cut while scar implies healed tissue, distinct ideas.
+
+**19. garden + prison: weed / cell**
+- gemini37: Weed relates to plants or drugs while cell relates to prison rooms or biological units, sharing very little direct semantic overlap.
+- gemini38: One player focused on botany while the other focused on incarceration, leading to distinct concepts sharing little direct semantic overlap.
+- deepseek_max: Weed is a garden plant; cell is a prison room. They don't share core meaning, so the bridges diverged.
+- deepseek_low: Weed connects to garden, cell to prison; they share no common idea beyond the anchors.
+- deepseek_none: Weed and cell are distinct concepts, sharing little beyond weak anchor associations, so they diverge significantly.
+
+**20. mirror + river: glass / bank**
+- gemini37: Glass and bank connect to the anchors in completely different ways (material/surface versus landscape feature) and share little meaning.
+- gemini38: Glass refers to the reflective material of a mirror, while bank refers to the physical edge of a river, representing completely distinct concepts.
+- deepseek_max: Glass leans toward mirror, bank toward river; they occupy different semantic paths with little overlap.
+- deepseek_low: Glass and bank share little beyond vague physical associations with the anchors; they are different ideas.
+- deepseek_none: Glass reflects like a mirror; bank is a river's edge. They share no direct conceptual overlap.
+
+## Ordering agreement (|forward - reverse| per item)
+
+| candidate | mean | max | within 5 | melded (≥75) | errors |
+|---|---|---|---|---|---|
+| gemini37 | 4.0 | 13 | 70.0% | 9 | 0 |
+| gemini38 | 4.8 | 25 | 70.0% | 9 | 0 |
+| deepseek_max | 6.3 | 35 | 76.5% | 6 | 3 |
+| deepseek_low | 6.7 | 25 | 63.2% | 7 | 1 |
+| deepseek_none | 10.5 | 30 | 40.0% | 5 | 0 |
+
+== spend this run: $0.07847 over 198 calls ==
+   accounts/fireworks/models/deepseek-v4-flash-0731  118 calls  $0.04656
+   gemini-3.7-flash           40 calls  $0.01885
+   gemini-3.8-flash           40 calls  $0.01305

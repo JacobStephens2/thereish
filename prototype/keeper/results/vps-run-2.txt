@@ -1,0 +1,575 @@
+-rw------- 1 jacob jacob 478 Sep  2 23:42 /home/jacob/keeper.env
+bench vps-2: n=20, hedge=2, repeats=5, candidates=[:gemini37, :gemini38, :deepseek_max, :deepseek_low, :deepseek_none]; cache OFF, streaming, retries OFF
+
+[assayer] gemini-3.8-flash ttft=919ms total=1063ms in=241 out=38 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=685ms total=1259ms in=314 out=37 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=669ms total=669ms in=241 out=39 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1684ms total=1854ms in=241 out=121 $0.00063 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=819ms total=890ms in=314 out=36 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=566ms total=718ms in=241 out=45 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=285ms total=882ms in=314 out=37 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=632ms total=757ms in=241 out=38 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=1530ms total=1558ms in=241 out=146 $0.00073 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=254ms total=772ms in=314 out=37 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=557ms total=703ms in=241 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4171ms total=4324ms in=314 out=322 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4290ms total=4479ms in=406 out=313 $0.00030 stop=stop
+[assayer] gemini-3.8-flash ttft=656ms total=787ms in=241 out=39 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1145ms total=1337ms in=241 out=121 $0.00063 stop=stop
+[assayer] gemini-3.8-flash ttft=718ms total=840ms in=241 out=38 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=1101ms total=1220ms in=241 out=121 $0.00063 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1674ms total=2515ms in=314 out=41 $0.00010 stop=stop
+[assayer] gemini-3.8-flash ttft=709ms total=775ms in=241 out=37 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=560ms total=568ms in=241 out=39 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=479ms total=644ms in=241 out=41 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=829ms total=1283ms in=314 out=34 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3058ms total=3328ms in=314 out=153 $0.00017 stop=stop
+[assayer] gemini-3.7-flash ttft=1624ms total=1845ms in=241 out=156 $0.00077 stop=stop
+[assayer] gemini-3.8-flash ttft=592ms total=696ms in=241 out=41 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=804ms total=959ms in=241 out=41 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1380ms total=1564ms in=241 out=147 $0.00073 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1125ms total=1813ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=937ms total=1088ms in=241 out=114 $0.00061 stop=stop
+[assayer] gemini-3.8-flash ttft=1573ms total=1678ms in=241 out=41 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=612ms total=764ms in=241 out=41 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1674ms total=1705ms in=241 out=225 $0.00102 stop=stop
+[assayer] gemini-3.8-flash ttft=475ms total=591ms in=241 out=36 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=577ms total=673ms in=241 out=36 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=251ms total=3571ms in=314 out=35 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1056ms total=1268ms in=241 out=103 $0.00057 stop=stop
+[assayer] gemini-3.8-flash ttft=594ms total=740ms in=241 out=39 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=539ms total=614ms in=241 out=36 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=612ms total=1523ms in=314 out=45 $0.00010 stop=stop
+[assayer] gemini-3.7-flash ttft=1234ms total=1340ms in=241 out=113 $0.00060 stop=stop
+[assayer] gemini-3.8-flash ttft=544ms total=747ms in=241 out=38 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10619ms total=10836ms in=406 out=516 $0.00043 stop=stop
+[assayer] gemini-3.8-flash ttft=635ms total=639ms in=241 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=507ms total=1200ms in=314 out=34 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1177ms total=1443ms in=241 out=105 $0.00057 stop=stop
+[assayer] gemini-3.8-flash ttft=766ms total=879ms in=241 out=38 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=429ms total=888ms in=314 out=40 $0.00010 stop=stop
+[assayer] gemini-3.7-flash ttft=620ms total=839ms in=241 out=42 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=612ms total=632ms in=241 out=40 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=491ms total=632ms in=241 out=41 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=327ms total=1109ms in=314 out=35 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=498ms total=641ms in=241 out=40 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=609ms total=612ms in=241 out=43 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1388ms total=1414ms in=241 out=89 $0.00051 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=261ms total=1030ms in=314 out=40 $0.00010 stop=stop
+[assayer] gemini-3.8-flash ttft=539ms total=681ms in=241 out=40 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3887ms total=4133ms in=406 out=314 $0.00030 stop=stop
+[assayer] gemini-3.7-flash ttft=1051ms total=1083ms in=241 out=111 $0.00060 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=359ms total=979ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=563ms total=620ms in=241 out=38 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=582ms total=591ms in=241 out=38 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=12595ms total=12750ms in=314 out=783 $0.00059 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=638ms total=1182ms in=314 out=32 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=625ms total=631ms in=241 out=38 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=1411ms total=1571ms in=241 out=154 $0.00076 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=271ms total=699ms in=314 out=33 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=643ms total=786ms in=241 out=39 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=841ms total=920ms in=241 out=41 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=650ms total=1121ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1397ms total=1595ms in=241 out=143 $0.00072 stop=stop
+[assayer] gemini-3.8-flash ttft=539ms total=681ms in=241 out=39 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2681ms total=2994ms in=314 out=253 $0.00024 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=263ms total=687ms in=314 out=32 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1234ms total=1255ms in=241 out=124 $0.00065 stop=stop
+[assayer] gemini-3.8-flash ttft=593ms total=702ms in=241 out=36 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=522ms total=968ms in=314 out=42 $0.00010 stop=stop
+[assayer] gemini-3.8-flash ttft=567ms total=695ms in=241 out=41 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=378ms total=1111ms in=314 out=36 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=774ms total=887ms in=241 out=39 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=563ms total=589ms in=241 out=39 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=236ms total=934ms in=314 out=33 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2996ms total=3182ms in=314 out=207 $0.00021 stop=stop
+[assayer] gemini-3.8-flash ttft=611ms total=771ms in=241 out=43 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=226ms total=622ms in=314 out=34 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=3293ms total=3489ms in=241 out=149 $0.00074 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=242ms total=750ms in=314 out=35 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=904ms total=1054ms in=241 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=318ms total=923ms in=314 out=37 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=553ms total=705ms in=241 out=38 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=1119ms total=1347ms in=241 out=114 $0.00061 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2196ms total=2451ms in=314 out=197 $0.00020 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9442ms total=9622ms in=406 out=810 $0.00062 stop=stop
+[assayer] gemini-3.8-flash ttft=537ms total=645ms in=241 out=37 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=436ms total=956ms in=314 out=35 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1043ms total=1193ms in=241 out=102 $0.00056 stop=stop
+[assayer] gemini-3.8-flash ttft=681ms total=718ms in=241 out=44 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=307ms total=1036ms in=314 out=42 $0.00010 stop=stop
+[assayer] gemini-3.8-flash ttft=624ms total=670ms in=241 out=40 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1384ms total=1448ms in=241 out=248 $0.00111 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=319ms total=846ms in=314 out=32 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3015ms total=3271ms in=314 out=236 $0.00022 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=243ms total=809ms in=314 out=36 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=938ms total=1180ms in=241 out=134 $0.00068 stop=stop
+[assayer] gemini-3.8-flash ttft=1845ms total=1902ms in=241 out=30 $0.00029 stop=stop
+[assayer] gemini-3.8-flash ttft=603ms total=604ms in=241 out=21 $0.00026 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=253ms total=1032ms in=314 out=37 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=567ms total=613ms in=241 out=21 $0.00026 stop=stop
+[assayer] gemini-3.7-flash ttft=1257ms total=1385ms in=241 out=134 $0.00068 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=281ms total=863ms in=314 out=39 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=545ms total=661ms in=241 out=29 $0.00029 stop=stop
+[assayer] gemini-3.7-flash ttft=851ms total=1001ms in=241 out=43 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=386ms total=865ms in=314 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=302ms total=974ms in=314 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3590ms total=3895ms in=314 out=315 $0.00028 stop=stop
+[assayer] gemini-3.7-flash ttft=1424ms total=1475ms in=241 out=122 $0.00064 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=249ms total=830ms in=314 out=36 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1199ms total=1362ms in=241 out=115 $0.00061 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=296ms total=980ms in=314 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=369ms total=821ms in=314 out=39 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1033ms total=1112ms in=241 out=105 $0.00057 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=222ms total=820ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=4930ms total=5006ms in=241 out=29 $0.00029 stop=stop
+[assayer] gemini-3.7-flash ttft=1001ms total=1109ms in=241 out=111 $0.00060 stop=stop
+[assayer] gemini-3.8-flash ttft=493ms total=593ms in=243 out=38 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=263ms total=700ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=525ms total=527ms in=243 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4695ms total=4892ms in=314 out=357 $0.00030 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=277ms total=851ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1115ms total=1284ms in=241 out=107 $0.00058 stop=stop
+[assayer] gemini-3.8-flash ttft=686ms total=813ms in=243 out=43 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=12866ms total=13070ms in=406 out=1110 $0.00082 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=279ms total=1083ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=718ms total=896ms in=243 out=43 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1243ms total=1435ms in=241 out=127 $0.00066 stop=stop
+[assayer] gemini-3.8-flash ttft=529ms total=656ms in=243 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=246ms total=917ms in=314 out=36 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=570ms total=692ms in=241 out=36 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=932ms total=1101ms in=241 out=86 $0.00050 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=224ms total=796ms in=314 out=46 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3108ms total=3287ms in=314 out=299 $0.00027 stop=stop
+[assayer] gemini-3.8-flash ttft=661ms total=667ms in=241 out=36 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=555ms total=980ms in=314 out=23 $0.00008 stop=stop
+[assayer] gemini-3.8-flash ttft=573ms total=636ms in=241 out=45 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=250ms total=606ms in=314 out=29 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1597ms total=1696ms in=241 out=150 $0.00074 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=220ms total=585ms in=314 out=28 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=253ms total=472ms in=314 out=24 $0.00008 stop=stop
+[assayer] gemini-3.8-flash ttft=1730ms total=1848ms in=241 out=39 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1074ms total=1359ms in=241 out=127 $0.00066 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=209ms total=639ms in=314 out=23 $0.00008 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5254ms total=5427ms in=406 out=491 $0.00041 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3214ms total=3436ms in=314 out=323 $0.00028 stop=stop
+[assayer] gemini-3.7-flash ttft=1104ms total=1170ms in=241 out=103 $0.00057 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1467ms total=1714ms in=313 out=36 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=1785ms total=1985ms in=241 out=43 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1081ms total=1289ms in=241 out=119 $0.00063 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=254ms total=817ms in=313 out=36 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=785ms total=877ms in=242 out=90 $0.00052 stop=stop
+[assayer] gemini-3.8-flash ttft=572ms total=575ms in=242 out=33 $0.00031 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=236ms total=826ms in=313 out=39 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2620ms total=2783ms in=314 out=232 $0.00022 stop=stop
+[assayer] gemini-3.7-flash ttft=1419ms total=1465ms in=241 out=121 $0.00063 stop=stop
+[assayer] gemini-3.8-flash ttft=558ms total=562ms in=242 out=40 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=262ms total=810ms in=313 out=43 $0.00010 stop=stop
+[assayer] gemini-3.8-flash ttft=467ms total=582ms in=242 out=40 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=673ms total=732ms in=242 out=34 $0.00031 stop=stop
+[assayer] gemini-3.7-flash ttft=1262ms total=1398ms in=241 out=129 $0.00066 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1764ms total=1931ms in=314 out=168 $0.00018 stop=stop
+[assayer] gemini-3.8-flash ttft=546ms total=597ms in=241 out=29 $0.00029 stop=stop
+[assayer] gemini-3.8-flash ttft=558ms total=618ms in=241 out=21 $0.00026 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=503ms total=1512ms in=313 out=31 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=596ms total=669ms in=241 out=28 $0.00029 stop=stop
+[assayer] gemini-3.7-flash ttft=1062ms total=1270ms in=241 out=109 $0.00059 stop=stop
+[assayer] gemini-3.8-flash ttft=811ms total=871ms in=241 out=101 $0.00056 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=277ms total=877ms in=314 out=39 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=506ms total=579ms in=242 out=32 $0.00030 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1627ms total=1875ms in=314 out=147 $0.00017 stop=stop
+[assayer] gemini-3.8-flash ttft=631ms total=776ms in=242 out=36 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=218ms total=788ms in=314 out=32 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=987ms total=1132ms in=241 out=79 $0.00048 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=233ms total=667ms in=314 out=36 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=685ms total=816ms in=243 out=38 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=810ms total=940ms in=243 out=34 $0.00031 stop=stop
+[assayer] gemini-3.8-flash ttft=582ms total=588ms in=241 out=34 $0.00031 stop=stop
+[assayer] gemini-3.7-flash ttft=1246ms total=1370ms in=241 out=132 $0.00068 stop=stop
+[assayer] gemini-3.8-flash ttft=685ms total=686ms in=241 out=33 $0.00030 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=260ms total=1101ms in=314 out=38 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=571ms total=572ms in=243 out=37 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=604ms total=610ms in=243 out=36 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=218ms total=918ms in=314 out=39 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1266ms total=1404ms in=241 out=135 $0.00069 stop=stop
+[assayer] gemini-3.8-flash ttft=760ms total=860ms in=243 out=39 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=261ms total=838ms in=312 out=35 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=1018ms total=1059ms in=241 out=92 $0.00053 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=235ms total=1058ms in=312 out=43 $0.00010 stop=stop
+[assayer] gemini-3.8-flash ttft=2265ms total=2381ms in=243 out=35 $0.00031 stop=stop
+[assayer] gemini-3.7-flash ttft=666ms total=705ms in=241 out=22 $0.00026 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4788ms total=4992ms in=314 out=505 $0.00040 stop=stop
+[assayer] gemini-3.8-flash ttft=664ms total=674ms in=242 out=35 $0.00031 stop=stop
+[assayer] gemini-3.7-flash ttft=565ms total=620ms in=241 out=29 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=230ms total=726ms in=312 out=35 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=1379ms total=1488ms in=242 out=40 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=267ms total=855ms in=312 out=38 $0.00009 stop=stop
+[assayer] gemini-3.7-flash ttft=973ms total=1010ms in=241 out=29 $0.00029 stop=stop
+[assayer] gemini-3.8-flash ttft=494ms total=497ms in=241 out=34 $0.00031 stop=stop
+[assayer] gemini-3.8-flash ttft=519ms total=610ms in=241 out=40 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=212ms total=769ms in=312 out=38 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=652ms total=673ms in=243 out=43 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=619ms total=728ms in=243 out=44 $0.00035 stop=stop
+[assayer] gemini-3.7-flash ttft=1063ms total=1138ms in=241 out=29 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2849ms total=3006ms in=314 out=234 $0.00022 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=319ms total=1027ms in=314 out=31 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=359ms total=1222ms in=314 out=30 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=554ms total=756ms in=241 out=41 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=796ms total=924ms in=241 out=40 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1253ms total=1443ms in=243 out=43 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=524ms total=833ms in=314 out=25 $0.00009 stop=stop
+[assayer] gemini-3.8-flash ttft=543ms total=661ms in=243 out=39 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=589ms total=754ms in=243 out=41 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=570ms total=686ms in=243 out=42 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2171ms total=2307ms in=314 out=215 $0.00021 stop=stop
+[assayer] gemini-3.7-flash ttft=1246ms total=1456ms in=243 out=139 $0.00070 stop=stop
+[assayer] gemini-3.8-flash ttft=2196ms total=2350ms in=243 out=46 $0.00035 stop=stop
+[assayer] gemini-3.7-flash ttft=981ms total=1176ms in=243 out=31 $0.00030 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2880ms total=3528ms in=314 out=31 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1605ms total=1797ms in=314 out=133 $0.00016 stop=stop
+[assayer] gemini-3.8-flash ttft=534ms total=634ms in=242 out=41 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=589ms total=741ms in=242 out=36 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=581ms total=701ms in=243 out=30 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=360ms total=974ms in=315 out=46 $0.00010 stop=stop
+[assayer] gemini-3.8-flash ttft=604ms total=630ms in=242 out=37 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=650ms total=817ms in=243 out=37 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2194ms total=2360ms in=314 out=194 $0.00020 stop=stop
+[assayer] gemini-3.7-flash ttft=1238ms total=1318ms in=241 out=123 $0.00064 stop=stop
+[assayer] gemini-3.8-flash ttft=2370ms total=2503ms in=242 out=40 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=653ms total=738ms in=242 out=40 $0.00033 stop=stop
+[assayer] gemini-3.8-flash ttft=834ms total=970ms in=242 out=39 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=1483ms total=1548ms in=241 out=159 $0.00078 stop=stop
+[assayer] gemini-3.8-flash ttft=507ms total=639ms in=242 out=42 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=764ms total=946ms in=241 out=41 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2976ms total=3256ms in=314 out=264 $0.00024 stop=stop
+[assayer] gemini-3.7-flash ttft=1132ms total=1333ms in=241 out=126 $0.00065 stop=stop
+[assayer] gemini-3.8-flash ttft=2454ms total=2617ms in=242 out=45 $0.00035 stop=stop
+[assayer] gemini-3.8-flash ttft=666ms total=717ms in=242 out=42 $0.00034 stop=stop
+[assayer] gemini-3.8-flash ttft=654ms total=753ms in=242 out=42 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1147ms total=1212ms in=241 out=153 $0.00075 stop=stop
+[assayer] gemini-3.8-flash ttft=497ms total=575ms in=243 out=37 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=553ms total=695ms in=243 out=38 $0.00032 stop=stop
+[assayer] gemini-3.8-flash ttft=570ms total=597ms in=242 out=37 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2819ms total=3041ms in=314 out=253 $0.00024 stop=stop
+[assayer] gemini-3.8-flash ttft=858ms total=984ms in=242 out=154 $0.00076 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=27955ms total=28105ms in=406 out=2921 $0.00202 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1367ms total=1614ms in=314 out=123 $0.00015 stop=stop
+[assayer] gemini-3.7-flash ttft=4540ms total=4652ms in=242 out=109 $0.00059 stop=stop
+[assayer] gemini-3.7-flash ttft=650ms total=804ms in=242 out=41 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1336ms total=1471ms in=242 out=92 $0.00053 stop=stop
+[assayer] gemini-3.7-flash ttft=1265ms total=1376ms in=242 out=113 $0.00061 stop=stop
+[assayer] gemini-3.7-flash ttft=1465ms total=1507ms in=242 out=124 $0.00065 stop=stop
+[assayer] gemini-3.7-flash ttft=761ms total=813ms in=241 out=29 $0.00029 stop=stop
+[assayer] gemini-3.7-flash ttft=845ms total=962ms in=241 out=63 $0.00042 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8476ms total=8754ms in=314 out=415 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=884ms total=1000ms in=241 out=96 $0.00054 stop=stop
+[assayer] gemini-3.7-flash ttft=2435ms total=2537ms in=241 out=62 $0.00041 stop=stop
+[assayer] gemini-3.7-flash ttft=855ms total=935ms in=242 out=39 $0.00033 stop=stop
+[assayer] gemini-3.7-flash ttft=998ms total=1058ms in=242 out=94 $0.00053 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2924ms total=3122ms in=314 out=309 $0.00027 stop=stop
+[assayer] gemini-3.7-flash ttft=567ms total=672ms in=243 out=25 $0.00028 stop=stop
+[assayer] gemini-3.7-flash ttft=878ms total=1008ms in=243 out=37 $0.00032 stop=stop
+[assayer] gemini-3.7-flash ttft=1046ms total=1115ms in=241 out=108 $0.00059 stop=stop
+[assayer] gemini-3.7-flash ttft=1245ms total=1369ms in=241 out=107 $0.00058 stop=stop
+[assayer] gemini-3.7-flash ttft=676ms total=842ms in=243 out=35 $0.00031 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3504ms total=3812ms in=314 out=296 $0.00026 stop=stop
+[assayer] gemini-3.7-flash ttft=3883ms total=4027ms in=243 out=37 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2663ms total=2856ms in=314 out=283 $0.00026 stop=stop
+[assayer] gemini-3.7-flash ttft=785ms total=937ms in=243 out=41 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=975ms total=1181ms in=243 out=106 $0.00058 stop=stop
+[assayer] gemini-3.7-flash ttft=1065ms total=1286ms in=242 out=92 $0.00053 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1661ms total=1975ms in=314 out=162 $0.00018 stop=stop
+[assayer] gemini-3.7-flash ttft=2942ms total=2975ms in=242 out=101 $0.00056 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=23991ms total=24187ms in=406 out=1751 $0.00124 stop=stop
+[assayer] gemini-3.7-flash ttft=1284ms total=1475ms in=241 out=111 $0.00060 stop=stop
+[assayer] gemini-3.7-flash ttft=1378ms total=1498ms in=241 out=105 $0.00057 stop=stop
+[assayer] gemini-3.7-flash ttft=719ms total=851ms in=243 out=29 $0.00029 stop=stop
+[assayer] gemini-3.7-flash ttft=772ms total=1039ms in=243 out=44 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2193ms total=2383ms in=406 out=208 $0.00023 stop=stop
+[assayer] gemini-3.7-flash ttft=717ms total=888ms in=241 out=39 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5089ms total=5257ms in=314 out=518 $0.00041 stop=stop
+[assayer] gemini-3.7-flash ttft=1414ms total=1540ms in=241 out=125 $0.00065 stop=stop
+[assayer] gemini-3.7-flash ttft=993ms total=1226ms in=243 out=144 $0.00072 stop=stop
+[assayer] gemini-3.7-flash ttft=1668ms total=1802ms in=243 out=114 $0.00061 stop=stop
+[assayer] gemini-3.7-flash ttft=676ms total=727ms in=243 out=48 $0.00036 stop=stop
+[assayer] gemini-3.7-flash ttft=616ms total=878ms in=243 out=44 $0.00035 stop=stop
+[assayer] gemini-3.7-flash ttft=591ms total=711ms in=242 out=41 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1084ms total=1168ms in=242 out=143 $0.00072 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4438ms total=4773ms in=314 out=233 $0.00022 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5397ms total=5576ms in=406 out=317 $0.00030 stop=stop
+[assayer] gemini-3.7-flash ttft=1127ms total=1297ms in=242 out=41 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1658ms total=1782ms in=242 out=35 $0.00031 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1655ms total=1983ms in=314 out=133 $0.00016 stop=stop
+[assayer] gemini-3.7-flash ttft=799ms total=962ms in=242 out=31 $0.00030 stop=stop
+[assayer] gemini-3.7-flash ttft=995ms total=1140ms in=242 out=43 $0.00034 stop=stop
+[assayer] gemini-3.7-flash ttft=1165ms total=1283ms in=242 out=160 $0.00078 stop=stop
+[assayer] gemini-3.7-flash ttft=1438ms total=1647ms in=242 out=119 $0.00063 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2830ms total=3001ms in=314 out=265 $0.00024 stop=stop
+[assayer] gemini-3.7-flash ttft=1046ms total=1213ms in=242 out=92 $0.00053 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4940ms total=5206ms in=406 out=437 $0.00038 stop=stop
+[assayer] gemini-3.7-flash ttft=1507ms total=1733ms in=242 out=127 $0.00066 stop=stop
+[assayer] gemini-3.7-flash ttft=651ms total=821ms in=243 out=44 $0.00035 stop=stop
+[assayer] gemini-3.7-flash ttft=1206ms total=1473ms in=243 out=122 $0.00064 stop=stop
+[assayer] gemini-3.7-flash ttft=796ms total=981ms in=242 out=45 $0.00035 stop=stop
+[assayer] gemini-3.7-flash ttft=1530ms total=1619ms in=242 out=90 $0.00052 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3977ms total=4174ms in=314 out=332 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3584ms total=3761ms in=314 out=323 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2347ms total=2789ms in=314 out=150 $0.00017 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1972ms total=2279ms in=314 out=154 $0.00017 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3403ms total=3666ms in=314 out=325 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1875ms total=2072ms in=314 out=171 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2361ms total=2620ms in=314 out=184 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3293ms total=3520ms in=314 out=257 $0.00024 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2280ms total=2318ms in=314 out=164 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3093ms total=3353ms in=314 out=258 $0.00024 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=29781ms total=30062ms in=406 out=2992 $0.00206 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1388ms total=1641ms in=314 out=79 $0.00012 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1042ms total=1259ms in=314 out=70 $0.00012 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1654ms total=2123ms in=314 out=96 $0.00013 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1093ms total=1591ms in=314 out=82 $0.00012 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=751ms total=1011ms in=314 out=64 $0.00011 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2924ms total=2959ms in=313 out=185 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10965ms total=11242ms in=406 out=936 $0.00071 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2429ms total=2699ms in=313 out=202 $0.00020 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3764ms total=4035ms in=313 out=251 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4403ms total=4840ms in=313 out=329 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3678ms total=3900ms in=313 out=334 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=15333ms total=15563ms in=406 out=1409 $0.00102 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6320ms total=6501ms in=406 out=510 $0.00043 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7533ms total=7749ms in=314 out=567 $0.00044 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2553ms total=2992ms in=314 out=188 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1458ms total=1776ms in=314 out=115 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3578ms total=3888ms in=314 out=289 $0.00026 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=11564ms total=11761ms in=406 out=1187 $0.00087 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7098ms total=7223ms in=314 out=727 $0.00055 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1222ms total=1613ms in=312 out=104 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7188ms total=7375ms in=406 out=731 $0.00057 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1546ms total=1905ms in=312 out=129 $0.00015 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2938ms total=3116ms in=312 out=249 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8437ms total=8690ms in=312 out=910 $0.00067 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=13393ms total=13596ms in=406 out=543 $0.00045 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2684ms total=2832ms in=312 out=244 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1058ms total=1402ms in=314 out=56 $0.00011 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1646ms total=1859ms in=314 out=75 $0.00012 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=880ms total=1031ms in=314 out=68 $0.00011 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=863ms total=1144ms in=314 out=72 $0.00012 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2251ms total=2613ms in=315 out=158 $0.00017 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9288ms total=9508ms in=406 out=812 $0.00063 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8692ms total=8882ms in=406 out=755 $0.00059 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9259ms total=9421ms in=406 out=837 $0.00064 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5488ms total=5689ms in=406 out=572 $0.00047 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3505ms total=3703ms in=406 out=368 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6627ms total=6862ms in=406 out=656 $0.00052 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5095ms total=5294ms in=406 out=539 $0.00045 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6035ms total=6256ms in=406 out=533 $0.00044 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5091ms total=5285ms in=406 out=436 $0.00038 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4988ms total=5185ms in=406 out=370 $0.00033 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8251ms total=8564ms in=406 out=508 $0.00042 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=20517ms total=20813ms in=406 out=1621 $0.00116 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3713ms total=3930ms in=406 out=308 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=18094ms total=18310ms in=406 out=1678 $0.00120 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5181ms total=5403ms in=406 out=475 $0.00040 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5905ms total=6156ms in=406 out=509 $0.00043 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6533ms total=6541ms in=406 out=282 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=11572ms total=11845ms in=406 out=502 $0.00042 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6872ms total=7149ms in=406 out=571 $0.00047 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6054ms total=6289ms in=406 out=583 $0.00047 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6525ms total=6717ms in=406 out=587 $0.00048 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10270ms total=10748ms in=406 out=929 $0.00070 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9679ms total=9888ms in=406 out=942 $0.00071 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3371ms total=3545ms in=406 out=72 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2228ms total=2660ms in=406 out=69 $0.00013 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=875ms total=1308ms in=406 out=75 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1132ms total=1750ms in=406 out=71 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=557ms total=941ms in=406 out=55 $0.00013 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=17493ms total=17742ms in=405 out=1436 $0.00104 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=31617ms total=31870ms in=405 out=3058 $0.00211 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2550ms total=2772ms in=405 out=238 $0.00025 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6265ms total=6460ms in=405 out=545 $0.00045 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=22603ms total=22798ms in=405 out=2339 $0.00163 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=38198ms total=38417ms in=406 out=509 $0.00043 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4841ms total=5042ms in=406 out=477 $0.00040 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=18446ms total=18618ms in=406 out=1698 $0.00121 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2570ms total=2851ms in=406 out=201 $0.00022 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7019ms total=7351ms in=406 out=538 $0.00044 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=11532ms total=11794ms in=404 out=1152 $0.00085 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=39847ms total=40134ms in=404 out=3404 $0.00234 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6712ms total=6970ms in=404 out=583 $0.00047 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=24239ms total=24449ms in=404 out=2325 $0.00162 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=16493ms total=16655ms in=404 out=1555 $0.00112 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=866ms total=1089ms in=406 out=76 $0.00014 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1059ms total=1284ms in=406 out=87 $0.00015 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2530ms total=3026ms in=406 out=98 $0.00015 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2866ms total=3091ms in=406 out=191 $0.00022 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=225ms total=879ms in=315 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=278ms total=928ms in=315 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=203ms total=987ms in=312 out=45 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2342ms total=2823ms in=312 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=216ms total=783ms in=314 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=542ms total=1547ms in=314 out=39 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=221ms total=828ms in=313 out=40 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2113ms total=2531ms in=313 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=209ms total=737ms in=313 out=33 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=944ms total=1336ms in=313 out=30 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=476ms total=999ms in=314 out=40 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2358ms total=2931ms in=314 out=34 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=209ms total=611ms in=315 out=37 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=209ms total=764ms in=315 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=244ms total=813ms in=312 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=856ms total=1420ms in=312 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=199ms total=717ms in=314 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=232ms total=974ms in=314 out=40 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=502ms total=895ms in=314 out=38 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9013ms total=9505ms in=314 out=33 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=407ms total=839ms in=312 out=44 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=399ms total=1062ms in=312 out=35 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=775ms total=1328ms in=313 out=38 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6352ms total=7042ms in=313 out=34 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=224ms total=767ms in=314 out=33 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=549ms total=1164ms in=314 out=38 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=429ms total=903ms in=313 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=584ms total=1469ms in=313 out=39 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1801ms total=2292ms in=312 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4062ms total=5024ms in=312 out=42 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=237ms total=737ms in=314 out=37 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1389ms total=1609ms in=315 out=130 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1482ms total=1647ms in=315 out=118 $0.00015 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2590ms total=2762ms in=312 out=141 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7663ms total=7807ms in=312 out=266 $0.00024 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2096ms total=3817ms in=314 out=145 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4337ms total=4533ms in=314 out=406 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2437ms total=2611ms in=313 out=284 $0.00026 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2657ms total=2854ms in=313 out=267 $0.00025 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1870ms total=2051ms in=313 out=187 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=166850ms total=167270ms in=407 out=583 $0.00047 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3024ms total=3202ms in=313 out=325 $0.00028 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2341ms total=2579ms in=314 out=189 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=7691ms total=7857ms in=314 out=430 $0.00035 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1673ms total=2094ms in=315 out=115 $0.00015 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1982ms total=2298ms in=315 out=175 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1613ms total=1738ms in=312 out=141 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1794ms total=2066ms in=312 out=178 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1880ms total=2125ms in=314 out=223 $0.00022 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2502ms total=2841ms in=314 out=192 $0.00020 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1994ms total=2186ms in=314 out=217 $0.00021 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1968ms total=2377ms in=314 out=160 $0.00017 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2401ms total=2541ms in=312 out=307 $0.00027 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4350ms total=4493ms in=312 out=534 $0.00042 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2055ms total=2408ms in=313 out=161 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3101ms total=3375ms in=313 out=201 $0.00020 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2680ms total=2979ms in=314 out=181 $0.00019 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3776ms total=4017ms in=314 out=362 $0.00031 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4405ms total=4607ms in=313 out=239 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5072ms total=5330ms in=313 out=589 $0.00046 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1787ms total=2016ms in=312 out=167 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1907ms total=2178ms in=312 out=213 $0.00021 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1610ms total=1962ms in=314 out=132 $0.00016 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=334529ms total=334619ms in=314 out=39 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1093ms total=2007ms in=315 out=40 $0.00010 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=376912ms total=377340ms in=407 out=728 $0.00057 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2022ms total=2160ms in=407 out=209 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5184ms total=5870ms in=315 out=36 $0.00009 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=179222ms total=179310ms in=314 out=169 $0.00018 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=1076ms total=1395ms in=315 out=125 $0.00015 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9320ms total=9547ms in=407 out=244 $0.00025 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=2458ms total=2629ms in=404 out=304 $0.00029 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=5523ms total=5753ms in=315 out=247 $0.00023 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6668ms total=7066ms in=404 out=119 $0.00017 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=13279ms total=13450ms in=406 out=1069 $0.00079 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=35955ms total=36082ms in=406 out=1525 $0.00110 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=14448ms total=14632ms in=405 out=1290 $0.00094 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=32538ms total=32757ms in=405 out=3361 $0.00231 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8830ms total=9004ms in=405 out=964 $0.00073 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=15236ms total=15408ms in=405 out=1594 $0.00114 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=3918ms total=4164ms in=406 out=385 $0.00034 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=23960ms total=24149ms in=406 out=775 $0.00060 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4093ms total=4312ms in=407 out=415 $0.00036 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=12917ms total=13141ms in=407 out=1309 $0.00095 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9220ms total=9443ms in=404 out=560 $0.00046 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10802ms total=10968ms in=404 out=1031 $0.00077 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=4379ms total=4531ms in=406 out=427 $0.00037 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9113ms total=9248ms in=406 out=1038 $0.00077 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8246ms total=8420ms in=406 out=931 $0.00070 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10387ms total=10619ms in=406 out=984 $0.00074 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=9499ms total=9630ms in=404 out=1087 $0.00081 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=25741ms total=25940ms in=404 out=2959 $0.00204 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6040ms total=6270ms in=405 out=348 $0.00032 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=8268ms total=8423ms in=405 out=522 $0.00043 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=12729ms total=12903ms in=406 out=1326 $0.00096 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=n/a total=40345ms in=406 out=4000 $0.00273 stop=length
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=30392ms total=30664ms in=405 out=1967 $0.00139 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=n/a total=37658ms in=405 out=4000 $0.00273 stop=length
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=23349ms total=23519ms in=404 out=2098 $0.00147 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=n/a total=40233ms in=404 out=4000 $0.00273 stop=length
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=10452ms total=10706ms in=406 out=831 $0.00064 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=49533ms total=49753ms in=406 out=1403 $0.00102 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=6408ms total=6584ms in=407 out=622 $0.00050 stop=stop
+[assayer] accounts/fireworks/models/deepseek-v4-flash-0731 ttft=58179ms total=58425ms in=407 out=1332 $0.00097 stop=stop
+
+### Latency (vps-2, n=20 sequential calls per candidate, item 9, cache off)
+
+| candidate | model | ttft p50 | ttft p95 | total p50 | total p95 | out tok | tok/s p50 | ttft+60/tps | p50 rule ≤2.5s | p95 rule ≤4s | failures |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| gemini37 | gemini-3.7-flash (low) | 1234 | 1674 | 1347 | 1845 | 131.3 | 760.2 | 1312.9 | PASS | PASS | 0/20 |
+| gemini38 | gemini-3.8-flash (low) | 594 | 804 | 718 | 959 | 39.4 | 310.3 | 787.3 | PASS | PASS | 0/20 |
+| deepseek_max | accounts/fireworks/models/deepseek-v4-flash-0731 (max) | 9288 | 27955 | 9508 | 28105 | 979.4 | 3690.9 | 9304.3 | FAIL | FAIL | 0/20 |
+| deepseek_low | accounts/fireworks/models/deepseek-v4-flash-0731 (low) | 2849 | 4788 | 3041 | 4992 | 273.4 | 1112.9 | 2902.9 | FAIL | FAIL | 0/20 |
+| deepseek_none | accounts/fireworks/models/deepseek-v4-flash-0731 (none) | 378 | 1125 | 1030 | 2515 | 36.8 | 58.8 | 1398.0 | PASS | PASS | 0/20 |
+
+### Hedging (2 identical requests to one model, first wins; n=20)
+
+| candidate | unhedged total p95 | hedged total p95 | unhedged total p50 | hedged total p50 | unhedged ttft p95 | hedged ttft p95 | hedged failures |
+|---|---|---|---|---|---|---|---|
+| gemini37 | 1845 | 1475 | 1347 | 1289 | 1674 | 1424 | 0 |
+| gemini38 | 959 | 920 | 718 | 681 | 804 | 841 | 0 |
+| deepseek_max | 28105 | 18310 | 9508 | 6289 | 27955 | 18094 | 0 |
+| deepseek_low | 4992 | 5257 | 3041 | 3001 | 4788 | 5089 | 0 |
+| deepseek_none | 2515 | 1036 | 1030 | 851 | 1125 | 386 | 0 |
+
+### Repeat agreement (same submission ×5, cache off)
+
+| candidate | item | closeness values | identical | range ≤ 5 |
+|---|---|---|---|---|
+| gemini37 | 1 | 100, 100, 100, 100, 100 | true | true (range 0) |
+| gemini37 | 7 | 85, 78, 85, 82, 85 | false | false (range 7) |
+| gemini37 | 9 | 68, 70, 70, 65, 68 | false | true (range 5) |
+| gemini37 | 18 | 10, 12, 15, 10, 12 | false | true (range 5) |
+| gemini38 | 1 | 100, 100, 100, 100, 100 | true | true (range 0) |
+| gemini38 | 7 | 85, 82, 85, 78, 85 | false | false (range 7) |
+| gemini38 | 9 | 72, 72, 68, 72, 76 | false | false (range 8) |
+| gemini38 | 18 | 12, 5, 10, 12, 12 | false | false (range 7) |
+| deepseek_max | 1 | 100, 100, 100, 100, 100 | true | true (range 0) |
+| deepseek_max | 7 | 70, 80, 65, 78, 70 | false | false (range 15) |
+| deepseek_max | 9 | 60, 60, 65, 58, 60 | false | false (range 7) |
+| deepseek_max | 18 | 25, 45, 15, 30, 20 | false | false (range 30) |
+| deepseek_low | 1 | 100, 100, 100, 100, 100 | true | true (range 0) |
+| deepseek_low | 7 | 65, 65, 60, 70, 75 | false | false (range 15) |
+| deepseek_low | 9 | 60, 60, 60, 65, 60 | false | true (range 5) |
+| deepseek_low | 18 | 20, 25, 50, 20, 20 | false | false (range 30) |
+| deepseek_none | 1 | 100, 100, 100, 100, 100 | true | true (range 0) |
+| deepseek_none | 7 | 65, 70, 70, 60, 78 | false | false (range 18) |
+| deepseek_none | 9 | 45, 55, 45, 55, 35 | false | false (range 20) |
+| deepseek_none | 18 | 15, 35, 15, 35, 15 | false | false (range 20) |
+
+### Ordering agreement ((A,B) vs (B,A) over the 20-item set)
+
+| candidate | mean abs diff | max abs diff | within 5 | graded pairs |
+|---|---|---|---|---|
+| gemini37 | 2.8 | 13 | 80.0% | 20 |
+| gemini38 | 4.3 | 40 | 80.0% | 20 |
+| deepseek_max | 3.1 | 10 | 88.2% | 17 |
+| deepseek_low | 5.5 | 15 | 68.4% | 19 |
+| deepseek_none | 8.3 | 35 | 57.9% | 19 |
+
+Warm-up call (discarded): gemini37 ttft=1684 total=1854; gemini38 ttft=919 total=1063; deepseek_max ttft=4290 total=4479; deepseek_low ttft=4171 total=4324; deepseek_none ttft=685 total=1259
+
+Bench spend: gemini37 $0.05369; gemini38 $0.03328; deepseek_max $0.06657; deepseek_low $0.02273; deepseek_none $0.00920
+wrote results/bench-vps-2.md and .json
+
+== spend this run: $0.19562 over 504 calls ==
+   accounts/fireworks/models/deepseek-v4-flash-0731  301 calls  $0.10735
+   gemini-3.7-flash          101 calls  $0.05432
+   gemini-3.8-flash          102 calls  $0.03394
+container exit 0; env file removed: ls: cannot access '/home/jacob/keeper.env': No such file or directory
+-rw-------@ 1 jacob  wheel  186660 Sep  2 20:07 /private/tmp/claude-501/-Users-jacob-GitHub-JacobStephens2-meaning-game/6e39a1b1-c93f-4d14-a8c2-e749730ca8f5/scratchpad/runs/bench-vps-2.json
+-rw-------@ 1 jacob  wheel    3664 Sep  2 20:07 /private/tmp/claude-501/-Users-jacob-GitHub-JacobStephens2-meaning-game/6e39a1b1-c93f-4d14-a8c2-e749730ca8f5/scratchpad/runs/bench-vps-2.md
