@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# One-time setup of meld.stephens.page on the VPS: checkout, Postgres role and
+# database, pg_hba rule, .env, Apache vhost, TLS certificate.
+#
+# Idempotent — safe to re-run. Routine deploys are bin/deploy.
+set -euo pipefail
+
+SERVER="jacob@stephens.page"
+HOST="meld.stephens.page"
+APP_DIR="/var/www/${HOST}"
+REPO="https://github.com/JacobStephens2/meaning-game.git"
+
+echo "== Ensuring the checkout at ${APP_DIR}"
+ssh "${SERVER}" bash -s <<REMOTE
+set -euo pipefail
+if [ ! -d "${APP_DIR}/.git" ]; then
+  sudo install -d -o "\$(id -un)" -g "\$(id -gn)" "${APP_DIR}"
+  git clone "${REPO}" "${APP_DIR}"
+else
+  git -C "${APP_DIR}" fetch --quiet origin
+  git -C "${APP_DIR}" checkout --quiet master
+  git -C "${APP_DIR}" reset --quiet --hard origin/master
+fi
+REMOTE
+
+echo "== Running deploy/provision.sh on the server"
+ssh -t "${SERVER}" "cd ${APP_DIR} && bash deploy/provision.sh"
