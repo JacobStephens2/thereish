@@ -13,6 +13,10 @@ HOST="meld.stephens.page"
 APP_DIR="/var/www/${HOST}"
 COMPOSE="docker compose -f docker-compose.app.yml"
 
+# Without the fetch this compares against a possibly stale remote-tracking ref,
+# and the deploy fails later on the server with a much less obvious message.
+git fetch --quiet origin
+
 LOCAL_HEAD="$(git rev-parse master)"
 if [ "${LOCAL_HEAD}" != "$(git rev-parse origin/master)" ]; then
   echo "master and origin/master differ. Push first — the server deploys from origin." >&2
@@ -44,7 +48,12 @@ REMOTE
 
 echo "== Waiting for ${HOST} to answer"
 for _ in $(seq 1 30); do
-  if curl -fsS --max-time 5 "https://${HOST}/" | grep -q "Socket not connected"; then
+  # Gated on the marker attribute rather than on the page's prose, which is
+  # there to be reworded. MeaningGameWeb.CheckLive names this as load-bearing.
+  #
+  # -s not -sS: a 502 while the old container is still going down is expected
+  # here, and printing it every two seconds makes a normal deploy look broken.
+  if curl -fs --max-time 5 "https://${HOST}/" | grep -q 'data-check="socket"'; then
     echo "== Live: https://${HOST}/"
     exit 0
   fi

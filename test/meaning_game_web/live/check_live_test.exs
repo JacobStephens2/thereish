@@ -22,6 +22,7 @@ defmodule MeaningGameWeb.CheckLiveTest do
     {:ok, live, _html} = live(conn, ~p"/")
     html = render(live)
 
+    assert html =~ "Transport: unknown"
     assert html =~ "Secure context: unknown"
     assert html =~ "Screen Wake Lock: unknown"
   end
@@ -30,8 +31,13 @@ defmodule MeaningGameWeb.CheckLiveTest do
     {:ok, live, _html} = live(conn, ~p"/")
 
     html =
-      render_hook(live, "browser_reported", %{"secure_context" => true, "wake_lock" => true})
+      render_hook(live, "browser_reported", %{
+        "transport" => "WebSocket",
+        "secure_context" => true,
+        "wake_lock" => true
+      })
 
+    assert html =~ "Transport: WebSocket"
     assert html =~ "Secure context: yes"
     assert html =~ "Screen Wake Lock: available"
   end
@@ -40,9 +46,21 @@ defmodule MeaningGameWeb.CheckLiveTest do
     {:ok, live, _html} = live(conn, ~p"/")
 
     html =
-      render_hook(live, "browser_reported", %{"secure_context" => false, "wake_lock" => false})
+      render_hook(live, "browser_reported", %{
+        "transport" => "WebSocket",
+        "secure_context" => false,
+        "wake_lock" => false
+      })
 
     assert html =~ "Secure context: no"
     assert html =~ "Screen Wake Lock: unavailable"
+  end
+
+  test "falling back to long polling is named as the broken thing it is", %{conn: conn} do
+    {:ok, live, _html} = live(conn, ~p"/")
+
+    html = render_hook(live, "browser_reported", %{"transport" => "LongPoll"})
+
+    assert html =~ "Transport: LongPoll (the websocket upgrade is not working)"
   end
 end
