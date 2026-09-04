@@ -55,11 +55,19 @@ defmodule MeaningGame.StewardFixtures do
     }
   end
 
-  @doc "A well-formed verdict, as the model writes it: a JSON object in a string."
+  @doc """
+  A well-formed verdict, as the model writes it: a JSON object in a string.
+
+  `furthest` defaults to the pair the couch's tests grade, because almost every
+  recording here is about something other than the carry-forward and an answer
+  whose furthest pair is not two of the request's Bridges is rejected by the
+  validator (ADR-0010).
+  """
   def verdict(opts \\ []) do
     Jason.encode!(%{
       "reasoning" => Keyword.get(opts, :reasoning, "Both words name a marker left to be found."),
       "closeness" => Keyword.get(opts, :closeness, 80),
+      "furthest" => Keyword.get(opts, :furthest, ["beacon", "cairn"]),
       "quip" => Keyword.get(opts, :quip, "One of you built it, the other lit it. Same errand.")
     })
   end

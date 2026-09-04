@@ -2,7 +2,7 @@ defmodule MeaningGame.StewardTest do
   @moduledoc """
   The live Assayer, against recorded responses.
 
-  Everything here asks the same question the couch asks — grade this pair of
+  Everything here asks the same question the couch asks — grade this Attempt's
   Bridges — and checks the things that are true of a grade whatever the model
   said: that both orderings were asked and both were kept, that a malformed
   answer was sent back rather than shown, that a hedged pair of requests was one
@@ -185,6 +185,168 @@ defmodule MeaningGame.StewardTest do
     end
   end
 
+  describe "grading a table" do
+    setup do
+      assayer(requests: 1, retries: 2)
+    end
+
+    # Four players, one grading. Which of them the request lists first is what
+    # tells the two orderings apart, exactly as it does at two.
+    @table %{
+      anchors: ["lantern", "harbour"],
+      bridges: ["beacon", "cairn", "lamp", "seagull"]
+    }
+
+    defp table_ordering(body), do: first_bridge(body, @table.bridges)
+
+    test "four Bridges are one grading, asked in roster order and its reverse" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        ordering = table_ordering(body)
+        asked(counts, ordering)
+
+        case ordering do
+          "beacon" ->
+            Req.Test.json(
+              conn,
+              response(
+                verdict(closeness: 60, reasoning: "Forward.", furthest: ["beacon", "seagull"])
+              )
+            )
+
+          "seagull" ->
+            Req.Test.json(
+              conn,
+              response(verdict(closeness: 40, reasoning: "Reverse.", furthest: ["cairn", "lamp"]))
+            )
+        end
+      end)
+
+      {:ok, verdict} = Live.assay(@table)
+
+      # Two orderings and not twenty-four: roster order against its reverse is
+      # the same correction at four that it is at two.
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+      assert verdict.closeness == 50
+      assert verdict.meta.forward == 60
+      assert verdict.meta.reverse == 40
+    end
+
+    test "the two furthest words come from the forward ordering" do
+      recorded(fn conn, body ->
+        furthest =
+          case table_ordering(body) do
+            "beacon" -> ["beacon", "seagull"]
+            "seagull" -> ["cairn", "lamp"]
+          end
+
+        Req.Test.json(conn, response(verdict(furthest: furthest)))
+      end)
+
+      {:ok, verdict} = Live.assay(@table)
+
+      # The two orderings can name different pairs, and the next Attempt's
+      # Anchors have to be one pair rather than an average of two.
+      assert verdict.furthest == ["beacon", "seagull"]
+    end
+
+    test "the two furthest words come back as the players wrote them" do
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, response(verdict(furthest: ["  BEACON ", "Seagull"])))
+      end)
+
+      {:ok, verdict} = Live.assay(@table)
+
+      # A model that shouted a Bridge back has still named that Bridge, and the
+      # words about to be shown as the next Anchors are the words somebody typed.
+      assert verdict.furthest == ["beacon", "seagull"]
+    end
+
+    test "a furthest pair naming a word nobody wrote is asked for again" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        case asked(counts, table_ordering(body)) do
+          # "gull" is not one of the four Bridges. Taking it would send the next
+          # Attempt to Anchors nobody at the table chose.
+          1 -> Req.Test.json(conn, response(verdict(furthest: ["beacon", "gull"])))
+          _ -> Req.Test.json(conn, response(verdict(furthest: ["beacon", "seagull"])))
+        end
+      end)
+
+      assert {:ok, verdict} = Live.assay(@table)
+      assert verdict.furthest == ["beacon", "seagull"]
+      assert Agent.get(counts, &Map.values/1) == [2, 2]
+    end
+
+    test "a furthest pair that is not two words is asked for again" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        case asked(counts, table_ordering(body)) do
+          1 -> Req.Test.json(conn, response(verdict(furthest: ["beacon"])))
+          2 -> Req.Test.json(conn, response(verdict(furthest: ["beacon", "cairn", "lamp"])))
+          _ -> Req.Test.json(conn, response(verdict(furthest: ["beacon", "seagull"])))
+        end
+      end)
+
+      assert {:ok, verdict} = Live.assay(@table)
+      assert verdict.furthest == ["beacon", "seagull"]
+    end
+
+    test "a model that never names two of the words is no verdict, not a guess" do
+      assayer(requests: 1, retries: 1)
+
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, response(verdict(furthest: ["beacon", "gull"])))
+      end)
+
+      assert {:error, {:rejected, why}} = Live.assay(@table)
+      assert why =~ "furthest"
+    end
+
+    test "every ordering of the same four Bridges is one precedent" do
+      assayer(requests: 1, retries: 0)
+      counts = counts()
+
+      recorded(fn conn, body ->
+        asked(counts, table_ordering(body))
+
+        Req.Test.json(
+          conn,
+          response(verdict(closeness: 33, furthest: ["beacon", "seagull"]))
+        )
+      end)
+
+      assert {:ok, _} = Live.assay(@table)
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+
+      shuffled = %{@table | bridges: ["lamp", "seagull", "beacon", "cairn"]}
+
+      assert {:ok, verdict} = Live.assay(shuffled)
+      assert verdict.closeness == 33
+      # The whole point of the cache: the same words meeting again get the same
+      # grade, whatever order the Seats were filled in (design law 1).
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+    end
+
+    test "a cached Verdict carries the two furthest words with it" do
+      assayer(requests: 1, retries: 0)
+
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, response(verdict(furthest: ["beacon", "seagull"])))
+      end)
+
+      assert {:ok, _} = Live.assay(@table)
+      assert {:ok, cached} = Live.assay(@table)
+
+      # A cache hit that lost the furthest pair would replay the grade but not
+      # the game: those two words are the next Attempt's Anchors.
+      assert cached.furthest == ["beacon", "seagull"]
+    end
+  end
+
   describe "the verdict cache is the precedent" do
     setup do
       assayer(requests: 1, retries: 0)
@@ -239,7 +401,7 @@ defmodule MeaningGame.StewardTest do
       assert verdict1.closeness == 77
       assert Agent.get(counts, &Map.values/1) == [1, 1]
 
-      assayer(prompt_version: "assay-2")
+      assayer(prompt_version: "a-different-question")
 
       recorded(fn conn, body ->
         asked(counts, ordering(body))

@@ -1,11 +1,17 @@
 defmodule MeaningGame.Chronicle.Verdict do
   @moduledoc """
-  What the Assayer said about one pair of Bridges, and who said it.
+  What the Assayer said about an Attempt's Bridges, and who said it.
 
   The grade is stored exactly as the players saw it, because the grade that was
-  shown is the precedent (ADR-0006). A pair the Assayer could not grade is a row
-  too, with `graded` false and no number — the game admitting it had no verdict
-  is a thing that happened and belongs in the record.
+  shown is the precedent (ADR-0006). Bridges the Assayer could not grade are a
+  row too, with `graded` false and no number — the game admitting it had no
+  verdict is a thing that happened and belongs in the record.
+
+  `furthest` is the two Bridges the Assayer named as landing furthest apart, and
+  it is in the book because those two words became the next Attempt's Anchors
+  (ADR-0010). Without it a reader could see an Attempt converge and not see why
+  it converged there. It is null on a Verdict that never arrived, and on every
+  row written before the Assayer was asked the question.
 
   `model`, `prompt_version`, `latency_ms` and `cost_usd` are what keep the model
   policy measured rather than remembered. `forward`, `reverse` and
@@ -36,6 +42,7 @@ defmodule MeaningGame.Chronicle.Verdict do
     field :forward, :integer
     field :reverse, :integer
     field :reasoning_reverse, :string
+    field :furthest, {:array, :string}
     field :overruled, :boolean, default: false
     field :position, :integer
 
@@ -63,6 +70,7 @@ defmodule MeaningGame.Chronicle.Verdict do
       :forward,
       :reverse,
       :reasoning_reverse,
+      :furthest,
       :overruled,
       :position
     ])

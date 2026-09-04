@@ -28,6 +28,28 @@ defmodule MeaningGame.Steward.PrecedentTest do
       assert forward == reverse
     end
 
+    test "every ordering of an Attempt's four Bridges collapses to the same key" do
+      roster =
+        Precedent.key("gemini-3.8-flash", "assay-2", ["lantern", "harbour"], [
+          "beacon",
+          "cairn",
+          "lamp",
+          "seagull"
+        ])
+
+      # A table of four fills its Seats in whatever order four phones typed
+      # their names, and the words they wrote are the same words either way.
+      shuffled =
+        Precedent.key("gemini-3.8-flash", "assay-2", ["lantern", "harbour"], [
+          "lamp",
+          "seagull",
+          "beacon",
+          "cairn"
+        ])
+
+      assert roster == shuffled
+    end
+
     test "surface whitespace and casing do not fork a key" do
       base = Precedent.key("gemini-3.8-flash", "assay-1", ["ocean", "night"], ["tide", "moon"])
 
@@ -192,6 +214,103 @@ defmodule MeaningGame.Steward.PrecedentTest do
       assert verdict.closeness == 100
       assert verdict.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
       assert verdict.quip == "House law."
+    end
+  end
+
+  describe "the two words that landed furthest apart" do
+    @table_verdict %{
+      closeness: 27,
+      reasoning: "Three of you were at the shore and one of you was not.",
+      quip: "The seagull is having its own evening.",
+      furthest: ["beacon", "seagull"],
+      meta: %{
+        model: "gemini-3.8-flash",
+        prompt_version: "assay-2",
+        cost_usd: 0.0021,
+        forward: 30,
+        reverse: 24,
+        reasoning_reverse: "One word wandered."
+      }
+    }
+
+    @table ["beacon", "cairn", "lamp", "seagull"]
+
+    test "come back on a cache hit, so a stored Verdict can still be carried forward" do
+      assert {:ok, _} =
+               Precedent.put(
+                 "gemini-3.8-flash",
+                 "assay-2",
+                 ["lantern", "harbour"],
+                 @table,
+                 @table_verdict
+               )
+
+      assert {:ok, verdict} =
+               Precedent.get("gemini-3.8-flash", "assay-2", ["lantern", "harbour"], @table)
+
+      # Without these two words a cache hit would replay the grade but not the
+      # game: they are the next Attempt's Anchors (ADR-0010).
+      assert verdict.furthest == ["beacon", "seagull"]
+    end
+
+    test "are stored as the players wrote them, not sorted like the key's inputs" do
+      assert {:ok, _} =
+               Precedent.put(
+                 "gemini-3.8-flash",
+                 "assay-2",
+                 ["lantern", "harbour"],
+                 @table,
+                 %{@table_verdict | furthest: ["seagull", "Beacon"]}
+               )
+
+      assert {:ok, verdict} =
+               Precedent.get("gemini-3.8-flash", "assay-2", ["lantern", "harbour"], @table)
+
+      assert verdict.furthest == ["seagull", "Beacon"]
+    end
+
+    test "survive an overrule, because the players ruled on the grade and not on them" do
+      Precedent.put(
+        "gemini-3.8-flash",
+        "assay-2",
+        ["lantern", "harbour"],
+        @table,
+        @table_verdict
+      )
+
+      assert {:ok, _} =
+               Precedent.overrule(
+                 "gemini-3.8-flash",
+                 "assay-2",
+                 ["lantern", "harbour"],
+                 @table,
+                 %{closeness: 90, reasoning: "We all meant the same shore.", quip: "House law."}
+               )
+
+      assert {:ok, verdict} =
+               Precedent.get("gemini-3.8-flash", "assay-2", ["lantern", "harbour"], @table)
+
+      assert verdict.closeness == 90
+      assert verdict.furthest == ["beacon", "seagull"]
+    end
+
+    test "are absent from a Verdict that never named any, and that is not an error" do
+      assert {:ok, _} =
+               Precedent.put(
+                 "gemini-3.8-flash",
+                 "assay-2",
+                 ["lantern", "harbour"],
+                 ["beacon", "cairn"],
+                 Map.delete(@table_verdict, :furthest)
+               )
+
+      assert {:ok, verdict} =
+               Precedent.get("gemini-3.8-flash", "assay-2", ["lantern", "harbour"], [
+                 "beacon",
+                 "cairn"
+               ])
+
+      assert verdict.furthest == nil
     end
   end
 end

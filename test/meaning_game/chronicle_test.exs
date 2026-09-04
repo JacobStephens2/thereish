@@ -743,4 +743,122 @@ defmodule MeaningGame.ChronicleTest do
       assert Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
     end
   end
+
+  describe "the two words that landed furthest apart" do
+    test "are written down beside the Verdict, so the book can say where the next Anchors came from" do
+      slug = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: slug)
+
+      seats =
+        for name <- ["Mara", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      bridges = ["beacon", "cairn", "lamp", "seagull"]
+
+      entry = %{
+        page: %{
+          id: "hand-written-4",
+          chapter: "harbour",
+          anchors: ["lantern", "harbour"],
+          bait: "lighthouse",
+          deep_bridges: ["cairn"],
+          likely_bridges: ["lighthouse", "beacon", "cairn"],
+          why_these: "A table of four at the shore.",
+          band_scripts: MeaningGame.Steward.Fake.default_band_scripts()
+        },
+        closed_because: :attempts,
+        melded?: false,
+        closeness: 27,
+        attempts: [
+          %{
+            number: 1,
+            anchors: ["lantern", "harbour"],
+            closeness: 27,
+            melded?: false,
+            bridges:
+              Enum.zip_with(seats, bridges, fn seat, bridge ->
+                %{seat_id: seat.id, bridge: bridge}
+              end),
+            verdicts: [
+              %{
+                seat_ids: Enum.map(seats, & &1.id),
+                bridges: bridges,
+                graded?: true,
+                closeness: 27,
+                band: :miss,
+                reasoning: "Three of you were at the shore and one of you was not.",
+                quip: "The seagull is having its own evening.",
+                furthest: ["beacon", "seagull"],
+                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 90, cost_usd: 0.0}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+
+      [view] = Chronicle.book(room.id)
+      [attempt] = view.attempts
+      [verdict] = attempt.verdicts
+
+      assert verdict.bridges == bridges
+      assert length(verdict.seat_ids) == 4
+      assert verdict.furthest == ["beacon", "seagull"]
+    end
+
+    test "are absent from a Verdict that never arrived, and that is not an error", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      entry = %{
+        page: %{
+          id: "hand-written-2",
+          chapter: "harbour",
+          anchors: ["lantern", "harbour"],
+          bait: "lighthouse",
+          deep_bridges: ["cairn"],
+          likely_bridges: ["lighthouse", "beacon", "cairn"],
+          why_these: "A couch evening.",
+          band_scripts: MeaningGame.Steward.Fake.default_band_scripts()
+        },
+        closed_because: :attempts,
+        melded?: false,
+        closeness: nil,
+        attempts: [
+          %{
+            number: 1,
+            anchors: ["lantern", "harbour"],
+            closeness: nil,
+            melded?: false,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "beacon"},
+              %{seat_id: ctx.jacob.id, bridge: "cairn"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [ctx.mara.id, ctx.jacob.id],
+                bridges: ["beacon", "cairn"],
+                graded?: false,
+                closeness: nil,
+                band: nil,
+                reasoning: nil,
+                quip: "No verdict tonight.",
+                meta: %{}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+
+      [view] = Chronicle.book(room.id)
+      [attempt] = view.attempts
+      [verdict] = attempt.verdicts
+
+      assert verdict.furthest == nil
+    end
+  end
 end

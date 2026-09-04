@@ -130,6 +130,70 @@ defmodule MeaningGame.ExperimentsTest do
       assert scored.closeness == 45
     end
 
+    test "bait arm springs the trap only when every Bridge is the bait" do
+      verdict = %{
+        closeness: 70,
+        reasoning: "Three at the grill, one in the shed.",
+        quip: "Somebody went looking for the mower.",
+        meta: %{}
+      }
+
+      # Three of four on the trap is a table that did not all walk into it, and
+      # the Assayer's own number already says how close they came (ADR-0010).
+      scored =
+        Experiments.apply_arm_closeness(verdict, @page, :bait, [
+          "barbecue",
+          "barbecue",
+          "barbecue",
+          "lawnmower"
+        ])
+
+      assert scored.closeness == 70
+      assert scored.meta[:trap_sprung] == nil
+
+      sprung =
+        Experiments.apply_arm_closeness(verdict, @page, :bait, [
+          "barbecue",
+          "barbecue",
+          "barbecue",
+          "barbecue"
+        ])
+
+      assert sprung.closeness == 75
+      assert sprung.meta[:trap_sprung] == true
+    end
+
+    test "bait arm marks deep convergence only when every Bridge is a deep bridge" do
+      verdict = %{
+        closeness: 70,
+        reasoning: "Mostly the mower.",
+        quip: "One of you was still at the grill.",
+        meta: %{}
+      }
+
+      scored =
+        Experiments.apply_arm_closeness(verdict, @page, :bait, [
+          "lawnmower",
+          "chores",
+          "lawnmower",
+          "fence"
+        ])
+
+      assert scored.closeness == 70
+      assert scored.meta[:deep_convergence] == nil
+
+      deep =
+        Experiments.apply_arm_closeness(verdict, @page, :bait, [
+          "lawnmower",
+          "chores",
+          "lawnmower",
+          "chores"
+        ])
+
+      assert deep.closeness >= 95
+      assert deep.meta[:deep_convergence] == true
+    end
+
     test "does not overwrite joint player overrules" do
       verdict = %{
         closeness: 90,

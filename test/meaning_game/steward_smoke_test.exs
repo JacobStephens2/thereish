@@ -14,7 +14,10 @@ defmodule MeaningGame.StewardSmokeTest do
 
       GEMINI_API_KEY=... mix test --include live
 
-  One test per role. There is one role.
+  One test per role, and one more for the table: the couch's grading and a
+  four-word grading are the same call, but they are not the same prompt or the
+  same judgement, and the reveal beat is the same beat at four Seats as at two
+  (ADR-0010).
   """
   use ExUnit.Case, async: false
 
@@ -55,6 +58,43 @@ defmodule MeaningGame.StewardSmokeTest do
       "\n  live Assayer: #{verdict.closeness} " <>
         "(#{verdict.meta.forward}/#{verdict.meta.reverse}) " <>
         "in #{verdict.meta.latency_ms} ms for $#{Float.round(verdict.meta.cost_usd, 5)}" <>
+        "\n  #{verdict.reasoning}\n  #{verdict.quip}\n"
+    )
+  end
+
+  test "the Assayer grades a real table of four, and names two of their words" do
+    bridges = ["lighthouse", "beacon", "lamp", "gull"]
+
+    {:ok, verdict} =
+      Steward.assay(%{anchors: ["harbour", "dusk"], bridges: bridges})
+
+    assert verdict.closeness in 0..100
+    assert Ladder.read(verdict.closeness).band != nil
+
+    # Three words at the shore's light and one bird. It reads as a set that
+    # mostly converged rather than as a miss, which is the whole reason the
+    # prompt was rewritten.
+    assert verdict.closeness >= 40
+
+    assert String.trim(verdict.reasoning) != ""
+    assert String.trim(verdict.quip) != ""
+
+    # The carry-forward is two words somebody actually wrote, because those two
+    # are about to be the next Attempt's Anchors. That they are two *different*
+    # words is not asserted and not enforced: a table that all wrote "moon" has
+    # "moon" and "moon" as its furthest pair, and nothing defends against the two
+    # carried words being the same word.
+    assert [left, right] = verdict.furthest
+    assert left in bridges
+    assert right in bridges
+
+    assert verdict.meta.latency_ms < 4_000
+
+    IO.puts(
+      "\n  live Assayer at four: #{verdict.closeness} " <>
+        "(#{verdict.meta.forward}/#{verdict.meta.reverse}) " <>
+        "in #{verdict.meta.latency_ms} ms for $#{Float.round(verdict.meta.cost_usd, 5)}" <>
+        "\n  furthest apart: #{left} / #{right}" <>
         "\n  #{verdict.reasoning}\n  #{verdict.quip}\n"
     )
   end

@@ -699,6 +699,7 @@ defmodule MeaningGame.Chronicle do
               forward: v.forward,
               reverse: v.reverse,
               reasoning_reverse: v.reasoning_reverse,
+              furthest: v.furthest,
               position: v.position
             }
           end)
@@ -902,6 +903,7 @@ defmodule MeaningGame.Chronicle do
       forward: meta[:forward],
       reverse: meta[:reverse],
       reasoning_reverse: meta[:reasoning_reverse],
+      furthest: Map.get(verdict, :furthest),
       overruled: Map.get(verdict, :overruled?, false),
       position: position
     })
