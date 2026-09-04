@@ -51,13 +51,7 @@ defmodule MeaningGame.Steward.Fake do
           "deep_bridges" => deep_bridges,
           "likely_bridges" => likely_bridges,
           "why_these" => "The anchors invite #{bait} as the immediate trap.",
-          "band_scripts" => %{
-            "miss" => "Different neighbourhoods entirely.",
-            "adjacent" => "On the same block, across the street.",
-            "close" => "Passable.",
-            "meld" => "You both saw the grill.",
-            "deep_meld" => "Two minds at the mower."
-          }
+          "band_scripts" => default_band_scripts()
         }
 
         {:ok,
@@ -78,6 +72,17 @@ defmodule MeaningGame.Steward.Fake do
         raise "this Author is having a moment"
     end
   end
+
+  @default_band_scripts %{
+    "miss" => "Different neighbourhoods entirely.",
+    "adjacent" => "On the same block, across the street.",
+    "close" => "Passable.",
+    "meld" => "You both saw the grill.",
+    "deep_meld" => "Two minds at the mower."
+  }
+
+  @doc "Default band scripts used by the Fake author and test fixtures."
+  def default_band_scripts, do: @default_band_scripts
 
   defp authored_bridges(nil) do
     %{

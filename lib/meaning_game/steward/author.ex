@@ -15,6 +15,13 @@ defmodule MeaningGame.Steward.Author do
 
   @doc "The JSON schema the Author's responses must satisfy."
   def schema do
+    band_keys = Enum.map(MeaningGame.Ladder.band_names(), &to_string/1)
+
+    band_properties =
+      Enum.map(band_keys, fn band ->
+        {band, o([{"type", "string"}])}
+      end)
+
     o([
       {"type", "object"},
       {"properties",
@@ -58,15 +65,8 @@ defmodule MeaningGame.Steward.Author do
          {"band_scripts",
           o([
             {"type", "object"},
-            {"properties",
-             o([
-               {"miss", o([{"type", "string"}])},
-               {"adjacent", o([{"type", "string"}])},
-               {"close", o([{"type", "string"}])},
-               {"meld", o([{"type", "string"}])},
-               {"deep_meld", o([{"type", "string"}])}
-             ])},
-            {"required", ["miss", "adjacent", "close", "meld", "deep_meld"]},
+            {"properties", o(band_properties)},
+            {"required", band_keys},
             {"additionalProperties", false}
           ])}
        ])},

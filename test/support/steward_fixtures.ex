@@ -212,13 +212,7 @@ defmodule MeaningGame.StewardFixtures do
           "Backyard and weekend invite barbecue as the immediate trap."
         ),
       "band_scripts" =>
-        Keyword.get(opts, :band_scripts, %{
-          "miss" => "Different neighbourhoods entirely.",
-          "adjacent" => "On the same block, across the street.",
-          "close" => "Passable.",
-          "meld" => "You both saw the grill.",
-          "deep_meld" => "Two minds at the mower."
-        })
+        Keyword.get(opts, :band_scripts, MeaningGame.Steward.Fake.default_band_scripts())
     })
   end
 end
