@@ -27,6 +27,7 @@ defmodule MeaningGame.Chronicle.Page do
     has_many :attempts, MeaningGame.Chronicle.Attempt, preload_order: [asc: :number]
     has_many :overrules, MeaningGame.Chronicle.Overrule, preload_order: [asc: :inserted_at]
     has_many :corrections, MeaningGame.Chronicle.Correction, preload_order: [asc: :inserted_at]
+    has_many :fairness_taps, MeaningGame.Chronicle.FairnessTap, preload_order: [asc: :inserted_at]
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end

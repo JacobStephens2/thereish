@@ -885,4 +885,95 @@ defmodule MeaningGame.GameTest do
       assert view.overrule == nil
     end
   end
+
+  describe "the fairness tap (ticket 11)" do
+    setup do
+      {state, effects} =
+        commit_all(bridging(), [{"Melissa", "dock"}, {"Jacob", "wharf"}])
+
+      revealed = grade(state, effects, [62])
+      %{revealed: revealed}
+    end
+
+    test "tapping fair at the reveal emits a fairness_tap effect with all required fields", ctx do
+      assert {:ok, tapped, effects} =
+               Game.apply(
+                 ctx.revealed,
+                 {:fairness_tapped, %{seat_id: "seat-Melissa", label: "fair"}}
+               )
+
+      assert [
+               {:fairness_tap,
+                %{
+                  seat_id: "seat-Melissa",
+                  attempt_number: 1,
+                  anchors: ["lantern", "harbour"],
+                  bridges: ["dock", "wharf"],
+                  grade: 62,
+                  band: "near",
+                  model: "test",
+                  prompt_version: "v1",
+                  label: "fair"
+                }}
+             ] = effects
+
+      assert Game.view(tapped, "seat-Melissa").your_tap == "fair"
+      assert Game.view(tapped, "seat-Jacob").your_tap == nil
+    end
+
+    test "two seats can disagree about the same grade and both persist", ctx do
+      assert {:ok, s1, [fair_effect]} =
+               Game.apply(
+                 ctx.revealed,
+                 {:fairness_tapped, %{seat_id: "seat-Melissa", label: "fair"}}
+               )
+
+      assert {:ok, s2, [harsh_effect]} =
+               Game.apply(s1, {:fairness_tapped, %{seat_id: "seat-Jacob", label: "too_harsh"}})
+
+      assert match?({:fairness_tap, %{seat_id: "seat-Melissa", label: "fair"}}, fair_effect)
+      assert match?({:fairness_tap, %{seat_id: "seat-Jacob", label: "too_harsh"}}, harsh_effect)
+
+      assert Game.view(s2, "seat-Melissa").your_tap == "fair"
+      assert Game.view(s2, "seat-Jacob").your_tap == "too_harsh"
+    end
+
+    test "tapping never blocks or delays the next attempt", ctx do
+      {:ok, tapped, _} =
+        Game.apply(
+          ctx.revealed,
+          {:fairness_tapped, %{seat_id: "seat-Melissa", label: "too_kind"}}
+        )
+
+      assert {:ok, advanced, []} =
+               Game.apply(tapped, {:attempt_advanced, %{seat_id: "seat-Jacob"}})
+
+      view = Game.view(advanced, "seat-Melissa")
+      assert view.attempt.number == 2
+      assert view.phase == :bridging
+      assert view.your_tap == nil
+    end
+
+    test "skipping the tap is normal: attempt advances without any tap", ctx do
+      assert {:ok, advanced, []} =
+               Game.apply(ctx.revealed, {:attempt_advanced, %{seat_id: "seat-Jacob"}})
+
+      assert Game.view(advanced, "seat-Melissa").attempt.number == 2
+    end
+
+    test "cannot tap when not revealed" do
+      state = bridging()
+
+      assert {:error, :not_revealed} =
+               Game.apply(state, {:fairness_tapped, %{seat_id: "seat-Melissa", label: "fair"}})
+    end
+
+    test "rejects an invalid label", ctx do
+      assert {:error, :invalid_label} =
+               Game.apply(
+                 ctx.revealed,
+                 {:fairness_tapped, %{seat_id: "seat-Melissa", label: "bogus"}}
+               )
+    end
+  end
 end

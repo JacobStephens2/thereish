@@ -116,6 +116,14 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("fairness_tap", %{"label" => label}, socket) do
+    if socket.assigns.seat do
+      Rooms.record_fairness_tap(socket.assigns.slug, socket.assigns.seat.id, label)
+    end
+
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.

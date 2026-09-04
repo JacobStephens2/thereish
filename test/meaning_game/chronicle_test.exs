@@ -436,4 +436,169 @@ defmodule MeaningGame.ChronicleTest do
       assert Keeper.digest(ctx.slug) == digest
     end
   end
+
+  describe "fairness taps and calibration export (ticket 11)" do
+    test "records a fairness tap row with all expected fields", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      attrs = %{
+        seat_id: ctx.melissa.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "fair"
+      }
+
+      assert {:ok, tap} = Chronicle.record_fairness_tap(room.id, attrs)
+      assert tap.room_id == room.id
+      assert tap.seat_id == ctx.melissa.id
+      assert tap.anchors == ["lantern", "harbour"]
+      assert tap.bridges == ["cairn", "cairo"]
+      assert tap.grade == 80
+      assert tap.closeness == 80
+      assert tap.band == "meld"
+      assert tap.model == "gemini-3.8-flash"
+      assert tap.prompt_version == "v1"
+      assert tap.label == "fair"
+      assert tap.inserted_at != nil
+    end
+
+    test "two seats disagreeing about the same grade both persist", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      {:ok, _t1} =
+        Chronicle.record_fairness_tap(room.id, %{
+          seat_id: ctx.melissa.id,
+          attempt_number: 1,
+          anchors: ["lantern", "harbour"],
+          bridges: ["cairn", "cairo"],
+          grade: 80,
+          band: "meld",
+          model: "gemini-3.8-flash",
+          prompt_version: "v1",
+          label: "too_kind"
+        })
+
+      {:ok, _t2} =
+        Chronicle.record_fairness_tap(room.id, %{
+          seat_id: ctx.jacob.id,
+          attempt_number: 1,
+          anchors: ["lantern", "harbour"],
+          bridges: ["cairn", "cairo"],
+          grade: 80,
+          band: "meld",
+          model: "gemini-3.8-flash",
+          prompt_version: "v1",
+          label: "fair"
+        })
+
+      taps = Chronicle.fairness_taps(room.id)
+      assert length(taps) == 2
+      assert Enum.find(taps, &(&1.seat_id == ctx.melissa.id)).label == "too_kind"
+      assert Enum.find(taps, &(&1.seat_id == ctx.jacob.id)).label == "fair"
+    end
+
+    test "calibration export includes everything a calibration needs", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      Chronicle.record_fairness_tap(room.id, %{
+        seat_id: ctx.melissa.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "too_kind"
+      })
+
+      Chronicle.record_fairness_tap(room.id, %{
+        seat_id: ctx.jacob.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "fair"
+      })
+
+      # Test structured dataset
+      dataset = Chronicle.calibration_dataset(room.id)
+      assert length(dataset) == 2
+      [entry1, _entry2] = dataset
+
+      assert entry1.anchors == ["lantern", "harbour"]
+      assert entry1.bridges == ["cairn", "cairo"]
+      assert entry1.grade == 80
+      assert entry1.band == "meld"
+      assert entry1.model == "gemini-3.8-flash"
+      assert entry1.prompt_version == "v1"
+      assert entry1.label in ["too_kind", "fair"]
+      assert entry1.seat_name in ["Melissa", "Jacob"]
+
+      # Test JSON export format that calibration runs consume
+      json_export = Chronicle.export_calibration(room.id, :json)
+      assert is_binary(json_export)
+      assert {:ok, parsed_json} = Jason.decode(json_export)
+      assert length(parsed_json) == 2
+      assert hd(parsed_json)["anchors"] == ["lantern", "harbour"]
+      assert hd(parsed_json)["bridges"] == ["cairn", "cairo"]
+      assert hd(parsed_json)["grade"] == 80
+      assert hd(parsed_json)["model"] == "gemini-3.8-flash"
+      assert hd(parsed_json)["prompt_version"] == "v1"
+    end
+
+    test "taps appear in the Chronicle alongside the Page they judge", ctx do
+      play(ctx, "cairn", "cairo")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = chronicled(ctx.slug)
+
+      Chronicle.record_fairness_tap(room.id, %{
+        page_id: page.id,
+        seat_id: ctx.melissa.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "fair"
+      })
+
+      Chronicle.record_fairness_tap(room.id, %{
+        page_id: page.id,
+        seat_id: ctx.jacob.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "too_harsh"
+      })
+
+      # Book view includes fairness taps on the attempt
+      [page_view] = Chronicle.book(room.id)
+      [attempt_view] = page_view.attempts
+      assert length(attempt_view.fairness_taps) == 2
+      labels = Enum.map(attempt_view.fairness_taps, &{&1.seat_name, &1.label})
+      assert {"Melissa", "fair"} in labels
+      assert {"Jacob", "too_harsh"} in labels
+
+      # Markdown export includes fairness taps
+      markdown = Chronicle.to_markdown(room.id)
+      assert markdown =~ "Fairness"
+      assert markdown =~ "Melissa: fair"
+      assert markdown =~ "Jacob: too harsh"
+    end
+  end
 end

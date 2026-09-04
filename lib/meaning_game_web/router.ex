@@ -33,6 +33,14 @@ defmodule MeaningGameWeb.Router do
 
     get "/chronicle.md", ChronicleController, :export
     get "/r/:slug/chronicle.md", ChronicleController, :export
+    get "/calibration.json", ChronicleController, :export_calibration, assigns: %{format: :json}
+    get "/calibration.jsonl", ChronicleController, :export_calibration, assigns: %{format: :jsonl}
+
+    get "/r/:slug/calibration.json", ChronicleController, :export_calibration,
+      assigns: %{format: :json}
+
+    get "/r/:slug/calibration.jsonl", ChronicleController, :export_calibration,
+      assigns: %{format: :jsonl}
 
     live "/check", CheckLive, :show
   end

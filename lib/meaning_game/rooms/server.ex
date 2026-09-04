@@ -147,6 +147,13 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  def handle_call({:record_fairness_tap, seat_id, label}, _from, state) do
+    case Game.apply(state.game, {:fairness_tapped, %{seat_id: seat_id, label: label}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   def handle_call({:next_page, seat_id}, _from, state) do
     view = Game.view(state.game, seat_id)
 
@@ -333,6 +340,15 @@ defmodule MeaningGame.Rooms.Server do
   rescue
     error ->
       Logger.error("the overrule could not be recorded: #{Exception.message(error)}")
+      state
+  end
+
+  defp perform({:fairness_tap, tap_data}, state) do
+    {:ok, _} = Chronicle.record_fairness_tap(state.room.id, tap_data)
+    state
+  rescue
+    error ->
+      Logger.error("the fairness tap could not be recorded: #{Exception.message(error)}")
       state
   end
 
