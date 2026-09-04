@@ -94,76 +94,246 @@ defmodule MeaningGameWeb.RoomComponents do
   """
   def assaying(assigns) do
     ~H"""
-    <p
+    <div
       :if={@room.phase == :assaying}
       data-role="phase"
       data-step={@room.assayer_step || :grading}
       data-provisional-band={@room[:provisional_band]}
-      class="text-center text-lg opacity-70"
+      class="flex flex-col items-center justify-center gap-3 text-center"
     >
-      {waiting_line(@room.assayer_step, @room[:provisional_band])}
-    </p>
+      <div
+        :if={is_nil(@room.assayer_step) or @room.assayer_step == :grading}
+        data-role="beat-meter"
+        class="flex flex-col items-center gap-2"
+      >
+        <div class="flex items-center gap-2" aria-hidden="true">
+          <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
+          <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
+          <span class="size-2.5 rounded-full bg-primary/40 animate-pulse"></span>
+        </div>
+        <p class="text-xs font-semibold tracking-widest uppercase opacity-60">
+          The Beat — holding the breath
+        </p>
+      </div>
+
+      <p class="text-lg opacity-70">
+        {waiting_line(@room.assayer_step, @room[:provisional_band])}
+      </p>
+    </div>
     """
   end
 
   attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :phone
 
   @doc """
-  The reveal: the Bridges side by side, then the number, then the joke, then the
-  argument.
+  The reveal: the Bridges side by side, then the number climbing into its band,
+  then the punchline quip, then the Assayer's reasoning.
 
-  In that order deliberately — the comparison is meant to land before the grade
-  does. The number is the joke's delivery, so it is the biggest thing on the
-  screen; the quip lands on top of it, naming the two words they actually wrote
-  (ADR-0005); and the Assayer's reasoning is under both because the players are
-  supposed to be able to argue with it.
+  In that order deliberately — the comparison lands first before the number does.
+  The number arrives with weight, the band name arrives with it, and a Meld lands
+  as a triumphant arrival distinct from a near miss or a deadpan miss.
   """
   def reveal(assigns) do
+    presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
+    assigns = assign(assigns, :presentation, presentation)
+
     ~H"""
-    <section :if={@room.reveal} data-role="reveal" class="flex flex-col items-center gap-6">
-      <div class="flex flex-wrap items-stretch justify-center gap-4">
+    <section
+      :if={@room.reveal}
+      id="reveal-performance"
+      data-role="reveal"
+      data-arrival={reveal_arrival(@room.reveal)}
+      data-mode={@mode}
+      class="flex flex-col items-center gap-8 w-full max-w-xl mx-auto"
+    >
+      <div
+        data-role="comparison"
+        style="animation: reveal-comparison 0.35s ease-out both;"
+        class="flex flex-wrap items-stretch justify-center gap-3 sm:gap-4 w-full"
+      >
         <div
           :for={bridge <- @room.reveal.bridges}
           data-bridge={bridge.seat_id}
-          class="flex min-w-40 flex-col gap-1 rounded-lg border border-base-300 px-5 py-3 text-center"
+          data-you={to_string(you?(@seat, bridge))}
+          class={[
+            "flex flex-1 min-w-[120px] sm:min-w-44 flex-col items-center justify-center gap-1 rounded-xl border p-4 text-center transition-all duration-300",
+            if(you?(@seat, bridge),
+              do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
+              else: "border-base-300 bg-base-100 shadow-sm"
+            )
+          ]}
         >
-          <span class="text-sm uppercase tracking-wide opacity-60">{bridge.name}</span>
-          <span class="text-2xl font-semibold">{bridge.bridge}</span>
+          <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider opacity-60">
+            <span>{bridge.name}</span>
+            <span :if={you?(@seat, bridge)} class="font-bold text-primary">(you)</span>
+          </div>
+          <span class={[
+            "font-bold tracking-tight",
+            if(@mode == :stage, do: "text-3xl sm:text-4xl", else: "text-2xl sm:text-3xl")
+          ]}>
+            {bridge.bridge}
+          </span>
         </div>
       </div>
 
-      <div :if={@room.reveal.closeness} class="flex flex-col items-center">
-        <span data-role="closeness" class="text-7xl font-bold leading-none">
+      <div
+        :if={@room.reveal.closeness}
+        data-role="closeness-display"
+        style="animation: reveal-closeness 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;"
+        class={[
+          "flex flex-col items-center justify-center rounded-2xl px-8 py-6 transition-all duration-500 w-full max-w-sm text-center",
+          @presentation.container_class
+        ]}
+      >
+        <span
+          id="reveal-closeness"
+          phx-hook=".ClimbNumber"
+          data-role="closeness"
+          data-target={@room.reveal.closeness}
+          class={[
+            "font-black tracking-tighter tabular-nums leading-none select-none",
+            if(@mode == :stage, do: "text-9xl sm:text-[10rem]", else: "text-7xl sm:text-8xl"),
+            @presentation.number_class
+          ]}
+        >
           {@room.reveal.closeness}
         </span>
-        <span data-role="band" class="mt-1 text-xl uppercase tracking-widest">
-          {band(@room.reveal.band)}
-        </span>
-        <span :if={@room.reveal.melded?} class="mt-1 text-sm opacity-70">One mind, two heads.</span>
+
+        <div class="mt-3 flex flex-col items-center gap-1.5">
+          <span
+            data-role="band"
+            style="animation: band-arrive 0.4s ease-out 0.8s both;"
+            class={[
+              "text-lg sm:text-xl font-extrabold uppercase tracking-widest px-4 py-1 rounded-full",
+              @presentation.badge_class
+            ]}
+          >
+            {band(@room.reveal.band)}
+          </span>
+
+          <span
+            :if={@presentation.flavour}
+            class={[
+              "text-sm sm:text-base font-medium",
+              if(@room.reveal.melded?, do: "font-semibold text-primary", else: "opacity-70")
+            ]}
+          >
+            {@presentation.flavour}
+          </span>
+        </div>
       </div>
 
-      <p :if={@room.reveal.closeness == nil} data-role="no-verdict" class="text-xl">
-        No verdict. This one is yours to call.
-      </p>
+      <div
+        :if={@room.reveal.closeness == nil}
+        data-role="no-verdict"
+        class="flex flex-col items-center gap-3 rounded-2xl border border-primary/30 bg-base-200/60 p-6 sm:p-8 text-center max-w-md shadow-sm"
+      >
+        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+          <span>The Assayer steps aside</span>
+        </div>
+        <p class="text-2xl sm:text-3xl font-bold tracking-tight">
+          No verdict. This one is yours to call.
+        </p>
+        <p class="text-sm opacity-70 max-w-sm">
+          The clock ran out and the machine stepped aside. You on the couch decide whether this was a Meld.
+        </p>
+      </div>
 
-      <ul class="flex max-w-prose flex-col gap-5 text-center">
+      <ul class="flex w-full max-w-lg flex-col gap-6 text-center">
         <li
           :for={pair <- @room.reveal.pairs}
           data-role="pair"
           data-melded={to_string(pair.melded?)}
-          class="flex flex-col gap-1"
+          class="flex flex-col items-center gap-3"
         >
-          <p :if={length(@room.reveal.pairs) > 1} class="font-semibold">
+          <p :if={length(@room.reveal.pairs) > 1} class="font-semibold text-sm opacity-80">
             {Enum.join(pair.names, " + ")} — {pair.closeness || "no verdict"} {band(pair.band)}
             <span :if={pair.melded?} data-role="pair-meld">· melded</span>
             <span :if={pair.overruled?} data-role="pair-overruled">· overruled</span>
           </p>
-          <p :if={pair.quip} data-role="quip" class="text-xl">{pair.quip}</p>
-          <p data-role="reasoning" class="opacity-80">
-            {pair.reasoning || "The Assayer could not say."}
+
+          <p
+            :if={pair.quip}
+            data-role="quip"
+            class={[
+              "font-serif italic font-medium leading-snug max-w-prose text-center",
+              if(@mode == :stage,
+                do: "text-3xl sm:text-4xl text-base-content",
+                else: "text-xl sm:text-2xl text-base-content/90"
+              )
+            ]}
+          >
+            {pair.quip}
           </p>
+
+          <div
+            :if={pair.reasoning}
+            class="flex flex-col items-center gap-1 rounded-xl bg-base-200/40 px-5 py-3 w-full border border-base-300/60"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+              The Assayer's reasoning
+            </span>
+            <p
+              data-role="reasoning"
+              class={[
+                "leading-relaxed",
+                if(@mode == :stage,
+                  do: "text-xl sm:text-2xl opacity-90",
+                  else: "text-sm sm:text-base opacity-85"
+                )
+              ]}
+            >
+              {pair.reasoning}
+            </p>
+          </div>
         </li>
       </ul>
+
+      <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
+        The couch has the call · Use your phones to continue or overrule
+      </p>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ClimbNumber">
+        export default {
+          mounted() {
+            const target = parseInt(this.el.dataset.target, 10)
+            if (isNaN(target)) return
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+              this.el.textContent = target
+              return
+            }
+            const delay = 350
+            const duration = 650
+            let started = false
+            let startTime = null
+            this.el.textContent = "0"
+
+            const tick = (now) => {
+              if (!started) {
+                startTime = now + delay
+                started = true
+              }
+              if (now < startTime) {
+                requestAnimationFrame(tick)
+                return
+              }
+              const elapsed = now - startTime
+              const progress = Math.min(elapsed / duration, 1)
+              const ease = 1 - Math.pow(1 - progress, 3)
+              const current = Math.round(ease * target)
+              this.el.textContent = current
+              if (progress < 1) {
+                requestAnimationFrame(tick)
+              } else {
+                this.el.textContent = target
+              }
+            }
+            requestAnimationFrame(tick)
+          }
+        }
+      </script>
     </section>
     """
   end
@@ -325,4 +495,64 @@ defmodule MeaningGameWeb.RoomComponents do
 
   defp waiting(%{open_seats: 1}), do: "Waiting for 1 more"
   defp waiting(%{open_seats: open}), do: "Waiting for #{open} more"
+
+  defp reveal_arrival(%{melded?: true}), do: "meld"
+  defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
+  defp reveal_arrival(_), do: "no_verdict"
+
+  defp closeness_presentation(%{melded?: true}) do
+    %{
+      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
+      number_class: "text-primary",
+      badge_class: "bg-primary text-primary-content font-bold",
+      flavour: "One mind, two heads."
+    }
+  end
+
+  defp closeness_presentation(%{band: :deep_meld}) do
+    %{
+      container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
+      number_class: "text-primary",
+      badge_class: "bg-primary text-primary-content font-bold",
+      flavour: "Two minds, one thought."
+    }
+  end
+
+  defp closeness_presentation(%{band: :near}) do
+    %{
+      container_class: "border border-info/30 bg-base-200/40",
+      number_class: "text-base-content",
+      badge_class: "bg-info/20 text-info font-bold",
+      flavour: "Orbiting the same thought."
+    }
+  end
+
+  defp closeness_presentation(%{band: :adjacent}) do
+    %{
+      container_class: "border border-base-300 bg-base-200/30",
+      number_class: "text-base-content",
+      badge_class: "bg-base-300 text-base-content/80 font-bold",
+      flavour: "Neighbouring ideas, distinct paths."
+    }
+  end
+
+  defp closeness_presentation(%{band: :miss}) do
+    %{
+      container_class: "border border-base-300 bg-base-200/30",
+      number_class: "text-base-content/85",
+      badge_class: "bg-base-300 text-base-content/80 font-bold",
+      flavour: "Different roads entirely."
+    }
+  end
+
+  defp closeness_presentation(_) do
+    %{
+      container_class: "border border-base-300 bg-base-200/30",
+      number_class: "text-base-content",
+      badge_class: "bg-base-300 text-base-content/70 font-bold",
+      flavour: nil
+    }
+  end
+
+  defp you?(seat, bridge), do: seat != nil and seat.id == bridge.seat_id
 end

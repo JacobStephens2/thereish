@@ -609,6 +609,98 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "the reveal performance (Ticket 10)" do
+    setup do
+      slug = open_room()
+      mara_conn = get(build_conn(), ~p"/r/#{slug}")
+      {:ok, mara, _} = live(mara_conn)
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      %{
+        slug: slug,
+        mara: mara,
+        jacob: jacob,
+        stage: stage,
+        screens: [mara, jacob, stage]
+      }
+    end
+
+    test "the 2.5s beat is visibly a beat, not a spinner, on both phones and the stage", ctx do
+      beat(500)
+
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=beat-meter]")
+        refute render(view) =~ "loading-spinner"
+        refute render(view) =~ "spinner"
+      end
+
+      await_reveal_on(ctx.stage)
+    end
+
+    test "reveal lands: side-by-side comparison first, climbing number, quip punchline, and phone vs stage split",
+         ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      for view <- ctx.screens do
+        await_reveal_on(view)
+        assert has_element?(view, "[data-role=comparison]")
+        assert has_element?(view, "[data-role=closeness]", "80")
+        assert has_element?(view, "[data-role=band]", "meld")
+        assert render(view) =~ "ClimbNumber"
+        assert has_element?(view, "[data-role=reasoning]")
+        assert render(view) =~ "reasoning"
+        assert has_element?(view, "[data-role=quip]")
+        assert has_element?(view, "[data-arrival=meld]")
+        assert render(view) =~ "One mind, two heads"
+      end
+
+      # Phone distinguishes your bridge with (you)
+      assert has_element?(ctx.mara, "[data-bridge][data-you=true]", "Mara")
+      assert has_element?(ctx.mara, "[data-bridge][data-you=false]", "Jacob")
+
+      # Stage has public stage mode and no private (you) attribution
+      assert has_element?(ctx.stage, "[data-mode=stage]")
+      refute has_element?(ctx.stage, "[data-bridge][data-you=true]")
+    end
+
+    test "a miss is staged as a shared comedy deadpan joke, not an error sting", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "beacon")
+
+      for view <- ctx.screens do
+        await_reveal_on(view)
+        assert has_element?(view, "[data-arrival=miss]")
+        assert has_element?(view, "[data-role=closeness]", "0")
+        assert has_element?(view, "[data-role=band]", "miss")
+        refute render(view) =~ "alert-error"
+        refute render(view) =~ "text-error"
+      end
+    end
+
+    test "the 10-second no-verdict path is staged as deliberate handover rather than broken",
+         ctx do
+      keeper(mode: :unavailable)
+
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      await_reveal_on(ctx.stage)
+
+      assert has_element?(ctx.stage, "[data-role=no-verdict]")
+      assert render(ctx.stage) =~ "The Assayer steps aside"
+      assert render(ctx.stage) =~ "No verdict. This one is yours to call."
+      assert has_element?(ctx.mara, "[data-role=propose-overrule]")
+    end
+  end
+
   # The default Room is the one Room without a slug of its own, so the test that
   # touches it has to put it away itself.
   defp stop_default_room do

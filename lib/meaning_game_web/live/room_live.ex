@@ -214,7 +214,7 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.assaying room={@room} />
 
-      <.reveal room={@room} />
+      <.reveal room={@room} seat={@seat} mode={:phone} />
 
       <.overrule_banner room={@room} seat={@seat} />
 
