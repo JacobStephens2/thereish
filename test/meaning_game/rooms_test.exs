@@ -679,7 +679,7 @@ defmodule MeaningGame.RoomsTest do
           band_scripts: %{
             "miss" => "Lost in dark.",
             "adjacent" => "Near the light.",
-            "near" => "In the glow.",
+            "close" => "Passable. In the glow.",
             "meld" => "Two minds at the flame.",
             "deep_meld" => "Deep shadow."
           },
@@ -772,7 +772,7 @@ defmodule MeaningGame.RoomsTest do
           band_scripts: %{
             "miss" => "m",
             "adjacent" => "a",
-            "near" => "n",
+            "close" => "c",
             "meld" => "meld",
             "deep_meld" => "dm"
           },
@@ -965,7 +965,7 @@ defmodule MeaningGame.RoomsTest do
           band_scripts: %{
             "miss" => "m",
             "adjacent" => "a",
-            "near" => "n",
+            "close" => "c",
             "meld" => "meld",
             "deep_meld" => "dm"
           },

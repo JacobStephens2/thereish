@@ -16,13 +16,13 @@ defmodule MeaningGame.PagesTest do
     band_scripts: %{
       "miss" => "Different neighbourhoods entirely.",
       "adjacent" => "On the same block, across the street.",
-      "near" => "In the same backyard.",
+      "close" => "Passable.",
       "meld" => "You both saw the grill.",
       "deep_meld" => "Two minds at the mower."
     },
     meta: %{
       model: "claude-fable-5-1",
-      prompt_version: "author-1",
+      prompt_version: "author-2",
       attempts: 1,
       cost_usd: 0.15,
       latency_ms: 1200
@@ -146,9 +146,9 @@ defmodule MeaningGame.PagesTest do
       assert Pages.provisional_reading(@valid_page, "family", "family") == :meld
     end
 
-    test "scores near when both are in likely_bridges" do
-      assert Pages.provisional_reading(@valid_page, "lawnmower", "family") == :near
-      assert Pages.provisional_reading(@valid_page, "barbecue", "chores") == :near
+    test "scores close when both are in likely_bridges" do
+      assert Pages.provisional_reading(@valid_page, "lawnmower", "family") == :close
+      assert Pages.provisional_reading(@valid_page, "barbecue", "chores") == :close
     end
 
     test "scores adjacent when one is in likely_bridges" do

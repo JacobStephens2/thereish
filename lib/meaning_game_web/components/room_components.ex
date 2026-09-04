@@ -631,12 +631,12 @@ defmodule MeaningGameWeb.RoomComponents do
     }
   end
 
-  defp closeness_presentation(%{band: :near}) do
+  defp closeness_presentation(%{band: :close}) do
     %{
       container_class: "border border-info/30 bg-base-200/40",
       number_class: "text-base-content",
       badge_class: "bg-info/20 text-info font-bold",
-      flavour: "Orbiting the same thought."
+      flavour: "Passable."
     }
   end
 

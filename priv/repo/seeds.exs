@@ -29,13 +29,13 @@ pages = [
     band_scripts: %{
       "miss" => "Different neighbourhoods entirely.",
       "adjacent" => "On the same block, across the street.",
-      "near" => "In the same backyard.",
+      "close" => "Passable. In the same backyard.",
       "meld" => "You both smelled the grill.",
       "deep_meld" => "Two minds at the mower."
     },
     meta: %{
       model: "claude-fable-5-1",
-      prompt_version: "author-1",
+      prompt_version: "author-2",
       attempts: 1,
       cost_usd: 0.12,
       latency_ms: 54_000
@@ -63,13 +63,13 @@ pages = [
     band_scripts: %{
       "miss" => "Sleeping through the alarm.",
       "adjacent" => "Passing each other in the hallway.",
-      "near" => "At the counter together.",
+      "close" => "Passable. At the counter together.",
       "meld" => "Both reaching for the cereal.",
       "deep_meld" => "Packed and out the door in unison."
     },
     meta: %{
       model: "claude-fable-5-1",
-      prompt_version: "author-1",
+      prompt_version: "author-2",
       attempts: 1,
       cost_usd: 0.13,
       latency_ms: 61_000
@@ -89,13 +89,13 @@ pages = [
     band_scripts: %{
       "miss" => "Headed in opposite directions.",
       "adjacent" => "In the slow lane together.",
-      "near" => "At the same highway exit.",
+      "close" => "Passable. At the same highway exit.",
       "meld" => "Eyes on the destination.",
       "deep_meld" => "Sharing the front-seat secret."
     },
     meta: %{
       model: "claude-fable-5-1",
-      prompt_version: "author-1",
+      prompt_version: "author-2",
       attempts: 1,
       cost_usd: 0.14,
       latency_ms: 58_000
@@ -115,13 +115,13 @@ pages = [
     band_scripts: %{
       "miss" => "Rummaging in the wrong bin.",
       "adjacent" => "On adjoining pegboards.",
-      "near" => "Hovering over the same project.",
+      "close" => "Passable. Hovering over the same project.",
       "meld" => "Both grabbing the wrench.",
       "deep_meld" => "Unspoken reverence for unfinished work."
     },
     meta: %{
       model: "claude-fable-5-1",
-      prompt_version: "author-1",
+      prompt_version: "author-2",
       attempts: 1,
       cost_usd: 0.11,
       latency_ms: 49_000

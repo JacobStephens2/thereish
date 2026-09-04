@@ -286,7 +286,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
           band_scripts: %{
             "miss" => "Away from water.",
             "adjacent" => "Near the shore.",
-            "near" => "On the sand.",
+            "close" => "Passable. On the sand.",
             "meld" => "At the beach.",
             "deep_meld" => "In the dunes."
           },

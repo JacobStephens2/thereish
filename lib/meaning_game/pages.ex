@@ -29,7 +29,7 @@ defmodule MeaningGame.Pages do
       band_scripts: %{
         "miss" => "Adrift in the fog.",
         "adjacent" => "Along the quay.",
-        "near" => "In the harbour mouth.",
+        "close" => "Passable. In the harbour mouth.",
         "meld" => "Two minds at the light.",
         "deep_meld" => "Deep navigation."
       },
@@ -48,7 +48,7 @@ defmodule MeaningGame.Pages do
       band_scripts: %{
         "miss" => "Lost in the dunes.",
         "adjacent" => "On the edge of the heat.",
-        "near" => "At the reflection.",
+        "close" => "Passable. At the reflection.",
         "meld" => "You both saw the mirage.",
         "deep_meld" => "Crystalline convergence."
       },
@@ -67,7 +67,7 @@ defmodule MeaningGame.Pages do
       band_scripts: %{
         "miss" => "Standing on different banks.",
         "adjacent" => "Caught in the eddies.",
-        "near" => "With the current.",
+        "close" => "Passable. With the current.",
         "meld" => "Two minds in the flow.",
         "deep_meld" => "Timeless convergence."
       },
@@ -86,7 +86,7 @@ defmodule MeaningGame.Pages do
       band_scripts: %{
         "miss" => "Cold butter.",
         "adjacent" => "On the board.",
-        "near" => "At the jar.",
+        "close" => "Passable. At the jar.",
         "meld" => "Two minds spread thin.",
         "deep_meld" => "Pure comb."
       },
@@ -105,7 +105,7 @@ defmodule MeaningGame.Pages do
       band_scripts: %{
         "miss" => "In the rafters.",
         "adjacent" => "Under the floorboards.",
-        "near" => "By the window.",
+        "close" => "Passable. By the window.",
         "meld" => "You found the trunk.",
         "deep_meld" => "Shared memory."
       },

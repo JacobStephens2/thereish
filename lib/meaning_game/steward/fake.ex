@@ -54,7 +54,7 @@ defmodule MeaningGame.Steward.Fake do
           "band_scripts" => %{
             "miss" => "Different neighbourhoods entirely.",
             "adjacent" => "On the same block, across the street.",
-            "near" => "In the same backyard.",
+            "close" => "Passable.",
             "meld" => "You both saw the grill.",
             "deep_meld" => "Two minds at the mower."
           }
