@@ -6,7 +6,7 @@ Design law 4: pre-generate and rank, never live-generate.
 
 **Blocked by:** 05.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] The Author role sits behind the Keeper, using Fable 5.1 at max effort, per the measured model policy
 - [x] Authoring runs ahead of play against a named Chapter and fills a pool. No Author call ever sits between the couple and their next Page
@@ -19,3 +19,14 @@ Design law 4: pre-generate and rank, never live-generate.
 - [x] Author-prewritten band scripts are stored as the quip fallback, unused while the live Assayer is healthy
 - [x] Tests: legality rejection and regeneration against recorded responses, schema validation on Author output, the pool draining and refusing to repeat a Page
 - [x] At least one Chapter authored and read by Jacob for quality before couch night
+
+## Comments
+
+**Author role behind the Keeper.** `MeaningGame.Keeper.Author` and `MeaningGame.Keeper.Anthropic` configure the Author role using `claude-fable-5-1` with `effort: "max"`. Validated against JSON schema via JSV and deterministic gate checks for anchors, bait, deep bridges, likely bridges table, and band scripts.
+
+**Legality filter & rejection loop.** `MeaningGame.Keeper.Legality` implements fast root/stem matching via `:stemmer`, irregular inflection resolution (`priv/wordlists/inflections.txt`), ENABLE dictionary check (`priv/wordlists/enable1.txt`), and profanity filtering. Illegal author outputs are rejected and regenerated with feedback, never repaired by hand. Player bridges are checked live (`phx-change`) and on commit without consuming attempts.
+
+**Pool persistence & Room lifecycle.** Authored pages are persisted in `authored_pages` (`MeaningGame.Pages.AuthoredPage`). `MeaningGame.Pages.draw/2` marks pages as played and refuses to repeat within an evening (`{:error, :pool_exhausted}`). At the 8s `:provisional` reveal beat, `Rooms.Server` reads `provisional_band` from `likely_bridges`, and `MeaningGame.Game` uses prewritten `band_scripts` as quip fallback if the live Assayer is unhealthy.
+
+**Chapter seeded & Jacob approved.** Four quality pages for Chapter `"suburban family life"` seeded in `priv/repo/seeds.exs` and inspected/approved by Jacob.
+
