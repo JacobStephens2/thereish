@@ -236,6 +236,6 @@ defmodule MeaningGame.Experiments do
   defp normalize_word(nil), do: ""
 
   defp normalize_word(word) when is_binary(word) do
-    word |> String.trim() |> String.downcase()
+    MeaningGame.Keeper.Precedent.normalize(word)
   end
 end
