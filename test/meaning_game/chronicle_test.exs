@@ -196,5 +196,32 @@ defmodule MeaningGame.ChronicleTest do
 
       assert chronicled(ctx.slug) == []
     end
+
+    test "records an overrule with machine ruling, couple ruling, and proposer", ctx do
+      room_id = Repo.get_by!(Room, slug: ctx.slug).id
+
+      overrule_attrs = %{
+        attempt_number: 1,
+        proposer_seat_id: ctx.melissa.id,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "beacon"],
+        machine_closeness: 41,
+        machine_reasoning: "Too far apart.",
+        machine_quip: "Not quite.",
+        couple_closeness: 100,
+        couple_reasoning: "Overruled jointly across all Seats. Recorded as precedent."
+      }
+
+      assert {:ok, overrule} = Chronicle.record_overrule(room_id, overrule_attrs)
+      assert overrule.room_id == room_id
+      assert overrule.proposer_seat_id == ctx.melissa.id
+      assert overrule.machine_closeness == 41
+      assert overrule.couple_closeness == 100
+      assert overrule.couple_reasoning =~ "Overruled jointly"
+
+      assert [saved] = Chronicle.overrules(room_id)
+      assert saved.id == overrule.id
+      assert saved.proposer.name == "Melissa"
+    end
   end
 end

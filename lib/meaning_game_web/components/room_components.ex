@@ -155,6 +155,7 @@ defmodule MeaningGameWeb.RoomComponents do
           <p :if={length(@room.reveal.pairs) > 1} class="font-semibold">
             {Enum.join(pair.names, " + ")} — {pair.closeness || "no verdict"} {band(pair.band)}
             <span :if={pair.melded?} data-role="pair-meld">· melded</span>
+            <span :if={pair.overruled?} data-role="pair-overruled">· overruled</span>
           </p>
           <p :if={pair.quip} data-role="quip" class="text-xl">{pair.quip}</p>
           <p data-role="reasoning" class="opacity-80">
@@ -163,6 +164,66 @@ defmodule MeaningGameWeb.RoomComponents do
         </li>
       </ul>
     </section>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+
+  @doc """
+  The overrule banner: visible on both phones and the stage while a proposal is
+  pending, and showing the joint ruling once agreed.
+  """
+  def overrule_banner(assigns) do
+    ~H"""
+    <div
+      :if={@room.overrule && @room.overrule.pending?}
+      data-role="overrule-banner"
+      class="flex flex-col items-center gap-2 rounded-lg border border-primary/30 bg-base-200/50 p-4 text-center"
+    >
+      <p :if={@seat && @room.overrule.you_proposed?} data-role="overrule-pending">
+        You proposed an overrule. Waiting for everyone to agree.
+      </p>
+
+      <div
+        :if={@seat && !@room.overrule.you_agreed?}
+        data-role="overrule-vote"
+        class="flex flex-col items-center gap-3"
+      >
+        <p data-role="overrule-pending">
+          <span class="font-semibold">{@room.overrule.proposer_name}</span>
+          proposed overruling this grade to a Meld.
+        </p>
+        <div class="flex gap-3">
+          <.button phx-click="agree_overrule" data-role="agree-overrule" variant="primary">
+            Agree
+          </.button>
+          <.button phx-click="decline_overrule" data-role="decline-overrule">
+            Decline
+          </.button>
+        </div>
+      </div>
+
+      <p
+        :if={@seat && @room.overrule.you_agreed? && !@room.overrule.you_proposed?}
+        data-role="overrule-pending"
+      >
+        You agreed. Waiting for everyone to agree.
+      </p>
+
+      <p :if={is_nil(@seat)} data-role="overrule-pending" class="opacity-80">
+        <span class="font-semibold">{@room.overrule.proposer_name}</span>
+        proposed an overrule. Waiting for the Room to agree.
+      </p>
+    </div>
+
+    <p
+      :if={@room.reveal && @room.reveal.overruled?}
+      data-role="overruled-notice"
+      class="text-center text-sm font-semibold text-primary"
+    >
+      Overruled jointly — recorded in the Chronicle as precedent.
+    </p>
     """
   end
 

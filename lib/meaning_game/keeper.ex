@@ -84,6 +84,21 @@ defmodule MeaningGame.Keeper do
   end
 
   @doc """
+  Rewrites the precedent for this pair with the couple's ruling.
+
+  A joint player overrule is the only thing in the system that rewrites
+  precedent (ADR-0006, design law 3).
+  """
+  @spec overrule([String.t()], [String.t()], map()) ::
+          {:ok, term()} | {:error, term()}
+  def overrule(anchors, bridges, ruling) do
+    role = role(:assayer)
+    prompt_version = Map.get(role, :prompt_version, MeaningGame.Keeper.Assay.version())
+
+    MeaningGame.Keeper.Precedent.overrule(role.model, prompt_version, anchors, bridges, ruling)
+  end
+
+  @doc """
   What answers one role: which provider, which model, at what effort, how many
   identical requests, and how long to wait.
 

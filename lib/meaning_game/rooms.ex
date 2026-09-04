@@ -116,6 +116,28 @@ defmodule MeaningGame.Rooms do
   def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
 
   @doc """
+  Proposes an overrule of the current reveal from one Seat.
+  """
+  @spec propose_overrule(String.t(), String.t(), keyword()) ::
+          :ok | {:error, :not_revealed | :no_such_seat | :proposal_pending | :already_overruled}
+  def propose_overrule(slug, seat_id, opts \\ []),
+    do: call(slug, {:propose_overrule, seat_id, opts})
+
+  @doc """
+  Agrees to a pending overrule proposal from one Seat.
+  """
+  @spec agree_overrule(String.t(), String.t()) ::
+          :ok | {:error, :no_such_seat | :no_proposal_pending}
+  def agree_overrule(slug, seat_id), do: call(slug, {:agree_overrule, seat_id})
+
+  @doc """
+  Declines a pending overrule proposal from one Seat.
+  """
+  @spec decline_overrule(String.t(), String.t()) ::
+          :ok | {:error, :no_such_seat | :no_proposal_pending}
+  def decline_overrule(slug, seat_id), do: call(slug, {:decline_overrule, seat_id})
+
+  @doc """
   "One more?" — a fresh Page in the same Room, with the same Seats.
 
   Only from a Page that has closed, so that the tap can never take a Page away

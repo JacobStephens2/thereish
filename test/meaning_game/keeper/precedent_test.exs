@@ -158,5 +158,40 @@ defmodule MeaningGame.Keeper.PrecedentTest do
       assert verdict.reasoning == "Both words name a marker left to be found."
       assert verdict.quip == "One built it, the other lit it."
     end
+
+    test "a joint overrule rewrites stored precedent" do
+      Precedent.put(
+        "gemini-3.8-flash",
+        "assay-1",
+        ["lantern", "harbour"],
+        ["beacon", "cairn"],
+        @verdict
+      )
+
+      couple_ruling = %{
+        closeness: 100,
+        reasoning: "Overruled jointly across all Seats. Recorded as precedent.",
+        quip: "House law."
+      }
+
+      assert {:ok, _} =
+               Precedent.overrule(
+                 "gemini-3.8-flash",
+                 "assay-1",
+                 ["lantern", "harbour"],
+                 ["beacon", "cairn"],
+                 couple_ruling
+               )
+
+      assert {:ok, verdict} =
+               Precedent.get("gemini-3.8-flash", "assay-1", ["lantern", "harbour"], [
+                 "beacon",
+                 "cairn"
+               ])
+
+      assert verdict.closeness == 100
+      assert verdict.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
+      assert verdict.quip == "House law."
+    end
   end
 end

@@ -739,4 +739,141 @@ defmodule MeaningGame.GameTest do
       assert {:error, :no_verdict_expected} = Game.apply(state, event)
     end
   end
+
+  describe "overruling a grade" do
+    setup do
+      {state, effects} = commit_all(bridging(), [{"Melissa", "cairn"}, {"Jacob", "beacon"}])
+      revealed = grade(state, effects, [41])
+      pair = hd(assays(effects)) |> elem(1)
+
+      %{revealed: revealed, pair: pair}
+    end
+
+    test "any Seat can propose an overrule from the reveal", ctx do
+      assert {:ok, state, []} =
+               Game.apply(ctx.revealed, {:overrule_proposed, %{seat_id: "seat-Melissa"}})
+
+      # The proposal is pending, and the grade is untouched
+      assert Game.view(state, nil).reveal.closeness == 41
+
+      melissa_view = Game.view(state, "seat-Melissa")
+      assert melissa_view.overrule.pending?
+      assert melissa_view.overrule.proposer_id == "seat-Melissa"
+      assert melissa_view.overrule.proposer_name == "Melissa"
+      assert melissa_view.overrule.you_proposed?
+      assert melissa_view.overrule.you_agreed?
+
+      jacob_view = Game.view(state, "seat-Jacob")
+      assert jacob_view.overrule.pending?
+      assert jacob_view.overrule.proposer_id == "seat-Melissa"
+      refute jacob_view.overrule.you_proposed?
+      refute jacob_view.overrule.you_agreed?
+
+      stage_view = Game.view(state, nil)
+      assert stage_view.overrule.pending?
+      assert stage_view.overrule.proposer_name == "Melissa"
+      refute stage_view.overrule.you_proposed?
+      refute stage_view.overrule.you_agreed?
+    end
+
+    test "cannot propose an overrule before the reveal" do
+      state = bridging()
+
+      assert {:error, :not_revealed} =
+               Game.apply(state, {:overrule_proposed, %{seat_id: "seat-Melissa"}})
+    end
+
+    test "someone not in the Room cannot propose an overrule", ctx do
+      assert {:error, :no_such_seat} =
+               Game.apply(ctx.revealed, {:overrule_proposed, %{seat_id: "seat-Ada"}})
+    end
+
+    test "an overrule takes effect only when every Seat agrees (unanimity)", ctx do
+      {:ok, proposed, []} =
+        Game.apply(ctx.revealed, {:overrule_proposed, %{seat_id: "seat-Melissa"}})
+
+      # Proposer alone does not rewrite the grade
+      assert Game.view(proposed, nil).reveal.closeness == 41
+
+      # Second seat agrees -> all 2 seats agree -> overrule takes effect!
+      assert {:ok, agreed, effects} =
+               Game.apply(proposed, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+      view = Game.view(agreed, nil)
+      assert view.reveal.closeness == 100
+      assert view.reveal.melded?
+      assert view.reveal.pairs |> hd() |> Map.get(:overruled?)
+      assert view.phase == :closed
+      assert view.closed == %{because: :meld, attempt: 1}
+      assert view.overrule == nil
+
+      # Emitted overrule effect with original and couple ruling
+      assert {:overrule, overrule} = Enum.find(effects, &match?({:overrule, _}, &1))
+      assert overrule.proposer_seat_id == "seat-Melissa"
+      assert overrule.machine_closeness == 41
+      assert overrule.couple_closeness == 100
+      assert overrule.anchors == ["lantern", "harbour"]
+      assert overrule.bridges == ["cairn", "beacon"]
+
+      # And because it melded and closed, the Chronicle is owed
+      assert {:chronicle, entry} = Enum.find(effects, &match?({:chronicle, _}, &1))
+      assert entry.closed_because == :meld
+      assert entry.melded?
+    end
+
+    test "a declined proposal leaves the grade untouched", ctx do
+      {:ok, proposed, []} =
+        Game.apply(ctx.revealed, {:overrule_proposed, %{seat_id: "seat-Melissa"}})
+
+      assert {:ok, declined, effects} =
+               Game.apply(proposed, {:overrule_declined, %{seat_id: "seat-Jacob"}})
+
+      assert effects == []
+      view = Game.view(declined, nil)
+      assert view.reveal.closeness == 41
+      assert view.overrule == nil
+      refute view.reveal.melded?
+    end
+
+    test "a three-Seat Room needs all three Seats to agree" do
+      {state, effects} = three_committed()
+      revealed = grade(state, effects, [40, 30, 20])
+
+      assert {:ok, p1, []} =
+               Game.apply(revealed, {:overrule_proposed, %{seat_id: "seat-Melissa"}})
+
+      assert Game.view(p1, nil).reveal.closeness == 30
+      assert Game.view(p1, nil).overrule.pending?
+
+      # Second seat agrees: 2 of 3, still pending!
+      assert {:ok, p2, []} =
+               Game.apply(p1, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+      assert Game.view(p2, nil).reveal.closeness == 30
+      assert Game.view(p2, nil).overrule.pending?
+
+      # Third seat agrees: 3 of 3, now takes effect!
+      assert {:ok, agreed, effects} =
+               Game.apply(p2, {:overrule_agreed, %{seat_id: "seat-Ada"}})
+
+      assert Game.view(agreed, nil).overrule == nil
+      assert Enum.any?(effects, &match?({:overrule, _}, &1))
+    end
+
+    test "the proposal expires cleanly if the Page moves on", ctx do
+      {:ok, proposed, []} =
+        Game.apply(ctx.revealed, {:overrule_proposed, %{seat_id: "seat-Melissa"}})
+
+      assert Game.view(proposed, nil).overrule.pending?
+
+      # Next attempt starts without anyone agreeing
+      assert {:ok, advanced, []} =
+               Game.apply(proposed, {:attempt_advanced, %{seat_id: "seat-Jacob"}})
+
+      view = Game.view(advanced, nil)
+      assert view.attempt.number == 2
+      assert view.phase == :bridging
+      assert view.overrule == nil
+    end
+  end
 end

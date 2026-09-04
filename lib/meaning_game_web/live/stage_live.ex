@@ -63,6 +63,8 @@ defmodule MeaningGameWeb.StageLive do
 
       <.reveal room={@room} />
 
+      <.overrule_banner room={@room} />
+
       <.carry_forward room={@room} />
 
       <.ending room={@room} />
