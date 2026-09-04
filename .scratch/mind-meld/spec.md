@@ -200,7 +200,7 @@ A good test here crosses one of the three surfaces and asserts on what a player 
 - Accounts, magic-link email, and Google sign-in. Only claimable Seat ids are in scope.
 - The Scribe and its Vale gate. The Chronicle records events; narrative recaps come later.
 - Oban, pgvector, embeddings, and Bumblebee. All post-couch-night.
-- Chronicle Clover, which stays parked on `prototype/stage0-page-machines`.
+- Chronicle Clover, retired unplayed on 2026-09-02 (survives only on `prototype/stage0-page-machines` as a dated primary source).
 - Solo mode, competitive modes, and the LLM understudying a Seat, which ADR-0001 rules out for now.
 - Outward sharing and result cards, deprioritized because couch play removes the need.
 - Naming the game, which has its own session.

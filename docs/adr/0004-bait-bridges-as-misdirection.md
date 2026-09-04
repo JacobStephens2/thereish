@@ -4,7 +4,7 @@ status: accepted
 
 # Bait bridges are Mind-Meld's misdirection engine, shipped as an A/B layer
 
-Stage 0 parked the clover candidate and left Mind-Meld, which carried no misdirection at all — and design law 9 says only two tricks survive at two players (overlapping keys, blind decoys), while Melissa's signature pleasure is beating a fair trap and narrating it afterwards. Decision (2026-09-02): the Author plants Anchors that have an obvious **Bait** bridge and at least two deeper bridges; converging on the bait is still a Meld, on the lowest rung, and converging on a deep bridge is the top rung. A miss is never a loss. It ships as an A/B layer — bait-scored Pages against plain ones — so the couch decides whether misdirection was what Mind-Meld lacked.
+Stage 0 retired the clover candidate (unplayed) and left Mind-Meld, which carried no misdirection at all — and design law 9 says only two tricks survive at two players (overlapping keys, blind decoys), while Melissa's signature pleasure is beating a fair trap and narrating it afterwards. Decision (2026-09-02): the Author plants Anchors that have an obvious **Bait** bridge and at least two deeper bridges; converging on the bait is still a Meld, on the lowest rung, and converging on a deep bridge is the top rung. A miss is never a loss. It ships as an A/B layer — bait-scored Pages against plain ones — so the couch decides whether misdirection was what Mind-Meld lacked.
 
 ## Considered options
 
