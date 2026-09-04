@@ -216,30 +216,46 @@ defmodule MeaningGame.Game do
     bridge = normalize(bridge)
 
     cond do
-      phase(state) != :bridging -> {:error, :not_bridging}
-      not seated?(state, seat_id) -> {:error, :no_such_seat}
-      committed?(state, seat_id) -> {:error, :already_committed}
-      bridge == "" -> {:error, :bridge_required}
-      true -> committed(%{state | bridges: Map.put(state.bridges, seat_id, bridge)})
+      phase(state) != :bridging ->
+        {:error, :not_bridging}
+
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      committed?(state, seat_id) ->
+        {:error, :already_committed}
+
+      bridge == "" ->
+        {:error, :bridge_required}
+
+      true ->
+        case MeaningGame.Keeper.Legality.check_bridge(bridge, state.anchors) do
+          :ok -> committed(%{state | bridges: Map.put(state.bridges, seat_id, bridge)})
+          {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
+        end
     end
   end
 
-  def apply(%__MODULE__{} = state, {:verdict_received, verdict}) do
-    record(state, verdict.pair, %{
+  def apply(%__MODULE__{} = state, {:verdict_received, %{pair: pair} = verdict}) do
+    quip = Map.get(verdict, :quip) || fallback_quip(state, pair)
+
+    record(state, pair, %{
       graded?: true,
       closeness: verdict.closeness,
       reasoning: verdict.reasoning,
-      quip: Map.get(verdict, :quip),
+      quip: quip,
       meta: Map.get(verdict, :meta, %{})
     })
   end
 
   def apply(%__MODULE__{} = state, {:verdict_unavailable, %{pair: pair} = event}) do
+    quip = Map.get(event, :quip) || fallback_quip(state, pair)
+
     record(state, pair, %{
       graded?: false,
       closeness: nil,
       reasoning: nil,
-      quip: nil,
+      quip: quip,
       meta: Map.get(event, :meta, %{})
     })
   end
@@ -402,6 +418,28 @@ defmodule MeaningGame.Game do
 
     {:assay, pair, %{anchors: state.anchors, bridges: bridges}}
   end
+
+  defp fallback_quip(%{page: %{} = page} = state, pair) do
+    scripts = Map.get(page, :band_scripts) || Map.get(page, "band_scripts")
+
+    if is_map(scripts) do
+      bridges =
+        state.seats
+        |> Enum.filter(&(&1.id in pair))
+        |> Enum.map(&state.bridges[&1.id])
+
+      case bridges do
+        [left, right] when is_binary(left) and is_binary(right) ->
+          band = MeaningGame.Keeper.Author.provisional_reading(page, left, right)
+          Map.get(scripts, to_string(band)) || Map.get(scripts, band)
+
+        _ ->
+          nil
+      end
+    end
+  end
+
+  defp fallback_quip(_state, _pair), do: nil
 
   # A pair is graded once. The Room can deliver the same verdict twice — a
   # retry, a message that outlived the attempt it was about — and the second one

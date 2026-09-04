@@ -61,6 +61,15 @@ defmodule MeaningGame.Keeper do
         }
 
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
+  @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
+  Pre-generates a Page ahead of play against a named Chapter.
+  """
+  @spec author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def author(chapter, opts \\ []) do
+    adapter().author(chapter, opts)
+  end
 
   @doc """
   Grades how close two Bridges landed.

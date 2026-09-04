@@ -36,6 +36,10 @@ if key = System.get_env("GEMINI_API_KEY") do
   config :meaning_game, :keeper, roles: [assayer: [api_key: key]]
 end
 
+if key = System.get_env("ANTHROPIC_API_KEY") do
+  config :meaning_game, :keeper, roles: [author: [api_key: key]]
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :meaning_game, MeaningGameWeb.Endpoint,

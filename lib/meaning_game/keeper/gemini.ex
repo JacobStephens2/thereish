@@ -37,7 +37,7 @@ defmodule MeaningGame.Keeper.Gemini do
         receive_timeout: request.timeout_ms,
         retry: false
       ]
-      |> Keyword.merge(Provider.http_options())
+      |> Keyword.merge(Provider.http_options(__MODULE__))
       |> then(&Req.post(@url, &1))
       |> answer()
     end

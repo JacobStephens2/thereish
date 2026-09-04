@@ -167,4 +167,58 @@ defmodule MeaningGame.KeeperFixtures do
 
     Application.put_env(:meaning_game, :keeper, live)
   end
+
+  @doc "Puts a recorded response behind the Author's provider for this test."
+  def recorded_author(answer) when is_function(answer, 2) do
+    Req.Test.stub(MeaningGame.Keeper.Anthropic, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      answer.(conn, Jason.decode!(body))
+    end)
+  end
+
+  @doc "One whole response in Anthropic messages shape."
+  def author_response(content, opts \\ []) do
+    stop_reason = Keyword.get(opts, :stop_reason, "end_turn")
+
+    %{
+      "id" => "msg_test_author",
+      "type" => "message",
+      "role" => "assistant",
+      "model" => "claude-fable-5-1",
+      "content" => [
+        %{"type" => "text", "text" => content}
+      ],
+      "stop_reason" => stop_reason,
+      "usage" => %{
+        "input_tokens" => Keyword.get(opts, :input_tokens, 450),
+        "output_tokens" => Keyword.get(opts, :output_tokens, 350)
+      }
+    }
+  end
+
+  @doc "A well-formed authored page JSON."
+  def authored_page_json(opts \\ []) do
+    Jason.encode!(%{
+      "theme" => Keyword.get(opts, :theme, "suburban family life"),
+      "anchors" => Keyword.get(opts, :anchors, ["backyard", "weekend"]),
+      "bait" => Keyword.get(opts, :bait, "barbecue"),
+      "deep_bridges" => Keyword.get(opts, :deep_bridges, ["lawnmower", "chores"]),
+      "likely_bridges" =>
+        Keyword.get(opts, :likely_bridges, ["barbecue", "lawnmower", "chores", "family", "party"]),
+      "why_these" =>
+        Keyword.get(
+          opts,
+          :why_these,
+          "Backyard and weekend invite barbecue as the immediate trap."
+        ),
+      "band_scripts" =>
+        Keyword.get(opts, :band_scripts, %{
+          "miss" => "Different neighbourhoods entirely.",
+          "adjacent" => "On the same block, across the street.",
+          "near" => "In the same backyard.",
+          "meld" => "You both saw the grill.",
+          "deep_meld" => "Two minds at the mower."
+        })
+    })
+  end
 end

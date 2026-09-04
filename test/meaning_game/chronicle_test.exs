@@ -40,7 +40,9 @@ defmodule MeaningGame.ChronicleTest do
       play(ctx, "cairn", "cairo")
 
       assert [page] = chronicled(ctx.slug)
-      assert page.document == %{"id" => "hand-written-1", "anchors" => ["lantern", "harbour"]}
+      assert page.document["id"] == "hand-written-1"
+      assert page.document["anchors"] == ["lantern", "harbour"]
+      assert page.document["bait"] == "lighthouse"
       assert page.closed_because == "meld"
       assert page.melded == true
       assert page.closeness == 80

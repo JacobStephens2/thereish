@@ -95,13 +95,22 @@ defmodule MeaningGame.GameTest do
     state
   end
 
+  @miss_words [
+    {"cairn", "beacon"},
+    {"stone", "signal"},
+    {"granite", "flare"},
+    {"rock", "torch"},
+    {"boulder", "light"}
+  ]
+
   # Misses `count` times over, carrying forward each time there is an attempt
   # left to carry into. The Bridges differ every time so that the Anchors do.
   defp missed_through(count) do
     Enum.reduce(1..count, {bridging(), []}, fn n, {state, _effects} ->
       state = if n == 1, do: state, else: again(state)
+      {w1, w2} = Enum.at(@miss_words, n - 1)
 
-      attempt(state, [{"Melissa", "cairn#{n}"}, {"Jacob", "beacon#{n}"}], [10])
+      attempt(state, [{"Melissa", w1}, {"Jacob", w2}], [10])
     end)
   end
 
@@ -110,7 +119,7 @@ defmodule MeaningGame.GameTest do
     commit_all(bridging(["Melissa", "Jacob", "Ada"]), [
       {"Melissa", "cairn"},
       {"Jacob", "beacon"},
-      {"Ada", "harbourmaster"}
+      {"Ada", "wharf"}
     ])
   end
 
@@ -489,8 +498,8 @@ defmodule MeaningGame.GameTest do
 
       # Melissa + Jacob 90, Melissa + Ada 60, Jacob + Ada 30. The widest gap is
       # the one worth asking them to bridge, and Melissa's Bridge is not in it.
-      assert Game.view(state, nil).next_anchors == ["beacon", "harbourmaster"]
-      assert Game.view(again(state), nil).anchors == ["beacon", "harbourmaster"]
+      assert Game.view(state, nil).next_anchors == ["beacon", "wharf"]
+      assert Game.view(again(state), nil).anchors == ["beacon", "wharf"]
     end
 
     test "a pair the Assayer could not grade is not the widest gap" do
@@ -502,7 +511,7 @@ defmodule MeaningGame.GameTest do
 
       # An unknown is not a miss, so the ungraded Melissa + Jacob pair loses to
       # the graded 30.
-      assert Game.view(state, nil).next_anchors == ["beacon", "harbourmaster"]
+      assert Game.view(state, nil).next_anchors == ["beacon", "wharf"]
     end
 
     test "a Page nobody could grade at all still carries something forward" do
@@ -587,8 +596,8 @@ defmodule MeaningGame.GameTest do
 
       assert Enum.map(played, & &1.anchors) == [
                ["lantern", "harbour"],
-               ["cairn1", "beacon1"],
-               ["cairn2", "beacon2"]
+               ["cairn", "beacon"],
+               ["stone", "signal"]
              ]
     end
   end

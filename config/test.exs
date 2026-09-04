@@ -41,7 +41,8 @@ config :meaning_game, reveal_beat_ms: 5
 config :meaning_game, :keeper,
   adapter: MeaningGame.Keeper.Fake,
   roles: [
-    assayer: [timeout_ms: 1_000, deadline_ms: 2_000, api_key: "recorded-responses-need-no-key"]
+    assayer: [timeout_ms: 1_000, deadline_ms: 2_000, api_key: "recorded-responses-need-no-key"],
+    author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"]
   ],
   http_options: [plug: {Req.Test, MeaningGame.Keeper.Gemini}]
 

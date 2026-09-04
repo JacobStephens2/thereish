@@ -98,9 +98,10 @@ defmodule MeaningGameWeb.RoomComponents do
       :if={@room.phase == :assaying}
       data-role="phase"
       data-step={@room.assayer_step || :grading}
+      data-provisional-band={@room[:provisional_band]}
       class="text-center text-lg opacity-70"
     >
-      {waiting_line(@room.assayer_step)}
+      {waiting_line(@room.assayer_step, @room[:provisional_band])}
     </p>
     """
   end
@@ -307,14 +308,17 @@ defmodule MeaningGameWeb.RoomComponents do
 
   # The Assayer has answered and the beat is still running, which is the
   # ordinary case and reads as the ordinary line.
-  defp waiting_line(nil), do: "Every bridge is in. The Assayer is looking at them."
-  defp waiting_line(:grading), do: waiting_line(nil)
-  defp waiting_line(:slow), do: "The Assayer is still reading. It does this sometimes."
+  defp waiting_line(step, provisional_band \\ nil)
+  defp waiting_line(nil, _band), do: "Every bridge is in. The Assayer is looking at them."
+  defp waiting_line(:grading, _band), do: waiting_line(nil)
+  defp waiting_line(:slow, _band), do: "The Assayer is still reading. It does this sometimes."
 
-  # Where the Author's pre-graded table will put a provisional band once there
-  # is an Author to write one. Until then the honest thing is to keep saying
-  # what is happening rather than to guess at a number.
-  defp waiting_line(:provisional), do: "Still nothing. Hold on."
+  # The Author's pre-graded table puts a provisional band at eight seconds.
+  defp waiting_line(:provisional, nil), do: "Still nothing. Hold on."
+
+  defp waiting_line(:provisional, band) do
+    "Provisional reading: #{band(band)} (from likely bridges). Still waiting on the Assayer."
+  end
 
   defp waiting(%{open_seats: 0, seat_limit: seat_limit}),
     do: "All #{seat_limit} seats taken"

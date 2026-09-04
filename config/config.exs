@@ -80,12 +80,25 @@ config :meaning_game, :keeper,
       # Filled in from GEMINI_API_KEY by `config/runtime.exs`. A key is a
       # setting like the model is; nothing reaches for the environment mid-Page.
       api_key: nil
+    ],
+    author: [
+      provider: MeaningGame.Keeper.Anthropic,
+      model: "claude-fable-5-1",
+      effort: "max",
+      max_tokens: 100_000,
+      retries: 2,
+      timeout_ms: 120_000,
+      deadline_ms: 300_000,
+      api_key: nil
     ]
   ],
   # Dollars per million tokens, {input, output}, from each provider's pricing
   # page on 2026-09-02. Google's promotional rate for Flash runs to 2026-12-31;
-  # $1.50 / $7.50 after that.
-  prices: %{"gemini-3.8-flash" => {0.75, 3.75}},
+  # $1.50 / $7.50 after that. Fable 5.1 is $10 / $50.
+  prices: %{
+    "gemini-3.8-flash" => {0.75, 3.75},
+    "claude-fable-5-1" => {10.0, 50.0}
+  },
   # The most Seats a Room may hold, because live grading is N choose 2 requests
   # per attempt and six Seats is already fifteen of them. A limit on what a
   # reveal can afford, not on what the rules can say.
