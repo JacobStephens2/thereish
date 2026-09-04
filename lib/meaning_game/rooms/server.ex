@@ -454,42 +454,7 @@ defmodule MeaningGame.Rooms.Server do
     {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
 
     arm = state[:current_arm] || :bait
-
-    trap_converged =
-      Enum.any?(entry.attempts, fn att ->
-        Enum.any?(att.verdicts, fn v ->
-          (is_map(v.meta) && v.meta[:trap_sprung] == true) or
-            (is_map(v[:meta]) && v[:meta][:trap_sprung] == true)
-        end)
-      end)
-
-    deep_converged =
-      Enum.any?(entry.attempts, fn att ->
-        Enum.any?(att.verdicts, fn v ->
-          (is_map(v.meta) && v.meta[:deep_convergence] == true) or
-            (is_map(v[:meta]) && v[:meta][:deep_convergence] == true)
-        end)
-      end)
-
-    page_identifier =
-      cond do
-        is_map(entry.page) -> entry.page[:id] || entry.page["id"] || page.id
-        true -> page.id
-      end
-
-    _ =
-      Chronicle.record_experiment_outcome(state.room.id, %{
-        page_id: page.id,
-        page_identifier: to_string(page_identifier),
-        experiment_id: "bait_against_plain",
-        arm: to_string(arm),
-        melded: entry.melded?,
-        closeness: entry.closeness,
-        attempts_count: length(entry.attempts),
-        closed_because: to_string(entry.closed_because),
-        trap_converged: trap_converged,
-        deep_converged: deep_converged
-      })
+    _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
 
     state
   rescue

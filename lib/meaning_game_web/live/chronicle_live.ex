@@ -238,39 +238,23 @@ defmodule MeaningGameWeb.ChronicleLive do
           <h3 class="text-sm font-bold uppercase tracking-wider opacity-70">Qualitative Readout</h3>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div
-              data-role="readout-arm-bait"
-              class="rounded-lg bg-base-200/60 p-3 flex flex-col gap-1 text-xs"
-            >
-              <span class="font-bold text-sm text-secondary">Bait-scored Pages</span>
-              <div>Pages played: <span class="font-semibold">{@readout.bait.pages_count}</span></div>
-              <div>Meld rate: <span class="font-semibold">{@readout.bait.meld_rate}</span></div>
-              <div>
-                Mean attempts:
-                <span class="font-semibold">{@readout.bait.mean_attempts_to_meld}</span>
-              </div>
-              <div>
-                Traps sprung: <span class="font-semibold">{@readout.bait.trap_sprung_count}</span>
-              </div>
-              <div class="mt-1 opacity-75">Fairness: {@readout.bait.fairness_summary}</div>
-            </div>
+            <.arm_readout_card
+              data_role="readout-arm-bait"
+              title="Bait-scored Pages"
+              title_class="text-secondary"
+              summary={@readout.bait}
+              extra_label="Traps sprung"
+              extra_value={@readout.bait.trap_sprung_count}
+            />
 
-            <div
-              data-role="readout-arm-plain"
-              class="rounded-lg bg-base-200/60 p-3 flex flex-col gap-1 text-xs"
-            >
-              <span class="font-bold text-sm opacity-80">Plain Pages</span>
-              <div>Pages played: <span class="font-semibold">{@readout.plain.pages_count}</span></div>
-              <div>Meld rate: <span class="font-semibold">{@readout.plain.meld_rate}</span></div>
-              <div>
-                Mean attempts:
-                <span class="font-semibold">{@readout.plain.mean_attempts_to_meld}</span>
-              </div>
-              <div>
-                Overrules: <span class="font-semibold">{@readout.plain.overrules_count}</span>
-              </div>
-              <div class="mt-1 opacity-75">Fairness: {@readout.plain.fairness_summary}</div>
-            </div>
+            <.arm_readout_card
+              data_role="readout-arm-plain"
+              title="Plain Pages"
+              title_class="opacity-80"
+              summary={@readout.plain}
+              extra_label="Overrules"
+              extra_value={@readout.plain.overrules_count}
+            />
           </div>
 
           <div
@@ -614,4 +598,31 @@ defmodule MeaningGameWeb.ChronicleLive do
   end
 
   defp human_label(label), do: MeaningGame.Chronicle.FairnessTap.label_human(label)
+
+  attr :data_role, :string, required: true
+  attr :title, :string, required: true
+  attr :title_class, :string, default: "opacity-80"
+  attr :summary, :map, required: true
+  attr :extra_label, :string, default: nil
+  attr :extra_value, :any, default: nil
+
+  defp arm_readout_card(assigns) do
+    ~H"""
+    <div
+      data-role={@data_role}
+      class="rounded-lg bg-base-200/60 p-3 flex flex-col gap-1 text-xs"
+    >
+      <span class={["font-bold text-sm", @title_class]}>{@title}</span>
+      <div>Pages played: <span class="font-semibold">{@summary.pages_count}</span></div>
+      <div>Meld rate: <span class="font-semibold">{@summary.meld_rate}</span></div>
+      <div>
+        Mean attempts: <span class="font-semibold">{@summary.mean_attempts_to_meld}</span>
+      </div>
+      <div :if={@extra_label && @extra_value != nil}>
+        {@extra_label}: <span class="font-semibold">{@extra_value}</span>
+      </div>
+      <div class="mt-1 opacity-75">Fairness: {@summary.fairness_summary}</div>
+    </div>
+    """
+  end
 end

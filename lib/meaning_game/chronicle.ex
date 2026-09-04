@@ -206,6 +206,48 @@ defmodule MeaningGame.Chronicle do
   end
 
   @doc """
+  Records an experiment outcome for a closed Page, extracting convergence flags and identifiers.
+  """
+  @spec record_page_outcome(Ecto.UUID.t(), map(), map(), atom() | String.t(), String.t()) ::
+          {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
+  def record_page_outcome(room_id, page, entry, arm, experiment_id \\ "bait_against_plain") do
+    trap_converged =
+      Enum.any?(entry.attempts, fn att ->
+        Enum.any?(att.verdicts, fn v ->
+          meta = (is_map(v) && (v[:meta] || Map.get(v, :meta))) || %{}
+          meta[:trap_sprung] == true or meta["trap_sprung"] == true
+        end)
+      end)
+
+    deep_converged =
+      Enum.any?(entry.attempts, fn att ->
+        Enum.any?(att.verdicts, fn v ->
+          meta = (is_map(v) && (v[:meta] || Map.get(v, :meta))) || %{}
+          meta[:deep_convergence] == true or meta["deep_convergence"] == true
+        end)
+      end)
+
+    page_identifier =
+      cond do
+        is_map(entry.page) -> entry.page[:id] || entry.page["id"] || page.id
+        true -> page.id
+      end
+
+    record_experiment_outcome(room_id, %{
+      page_id: page.id,
+      page_identifier: to_string(page_identifier),
+      experiment_id: experiment_id,
+      arm: to_string(arm),
+      melded: entry.melded?,
+      closeness: entry.closeness,
+      attempts_count: length(entry.attempts),
+      closed_because: to_string(entry.closed_because),
+      trap_converged: trap_converged,
+      deep_converged: deep_converged
+    })
+  end
+
+  @doc """
   Records an unblinding action for an experiment as an append-only event (ticket 13).
   """
   @spec record_experiment_unblinding(Ecto.UUID.t(), map()) ::
@@ -367,28 +409,21 @@ defmodule MeaningGame.Chronicle do
       end
 
     %{
-      bait: %{
-        pages_count: length(bait_outcomes),
-        melded_count: Enum.count(bait_outcomes, & &1.melded),
-        melded_history: Enum.map(bait_outcomes, & &1.melded),
-        attempts_to_meld:
-          bait_outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
-        fairness_taps: Enum.frequencies_by(taps_bait, & &1.label),
-        overrules_count: overrules_bait_count,
-        trap_sprung_count: Enum.count(bait_outcomes, & &1.trap_converged),
-        deep_convergence_count: Enum.count(bait_outcomes, & &1.deep_converged)
-      },
-      plain: %{
-        pages_count: length(plain_outcomes),
-        melded_count: Enum.count(plain_outcomes, & &1.melded),
-        melded_history: Enum.map(plain_outcomes, & &1.melded),
-        attempts_to_meld:
-          plain_outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
-        fairness_taps: Enum.frequencies_by(taps_plain, & &1.label),
-        overrules_count: overrules_plain_count,
-        trap_sprung_count: Enum.count(plain_outcomes, & &1.trap_converged),
-        deep_convergence_count: Enum.count(plain_outcomes, & &1.deep_converged)
-      }
+      bait: summarize_arm_raw(bait_outcomes, taps_bait, overrules_bait_count),
+      plain: summarize_arm_raw(plain_outcomes, taps_plain, overrules_plain_count)
+    }
+  end
+
+  defp summarize_arm_raw(outcomes, taps, overrules_count) do
+    %{
+      pages_count: length(outcomes),
+      melded_count: Enum.count(outcomes, & &1.melded),
+      melded_history: Enum.map(outcomes, & &1.melded),
+      attempts_to_meld: outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
+      fairness_taps: Enum.frequencies_by(taps, & &1.label),
+      overrules_count: overrules_count,
+      trap_sprung_count: Enum.count(outcomes, & &1.trap_converged),
+      deep_convergence_count: Enum.count(outcomes, & &1.deep_converged)
     }
   end
 
