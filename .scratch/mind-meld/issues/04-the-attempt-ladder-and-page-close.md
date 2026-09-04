@@ -61,7 +61,7 @@ carries the grade, the reasoning, and the provenance — model, prompt version,
 latency, cost. Nothing updates or deletes a row, and every reference is
 `on_delete: :restrict`.
 
-Provenance rides on the verdict as an opaque `meta` map: the Keeper attaches it
+Provenance rides on the verdict as an opaque `meta` map: the Steward attaches it
 (and times the call, because the stopwatch is the seam's business), the rules
 carry it to the Chronicle and never read it. A verdict that never arrived is
 still a row — `graded` false, no number, no model — because the game admitting it

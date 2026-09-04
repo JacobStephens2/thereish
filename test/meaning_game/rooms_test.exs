@@ -37,7 +37,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "a Room at the Assayer's cap plays, and every pair in it is graded" do
-      slug = open_room(seat_limit: MeaningGame.Keeper.seat_cap())
+      slug = open_room(seat_limit: MeaningGame.Steward.seat_cap())
 
       seats =
         for name <- ~w(Mara Jacob Ada Ida Ola Ora) do
@@ -53,7 +53,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "a Room too big for the Assayer to grade does not open" do
-      seats_per_room(MeaningGame.Keeper.seat_cap() + 1)
+      seats_per_room(MeaningGame.Steward.seat_cap() + 1)
 
       assert {:error, _reason} =
                Rooms.ensure_started("too-many-#{System.unique_integer([:positive])}")
@@ -278,7 +278,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "an Assayer that falls over is a Page that still reveals", ctx do
-      keeper(mode: :raise)
+      steward(mode: :raise)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
@@ -291,7 +291,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "an Assayer with no verdict hands the call to the players", ctx do
-      keeper(mode: :unavailable)
+      steward(mode: :unavailable)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
@@ -317,7 +317,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "a slow Assayer does not block the Room", ctx do
-      keeper(delay_ms: 100)
+      steward(delay_ms: 100)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
@@ -356,7 +356,7 @@ defmodule MeaningGame.RoomsTest do
       # the test cannot wait for it to answer anyway, because one of these tests
       # is about what happens when it finally does.
       escalation(slow: 50, provisional: 400, unavailable: 700)
-      keeper(delay_ms: 1_000)
+      steward(delay_ms: 1_000)
 
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
@@ -779,10 +779,10 @@ defmodule MeaningGame.RoomsTest do
           meta: %{model: "fake-author", prompt_version: "v1", attempts: 1, cost_usd: 0.0}
         })
 
-      keeper = Application.fetch_env!(:meaning_game, :keeper)
-      on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
+      steward = Application.fetch_env!(:meaning_game, :steward)
+      on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
 
-      %{slug: slug, mara: mara, jacob: jacob, keeper: keeper}
+      %{slug: slug, mara: mara, jacob: jacob, steward: steward}
     end
 
     test "a Give requires a seat and non-blank input", ctx do
@@ -794,13 +794,13 @@ defmodule MeaningGame.RoomsTest do
     test "a Give queues a background Author run, play continues meanwhile, and arriving Pages join pool",
          ctx do
       # Configure fake author to take 15ms per page
-      fake_config = Keyword.get(ctx.keeper, :fake, [])
+      fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
         :meaning_game,
-        :keeper,
+        :steward,
         Keyword.put(
-          ctx.keeper,
+          ctx.steward,
           :fake,
           Keyword.merge(fake_config, author_delay_ms: 15, author_mode: :ok)
         )
@@ -853,13 +853,13 @@ defmodule MeaningGame.RoomsTest do
 
     test "a failed or refused Author run degrades cleanly and leaves the evening playable", ctx do
       # Configure fake author to fail/refuse
-      fake_config = Keyword.get(ctx.keeper, :fake, [])
+      fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
         :meaning_game,
-        :keeper,
+        :steward,
         Keyword.put(
-          ctx.keeper,
+          ctx.steward,
           :fake,
           Keyword.merge(fake_config, author_delay_ms: 10, author_mode: :refused)
         )

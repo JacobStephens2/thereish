@@ -1,4 +1,4 @@
-defmodule MeaningGame.Keeper.Gate do
+defmodule MeaningGame.Steward.Gate do
   @moduledoc """
   Nothing a model says reaches the game without coming through here.
 
@@ -7,12 +7,12 @@ defmodule MeaningGame.Keeper.Gate do
   whatever else that role knows about its own answers. An answer that fails is
   not a crash and not a shrug — it is handed back to the model with the reason
   it was rejected, and asked again. Only when the retries are spent does the
-  Keeper report that it has no answer, which the game already has a rule for.
+  Steward report that it has no answer, which the game already has a rule for.
 
   This is the module the "malformed response is never a crash mid-Page"
   obligation lives in, so it is deliberately incurious about what the answer
   means. It knows a schema, a check, and how many times to ask; the Assayer's
-  words are `MeaningGame.Keeper.Assay`'s and the wire is the provider's.
+  words are `MeaningGame.Steward.Assay`'s and the wire is the provider's.
 
   What comes back is the answer plus its provenance: which model gave it, what
   it cost across every attempt it took, and how long the whole exchange ran.

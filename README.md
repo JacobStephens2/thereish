@@ -7,7 +7,7 @@ A two-player couch word game for Jacob and his wife, with a machine author-scrib
 The game is still unnamed; **Mind-Meld** is the Page type being built first.
 
 - `docs/design-brief.md` — the design, and how it got here
-- `CONTEXT.md` — the glossary. Room, Seat, Page, Keeper, Bridge, Meld
+- `CONTEXT.md` — the glossary. Room, Seat, Page, Steward, Bridge, Meld
 - `docs/adr/` — the decisions that are settled
 - `.scratch/mind-meld/spec.md` and `.scratch/mind-meld/issues/` — the build
 

@@ -60,10 +60,10 @@ defmodule MeaningGame.Rooms.Server do
 
   alias MeaningGame.Chronicle
   alias MeaningGame.Game
-  alias MeaningGame.Keeper
   alias MeaningGame.Pages
   alias MeaningGame.Rooms.Seat
   alias MeaningGame.Rooms.Store
+  alias MeaningGame.Steward
 
   def start_link(opts) do
     slug = Keyword.fetch!(opts, :slug)
@@ -177,7 +177,7 @@ defmodule MeaningGame.Rooms.Server do
         slug = state.room.slug
         digest = Chronicle.digest(room_id)
 
-        Task.Supervisor.start_child(MeaningGame.Keeper.Tasks, fn ->
+        Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
           author_give_task(room_pid, give, digest)
         end)
 
@@ -467,7 +467,7 @@ defmodule MeaningGame.Rooms.Server do
     {:ok, _} = Chronicle.record_overrule(state.room.id, overrule)
 
     {:ok, _} =
-      Keeper.overrule(
+      Steward.overrule(
         overrule.anchors,
         overrule.bridges,
         %{
@@ -498,7 +498,7 @@ defmodule MeaningGame.Rooms.Server do
     arm = state[:current_arm] || :bait
     page = state.game.page
 
-    Task.Supervisor.start_child(MeaningGame.Keeper.Tasks, fn ->
+    Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       send(room, {:assayed, verdict_event(pair, assay(request, page, arm))})
     end)
 
@@ -585,7 +585,7 @@ defmodule MeaningGame.Rooms.Server do
   # An Assayer that blows up has failed to grade, which is a thing the game has
   # a rule for. It is not a thing the Room should die of.
   defp assay(request, page, arm) do
-    Keeper.assay(request, page, arm)
+    Steward.assay(request, page, arm)
   rescue
     error -> {:error, error}
   catch
@@ -593,7 +593,7 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   defp assign_and_record_arm(room_id, page) do
-    Keeper.assign_arm(room_id, page)
+    Steward.assign_arm(room_id, page)
   end
 
   # How long the reveal is held is the Room's to know, because running it is the

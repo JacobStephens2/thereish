@@ -2,7 +2,7 @@ defmodule MeaningGame.Repo.Migrations.VerdictsKeepTheQuipAndBothOrderings do
   use Ecto.Migration
 
   # A live Assayer grades every pair twice, once in each ordering, because which
-  # Bridge is listed first changes the answer, and the Keeper prototype caught an
+  # Bridge is listed first changes the answer, and the Steward prototype caught an
   # 85-point swing from reversing the players (design law 12). The
   # number the couple were shown is the mean of the two, and the two are kept
   # beside it: a wide gap is the most useful thing to know about a grade that

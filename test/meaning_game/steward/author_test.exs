@@ -1,12 +1,12 @@
-defmodule MeaningGame.Keeper.AuthorTest do
+defmodule MeaningGame.Steward.AuthorTest do
   use MeaningGame.DataCase, async: false
 
   @moduletag :capture_log
 
-  import MeaningGame.KeeperFixtures
+  import MeaningGame.StewardFixtures
 
-  alias MeaningGame.Keeper
-  alias MeaningGame.Keeper.Author
+  alias MeaningGame.Steward
+  alias MeaningGame.Steward.Author
 
   describe "schema validation" do
     test "accepts a well-formed Author response" do
@@ -78,13 +78,13 @@ defmodule MeaningGame.Keeper.AuthorTest do
 
   describe "live authoring against recorded responses" do
     setup do
-      keeper = Application.fetch_env!(:meaning_game, :keeper)
-      on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
+      steward = Application.fetch_env!(:meaning_game, :steward)
+      on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
 
       Application.put_env(
         :meaning_game,
-        :keeper,
-        Keyword.put(keeper, :adapter, MeaningGame.Keeper.Live)
+        :steward,
+        Keyword.put(steward, :adapter, MeaningGame.Steward.Live)
       )
 
       :ok
@@ -122,7 +122,7 @@ defmodule MeaningGame.Keeper.AuthorTest do
         end
       end)
 
-      assert {:ok, page} = Keeper.author("botany")
+      assert {:ok, page} = Steward.author("botany")
       assert page.meta.attempts == 2
       assert page.bait == "petal"
       assert page.anchors == ["flower", "soil"]
@@ -139,7 +139,7 @@ defmodule MeaningGame.Keeper.AuthorTest do
         Req.Test.json(conn, author_response("{}", stop_reason: "max_tokens"))
       end)
 
-      assert {:error, {:max_tokens, _}} = Keeper.author("huge chapter")
+      assert {:error, {:max_tokens, _}} = Steward.author("huge chapter")
       # Ensure it did NOT retry
       assert Agent.get(agent, &Map.get(&1, "author", 0)) == 1
     end

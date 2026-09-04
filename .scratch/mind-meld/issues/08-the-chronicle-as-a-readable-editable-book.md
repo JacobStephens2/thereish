@@ -13,7 +13,7 @@ Design law 5: memory is a visible, player-editable artifact. Silent forgetting a
 - [x] Players can correct an entry, and the correction is recorded as another append-only event rather than by mutating history
 - [x] Every view is computed from the event log. No stored copy of a view exists anywhere
 - [x] An on-demand Markdown render is available both as a mix task and over HTTP
-- [x] A Keeper-composed digest of the Chronicle exists for feeding to models later, computed the same way
+- [x] A Steward-composed digest of the Chronicle exists for feeding to models later, computed the same way
 - [x] Tests: a played Page produces the expected event rows, the book page renders them, an edit appends rather than overwrites, and the Markdown export round-trips a full evening
 
 ## Comments
@@ -26,5 +26,5 @@ Design law 5: memory is a visible, player-editable artifact. Silent forgetting a
 
 **On-demand Markdown render via Mix task and HTTP.** `GET /chronicle.md` and `GET /r/:slug/chronicle.md` (`MeaningGameWeb.ChronicleController`) export the Chronicle as `text/markdown; charset=utf-8`. `mix chronicle.export` (`Mix.Tasks.Chronicle.Export`) exports the Chronicle to stdout or a designated file path via CLI. `MeaningGame.Chronicle.from_markdown/1` round-trips the exported document back into structured data.
 
-**Keeper-composed digest for models.** `MeaningGame.Keeper.digest/1` and `MeaningGame.Chronicle.digest/1` compose a compact, structured text summary of played Pages, convergence arcs, overrules, and corrections for future Author / Scribe prompt injection. Returns `"Nothing yet; this is the first Page."` when the Chronicle is empty.
+**Steward-composed digest for models.** `MeaningGame.Steward.digest/1` and `MeaningGame.Chronicle.digest/1` compose a compact, structured text summary of played Pages, convergence arcs, overrules, and corrections for future Author / Scribe prompt injection. Returns `"Nothing yet; this is the first Page."` when the Chronicle is empty.
 

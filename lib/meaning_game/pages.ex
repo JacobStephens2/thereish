@@ -11,9 +11,9 @@ defmodule MeaningGame.Pages do
 
   import Ecto.Query, only: [from: 2]
 
-  alias MeaningGame.Keeper
   alias MeaningGame.Pages.AuthoredPage
   alias MeaningGame.Repo
+  alias MeaningGame.Steward
 
   @hand_written_pool [
     %{
@@ -200,7 +200,7 @@ defmodule MeaningGame.Pages do
   def author_chapter(chapter_name, count \\ 5, opts \\ []) do
     results =
       Enum.reduce_while(1..count, {:ok, []}, fn _i, {:ok, acc} ->
-        case Keeper.author(chapter_name, opts) do
+        case Steward.author(chapter_name, opts) do
           {:ok, page} ->
             case insert_page(page) do
               {:ok, inserted} -> {:cont, {:ok, [inserted | acc]}}
@@ -255,7 +255,7 @@ defmodule MeaningGame.Pages do
   @doc """
   Computes a provisional reading from the Author's likely_bridges table.
   """
-  defdelegate provisional_reading(page, left, right), to: MeaningGame.Keeper.Author
+  defdelegate provisional_reading(page, left, right), to: MeaningGame.Steward.Author
 
   defp pool_has_pages? do
     Repo.exists?(AuthoredPage)

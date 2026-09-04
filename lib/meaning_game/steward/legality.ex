@@ -1,4 +1,4 @@
-defmodule MeaningGame.Keeper.Legality do
+defmodule MeaningGame.Steward.Legality do
   @moduledoc """
   Deterministic clue-legality gate (design law 14).
 

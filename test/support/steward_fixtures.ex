@@ -1,12 +1,12 @@
-defmodule MeaningGame.KeeperFixtures do
+defmodule MeaningGame.StewardFixtures do
   @moduledoc """
   Recorded Assayer responses, and the plug that hands them back.
 
   The suite must never spend money and never depend on a provider being up, so
-  `config/test.exs` puts `Req.Test` behind every HTTP call the Keeper makes and
+  `config/test.exs` puts `Req.Test` behind every HTTP call the Steward makes and
   a test that wants a particular answer records one here. What is recorded is
   the whole response body a chat-completions endpoint returns — the envelope as
-  well as the answer — because the parts the Keeper reads out of the envelope
+  well as the answer — because the parts the Steward reads out of the envelope
   (which model actually answered, why it stopped, how many tokens it spent) are
   part of what these tests are checking.
 
@@ -24,7 +24,7 @@ defmodule MeaningGame.KeeperFixtures do
   because most of these tests care which of the two orderings they are answering.
   """
   def recorded(answer) when is_function(answer, 2) do
-    Req.Test.stub(MeaningGame.Keeper.Gemini, fn conn ->
+    Req.Test.stub(MeaningGame.Steward.Gemini, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
 
       answer.(conn, Jason.decode!(body))
@@ -46,7 +46,7 @@ defmodule MeaningGame.KeeperFixtures do
       ],
       # Gemini's compatibility layer leaves the thinking out of
       # `completion_tokens` and puts it into `total_tokens`, which is why the
-      # two do not add up and why the Keeper prices output as total − prompt.
+      # two do not add up and why the Steward prices output as total − prompt.
       "usage" => %{
         "prompt_tokens" => 242,
         "completion_tokens" => 61,
@@ -132,14 +132,14 @@ defmodule MeaningGame.KeeperFixtures do
   Configuration is global, so a test that reaches for this cannot be async.
   """
   def assayer(opts) do
-    keeper = Application.fetch_env!(:meaning_game, :keeper)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
 
     {top, role_opts} = Keyword.split(opts, [:adapter])
-    keeper = Keyword.merge(keeper, top)
-    assayer = Keyword.merge(keeper[:roles][:assayer], role_opts)
+    steward = Keyword.merge(steward, top)
+    assayer = Keyword.merge(steward[:roles][:assayer], role_opts)
 
-    Application.put_env(:meaning_game, :keeper, put_in(keeper[:roles][:assayer], assayer))
+    Application.put_env(:meaning_game, :steward, put_in(steward[:roles][:assayer], assayer))
   end
 
   @doc """
@@ -150,27 +150,27 @@ defmodule MeaningGame.KeeperFixtures do
   is the only way through and it is deliberately noisy to read.
   """
   def let_it_call_the_provider do
-    keeper = Application.fetch_env!(:meaning_game, :keeper)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
 
     key =
       System.get_env("GEMINI_API_KEY") ||
         flunk("this test calls a provider and needs GEMINI_API_KEY in the environment")
 
     live =
-      keeper
-      |> Keyword.put(:adapter, MeaningGame.Keeper.Live)
+      steward
+      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
       |> Keyword.put(:http_options, [])
       |> put_in([:roles, :assayer, :api_key], key)
       |> put_in([:roles, :assayer, :timeout_ms], 5_000)
       |> put_in([:roles, :assayer, :deadline_ms], 10_000)
 
-    Application.put_env(:meaning_game, :keeper, live)
+    Application.put_env(:meaning_game, :steward, live)
   end
 
   @doc "Puts a recorded response behind the Author's provider for this test."
   def recorded_author(answer) when is_function(answer, 2) do
-    Req.Test.stub(MeaningGame.Keeper.Anthropic, fn conn ->
+    Req.Test.stub(MeaningGame.Steward.Anthropic, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       answer.(conn, Jason.decode!(body))
     end)

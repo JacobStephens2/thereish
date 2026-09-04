@@ -1,7 +1,7 @@
-defmodule MeaningGame.Keeper.LegalityTest do
+defmodule MeaningGame.Steward.LegalityTest do
   use ExUnit.Case, async: true
 
-  alias MeaningGame.Keeper.Legality
+  alias MeaningGame.Steward.Legality
 
   describe "single_word?/1" do
     test "accepts clean single words" do

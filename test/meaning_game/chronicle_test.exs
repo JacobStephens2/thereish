@@ -12,9 +12,9 @@ defmodule MeaningGame.ChronicleTest do
   import MeaningGame.RoomFixtures
 
   alias MeaningGame.Chronicle
-  alias MeaningGame.Keeper
   alias MeaningGame.Rooms
   alias MeaningGame.Rooms.Room
+  alias MeaningGame.Steward
 
   setup do
     slug = open_room()
@@ -133,7 +133,7 @@ defmodule MeaningGame.ChronicleTest do
     end
 
     test "records a verdict that never came as a verdict that never came", ctx do
-      keeper(mode: :unavailable)
+      steward(mode: :unavailable)
       attempt_cap(1)
 
       play(ctx, "cairn", "cairo")
@@ -415,17 +415,17 @@ defmodule MeaningGame.ChronicleTest do
       assert p2_a1.overrule.reasoning =~ "water in the desert"
     end
 
-    test "composes a Keeper digest for feeding to models later", ctx do
+    test "composes a Steward digest for feeding to models later", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
 
       # Empty room returns default starting message
-      assert Keeper.digest(room.id) == "Nothing yet; this is the first Page."
+      assert Steward.digest(room.id) == "Nothing yet; this is the first Page."
       assert Chronicle.digest(room.id) == "Nothing yet; this is the first Page."
 
       # Play a page
       play(ctx, "cairn", "cairo")
 
-      digest = Keeper.digest(room.id)
+      digest = Steward.digest(room.id)
       assert is_binary(digest)
       assert digest =~ "Page 1 (lantern · harbour)"
       assert digest =~ "Melded on attempt 1 (closeness: 80, meld)"
@@ -433,7 +433,7 @@ defmodule MeaningGame.ChronicleTest do
       assert digest =~ "Jacob bridged \"cairo\""
 
       # Also accepts room slug
-      assert Keeper.digest(ctx.slug) == digest
+      assert Steward.digest(ctx.slug) == digest
     end
   end
 

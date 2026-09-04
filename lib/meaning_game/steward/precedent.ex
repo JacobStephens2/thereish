@@ -1,6 +1,6 @@
-defmodule MeaningGame.Keeper.Precedent do
+defmodule MeaningGame.Steward.Precedent do
   @moduledoc """
-  The verdict cache that lives behind the Keeper.
+  The verdict cache that lives behind the Steward.
 
   When the couple plays the same Anchors and writes the same Bridges a month
   later, the game grades exactly as it graded the first time (design law 1). The
@@ -20,7 +20,7 @@ defmodule MeaningGame.Keeper.Precedent do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias MeaningGame.Keeper.Precedent
+  alias MeaningGame.Steward.Precedent
   alias MeaningGame.Repo
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -107,7 +107,7 @@ defmodule MeaningGame.Keeper.Precedent do
   Returns `{:ok, verdict}` if found, or `:miss` if not.
   """
   @spec get(String.t(), String.t(), [String.t()], [String.t()]) ::
-          {:ok, MeaningGame.Keeper.verdict()} | :miss
+          {:ok, MeaningGame.Steward.verdict()} | :miss
   def get(model, prompt_version, anchors, bridges) do
     cache_key = key(model, prompt_version, anchors, bridges)
 
@@ -123,7 +123,7 @@ defmodule MeaningGame.Keeper.Precedent do
   If a precedent already exists for this key, it is left untouched: nothing
   silently rewrites a grade (ADR-0006).
   """
-  @spec put(String.t(), String.t(), [String.t()], [String.t()], MeaningGame.Keeper.verdict()) ::
+  @spec put(String.t(), String.t(), [String.t()], [String.t()], MeaningGame.Steward.verdict()) ::
           {:ok, Precedent.t()} | {:error, Ecto.Changeset.t()}
   def put(model, prompt_version, anchors, bridges, verdict) do
     {normalized_anchors, normalized_bridges} = canonical_inputs(anchors, bridges)
@@ -195,9 +195,9 @@ defmodule MeaningGame.Keeper.Precedent do
   end
 
   @doc """
-  Reconstitutes a Keeper verdict from a stored Precedent row.
+  Reconstitutes a Steward verdict from a stored Precedent row.
   """
-  @spec to_verdict(Precedent.t()) :: MeaningGame.Keeper.verdict()
+  @spec to_verdict(Precedent.t()) :: MeaningGame.Steward.verdict()
   def to_verdict(%Precedent{} = precedent) do
     %{
       closeness: precedent.closeness,

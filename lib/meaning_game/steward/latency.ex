@@ -1,10 +1,10 @@
-defmodule MeaningGame.Keeper.Latency do
+defmodule MeaningGame.Steward.Latency do
   @moduledoc """
   What a grade actually costs in seconds, measured where it will be paid.
 
   The reveal is a fixed 2.5 second beat and the p95 the Assayer has to fit
   inside is 4 seconds (design law 10). Those numbers were met from the VPS by
-  the Keeper prototype against a bench harness; this is the same measurement
+  the Steward prototype against a bench harness; this is the same measurement
   against the thing that shipped — the same prompt, the same schema, the same
   hedging, the same both-orderings grading, on the machine the couple will play
   against.
@@ -12,8 +12,8 @@ defmodule MeaningGame.Keeper.Latency do
   It is not a test. It calls a provider and spends money, and it is meant to be
   run by hand from the VPS after a deploy that touched the Assayer:
 
-      docker compose -f docker-compose.app.yml exec app \\
-        bin/meaning_game eval 'MeaningGame.Keeper.Latency.measure()'
+      docker compose -f docker-compose.app.yml exec app \
+        bin/meaning_game eval 'MeaningGame.Steward.Latency.measure()'
 
   The pairs are fixed so that two runs are comparable, and they are spread
   across the ladder — an identical pair, a near miss, a wide miss — because a
@@ -21,7 +21,7 @@ defmodule MeaningGame.Keeper.Latency do
   round trip.
   """
 
-  alias MeaningGame.Keeper
+  alias MeaningGame.Steward
 
   # The p95 the reveal has to absorb, in milliseconds.
   @target_ms 4_000
@@ -63,7 +63,7 @@ defmodule MeaningGame.Keeper.Latency do
   # slow should be visible while it is still running rather than at the end.
   defp one(number, runs) do
     pair = Enum.at(@pairs, rem(number - 1, length(@pairs)))
-    result = Keeper.assay(pair)
+    result = Steward.assay(pair)
 
     IO.puts("  #{number}/#{runs} #{Enum.join(pair.bridges, " / ")}: #{said(result)}")
 

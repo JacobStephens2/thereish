@@ -1,4 +1,4 @@
-defmodule MeaningGame.Keeper.Gemini do
+defmodule MeaningGame.Steward.Gemini do
   @moduledoc """
   Google's models, through their OpenAI-compatible endpoint.
 
@@ -8,7 +8,7 @@ defmodule MeaningGame.Keeper.Gemini do
   every time makes the first grade on a borderline pair a dice roll that the
   cache then freezes as precedent.
 
-  **Not streamed, deliberately.** The Keeper prototype streamed in order to
+  **Not streamed, deliberately.** The Steward prototype streamed in order to
   measure time-to-first-token, which is a bench statistic; the game cannot show
   half a verdict, so what it waits for is the whole answer either way. Asking
   for the whole thing costs the same wall clock and saves an SSE parser, and it
@@ -20,11 +20,11 @@ defmodule MeaningGame.Keeper.Gemini do
   while `total_tokens` includes it — so the tokens that get billed as output are
   `total - prompt` rather than the completion count.
   """
-  @behaviour MeaningGame.Keeper.Provider
+  @behaviour MeaningGame.Steward.Provider
 
   require Logger
 
-  alias MeaningGame.Keeper.Provider
+  alias MeaningGame.Steward.Provider
 
   @url "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 

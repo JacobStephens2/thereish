@@ -1,7 +1,7 @@
-defmodule MeaningGame.Keeper.PrecedentTest do
+defmodule MeaningGame.Steward.PrecedentTest do
   use MeaningGame.DataCase, async: false
 
-  alias MeaningGame.Keeper.Precedent
+  alias MeaningGame.Steward.Precedent
 
   describe "normalization" do
     test "downcases, trims, collapses whitespace, and applies NFC" do

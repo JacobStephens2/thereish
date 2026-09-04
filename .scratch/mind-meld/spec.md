@@ -109,7 +109,7 @@ The **Author** writes Pages ahead of play, so nothing waits on a model mid-game.
 
 ### Seams
 
-**One adapter seam: the Keeper.** Everything the game says to a language model crosses it, and exactly two adapters satisfy it — the live one that talks to providers, and a deterministic fake used by every test that is not a hand-run smoke test. Two adapters is what makes it a real seam rather than a hypothetical one. Model choice, per-role effort, hedging, both-orderings grading, the verdict cache and precedent, A/B assignment, schema validation, and the clue-legality filter all live behind it. Nothing else in the codebase knows a provider exists.
+**One adapter seam: the Steward.** Everything the game says to a language model crosses it, and exactly two adapters satisfy it — the live one that talks to providers, and a deterministic fake used by every test that is not a hand-run smoke test. Two adapters is what makes it a real seam rather than a hypothetical one. Model choice, per-role effort, hedging, both-orderings grading, the verdict cache and precedent, A/B assignment, schema validation, and the clue-legality filter all live behind it. Nothing else in the codebase knows a provider exists.
 
 **Three test surfaces, no other seams.** The Game is a pure module; the Room is a process with a small interface; the LiveViews are exercised end to end. Persistence is not behind a seam — tests run against real Postgres with the Ecto sandbox, and no repository abstraction is introduced.
 
@@ -131,7 +131,7 @@ The whole rules surface should stay small enough to read in one sitting, per the
 
 ### The Room owns time and processes
 
-A Room is a supervised process holding Game state for N Seats, two by default. It is the only thing that starts the reveal beat, fires the Keeper, and pushes updates to connected views. Its interface is join, commit a Bridge, propose and agree an overrule, record a fairness tap, request a full snapshot, and start the next Page. A full snapshot on demand is the reconnect mechanism, so a phone waking from lock needs no special path.
+A Room is a supervised process holding Game state for N Seats, two by default. It is the only thing that starts the reveal beat, fires the Steward, and pushes updates to connected views. Its interface is join, commit a Bridge, propose and agree an overrule, record a fairness tap, request a full snapshot, and start the next Page. A full snapshot on demand is the reconnect mechanism, so a phone waking from lock needs no special path.
 
 Seats are a list, never a pair. Every rule that could be written for two players is written for a list, including the reveal, the scoring, and the stage layout.
 
@@ -161,7 +161,7 @@ The live joke belongs to the Assayer, which quips on the players' actual Bridges
 
 ### Models
 
-Author is Fable 5.1 at max effort; live Assayer is Gemini 3.8 Flash at low effort (ADR-0005), calibrated by the couple's labelled set. Per-role model and effort are configuration behind the Keeper. Hedging is two identical requests to one model, fast tier only. The Anthropic refusal-fallback header stays on the Author, logged, never depended on. All access is by API key. Every verdict records forward, reverse, reverse reasoning, model, prompt version, timings, and cost.
+Author is Fable 5.1 at max effort; live Assayer is Gemini 3.8 Flash at low effort (ADR-0005), calibrated by the couple's labelled set. Per-role model and effort are configuration behind the Steward. Hedging is two identical requests to one model, fast tier only. The Anthropic refusal-fallback header stays on the Author, logged, never depended on. All access is by API key. Every verdict records forward, reverse, reverse reasoning, model, prompt version, timings, and cost.
 
 ### Guardrails
 
@@ -171,7 +171,7 @@ Every model response is schema-validated with `jsv` before it enters the game, a
 
 Joining takes a name. The Seat holds a stable id and a device token kept in the browser; reopening the URL restores the Seat. Seats never expire. Accounts are out of scope here; the one obligation is seat ids that an account can claim later (ADR-0007).
 
-Postgres via Ecto (ADR-0003): append-only event tables for Pages, verdicts, overrules, fairness taps, experiment assignments, and player edits; the Page document as JSONB. Views are computed, never stored — the LiveView book page, a Keeper-composed digest for models, and an on-demand Markdown render for humans and coding agents. Chronicle rows reference Seats, never Accounts.
+Postgres via Ecto (ADR-0003): append-only event tables for Pages, verdicts, overrules, fairness taps, experiment assignments, and player edits; the Page document as JSONB. Views are computed, never stored — the LiveView book page, a Steward-composed digest for models, and an on-demand Markdown render for humans and coding agents. Chronicle rows reference Seats, never Accounts.
 
 ### Experiments
 
@@ -187,11 +187,11 @@ A good test here crosses one of the three surfaces and asserts on what a player 
 
 **The Game, tested as a pure function.** Drive a whole Page as a list of events and assert on the projected view. This is the highest and cheapest surface, and it should carry the bulk of the rules coverage: privacy of an uncommitted Bridge, reveal only after every Seat commits, meld at threshold, band selection, carry-forward of failed Bridges into the next Anchors, the attempt cap closing a Page unmelded, overrule requiring unanimity, three Seats behaving as three pairs, and the view differing correctly between Seats. Prior art is the `init`/`apply`/`view` harness on `prototype/stage0-page-machines`.
 
-**The Room, tested through its interface with the fake Keeper.** Deterministic verdicts and controllable delays let these tests cover what the pure module cannot: the beat fires and the reveal lands, a slow verdict escalates to provisional and then to no-verdict, a dropped connection followed by a snapshot request restores exactly the view the Seat had, rejoining with a device token lands in the same Seat, and a second Page starts cleanly.
+**The Room, tested through its interface with the fake Steward.** Deterministic verdicts and controllable delays let these tests cover what the pure module cannot: the beat fires and the reveal lands, a slow verdict escalates to provisional and then to no-verdict, a dropped connection followed by a snapshot request restores exactly the view the Seat had, rejoining with a device token lands in the same Seat, and a second Page starts cleanly.
 
-**The Keeper, tested against recorded responses.** Schema validation rejects malformed output and retries, both orderings collapse to one cache key, a cached verdict returns the grade that was shown, an overrule rewrites that key, hedging fires two identical requests and takes the first, and the clue-legality filter rejects and regenerates. One live smoke test per role exists but is tagged and excluded from the default run, because the suite must never spend money or depend on a provider. Prior art is the Elixir harness on `prototype/keeper`, including its hand-rolled SSE parser and `jsv` usage.
+**The Steward, tested against recorded responses.** Schema validation rejects malformed output and retries, both orderings collapse to one cache key, a cached verdict returns the grade that was shown, an overrule rewrites that key, hedging fires two identical requests and takes the first, and the clue-legality filter rejects and regenerates. One live smoke test per role exists but is tagged and excluded from the default run, because the suite must never spend money or depend on a provider. Prior art is the Elixir harness on `prototype/keeper`, including its hand-rolled SSE parser and `jsv` usage.
 
-**The LiveViews, tested end to end.** Two connected phone views plus a stage through `Phoenix.LiveViewTest`, with the fake Keeper: join by name, commit both Bridges, see the reveal on all three, tap an overrule to agreement, start the next Page. This is the couch-night path, and it is the test that says the thing works.
+**The LiveViews, tested end to end.** Two connected phone views plus a stage through `Phoenix.LiveViewTest`, with the fake Steward: join by name, commit both Bridges, see the reveal on all three, tap an overrule to agreement, start the next Page. This is the couch-night path, and it is the test that says the thing works.
 
 **Persistence, tested for real.** Ecto sandbox against real Postgres. Assert that a played Page produces the expected event rows and that the Markdown export renders them. No mock repository.
 
@@ -210,7 +210,7 @@ A good test here crosses one of the three surfaces and asserts on what a player 
 
 ## Further Notes
 
-**The kill criterion is live.** ADR-0002 gives Phoenix three evenings to reach a working two-phone Room with rejoin. If it does not, the stack becomes TypeScript and Socket.IO. Build in the order that tests this first: Room, Seats, join by name, two phones, rejoin — before Pages, before the Author, before the Chronicle. A fake Keeper returning canned verdicts is enough to reach that milestone, and it is the same fake the tests use.
+**The kill criterion is live.** ADR-0002 gives Phoenix three evenings to reach a working two-phone Room with rejoin. If it does not, the stack becomes TypeScript and Socket.IO. Build in the order that tests this first: Room, Seats, join by name, two phones, rejoin — before Pages, before the Author, before the Chronicle. A fake Steward returning canned verdicts is enough to reach that milestone, and it is the same fake the tests use.
 
 **The reveal is the product.** Stage 0's finding was that a 24 out of 100 from a stub Assayer with a toy heuristic drew a laugh. The graded number is the comedy delivery mechanism, so the ladder flavour and the reasoning line are load-bearing rather than chrome. Budget real effort there and treat it as the thing most worth polishing.
 
@@ -218,4 +218,4 @@ A good test here crosses one of the three surfaces and asserts on what a player 
 
 **Open and deliberately unresolved:** the meld threshold, the band boundaries, and whether the beat should shorten on a harsh grade. All three are calibration questions the couch answers, which is why the fairness tap exists and why every one of them is named configuration.
 
-**Still pending from the Keeper prototype:** Kimi K3 at max effort via Together, once the key is available. Commands are in `prototype/keeper/README.md`. It cannot block this build.
+**Still pending from the Steward prototype:** Kimi K3 at max effort via Together, once the key is available. Commands are in `prototype/keeper/README.md`. It cannot block this build.

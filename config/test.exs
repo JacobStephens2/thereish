@@ -36,15 +36,15 @@ config :meaning_game, reveal_beat_ms: 5
 # `http_options` fences the suite off from the network entirely: every request a
 # provider adapter makes goes to a recorded response instead. A test that means
 # to call somebody has to say so out loud
-# (`MeaningGame.KeeperFixtures.let_it_call_the_provider/0`), and is tagged
+# (`MeaningGame.StewardFixtures.let_it_call_the_provider/0`), and is tagged
 # `:live` and excluded from the default run.
-config :meaning_game, :keeper,
-  adapter: MeaningGame.Keeper.Fake,
+config :meaning_game, :steward,
+  adapter: MeaningGame.Steward.Fake,
   roles: [
     assayer: [timeout_ms: 1_000, deadline_ms: 2_000, api_key: "recorded-responses-need-no-key"],
     author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"]
   ],
-  http_options: [plug: {Req.Test, MeaningGame.Keeper.Gemini}]
+  http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]
 
 # The escalation ladder, in test time. The shape is what matters — activity,
 # then a provisional reading, then no verdict — and the shape is the same at a

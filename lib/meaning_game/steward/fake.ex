@@ -1,4 +1,4 @@
-defmodule MeaningGame.Keeper.Fake do
+defmodule MeaningGame.Steward.Fake do
   @moduledoc """
   An Assayer with no model behind it: the same verdict for the same Bridges,
   every time, at whatever speed the caller asked for.
@@ -13,14 +13,14 @@ defmodule MeaningGame.Keeper.Fake do
   Two knobs, both configuration, both for the tests that need the Room to be
   waiting on something:
 
-      config :meaning_game, :keeper, fake: [delay_ms: 0, mode: :grade]
+      config :meaning_game, :steward, fake: [delay_ms: 0, mode: :grade]
 
   `delay_ms` is how long a verdict takes. `mode: :unavailable` is an Assayer
   that says it cannot answer, and `mode: :raise` is one that falls over without
   saying anything — the two shapes a failed grade comes in, both of which the
   game answers the same way.
   """
-  @behaviour MeaningGame.Keeper
+  @behaviour MeaningGame.Steward
 
   @impl true
   def assay(%{anchors: [_, _], bridges: [left, right]}) do
@@ -70,7 +70,7 @@ defmodule MeaningGame.Keeper.Fake do
         }
 
         {:ok,
-         MeaningGame.Keeper.Author.page(json, chapter, give, %{
+         MeaningGame.Steward.Author.page(json, chapter, give, %{
            model: "fake-author",
            attempts: 1,
            cost_usd: 0.0,
@@ -96,7 +96,7 @@ defmodule MeaningGame.Keeper.Fake do
 
   defp config_get(key, default) do
     :meaning_game
-    |> Application.get_env(:keeper, [])
+    |> Application.get_env(:steward, [])
     |> Keyword.get(:fake, [])
     |> Keyword.get(key, default)
   end
@@ -144,7 +144,7 @@ defmodule MeaningGame.Keeper.Fake do
 
   defp config(key) do
     :meaning_game
-    |> Application.fetch_env!(:keeper)
+    |> Application.fetch_env!(:steward)
     |> Keyword.fetch!(:fake)
     |> Keyword.fetch!(key)
   end
