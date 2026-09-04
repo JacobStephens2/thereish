@@ -26,6 +26,30 @@ config :meaning_game, MeaningGameWeb.Endpoint,
 # the beat itself set their own with `MeaningGame.RoomFixtures.beat/1`.
 config :meaning_game, reveal_beat_ms: 5
 
+# No test grades against a provider. The suite must never spend money and never
+# depend on somebody's uptime, so the fake is the Assayer here and the handful
+# of tests that exercise the live adapter put a recorded response behind it.
+# Everything else about the Assayer — its provider, model, effort, hedging and
+# prices — is deliberately the couch's own configuration, so that the tests
+# which do exercise the live adapter exercise the settings that will be live.
+#
+# `http_options` fences the suite off from the network entirely: every request a
+# provider adapter makes goes to a recorded response instead. A test that means
+# to call somebody has to say so out loud
+# (`MeaningGame.KeeperFixtures.let_it_call_the_provider/0`), and is tagged
+# `:live` and excluded from the default run.
+config :meaning_game, :keeper,
+  adapter: MeaningGame.Keeper.Fake,
+  roles: [
+    assayer: [timeout_ms: 1_000, deadline_ms: 2_000, api_key: "recorded-responses-need-no-key"]
+  ],
+  http_options: [plug: {Req.Test, MeaningGame.Keeper.Gemini}]
+
+# The escalation ladder, in test time. The shape is what matters — activity,
+# then a provisional reading, then no verdict — and the shape is the same at a
+# fortieth of the wall clock.
+config :meaning_game, assayer_escalation_ms: [slow: 100, provisional: 200, unavailable: 250]
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

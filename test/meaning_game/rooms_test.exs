@@ -36,6 +36,29 @@ defmodule MeaningGame.RoomsTest do
       assert Rooms.snapshot(slug, nil).open_seats == 0
     end
 
+    test "a Room at the Assayer's cap plays, and every pair in it is graded" do
+      slug = open_room(seat_limit: MeaningGame.Keeper.seat_cap())
+
+      seats =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora) do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.commit_bridge(slug, &1.id, "cairn")))
+
+      # Six Seats is fifteen unordered pairs, which is why six is the cap: the
+      # rules would happily do sixty (ADR-0007), and one reveal beat would not.
+      assert length(await_reveal(slug).reveal.pairs) == 15
+    end
+
+    test "a Room too big for the Assayer to grade does not open" do
+      seats_per_room(MeaningGame.Keeper.seat_cap() + 1)
+
+      assert {:error, _reason} =
+               Rooms.ensure_started("too-many-#{System.unique_integer([:positive])}")
+    end
+
     test "a third player is turned away from a Room built for two" do
       slug = open_room(seat_limit: 2)
 
@@ -282,6 +305,80 @@ defmodule MeaningGame.RoomsTest do
       # The Room answers while the verdict is still out.
       assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
       assert await_reveal(ctx.slug).reveal.closeness == 80
+    end
+
+    test "an Assayer that answers is never called slow, however long the beat runs", ctx do
+      # A beat long enough that the whole test happens inside it, and a first
+      # rung the Assayer would be standing on by now if answering did not stand
+      # the ladder down.
+      beat(2_000)
+      escalation(slow: 20)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+
+      Process.sleep(100)
+      view = Rooms.snapshot(ctx.slug, nil)
+
+      assert view.phase == :assaying
+      assert view.assayer_step == nil
+    end
+  end
+
+  describe "an Assayer that takes too long" do
+    setup do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      # Rungs far enough apart that a test can catch the Room standing on each
+      # one, and an Assayer slower than all of them — but not so much slower that
+      # the test cannot wait for it to answer anyway, because one of these tests
+      # is about what happens when it finally does.
+      escalation(slow: 50, provisional: 400, unavailable: 700)
+      keeper(delay_ms: 1_000)
+
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+
+      %{slug: slug, mara: mara, jacob: jacob}
+    end
+
+    test "says it is still reading, and then that it is still nothing", ctx do
+      assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
+      assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :provisional end)
+    end
+
+    test "gives up at the last rung and hands the ruling to the players", ctx do
+      view = await_reveal(ctx.slug)
+
+      assert view.reveal.closeness == nil
+      assert view.reveal.melded? == false
+      refute hd(view.reveal.pairs).graded?
+      assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
+
+      # The wait is over, so nothing on any screen is still narrating it.
+      assert view.assayer_step == nil
+    end
+
+    test "a verdict that turns up after the game gave up does not change it", ctx do
+      assert await_reveal(ctx.slug).reveal.closeness == nil
+
+      # The Assayer does answer, a full second after being asked and long after
+      # the game stopped waiting at 700 ms. The pair is already graded — as
+      # ungraded — and a pair is graded once, so the number on the screen the
+      # couple are looking at does not move under them.
+      Process.sleep(1_100)
+
+      assert Rooms.snapshot(ctx.slug, nil).reveal.closeness == nil
+      assert Process.alive?(GenServer.whereis(Server.via(ctx.slug)))
+    end
+
+    test "every screen is told the same thing about the wait", ctx do
+      eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
+
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).assayer_step ==
+               Rooms.snapshot(ctx.slug, nil).assayer_step
     end
   end
 

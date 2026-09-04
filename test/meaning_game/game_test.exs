@@ -288,7 +288,12 @@ defmodule MeaningGame.GameTest do
       assert Enum.sort(pair) == pair
       assert Enum.sort(pair) == Enum.sort(["seat-Mara", "seat-Jacob"])
       assert request.anchors == ["lantern", "harbour"]
-      assert Enum.sort(request.bridges) == ["beacon", "cairn"]
+
+      # In roster order, not in the pair key's order. The Assayer writes a
+      # sentence and a joke naming both words, and they should read in the order
+      # the reveal shows them rather than in whatever order two Seat ids happen
+      # to sort in.
+      assert request.bridges == ["cairn", "beacon"]
 
       assert Game.view(state, nil).phase == :assaying
     end

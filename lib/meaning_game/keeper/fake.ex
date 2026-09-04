@@ -35,15 +35,30 @@ defmodule MeaningGame.Keeper.Fake do
 
   defp grade(left, right) do
     shared = shared_prefix(left, right)
+    closeness = round(200 * shared / (String.length(left) + String.length(right)))
 
     %{
-      closeness: round(200 * shared / (String.length(left) + String.length(right))),
+      closeness: closeness,
       reasoning:
         "\"#{left}\" and \"#{right}\" share #{shared} letters from the front. " <>
           "That is all this Assayer knows how to look at.",
+      # Named after the players' actual Bridges, like the live one's, so that
+      # every screen the quip is drawn on is exercised by a test that never
+      # calls anybody (ADR-0005).
+      quip: "\"#{left}\" and \"#{right}\" walk into a bar. The bar has no opinion.",
       # Provenance the Chronicle wants from every grader, answered honestly by
-      # the one that has no model behind it and costs nothing to run.
-      meta: %{model: "fake", prompt_version: "fake-1", cost_usd: 0.0}
+      # the one that has no model behind it and costs nothing to run. Both
+      # orderings agree because this Assayer is a symmetric function of two
+      # words: grading it twice is the same arithmetic twice.
+      meta: %{
+        model: "fake",
+        prompt_version: "fake-1",
+        cost_usd: 0.0,
+        forward: closeness,
+        reverse: closeness,
+        reasoning_reverse:
+          "\"#{right}\" and \"#{left}\" share the same #{shared} letters the other way round."
+      }
     }
   end
 

@@ -30,6 +30,15 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "Note: uncommitted changes here will not be deployed."
 fi
 
+# A warning rather than a failure, for the same reason the dirty-tree check is:
+# the game runs without a key, it just grades nothing. But an evening where
+# every Page reads "no verdict" is a missing line in a file, not a design, and
+# this is the last moment anyone is looking.
+if ! ssh "${SERVER}" "grep -q '^GEMINI_API_KEY=.' ${APP_DIR}/.env"; then
+  echo "Note: no GEMINI_API_KEY in ${APP_DIR}/.env — the Assayer will grade nothing."
+  echo "      See docs/deploy.md, \"The Assayer's key\"."
+fi
+
 echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"
 ssh "${SERVER}" bash -s <<REMOTE
 set -euo pipefail

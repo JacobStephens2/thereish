@@ -211,7 +211,28 @@ defmodule MeaningGameWeb.RoomLiveTest do
         assert has_element?(view, "[data-role=closeness]", "80")
         assert has_element?(view, "[data-role=band]", "meld")
         assert has_element?(view, "[data-role=reasoning]", "share 4 letters")
+        # The joke is about the two words they actually wrote, and it is on
+        # every screen the number is on (ADR-0005).
+        assert has_element?(view, "[data-role=quip]", "\"cairn\" and \"cairo\"")
       end
+    end
+
+    test "a slow Assayer is narrated on every screen rather than left as a hang", ctx do
+      escalation(slow: 50, provisional: 400, unavailable: 700)
+      keeper(delay_ms: 5_000)
+
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      for view <- [ctx.mara, ctx.jacob, ctx.stage] do
+        assert eventually(fn -> has_element?(view, "[data-role=phase][data-step=slow]") end)
+      end
+
+      # And when it never answers, the game says so and the call is theirs.
+      html = await_reveal_on(ctx.stage)
+
+      assert html =~ "No verdict"
+      assert html =~ "yours to call"
     end
 
     test "a miss is graded and said out loud, same as a Meld", ctx do

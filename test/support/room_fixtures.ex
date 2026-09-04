@@ -48,6 +48,27 @@ defmodule MeaningGame.RoomFixtures do
   end
 
   @doc """
+  Where the escalation ladder's rungs sit for one test, in milliseconds from the
+  moment the Assayer was asked.
+
+  A test that watches a step go by needs a window it can catch the Room in, and
+  the couch's four, eight and ten seconds are both too slow to run and — being
+  evenly spaced — too tight to observe.
+  """
+  def escalation(opts) do
+    steps = restore(:assayer_escalation_ms)
+
+    Application.put_env(:meaning_game, :assayer_escalation_ms, Keyword.merge(steps, opts))
+  end
+
+  @doc "How many Seats a newly opened Room holds, for one test."
+  def seats_per_room(seats) do
+    restore(:seats_per_room)
+
+    Application.put_env(:meaning_game, :seats_per_room, seats)
+  end
+
+  @doc """
   How many attempts a Page gets, for one test.
 
   Two is usually enough to watch a Page run out of them, and five rounds of

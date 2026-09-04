@@ -37,7 +37,15 @@ defmodule MeaningGame.Rooms.Room do
     |> validate_format(:slug, @slug_format)
     # Two is the smallest number of Seats that is still a Room. It is not the
     # default, which is configuration; it is the floor.
-    |> validate_number(:seat_limit, greater_than_or_equal_to: 2)
+    #
+    # The ceiling is the Assayer's, not the rules': every attempt is graded as
+    # N choose 2 pairs, so six Seats is fifteen live gradings inside one reveal
+    # beat. The rules themselves are written for a list of any length
+    # (ADR-0007), and this is the number the couch can afford in v1.
+    |> validate_number(:seat_limit,
+      greater_than_or_equal_to: 2,
+      less_than_or_equal_to: MeaningGame.Keeper.seat_cap()
+    )
     |> unique_constraint(:slug)
   end
 end

@@ -83,15 +83,24 @@ defmodule MeaningGameWeb.RoomComponents do
 
   attr :room, :map, required: true
 
-  @doc "The beat, said out loud. Every screen says the same thing during it."
+  @doc """
+  The beat, said out loud. Every screen says the same thing during it.
+
+  And if the Assayer is slow, every screen says so together: activity through
+  four seconds, a provisional reading at eight, and at ten the game says it has
+  no verdict, which is not a line here because by then there is a reveal to draw
+  (design law 10). A wait the game narrates is a wait; a wait it says nothing
+  about is a hang.
+  """
   def assaying(assigns) do
     ~H"""
     <p
       :if={@room.phase == :assaying}
       data-role="phase"
+      data-step={@room.assayer_step || :grading}
       class="text-center text-lg opacity-70"
     >
-      Every bridge is in. The Assayer is looking at them.
+      {waiting_line(@room.assayer_step)}
     </p>
     """
   end
@@ -99,11 +108,13 @@ defmodule MeaningGameWeb.RoomComponents do
   attr :room, :map, required: true
 
   @doc """
-  The reveal: the Bridges side by side, then the number, then the argument.
+  The reveal: the Bridges side by side, then the number, then the joke, then the
+  argument.
 
   In that order deliberately — the comparison is meant to land before the grade
   does. The number is the joke's delivery, so it is the biggest thing on the
-  screen, and the Assayer's reasoning is under it because the players are
+  screen; the quip lands on top of it, naming the two words they actually wrote
+  (ADR-0005); and the Assayer's reasoning is under both because the players are
   supposed to be able to argue with it.
   """
   def reveal(assigns) do
@@ -134,12 +145,18 @@ defmodule MeaningGameWeb.RoomComponents do
         No verdict. This one is yours to call.
       </p>
 
-      <ul class="flex max-w-prose flex-col gap-3 text-center">
-        <li :for={pair <- @room.reveal.pairs} data-role="pair" data-melded={to_string(pair.melded?)}>
+      <ul class="flex max-w-prose flex-col gap-5 text-center">
+        <li
+          :for={pair <- @room.reveal.pairs}
+          data-role="pair"
+          data-melded={to_string(pair.melded?)}
+          class="flex flex-col gap-1"
+        >
           <p :if={length(@room.reveal.pairs) > 1} class="font-semibold">
             {Enum.join(pair.names, " + ")} — {pair.closeness || "no verdict"} {band(pair.band)}
             <span :if={pair.melded?} data-role="pair-meld">· melded</span>
           </p>
+          <p :if={pair.quip} data-role="quip" class="text-xl">{pair.quip}</p>
           <p data-role="reasoning" class="opacity-80">
             {pair.reasoning || "The Assayer could not say."}
           </p>
@@ -226,6 +243,17 @@ defmodule MeaningGameWeb.RoomComponents do
   # The rules name a rung; nobody says "deep_meld" out loud.
   defp band(nil), do: ""
   defp band(name), do: name |> to_string() |> String.replace("_", " ")
+
+  # The Assayer has answered and the beat is still running, which is the
+  # ordinary case and reads as the ordinary line.
+  defp waiting_line(nil), do: "Every bridge is in. The Assayer is looking at them."
+  defp waiting_line(:grading), do: waiting_line(nil)
+  defp waiting_line(:slow), do: "The Assayer is still reading. It does this sometimes."
+
+  # Where the Author's pre-graded table will put a provisional band once there
+  # is an Author to write one. Until then the honest thing is to keep saying
+  # what is happening rather than to guess at a number.
+  defp waiting_line(:provisional), do: "Still nothing. Hold on."
 
   defp waiting(%{open_seats: 0, seat_limit: seat_limit}),
     do: "All #{seat_limit} seats taken"

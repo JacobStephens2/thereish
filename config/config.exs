@@ -22,6 +22,12 @@ config :meaning_game,
   # grade in v1: whether a harsh grade should be revealed sooner is a question
   # the couch answers, not one to guess at here.
   reveal_beat_ms: 2500,
+  # How the reveal escalates when the Assayer is slow (design law 10). Visible
+  # activity through four seconds; a provisional reading at eight, which shows
+  # the waiting state until the Author exists to pre-grade one; and at ten the
+  # game states it has no verdict and hands the ruling to the players. Ten
+  # seconds is a ceiling, not a target: the measured p95 is around one.
+  assayer_escalation_ms: [slow: 4_000, provisional: 8_000, unavailable: 10_000],
   # How many tries a Page gets before it closes unmelded. Five is a guess about
   # how long a converging arc stays funny, which makes it a setting the couch
   # moves rather than a number in the rules.
@@ -34,11 +40,56 @@ config :meaning_game,
     bands: [miss: 0, adjacent: 30, near: 55, meld: 75, deep_meld: 90]
   ]
 
-# The one seam to the models. Only the fake is on the other side of it until the
-# live Assayer arrives; `fake` is what makes a verdict slow or absent in a test.
+# The one seam to the models. Two adapters satisfy it: the live one, which is
+# what the couch plays against, and the fake, which is what every test that is
+# not a hand-run smoke test grades against (`fake` is what makes a verdict slow
+# or absent in a test).
+#
+# Everything about a role is here rather than in the code, so that swapping the
+# Assayer is a setting and not a refactor: the model, the effort, how many
+# identical requests are hedged, and how long the Keeper waits before it says it
+# has nothing. The Assayer is Gemini 3.8 Flash at low effort per ADR-0005 —
+# chosen for repeatability, because a constant offset is calibrated once by the
+# couple while noise makes the first grade on a borderline pair a dice roll that
+# the cache then freezes as precedent.
 config :meaning_game, :keeper,
-  adapter: MeaningGame.Keeper.Fake,
-  fake: [delay_ms: 0, mode: :grade]
+  adapter: MeaningGame.Keeper.Live,
+  fake: [delay_ms: 0, mode: :grade],
+  roles: [
+    assayer: [
+      provider: MeaningGame.Keeper.Gemini,
+      model: "gemini-3.8-flash",
+      # Thinking cannot be turned off on 3.8 Flash; low is the floor.
+      effort: "low",
+      max_tokens: 400,
+      # Two identical requests to one model, first answer wins. Fast tier only:
+      # hedging shortens a tail made of queueing, and does nothing for a tail
+      # made of generation (design law 11).
+      requests: 2,
+      # A rejected answer is asked for again, twice, before the Keeper gives up.
+      retries: 2,
+      # How long one request may take. The measured p95 for a whole verdict is
+      # around a second, so four is a request that has gone wrong — and it is
+      # short enough that a rejected answer can be asked for again inside the
+      # budget below, which is what makes the retries real (design law 14).
+      timeout_ms: 4_000,
+      # The whole grading's budget, retries and all. Under the ten seconds at
+      # which the reveal stops waiting, so that the Keeper has already said it
+      # has nothing by the time the game does.
+      deadline_ms: 9_000,
+      # Filled in from GEMINI_API_KEY by `config/runtime.exs`. A key is a
+      # setting like the model is; nothing reaches for the environment mid-Page.
+      api_key: nil
+    ]
+  ],
+  # Dollars per million tokens, {input, output}, from each provider's pricing
+  # page on 2026-09-02. Google's promotional rate for Flash runs to 2026-12-31;
+  # $1.50 / $7.50 after that.
+  prices: %{"gemini-3.8-flash" => {0.75, 3.75}},
+  # The most Seats a Room may hold, because live grading is N choose 2 requests
+  # per attempt and six Seats is already fifteen of them. A limit on what a
+  # reveal can afford, not on what the rules can say.
+  seat_cap: 6
 
 # Configure the endpoint
 config :meaning_game, MeaningGameWeb.Endpoint,
