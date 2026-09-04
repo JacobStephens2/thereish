@@ -144,9 +144,15 @@ defmodule MeaningGameWeb.ChronicleLive do
         </div>
         <div class="flex items-center justify-between text-sm opacity-60">
           <span>Room: {@slug}</span>
-          <a href={export_path(@slug)} class="underline hover:opacity-100" download>
-            Export Markdown (.md)
-          </a>
+          <div class="flex items-center gap-3">
+            <a href={export_path(@slug)} class="underline hover:opacity-100" download>
+              Export Markdown (.md)
+            </a>
+            <span>·</span>
+            <a href={export_calibration_path(@slug)} class="underline hover:opacity-100" download>
+              Export Calibration (.json)
+            </a>
+          </div>
         </div>
       </header>
 
@@ -242,6 +248,32 @@ defmodule MeaningGameWeb.ChronicleLive do
                 </div>
                 <p :if={v.reasoning} class="italic opacity-80">"{v.reasoning}"</p>
                 <p :if={v.quip} class="text-xs font-medium opacity-90">{v.quip}</p>
+              </div>
+
+              <!-- Fairness taps on this attempt -->
+              <div
+                :if={attempt[:fairness_taps] && attempt.fairness_taps != []}
+                data-role="fairness-taps"
+                class="mt-1 flex flex-wrap items-center gap-1.5 text-xs"
+              >
+                <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Fairness:
+                </span>
+                <span
+                  :for={t <- attempt.fairness_taps}
+                  data-role="fairness-tap-entry"
+                  class={[
+                    "rounded px-1.5 py-0.5 text-xs font-medium",
+                    case t.label do
+                      "fair" -> "bg-success/15 text-success font-semibold"
+                      "too_kind" -> "bg-info/15 text-info font-semibold"
+                      "too_harsh" -> "bg-warning/15 text-warning font-semibold"
+                      _ -> "bg-base-300"
+                    end
+                  ]}
+                >
+                  {t.seat_name}: {human_label(t.label)}
+                </span>
               </div>
 
               <!-- Overrule on this attempt -->
@@ -418,4 +450,12 @@ defmodule MeaningGameWeb.ChronicleLive do
   defp export_path(slug) do
     if slug == Rooms.default_slug(), do: ~p"/chronicle.md", else: ~p"/r/#{slug}/chronicle.md"
   end
+
+  defp export_calibration_path(slug) do
+    if slug == Rooms.default_slug(),
+      do: ~p"/calibration.json",
+      else: ~p"/r/#{slug}/calibration.json"
+  end
+
+  defp human_label(label), do: MeaningGame.Chronicle.FairnessTap.label_human(label)
 end

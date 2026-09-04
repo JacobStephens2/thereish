@@ -142,5 +142,24 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       assert correction.corrected_value == "cairn"
       assert correction.original_value == "cairo"
     end
+
+    test "shows fairness taps alongside the page and attempt they judge",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairo")
+
+      :ok = Rooms.record_fairness_tap(slug, ctx.mara.id, :fair)
+      :ok = Rooms.record_fairness_tap(slug, ctx.jacob.id, :too_harsh)
+
+      # Advance to close page
+      :ok = Rooms.next_page(slug, ctx.mara.id)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=fairness-taps]")
+      rendered = render(view)
+      assert rendered =~ "Fairness:"
+      assert rendered =~ "Mara: fair"
+      assert rendered =~ "Jacob: too harsh"
+    end
   end
 end

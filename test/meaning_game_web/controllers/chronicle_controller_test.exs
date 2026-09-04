@@ -58,4 +58,93 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
       end
     end
   end
+
+  describe "GET /r/:slug/calibration.json" do
+    test "exports the labelled set as JSON on demand", %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairo")
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: slug)
+
+      MeaningGame.Chronicle.record_fairness_tap(room.id, %{
+        seat_id: ctx.mara.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "fair"
+      })
+
+      conn = get(conn, ~p"/r/#{slug}/calibration.json")
+
+      assert response(conn, 200)
+      assert response_content_type(conn, :json) =~ "application/json"
+      body = response(conn, 200)
+      assert {:ok, [entry]} = Jason.decode(body)
+      assert entry["label"] == "fair"
+      assert entry["grade"] == 80
+      assert entry["anchors"] == ["lantern", "harbour"]
+      assert entry["bridges"] == ["cairn", "cairo"]
+    end
+
+    test "exports all rooms over /calibration.json and /calibration.jsonl",
+         %{conn: conn, slug: slug} = ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: slug)
+
+      MeaningGame.Chronicle.record_fairness_tap(room.id, %{
+        seat_id: ctx.mara.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "fair"
+      })
+
+      # JSON
+      conn_json = get(conn, ~p"/calibration.json")
+      assert response(conn_json, 200)
+      assert response_content_type(conn_json, :json) =~ "application/json"
+      assert {:ok, entries} = Jason.decode(response(conn_json, 200))
+      assert length(entries) >= 1
+
+      # JSONL
+      conn_jsonl = get(conn, ~p"/calibration.jsonl")
+      assert response(conn_jsonl, 200)
+      assert [ct] = get_resp_header(conn_jsonl, "content-type")
+      assert ct =~ "application/x-ndjson"
+      lines = response(conn_jsonl, 200) |> String.trim() |> String.split("\n")
+      assert length(lines) >= 1
+      assert {:ok, _} = Jason.decode(hd(lines))
+    end
+
+    test "exports room-scoped calibration as JSONL over /r/:slug/calibration.jsonl",
+         %{conn: conn, slug: slug} = ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: slug)
+
+      MeaningGame.Chronicle.record_fairness_tap(room.id, %{
+        seat_id: ctx.mara.id,
+        attempt_number: 1,
+        anchors: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        grade: 80,
+        band: "meld",
+        model: "gemini-3.8-flash",
+        prompt_version: "v1",
+        label: "fair"
+      })
+
+      conn = get(conn, ~p"/r/#{slug}/calibration.jsonl")
+      assert response(conn, 200)
+      assert [ct] = get_resp_header(conn, "content-type")
+      assert ct =~ "application/x-ndjson"
+      lines = response(conn, 200) |> String.trim() |> String.split("\n")
+      assert length(lines) == 1
+      assert {:ok, entry} = Jason.decode(hd(lines))
+      assert entry["label"] == "fair"
+    end
+  end
 end

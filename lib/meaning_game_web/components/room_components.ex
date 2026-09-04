@@ -291,6 +291,74 @@ defmodule MeaningGameWeb.RoomComponents do
         </li>
       </ul>
 
+      <div
+        :if={@mode == :phone && @seat && @room.reveal.closeness}
+        data-role="fairness-controls"
+        class="flex flex-col items-center gap-2 pt-2"
+      >
+        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+          Was this grade fair?
+        </span>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            phx-click="fairness_tap"
+            phx-value-label="too_harsh"
+            data-role="tap-too-harsh"
+            data-tap="too_harsh"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_fairness_tap(@room, @seat) == "too_harsh",
+                do: "btn-warning text-warning-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Too harsh
+          </button>
+          <button
+            type="button"
+            phx-click="fairness_tap"
+            phx-value-label="fair"
+            data-role="tap-fair"
+            data-tap="fair"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_fairness_tap(@room, @seat) == "fair",
+                do: "btn-primary font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Fair
+          </button>
+          <button
+            type="button"
+            phx-click="fairness_tap"
+            phx-value-label="too_kind"
+            data-role="tap-too-kind"
+            data-tap="too_kind"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_fairness_tap(@room, @seat) == "too_kind",
+                do: "btn-info text-info-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Too kind
+          </button>
+        </div>
+        <%= if tap = your_fairness_tap(@room, @seat) do %>
+          <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
+            <span data-role="seat-tap" class="font-semibold capitalize">
+              {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
+            </span>
+            recorded
+          </div>
+        <% end %>
+      </div>
+
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
       </p>
@@ -552,6 +620,10 @@ defmodule MeaningGameWeb.RoomComponents do
       badge_class: "bg-base-300 text-base-content/70 font-bold",
       flavour: nil
     }
+  end
+
+  defp your_fairness_tap(room, seat) do
+    room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])
   end
 
   defp you?(seat, bridge), do: seat != nil and seat.id == bridge.seat_id

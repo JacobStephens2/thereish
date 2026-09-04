@@ -138,6 +138,14 @@ defmodule MeaningGame.Rooms do
   def decline_overrule(slug, seat_id), do: call(slug, {:decline_overrule, seat_id})
 
   @doc """
+  Records one player fairness tap for the current reveal.
+  """
+  @spec record_fairness_tap(String.t(), String.t(), String.t() | atom()) ::
+          :ok | {:error, term()}
+  def record_fairness_tap(slug, seat_id, label),
+    do: call(slug, {:record_fairness_tap, seat_id, label})
+
+  @doc """
   "One more?" — a fresh Page in the same Room, with the same Seats.
 
   Only from a Page that has closed, so that the tap can never take a Page away

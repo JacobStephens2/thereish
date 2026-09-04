@@ -701,6 +701,75 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "the fairness tap at the reveal (ticket 11)" do
+    setup do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      commit(mara, "cairn")
+      commit(jacob, "cairo")
+
+      await_reveal_on(mara)
+      await_reveal_on(jacob)
+      await_reveal_on(stage)
+
+      %{slug: slug, mara: mara, jacob: jacob, stage: stage}
+    end
+
+    test "three taps appear on each phone at the reveal, but not on the stage", ctx do
+      for phone <- [ctx.mara, ctx.jacob] do
+        assert has_element?(phone, "[data-role=fairness-controls]")
+        assert has_element?(phone, "[data-role=tap-fair]", "Fair")
+        assert has_element?(phone, "[data-role=tap-too-kind]", "Too kind")
+        assert has_element?(phone, "[data-role=tap-too-harsh]", "Too harsh")
+      end
+
+      # Stage holds no seat so it renders no fairness buttons
+      refute has_element?(ctx.stage, "[data-role=fairness-controls]")
+    end
+
+    test "tapping persists the label and highlights the selection per Seat", ctx do
+      # Mara taps fair
+      ctx.mara |> element("[data-role=tap-fair]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=tap-fair].btn-primary")
+      assert has_element?(ctx.mara, "[data-role=your-tap]")
+      assert has_element?(ctx.mara, "[data-role=seat-tap]", "fair")
+      refute has_element?(ctx.jacob, "[data-role=tap-fair].btn-primary")
+      refute has_element?(ctx.jacob, "[data-role=your-tap]")
+
+      # Jacob disagrees and taps too_harsh
+      ctx.jacob |> element("[data-role=tap-too-harsh]") |> render_click()
+
+      assert has_element?(ctx.jacob, "[data-role=tap-too-harsh].btn-warning")
+      assert has_element?(ctx.jacob, "[data-role=your-tap]")
+      assert has_element?(ctx.jacob, "[data-role=seat-tap]", "too harsh")
+      assert has_element?(ctx.mara, "[data-role=tap-fair].btn-primary")
+      assert has_element?(ctx.mara, "[data-role=your-tap]")
+
+      # Both rows persisted in Chronicle
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      taps = MeaningGame.Chronicle.fairness_taps(room.id)
+      assert length(taps) == 2
+      assert Enum.map(taps, & &1.label) |> Enum.sort() == ["fair", "too_harsh"]
+    end
+
+    test "tapping never blocks or delays the next attempt", ctx do
+      ctx.mara |> element("[data-role=tap-fair]") |> render_click()
+
+      # Next page / again button is present and usable immediately
+      assert has_element?(ctx.mara, "[data-role=one-more]")
+      ctx.mara |> element("[data-role=one-more]") |> render_click()
+
+      assert render(ctx.mara) =~ "The word between them"
+    end
+  end
+
   # The default Room is the one Room without a slug of its own, so the test that
   # touches it has to put it away itself.
   defp stop_default_room do

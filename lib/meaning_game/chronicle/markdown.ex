@@ -163,6 +163,22 @@ defmodule MeaningGame.Chronicle.Markdown do
           "##### Corrections\n" <> corr_items
       end
 
+    fairness_md =
+      case Map.get(attempt, :fairness_taps, []) do
+        [] ->
+          nil
+
+        taps ->
+          items =
+            Enum.map(taps, fn t ->
+              display_label = MeaningGame.Chronicle.FairnessTap.label_human(t.label)
+              "#{t.seat_name}: #{display_label}"
+            end)
+            |> Enum.join(", ")
+
+          "- Fairness: #{items}"
+      end
+
     attempt_lines =
       ([
          "#### Attempt #{attempt.number}",
@@ -170,7 +186,7 @@ defmodule MeaningGame.Chronicle.Markdown do
          "- Bridges:\n#{bridges_lines}"
        ] ++
          verdict_lines ++
-         [overrules_md, corrections_md])
+         [fairness_md, overrules_md, corrections_md])
       |> Enum.reject(&is_nil/1)
 
     Enum.join(attempt_lines, "\n")
@@ -256,7 +272,8 @@ defmodule MeaningGame.Chronicle.Markdown do
                  "Closed",
                  "Proposed by",
                  "Original",
-                 "Overruled"
+                 "Overruled",
+                 "Fairness"
                ] ->
             if String.starts_with?(name, "By ") do
               []
@@ -285,6 +302,8 @@ defmodule MeaningGame.Chronicle.Markdown do
         line -> line |> String.replace_prefix("- Quip:", "") |> String.trim()
       end
 
+    fairness_line = Enum.find(lines, &String.starts_with?(String.trim(&1), "- Fairness:"))
+    fairness_taps = parse_fairness_line(fairness_line)
     overrule = parse_overrule_section(chunk)
     corrections = parse_corrections_section(chunk)
 
@@ -296,6 +315,7 @@ defmodule MeaningGame.Chronicle.Markdown do
       band: band,
       reasoning: reasoning,
       quip: quip,
+      fairness_taps: fairness_taps,
       overrule: overrule,
       corrections: corrections
     }
@@ -387,6 +407,31 @@ defmodule MeaningGame.Chronicle.Markdown do
     else
       []
     end
+  end
+
+  defp parse_fairness_line(nil), do: []
+
+  defp parse_fairness_line(line) do
+    line
+    |> String.replace_prefix("- Fairness:", "")
+    |> String.trim()
+    |> String.split(",")
+    |> Enum.flat_map(fn part ->
+      case String.split(part, ":", parts: 2) do
+        [name, label] ->
+          label_norm =
+            case String.trim(label) do
+              "too kind" -> "too_kind"
+              "too harsh" -> "too_harsh"
+              other -> other
+            end
+
+          [%{seat_name: String.trim(name), label: label_norm}]
+
+        _ ->
+          []
+      end
+    end)
   end
 
   defp parse_closeness(nil), do: nil

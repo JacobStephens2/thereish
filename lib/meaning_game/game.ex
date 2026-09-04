@@ -59,7 +59,8 @@ defmodule MeaningGame.Game do
     verdicts: %{},
     played: [],
     overrule: nil,
-    overrules: []
+    overrules: [],
+    fairness_taps: %{}
   ]
 
   @type seat :: %{id: String.t(), name: String.t()}
@@ -106,7 +107,8 @@ defmodule MeaningGame.Game do
           verdicts: %{pair() => verdict()},
           played: [attempt()],
           overrule: map() | nil,
-          overrules: [map()]
+          overrules: [map()],
+          fairness_taps: %{String.t() => String.t()}
         }
 
   @type viewer :: String.t() | nil
@@ -133,6 +135,12 @@ defmodule MeaningGame.Game do
              }}
           | {:overrule_agreed, %{seat_id: String.t()}}
           | {:overrule_declined, %{seat_id: String.t()}}
+          | {:fairness_tapped,
+             %{
+               required(:seat_id) => String.t(),
+               required(:label) => String.t() | atom(),
+               optional(:pair) => pair()
+             }}
 
   @typedoc """
   What the Room is asked to do next. Effects are descriptions, never actions:
@@ -146,6 +154,7 @@ defmodule MeaningGame.Game do
           | {:assay, pair(), %{anchors: [String.t()], bridges: [String.t()]}}
           | {:chronicle, map()}
           | {:overrule, map()}
+          | {:fairness_tap, map()}
 
   @type error ::
           :room_full
@@ -160,6 +169,8 @@ defmodule MeaningGame.Game do
           | :proposal_pending
           | :no_proposal_pending
           | :already_overruled
+          | :invalid_label
+          | :no_grade_to_rate
 
   @doc """
   Builds the state of a Room that holds `seat_limit` Seats, `seats` of them
@@ -320,6 +331,50 @@ defmodule MeaningGame.Game do
     end
   end
 
+  def apply(%__MODULE__{} = state, {:fairness_tapped, %{seat_id: seat_id, label: label} = attrs}) do
+    pair = Map.get(attrs, :pair) || default_pair(state)
+    verdict = Map.get(state.verdicts, pair)
+    label_str = normalize_label(label)
+
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) not in [:reveal, :closed] or is_nil(verdict) ->
+        {:error, :not_revealed}
+
+      is_nil(verdict.closeness) and is_nil(Map.get(verdict, :original_closeness)) ->
+        {:error, :not_assayed}
+
+      label_str not in ["fair", "too_kind", "too_harsh"] ->
+        {:error, :invalid_label}
+
+      true ->
+        bridges = for seat <- state.seats, seat.id in pair, do: state.bridges[seat.id]
+        grade = Map.get(verdict, :original_closeness) || verdict.closeness
+        band = Map.get(verdict, :original_band) || (grade && Ladder.read(grade).band)
+        meta = verdict.meta || %{}
+
+        tap_effect_data = %{
+          seat_id: seat_id,
+          attempt_number: state.attempt,
+          anchors: state.anchors,
+          bridges: bridges,
+          grade: grade,
+          closeness: grade,
+          band: band && to_string(band),
+          model: meta[:model],
+          prompt_version: meta[:prompt_version],
+          label: label_str
+        }
+
+        current_taps = state.fairness_taps || %{}
+        next_state = %{state | fairness_taps: Map.put(current_taps, seat_id, label_str)}
+
+        {:ok, next_state, [{:fairness_tap, tap_effect_data}]}
+    end
+  end
+
   def apply(%__MODULE__{} = state, {:attempt_advanced, %{seat_id: seat_id}}) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- open_reveal(state) do
@@ -331,7 +386,8 @@ defmodule MeaningGame.Game do
            bridges: %{},
            verdicts: %{},
            played: state.played ++ [this_attempt(state)],
-           overrule: nil
+           overrule: nil,
+           fairness_taps: %{}
        }, []}
     end
   end
@@ -349,7 +405,8 @@ defmodule MeaningGame.Game do
            verdicts: %{},
            played: [],
            overrule: nil,
-           overrules: []
+           overrules: [],
+           fairness_taps: %{}
        }, []}
     end
   end
@@ -367,6 +424,7 @@ defmodule MeaningGame.Game do
   @spec view(t(), viewer()) :: map()
   def view(%__MODULE__{} = state, viewer) do
     phase = phase(state)
+    fairness_taps = state.fairness_taps || %{}
 
     %{
       phase: phase,
@@ -384,7 +442,9 @@ defmodule MeaningGame.Game do
       next_anchors: if(phase == :reveal, do: carried_anchors(state)),
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
-      overrule: overrule_view(state, viewer)
+      overrule: overrule_view(state, viewer),
+      your_tap: Map.get(fairness_taps, viewer),
+      fairness_taps: fairness_taps
     }
   end
 
@@ -765,6 +825,20 @@ defmodule MeaningGame.Game do
   # A Bridge is one word, and the game says it its own way: what the players are
   # shown side by side should differ in meaning, not in the shift key.
   defp normalize(bridge), do: bridge |> String.trim() |> String.downcase()
+
+  defp normalize_label(:fair), do: "fair"
+  defp normalize_label(:too_kind), do: "too_kind"
+  defp normalize_label(:too_harsh), do: "too_harsh"
+  defp normalize_label("fair"), do: "fair"
+  defp normalize_label("too_kind"), do: "too_kind"
+  defp normalize_label("too kind"), do: "too_kind"
+  defp normalize_label("too_harsh"), do: "too_harsh"
+  defp normalize_label("too harsh"), do: "too_harsh"
+
+  defp normalize_label(other) when is_binary(other),
+    do: other |> String.trim() |> String.downcase()
+
+  defp normalize_label(other), do: to_string(other)
 
   defp seat(%{id: id, name: name}), do: %{id: id, name: name}
 

@@ -23,6 +23,7 @@ defmodule MeaningGame.Chronicle do
   alias MeaningGame.Chronicle.Attempt
   alias MeaningGame.Chronicle.Bridge
   alias MeaningGame.Chronicle.Correction
+  alias MeaningGame.Chronicle.FairnessTap
   alias MeaningGame.Chronicle.Overrule
   alias MeaningGame.Chronicle.Page
   alias MeaningGame.Chronicle.Verdict
@@ -97,6 +98,85 @@ defmodule MeaningGame.Chronicle do
   end
 
   @doc """
+  Records one player fairness tap into the Chronicle as an append-only event.
+  """
+  @spec record_fairness_tap(Ecto.UUID.t(), map()) ::
+          {:ok, FairnessTap.t()} | {:error, Ecto.Changeset.t()}
+  def record_fairness_tap(room_id, attrs) do
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    %FairnessTap{}
+    |> FairnessTap.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Every fairness tap in one Room, oldest first.
+  """
+  @spec fairness_taps(Ecto.UUID.t() | String.t()) :: [FairnessTap.t()]
+  def fairness_taps(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(t in FairnessTap,
+      where: t.room_id == ^room_id,
+      order_by: [asc: t.inserted_at, asc: t.id]
+    )
+    |> Repo.all()
+    |> Repo.preload(:seat)
+  end
+
+  @doc """
+  Every fairness tap across all Rooms, oldest first.
+  """
+  @spec all_fairness_taps() :: [FairnessTap.t()]
+  def all_fairness_taps do
+    from(t in FairnessTap, order_by: [asc: t.inserted_at, asc: t.id])
+    |> Repo.all()
+    |> Repo.preload(:seat)
+  end
+
+  @doc """
+  Returns the labelled set in structured map form for calibration runs.
+  """
+  @spec calibration_dataset(Ecto.UUID.t() | String.t() | nil) :: [map()]
+  def calibration_dataset(room_id_or_slug \\ nil) do
+    taps =
+      if room_id_or_slug do
+        fairness_taps(room_id_or_slug)
+      else
+        all_fairness_taps()
+      end
+
+    Enum.map(taps, &format_calibration_entry/1)
+  end
+
+  @doc """
+  Exports the labelled set in a format a calibration run can consume (:json or :jsonl).
+  """
+  @spec export_calibration(Ecto.UUID.t() | String.t() | nil, :json | :jsonl) :: String.t()
+  def export_calibration(room_id_or_slug \\ nil, format \\ :json) do
+    dataset = calibration_dataset(room_id_or_slug)
+
+    case format do
+      :json ->
+        Jason.encode!(dataset, pretty: true)
+
+      :jsonl ->
+        dataset
+        |> Enum.map(&Jason.encode!/1)
+        |> Enum.join("\n")
+    end
+  end
+
+  defp format_calibration_entry(t) do
+    format_fairness_tap(t)
+    |> Map.merge(%{
+      room_id: t.room_id,
+      page_id: t.page_id
+    })
+  end
+
+  @doc """
   Every closed Page in one Room, oldest first, with its attempts, Bridges and
   verdicts loaded.
 
@@ -143,8 +223,9 @@ defmodule MeaningGame.Chronicle do
 
     all_overrules = overrules(room_id)
     all_corrections = corrections(room_id)
+    all_taps = fairness_taps(room_id)
 
-    Enum.map(pages, &compute_page_view(&1, all_overrules, all_corrections))
+    Enum.map(pages, &compute_page_view(&1, all_overrules, all_corrections, all_taps))
   end
 
   @doc """
@@ -247,7 +328,7 @@ defmodule MeaningGame.Chronicle do
   @doc """
   Computes the view of one Page from its event rows, overrules, and corrections.
   """
-  def compute_page_view(%Page{} = page, all_overrules, all_corrections) do
+  def compute_page_view(%Page{} = page, all_overrules, all_corrections, all_taps \\ []) do
     page_overrules =
       Enum.filter(all_overrules, fn o ->
         o.page_id == page.id or
@@ -263,6 +344,16 @@ defmodule MeaningGame.Chronicle do
         c.page_id == page.id
       end)
 
+    page_taps =
+      Enum.filter(all_taps, fn t ->
+        t.page_id == page.id or
+          (t.room_id == page.room_id and
+             Enum.any?(
+               page.attempts,
+               &(&1.number == t.attempt_number and &1.anchors == t.anchors)
+             ))
+      end)
+
     attempts =
       Enum.map(page.attempts, fn attempt ->
         attempt_overrules =
@@ -274,6 +365,12 @@ defmodule MeaningGame.Chronicle do
         attempt_corrections =
           Enum.filter(page_corrections, fn c ->
             c.attempt_number == attempt.number
+          end)
+
+        attempt_taps =
+          Enum.filter(page_taps, fn t ->
+            t.attempt_number == attempt.number and
+              (t.anchors == attempt.anchors or t.page_id == page.id)
           end)
 
         bridges =
@@ -343,7 +440,8 @@ defmodule MeaningGame.Chronicle do
           bridges: bridges,
           verdicts: verdicts,
           overrules: Enum.map(attempt_overrules, &format_overrule/1),
-          corrections: Enum.map(attempt_corrections, &format_correction/1)
+          corrections: Enum.map(attempt_corrections, &format_correction/1),
+          fairness_taps: Enum.map(attempt_taps, &format_fairness_tap/1)
         }
       end)
 
@@ -366,7 +464,28 @@ defmodule MeaningGame.Chronicle do
       closed_at: page.closed_at,
       attempts: attempts,
       overrules: Enum.map(page_overrules, &format_overrule/1),
-      corrections: Enum.map(page_corrections, &format_correction/1)
+      corrections: Enum.map(page_corrections, &format_correction/1),
+      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1)
+    }
+  end
+
+  defp format_fairness_tap(t) do
+    closeness = t.closeness || Map.get(t, :grade)
+
+    %{
+      id: t.id,
+      attempt_number: t.attempt_number,
+      seat_id: t.seat_id,
+      seat_name: (t.seat && t.seat.name) || "Player",
+      anchors: t.anchors,
+      bridges: t.bridges,
+      grade: closeness,
+      closeness: closeness,
+      band: t.band,
+      model: t.model,
+      prompt_version: t.prompt_version,
+      label: t.label,
+      inserted_at: t.inserted_at
     }
   end
 

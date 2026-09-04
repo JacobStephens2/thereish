@@ -704,6 +704,53 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "the fairness tap (ticket 11)" do
+    setup do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_reveal(slug)
+
+      %{slug: slug, mara: mara, jacob: jacob}
+    end
+
+    test "a player taps fairness at the reveal, persisting the row and updating the snapshot",
+         ctx do
+      assert :ok = Rooms.record_fairness_tap(ctx.slug, ctx.mara.id, "fair")
+
+      # Mara's snapshot shows her tap
+      view_m = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view_m.your_tap == "fair"
+
+      # Jacob's snapshot does not have a tap yet
+      view_j = Rooms.snapshot(ctx.slug, ctx.jacob.id)
+      assert view_j.your_tap == nil
+
+      # Jacob taps too_harsh
+      assert :ok = Rooms.record_fairness_tap(ctx.slug, ctx.jacob.id, "too_harsh")
+      view_j2 = Rooms.snapshot(ctx.slug, ctx.jacob.id)
+      assert view_j2.your_tap == "too_harsh"
+
+      # Both persisted into Chronicle
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      taps = MeaningGame.Chronicle.fairness_taps(room.id)
+      assert length(taps) == 2
+      assert Enum.find(taps, &(&1.seat_id == ctx.mara.id)).label == "fair"
+      assert Enum.find(taps, &(&1.seat_id == ctx.jacob.id)).label == "too_harsh"
+    end
+
+    test "tapping does not prevent or delay starting the next page", ctx do
+      assert :ok = Rooms.record_fairness_tap(ctx.slug, ctx.mara.id, "fair")
+      # Next attempt / page proceeds without impediment
+      assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.your_tap == nil
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do
