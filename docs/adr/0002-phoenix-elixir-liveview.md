@@ -14,4 +14,4 @@ Our research ranked Node/TypeScript + Socket.IO first and Phoenix second for thi
 
 - Every model call is raw HTTP (no official Elixir SDK from any provider), behind one adapter module; streaming is parsed by hand.
 - Every interaction round-trips to the VPS. Acceptable for turn-based play with little animation; rich touch interaction, if ever needed, goes into JS hooks.
-- Kill criterion: if a two-phone room with rejoin isn't working after three evenings of work, switch to the TypeScript stack. The design — state document, phase machine, named seats — is stack-agnostic.
+- ~~Kill criterion: if a two-phone room with rejoin isn't working after three evenings of work, switch to the TypeScript stack.~~ **Passed 2026-09-03**, well inside the three evenings: two phones and a laptop stage in a Room on <https://meld.stephens.page>, a tab closed and reopened straight back into its own Seat, a phone locked and unlocked without losing it (ticket 02). Phoenix stays and the TypeScript fallback is off the table. The design — state document, phase machine, named seats — was stack-agnostic and no longer needs to be.
