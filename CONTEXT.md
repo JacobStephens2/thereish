@@ -32,9 +32,9 @@ _Avoid_: campaign, level, theme pack, world, mode
 A theme supplied on the spot by a player that sets the current Page — improv's audience suggestion, at Page scale rather than Chapter scale.
 _Avoid_: suggestion, request, custom theme
 
-**Keeper**:
+**Steward**:
 The one seam through which the game talks to language models. The Author, the Assayer, and the Scribe are its roles; model choice, caching, hedging, A/B assignment, and guardrails live behind it.
-_Avoid_: AI, "the LLM", model service, brain
+_Avoid_: Keeper (the earlier name), AI, "the LLM", model service, brain
 
 **Author**:
 The machine role that builds Pages before play — word sets, authored misdirection, decoys, Chapter content.
@@ -49,7 +49,7 @@ The machine role that writes the Chronicle after play — records, recaps, callb
 _Avoid_: logger, narrator, historian
 
 **Anchors**:
-The two words a Mind-Meld Page shows; each player writes the Bridge between them.
+The two words a Page shows; each player writes the Bridge between them.
 _Avoid_: prompt (collides with the model-prompt sense), pair, cue
 
 **Bridge**:
@@ -90,7 +90,11 @@ _Avoid_: delay, loading, spinner, timeout
 
 **Bait**:
 The obvious Bridge the Author plants; converging on it is a Meld on the lowest rung.
-_Avoid_: decoy (the clover's word), trap, red herring
+_Avoid_: decoy, trap, red herring
+
+**Band**:
+One rung of the ladder the Assayer grades onto, named in words the players hear rather than by its number.
+_Avoid_: tier, bucket, rank, grade (that's the number itself)
 
 **Precedent**:
 The cached verdict that future identical inputs inherit — the grade the players saw. Only a joint overrule rewrites it.
