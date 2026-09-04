@@ -49,7 +49,7 @@ defmodule MeaningGame.Steward.Fake do
             ["backyard", "weekend"]
           end
 
-        bait = if give, do: "clover", else: "barbecue"
+        bait = if give, do: "altar", else: "barbecue"
         deep_bridges = if give, do: ["saint", "church"], else: ["lawnmower", "chores"]
         likely_bridges = [bait | deep_bridges] ++ ["prayer", "faith"]
 

@@ -89,6 +89,6 @@ Historical note worth keeping: **Hasbro filed *BIO MELD* in Class 28 in 1996** a
 ## Out of scope
 
 - Renaming the OTP app or Elixir modules. `:meaning_game` is the umbrella and stays whatever the game is called
-- The parked clover candidate's real name — it stays "Chronicle Clover" while it stays parked
+- Chronicle Clover's real name — it was retired unplayed and needs no real name
 - Buying a domain or registering anything. The game is hosted at stephens.page and use is private
 - Any actual trademark filing. If the game ever leaves the couch that is a real attorney's question, not this ticket's
