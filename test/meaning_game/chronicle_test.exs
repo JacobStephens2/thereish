@@ -12,6 +12,7 @@ defmodule MeaningGame.ChronicleTest do
   import MeaningGame.RoomFixtures
 
   alias MeaningGame.Chronicle
+  alias MeaningGame.Keeper
   alias MeaningGame.Rooms
   alias MeaningGame.Rooms.Room
 
@@ -222,6 +223,215 @@ defmodule MeaningGame.ChronicleTest do
       assert [saved] = Chronicle.overrules(room_id)
       assert saved.id == overrule.id
       assert saved.proposer.name == "Mara"
+    end
+
+    test "records a player correction as an append-only event without mutating history", ctx do
+      play(ctx, "cairn", "cairo")
+
+      [page] = chronicled(ctx.slug)
+      [attempt] = page.attempts
+      [_bridge1, bridge2] = attempt.bridges
+      assert bridge2.bridge == "cairo"
+
+      correction_attrs = %{
+        page_id: page.id,
+        seat_id: ctx.jacob.id,
+        attempt_number: 1,
+        target: "bridge",
+        original_value: "cairo",
+        corrected_value: "cairn",
+        note: "Typo on phone keyboard"
+      }
+
+      assert {:ok, correction} = Chronicle.record_correction(page.room_id, correction_attrs)
+      assert correction.page_id == page.id
+      assert correction.target == "bridge"
+      assert correction.original_value == "cairo"
+      assert correction.corrected_value == "cairn"
+      assert correction.note == "Typo on phone keyboard"
+
+      # History is NOT mutated: the original bridge row remains exactly as it was written
+      fresh_page =
+        Repo.get!(MeaningGame.Chronicle.Page, page.id) |> Repo.preload(attempts: :bridges)
+
+      [fresh_attempt] = fresh_page.attempts
+      fresh_bridge2 = Enum.find(fresh_attempt.bridges, &(&1.id == bridge2.id))
+      assert fresh_bridge2.bridge == "cairo"
+
+      # And the correction is queryable
+      assert [saved] = Chronicle.corrections(page.room_id)
+      assert saved.id == correction.id
+      assert saved.seat.name == "Jacob"
+    end
+
+    test "computes the book view from the event log in reverse chronological order", ctx do
+      # Play first page: melded
+      play(ctx, "cairn", "cairo")
+
+      # Play second page: two attempts to close it
+      attempt_cap(2)
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      play(ctx, "mirage", "oasis")
+      :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+      play(ctx, "sand", "dune")
+
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      # Record an overrule on page 2 attempt 1
+      [p1, p2] = chronicled(ctx.slug)
+      p2_attempt1 = hd(p2.attempts)
+
+      {:ok, _overrule} =
+        Chronicle.record_overrule(room.id, %{
+          page_id: p2.id,
+          attempt_number: 1,
+          proposer_seat_id: ctx.mara.id,
+          anchors: p2_attempt1.anchors,
+          bridges: ["mirage", "oasis"],
+          machine_closeness: 40,
+          machine_reasoning: "Distinct ideas",
+          machine_quip: "A mirage in an oasis",
+          couple_closeness: 85,
+          couple_reasoning: "We both saw water in the desert"
+        })
+
+      # Record a correction on page 1
+      {:ok, _correction} =
+        Chronicle.record_correction(room.id, %{
+          page_id: p1.id,
+          seat_id: ctx.jacob.id,
+          attempt_number: 1,
+          target: "bridge",
+          original_value: "cairo",
+          corrected_value: "cairn",
+          note: "Phone autocorrect"
+        })
+
+      # Book view is in reverse chronological order (newest page first)
+      book_pages = Chronicle.book(room.id)
+      assert length(book_pages) == 2
+
+      [latest_page, first_page] = book_pages
+      assert latest_page.id != first_page.id
+
+      # First page in history (which is second in reverse order)
+      assert first_page.anchors == ["lantern", "harbour"]
+      assert first_page.melded == true
+      [first_attempt] = first_page.attempts
+      assert Enum.map(first_attempt.bridges, & &1.seat_name) == ["Mara", "Jacob"]
+      assert Enum.map(first_attempt.bridges, & &1.bridge) == ["cairn", "cairn"]
+      jacob_bridge = Enum.find(first_attempt.bridges, &(&1.seat_name == "Jacob"))
+      assert jacob_bridge.original_bridge == "cairo"
+      assert jacob_bridge.corrected? == true
+      assert [c] = first_page.corrections
+      assert c.corrected_value == "cairn"
+      assert c.author_name == "Jacob"
+
+      # Latest page
+      assert latest_page.closed_because in ["meld", "attempts_spent"]
+      assert length(latest_page.attempts) == 2
+      assert latest_page.overrules != []
+    end
+
+    test "Markdown export round-trips a full evening", ctx do
+      # Full evening: Page 1 melds on attempt 1
+      play(ctx, "cairn", "cairo")
+
+      # Page 2 misses attempt 1, melds attempt 2
+      attempt_cap(2)
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      play(ctx, "mirage", "oasis")
+      :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+      play(ctx, "sand", "dune")
+
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [p1, p2] = chronicled(ctx.slug)
+      p2_attempt1 = hd(p2.attempts)
+
+      # Record an overrule
+      {:ok, _overrule} =
+        Chronicle.record_overrule(room.id, %{
+          page_id: p2.id,
+          attempt_number: 1,
+          proposer_seat_id: ctx.mara.id,
+          anchors: p2_attempt1.anchors,
+          bridges: ["mirage", "oasis"],
+          machine_closeness: 40,
+          machine_reasoning: "Distinct ideas",
+          machine_quip: "A mirage in an oasis",
+          couple_closeness: 85,
+          couple_reasoning: "We both saw water in the desert"
+        })
+
+      # Record a correction
+      {:ok, _correction} =
+        Chronicle.record_correction(room.id, %{
+          page_id: p1.id,
+          seat_id: ctx.jacob.id,
+          attempt_number: 1,
+          target: "bridge",
+          original_value: "cairo",
+          corrected_value: "cairn",
+          note: "Phone autocorrect"
+        })
+
+      # Export to Markdown on demand
+      markdown = Chronicle.to_markdown(room.id)
+      assert is_binary(markdown)
+
+      # Verify it contains all components of the evening
+      assert markdown =~ "Page 1: lantern · harbour"
+      assert markdown =~ "Mara: cairn"
+      assert markdown =~ "Jacob: cairn"
+      assert markdown =~ "Overrule"
+      assert markdown =~ "Distinct ideas"
+      assert markdown =~ "We both saw water in the desert"
+      assert markdown =~ "Corrections"
+      assert markdown =~ "corrected bridge from \"cairo\" to \"cairn\""
+      assert markdown =~ "Phone autocorrect"
+
+      # Round-trip parse back from Markdown
+      assert {:ok, parsed_evening} = Chronicle.from_markdown(markdown)
+      assert length(parsed_evening) == 2
+
+      [roundtrip_p1, roundtrip_p2] = parsed_evening
+      assert roundtrip_p1.anchors == ["lantern", "harbour"]
+      assert roundtrip_p1.melded == true
+      [a1] = roundtrip_p1.attempts
+      assert a1.bridges == [{"Mara", "cairn"}, {"Jacob", "cairn"}]
+      assert [c1] = a1.corrections
+      assert c1.original == "cairo"
+      assert c1.corrected == "cairn"
+      assert c1.note == "Phone autocorrect"
+
+      assert length(roundtrip_p2.attempts) == 2
+      [p2_a1, _p2_a2] = roundtrip_p2.attempts
+      assert p2_a1.bridges == [{"Mara", "mirage"}, {"Jacob", "oasis"}]
+      assert p2_a1.overrule != nil
+      assert p2_a1.overrule.original == 40
+      assert p2_a1.overrule.overruled == 85
+      assert p2_a1.overrule.reasoning =~ "water in the desert"
+    end
+
+    test "composes a Keeper digest for feeding to models later", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      # Empty room returns default starting message
+      assert Keeper.digest(room.id) == "Nothing yet; this is the first Page."
+      assert Chronicle.digest(room.id) == "Nothing yet; this is the first Page."
+
+      # Play a page
+      play(ctx, "cairn", "cairo")
+
+      digest = Keeper.digest(room.id)
+      assert is_binary(digest)
+      assert digest =~ "Page 1 (lantern · harbour)"
+      assert digest =~ "Melded on attempt 1 (closeness: 80, meld)"
+      assert digest =~ "Mara bridged \"cairn\""
+      assert digest =~ "Jacob bridged \"cairo\""
+
+      # Also accepts room slug
+      assert Keeper.digest(ctx.slug) == digest
     end
   end
 end
