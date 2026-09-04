@@ -16,7 +16,7 @@ defmodule MeaningGame.KeeperTest do
   """
   # Which model answers, how often, and how patiently is application
   # configuration, and these tests move it.
-  use ExUnit.Case, async: false
+  use MeaningGame.DataCase, async: false
 
   # A rejected answer is logged, and half of these tests reject one on purpose.
   @moduletag :capture_log
@@ -182,6 +182,90 @@ defmodule MeaningGame.KeeperTest do
       end)
 
       assert {:error, :timeout} = Live.assay(@pair)
+    end
+  end
+
+  describe "the verdict cache is the precedent" do
+    setup do
+      assayer(requests: 1, retries: 0)
+    end
+
+    test "a repeated pair returns the stored verdict without calling the provider" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        asked(counts, ordering(body))
+        Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
+      end)
+
+      assert {:ok, verdict1} = Live.assay(@pair)
+      assert verdict1.closeness == 77
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+
+      # Subsequent call with the exact same pair skips provider entirely
+      assert {:ok, verdict2} = Live.assay(@pair)
+      assert verdict2.closeness == 77
+      assert verdict2.reasoning == "First run."
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+    end
+
+    test "the reverse ordering hits the same cached precedent" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        asked(counts, ordering(body))
+        Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
+      end)
+
+      assert {:ok, _} = Live.assay(@pair)
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+
+      reversed = %{@pair | bridges: Enum.reverse(@pair.bridges)}
+      assert {:ok, verdict} = Live.assay(reversed)
+      assert verdict.closeness == 77
+      assert verdict.reasoning == "First run."
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+    end
+
+    test "a differing prompt version misses the cache and calls the provider" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        asked(counts, ordering(body))
+        Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
+      end)
+
+      assert {:ok, verdict1} = Live.assay(@pair)
+      assert verdict1.closeness == 77
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+
+      assayer(prompt_version: "assay-2")
+
+      recorded(fn conn, body ->
+        asked(counts, ordering(body))
+        Req.Test.json(conn, response(verdict(closeness: 85, reasoning: "New prompt version.")))
+      end)
+
+      assert {:ok, verdict2} = Live.assay(@pair)
+      assert verdict2.closeness == 85
+      assert verdict2.reasoning == "New prompt version."
+      assert Agent.get(counts, &Map.values/1) == [2, 2]
+    end
+
+    test "Keeper.assay returns the cached precedent instantly" do
+      assayer(adapter: MeaningGame.Keeper.Live)
+
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, response(verdict(closeness: 90, reasoning: "Instant.")))
+      end)
+
+      assert {:ok, verdict1} = MeaningGame.Keeper.assay(@pair)
+      assert verdict1.closeness == 90
+
+      assert {:ok, verdict2} = MeaningGame.Keeper.assay(@pair)
+      assert verdict2.closeness == 90
+      assert verdict2.reasoning == "Instant."
+      assert verdict2.meta.latency_ms < 50
     end
   end
 end
