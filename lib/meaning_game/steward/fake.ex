@@ -41,16 +41,7 @@ defmodule MeaningGame.Steward.Fake do
     case author_mode() do
       :ok ->
         give = Keyword.get(opts, :give)
-
-        anchors =
-          if give do
-            give_anchors(give)
-          else
-            ["backyard", "weekend"]
-          end
-
-        bait = if give, do: "altar", else: "barbecue"
-        deep_bridges = if give, do: ["saint", "church"], else: ["lawnmower", "chores"]
+        %{anchors: anchors, bait: bait, deep_bridges: deep_bridges} = authored_bridges(give)
         likely_bridges = [bait | deep_bridges] ++ ["prayer", "faith"]
 
         json = %{
@@ -86,6 +77,22 @@ defmodule MeaningGame.Steward.Fake do
       :raise ->
         raise "this Author is having a moment"
     end
+  end
+
+  defp authored_bridges(nil) do
+    %{
+      anchors: ["backyard", "weekend"],
+      bait: "barbecue",
+      deep_bridges: ["lawnmower", "chores"]
+    }
+  end
+
+  defp authored_bridges(give) do
+    %{
+      anchors: give_anchors(give),
+      bait: "altar",
+      deep_bridges: ["saint", "church"]
+    }
   end
 
   defp give_anchors("hospital" <> _), do: ["nurse", "clinic"]
