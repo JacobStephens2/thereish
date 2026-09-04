@@ -57,7 +57,9 @@ defmodule MeaningGame.Game do
     attempt: 1,
     bridges: %{},
     verdicts: %{},
-    played: []
+    played: [],
+    overrule: nil,
+    overrules: []
   ]
 
   @type seat :: %{id: String.t(), name: String.t()}
@@ -102,7 +104,9 @@ defmodule MeaningGame.Game do
           attempt: pos_integer(),
           bridges: %{String.t() => String.t()},
           verdicts: %{pair() => verdict()},
-          played: [attempt()]
+          played: [attempt()],
+          overrule: map() | nil,
+          overrules: [map()]
         }
 
   @type viewer :: String.t() | nil
@@ -121,6 +125,14 @@ defmodule MeaningGame.Game do
           | {:verdict_unavailable, %{pair: pair(), meta: map()}}
           | {:attempt_advanced, %{seat_id: String.t()}}
           | {:page_started, %{seat_id: String.t(), page: page()}}
+          | {:overrule_proposed,
+             %{
+               required(:seat_id) => String.t(),
+               optional(:pair) => pair(),
+               optional(:closeness) => integer()
+             }}
+          | {:overrule_agreed, %{seat_id: String.t()}}
+          | {:overrule_declined, %{seat_id: String.t()}}
 
   @typedoc """
   What the Room is asked to do next. Effects are descriptions, never actions:
@@ -133,6 +145,7 @@ defmodule MeaningGame.Game do
           :beat
           | {:assay, pair(), %{anchors: [String.t()], bridges: [String.t()]}}
           | {:chronicle, map()}
+          | {:overrule, map()}
 
   @type error ::
           :room_full
@@ -144,6 +157,9 @@ defmodule MeaningGame.Game do
           | :not_revealed
           | :page_closed
           | :page_open
+          | :proposal_pending
+          | :no_proposal_pending
+          | :already_overruled
 
   @doc """
   Builds the state of a Room that holds `seat_limit` Seats, `seats` of them
@@ -228,6 +244,66 @@ defmodule MeaningGame.Game do
     })
   end
 
+  def apply(%__MODULE__{} = state, {:overrule_proposed, %{seat_id: seat_id} = attrs}) do
+    pair = Map.get(attrs, :pair) || default_pair(state)
+    closeness = Map.get(attrs, :closeness, 100)
+
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) not in [:reveal, :closed] or state.verdicts == %{} ->
+        {:error, :not_revealed}
+
+      state.overrule != nil ->
+        {:error, :proposal_pending}
+
+      already_overruled?(state, pair) ->
+        {:error, :already_overruled}
+
+      true ->
+        proposed_state = %{
+          state
+          | overrule: %{
+              proposer_id: seat_id,
+              pair: pair,
+              closeness: closeness,
+              agreed: MapSet.new([seat_id])
+            }
+        }
+
+        resolve_overrule_unanimity(proposed_state, proposed_state.overrule.agreed)
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:overrule_agreed, %{seat_id: seat_id}}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      state.overrule == nil ->
+        {:error, :no_proposal_pending}
+
+      true ->
+        agreed = MapSet.put(state.overrule.agreed, seat_id)
+        state = %{state | overrule: %{state.overrule | agreed: agreed}}
+        resolve_overrule_unanimity(state, agreed)
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:overrule_declined, %{seat_id: seat_id}}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      state.overrule == nil ->
+        {:error, :no_proposal_pending}
+
+      true ->
+        {:ok, %{state | overrule: nil}, []}
+    end
+  end
+
   def apply(%__MODULE__{} = state, {:attempt_advanced, %{seat_id: seat_id}}) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- open_reveal(state) do
@@ -238,7 +314,8 @@ defmodule MeaningGame.Game do
            attempt: state.attempt + 1,
            bridges: %{},
            verdicts: %{},
-           played: state.played ++ [this_attempt(state)]
+           played: state.played ++ [this_attempt(state)],
+           overrule: nil
        }, []}
     end
   end
@@ -254,7 +331,9 @@ defmodule MeaningGame.Game do
            attempt: 1,
            bridges: %{},
            verdicts: %{},
-           played: []
+           played: [],
+           overrule: nil,
+           overrules: []
        }, []}
     end
   end
@@ -288,7 +367,8 @@ defmodule MeaningGame.Game do
       # neither word would hide it.
       next_anchors: if(phase == :reveal, do: carried_anchors(state)),
       closed: closed(state, phase),
-      played: Enum.map(state.played, &attempt_view(state, &1))
+      played: Enum.map(state.played, &attempt_view(state, &1)),
+      overrule: overrule_view(state, viewer)
     }
   end
 
@@ -394,7 +474,8 @@ defmodule MeaningGame.Game do
 
     Map.merge(Ladder.read(headline(state)), %{
       bridges: bridges_view(state, state.bridges),
-      pairs: pairs
+      pairs: pairs,
+      overruled?: Enum.any?(pairs, & &1.overruled?)
     })
   end
 
@@ -451,7 +532,8 @@ defmodule MeaningGame.Game do
       names: Enum.map(seats, & &1.name),
       graded?: verdict.graded?,
       reasoning: verdict.reasoning,
-      quip: verdict.quip
+      quip: verdict.quip,
+      overruled?: Map.get(verdict, :overruled?, false)
     })
   end
 
@@ -490,8 +572,106 @@ defmodule MeaningGame.Game do
       closed_because: closed_because(state),
       melded?: melded?(state),
       closeness: headline(state),
-      attempts: Enum.map(attempts, &chronicle_attempt(state, &1))
+      attempts: Enum.map(attempts, &chronicle_attempt(state, &1)),
+      overrules: state.overrules
     }
+  end
+
+  defp overrule_view(%{overrule: nil}, _viewer), do: nil
+
+  defp overrule_view(%{overrule: overrule} = state, viewer) do
+    proposer = find_seat(state, overrule.proposer_id)
+
+    %{
+      pending?: true,
+      proposer_id: overrule.proposer_id,
+      proposer_name: proposer && proposer.name,
+      pair: overrule.pair,
+      closeness: overrule.closeness,
+      agreed_seat_ids: MapSet.to_list(overrule.agreed),
+      you_proposed?: viewer == overrule.proposer_id,
+      you_agreed?: MapSet.member?(overrule.agreed, viewer)
+    }
+  end
+
+  defp default_pair(state) do
+    case pairs(state) do
+      [single_pair] -> single_pair
+      _ -> hd(pairs(state))
+    end
+  end
+
+  defp already_overruled?(state, pair) do
+    case Map.get(state.verdicts, pair) do
+      %{overruled?: true} -> true
+      _ -> false
+    end
+  end
+
+  defp resolve_overrule_unanimity(state, agreed) do
+    if MapSet.size(agreed) >= length(state.seats) do
+      agree_overrule(state)
+    else
+      {:ok, state, []}
+    end
+  end
+
+  defp agree_overrule(state) do
+    previously_closed? = phase(state) == :closed
+
+    %{
+      proposer_id: proposer_id,
+      pair: pair,
+      closeness: couple_closeness
+    } = state.overrule
+
+    original_verdict = Map.fetch!(state.verdicts, pair)
+
+    couple_reasoning = "Overruled jointly across all Seats. Recorded as precedent."
+    couple_quip = "House law."
+
+    new_verdict =
+      Map.merge(original_verdict, %{
+        graded?: true,
+        closeness: couple_closeness,
+        reasoning: couple_reasoning,
+        quip: couple_quip,
+        overruled?: true,
+        original_closeness: original_verdict.closeness,
+        original_reasoning: original_verdict.reasoning,
+        original_quip: original_verdict.quip
+      })
+
+    bridges = for seat <- state.seats, seat.id in pair, do: state.bridges[seat.id]
+
+    overrule_effect_data = %{
+      attempt_number: state.attempt,
+      proposer_seat_id: proposer_id,
+      pair: pair,
+      anchors: state.anchors,
+      bridges: bridges,
+      machine_closeness: original_verdict.closeness,
+      machine_reasoning: original_verdict.reasoning,
+      machine_quip: original_verdict.quip,
+      couple_closeness: couple_closeness,
+      couple_reasoning: couple_reasoning,
+      couple_quip: couple_quip
+    }
+
+    overrules = state.overrules ++ [overrule_effect_data]
+    new_verdicts = Map.put(state.verdicts, pair, new_verdict)
+    state = %{state | verdicts: new_verdicts, overrule: nil, overrules: overrules}
+
+    effects = [{:overrule, overrule_effect_data}]
+
+    effects =
+      if phase(state) == :closed and not previously_closed? do
+        effects ++ [{:chronicle, chronicle(state)}]
+      else
+        effects
+      end
+
+    {:ok, state, effects}
   end
 
   # An attempt as the arc reads it, plus the verdicts behind it — which the

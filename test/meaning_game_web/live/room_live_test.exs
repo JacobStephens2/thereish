@@ -448,6 +448,96 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "overruling from the couch" do
+    test "two phones and a stage: propose, agree to a meld, and chain to next page" do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      # "cairn" and "beacon" share no prefix -> fake assayer grades 0
+      commit(mara, "cairn")
+      commit(jacob, "beacon")
+
+      await_reveal_on(mara)
+      await_reveal_on(jacob)
+      await_reveal_on(stage)
+
+      assert has_element?(mara, "[data-role=closeness]", "0")
+      assert has_element?(stage, "[data-role=closeness]", "0")
+
+      # Mara proposes an overrule
+      mara |> element("[data-role=propose-overrule]") |> render_click()
+
+      # Visible on all three views while pending
+      assert render(mara) =~ "You proposed an overrule"
+
+      assert has_element?(
+               jacob,
+               "[data-role=overrule-pending]",
+               "Mara proposed overruling this grade to a Meld"
+             )
+
+      assert has_element?(stage, "[data-role=overrule-pending]", "Mara proposed an overrule")
+      assert has_element?(jacob, "[data-role=agree-overrule]")
+      assert has_element?(jacob, "[data-role=decline-overrule]")
+
+      # Grade remains 0 while pending
+      assert has_element?(mara, "[data-role=closeness]", "0")
+      assert has_element?(jacob, "[data-role=closeness]", "0")
+
+      # Jacob agrees
+      jacob |> element("[data-role=agree-overrule]") |> render_click()
+
+      # Overrule takes effect on all three views: grade 100, melded!
+      for view <- [mara, jacob, stage] do
+        assert has_element?(view, "[data-role=closeness]", "100")
+        assert has_element?(view, "[data-role=band]", "deep meld")
+        assert render(view) =~ "Overruled jointly"
+      end
+
+      # Ending shows it melded
+      assert has_element?(stage, "[data-role=ending-line]", "melded first try")
+
+      # "One more?" starts the next page cleanly
+      assert has_element?(mara, "[data-role=one-more]")
+      mara |> element("[data-role=one-more]") |> render_click()
+
+      for view <- [mara, jacob, stage] do
+        assert has_element?(view, "[data-role=attempt]", "Attempt 1 of")
+        refute render(view) =~ "Overruled"
+      end
+    end
+
+    test "declining an overrule leaves the grade untouched" do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      commit(mara, "cairn")
+      commit(jacob, "beacon")
+
+      await_reveal_on(mara)
+      await_reveal_on(jacob)
+
+      mara |> element("[data-role=propose-overrule]") |> render_click()
+      assert has_element?(jacob, "[data-role=decline-overrule]")
+
+      jacob |> element("[data-role=decline-overrule]") |> render_click()
+
+      refute render(mara) =~ "proposed an overrule"
+      refute render(jacob) =~ "proposed an overrule"
+      assert has_element?(mara, "[data-role=closeness]", "0")
+      assert has_element?(mara, "[data-role=again]")
+    end
+  end
+
   # The default Room is the one Room without a slug of its own, so the test that
   # touches it has to put it away itself.
   defp stop_default_room do

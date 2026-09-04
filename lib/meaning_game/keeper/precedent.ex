@@ -127,7 +127,7 @@ defmodule MeaningGame.Keeper.Precedent do
           {:ok, Precedent.t()} | {:error, Ecto.Changeset.t()}
   def put(model, prompt_version, anchors, bridges, verdict) do
     {normalized_anchors, normalized_bridges} = canonical_inputs(anchors, bridges)
-    cache_key = hash(model, prompt_version, normalized_anchors, normalized_bridges)
+    cache_key = key(model, prompt_version, anchors, bridges)
 
     attrs = %{
       key: cache_key,
@@ -147,6 +147,37 @@ defmodule MeaningGame.Keeper.Precedent do
     %Precedent{}
     |> changeset(attrs)
     |> Repo.insert(on_conflict: :nothing, conflict_target: :key)
+  end
+
+  @doc """
+  Rewrites an existing precedent (or inserts a new one) with the couple's ruling.
+
+  A joint player overrule is the only thing in the system that rewrites
+  precedent (ADR-0006, design law 3).
+  """
+  @spec overrule(String.t(), String.t(), [String.t()], [String.t()], map()) ::
+          {:ok, Precedent.t()} | {:error, Ecto.Changeset.t()}
+  def overrule(model, prompt_version, anchors, bridges, ruling) do
+    {normalized_anchors, normalized_bridges} = canonical_inputs(anchors, bridges)
+    cache_key = key(model, prompt_version, anchors, bridges)
+
+    attrs = %{
+      key: cache_key,
+      model: model,
+      prompt_version: prompt_version,
+      anchors: normalized_anchors,
+      bridges: normalized_bridges,
+      closeness: ruling.closeness,
+      reasoning: ruling.reasoning,
+      quip: Map.get(ruling, :quip, "House law.")
+    }
+
+    %Precedent{}
+    |> changeset(attrs)
+    |> Repo.insert(
+      on_conflict: {:replace, [:closeness, :reasoning, :quip, :updated_at]},
+      conflict_target: :key
+    )
   end
 
   defp canonical_inputs(anchors, bridges) do

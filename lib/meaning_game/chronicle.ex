@@ -22,6 +22,7 @@ defmodule MeaningGame.Chronicle do
 
   alias MeaningGame.Chronicle.Attempt
   alias MeaningGame.Chronicle.Bridge
+  alias MeaningGame.Chronicle.Overrule
   alias MeaningGame.Chronicle.Page
   alias MeaningGame.Chronicle.Verdict
   alias MeaningGame.Repo
@@ -46,6 +47,29 @@ defmodule MeaningGame.Chronicle do
 
       page
     end)
+  end
+
+  @doc """
+  Records one joint player overrule into the Chronicle.
+  """
+  @spec record_overrule(Ecto.UUID.t(), map()) ::
+          {:ok, Overrule.t()} | {:error, Ecto.Changeset.t()}
+  def record_overrule(room_id, attrs) do
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    %Overrule{}
+    |> Overrule.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Every overrule in one Room, oldest first.
+  """
+  @spec overrules(Ecto.UUID.t()) :: [Overrule.t()]
+  def overrules(room_id) do
+    from(o in Overrule, where: o.room_id == ^room_id, order_by: [asc: o.inserted_at, asc: o.id])
+    |> Repo.all()
+    |> Repo.preload(:proposer)
   end
 
   @doc """
@@ -126,6 +150,7 @@ defmodule MeaningGame.Chronicle do
       forward: meta[:forward],
       reverse: meta[:reverse],
       reasoning_reverse: meta[:reasoning_reverse],
+      overruled: Map.get(verdict, :overruled?, false),
       position: position
     })
     |> Repo.insert!()

@@ -267,5 +267,38 @@ defmodule MeaningGame.KeeperTest do
       assert verdict2.reasoning == "Instant."
       assert verdict2.meta.latency_ms < 50
     end
+
+    test "an overruled key returns the couple's ruling afterwards" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        asked(counts, ordering(body))
+        Req.Test.json(conn, response(verdict(closeness: 41, reasoning: "Original grade.")))
+      end)
+
+      assert {:ok, verdict1} = Live.assay(@pair)
+      assert verdict1.closeness == 41
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+
+      couple_ruling = %{
+        closeness: 100,
+        reasoning: "Overruled jointly across all Seats. Recorded as precedent.",
+        quip: "House law."
+      }
+
+      assert {:ok, _} =
+               MeaningGame.Keeper.overrule(
+                 @pair.anchors,
+                 @pair.bridges,
+                 couple_ruling
+               )
+
+      assert {:ok, verdict2} = Live.assay(@pair)
+      assert verdict2.closeness == 100
+      assert verdict2.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
+      assert verdict2.quip == "House law."
+      # Did not call the provider again!
+      assert Agent.get(counts, &Map.values/1) == [1, 1]
+    end
   end
 end

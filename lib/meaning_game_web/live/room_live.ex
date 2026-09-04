@@ -76,6 +76,24 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("propose_overrule", _params, socket) do
+    Rooms.propose_overrule(socket.assigns.slug, socket.assigns.seat.id)
+
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("agree_overrule", _params, socket) do
+    Rooms.agree_overrule(socket.assigns.slug, socket.assigns.seat.id)
+
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("decline_overrule", _params, socket) do
+    Rooms.decline_overrule(socket.assigns.slug, socket.assigns.seat.id)
+
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
@@ -159,6 +177,17 @@ defmodule MeaningGameWeb.RoomLive do
       <.assaying room={@room} />
 
       <.reveal room={@room} />
+
+      <.overrule_banner room={@room} seat={@seat} />
+
+      <div
+        :if={@seat && @room.reveal && @room.overrule == nil && !@room.reveal.overruled?}
+        class="flex justify-center"
+      >
+        <.button phx-click="propose_overrule" data-role="propose-overrule">
+          Overrule the Assayer
+        </.button>
+      </div>
 
       <div
         :if={@seat && @room.phase == :reveal}

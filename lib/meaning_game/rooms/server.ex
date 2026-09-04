@@ -124,6 +124,29 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  def handle_call({:propose_overrule, seat_id, opts}, _from, state) do
+    attrs = Map.new(opts) |> Map.put(:seat_id, seat_id)
+
+    case Game.apply(state.game, {:overrule_proposed, attrs}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:agree_overrule, seat_id}, _from, state) do
+    case Game.apply(state.game, {:overrule_agreed, %{seat_id: seat_id}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:decline_overrule, seat_id}, _from, state) do
+    case Game.apply(state.game, {:overrule_declined, %{seat_id: seat_id}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   # A fresh Page starts the Room's clock again, because how long a Page took is
   # a fact about that Page and the Game keeps no clock of its own.
   def handle_call({:next_page, seat_id}, _from, state) do
@@ -265,6 +288,27 @@ defmodule MeaningGame.Rooms.Server do
   rescue
     error ->
       Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
+      state
+  end
+
+  defp perform({:overrule, overrule}, state) do
+    {:ok, _} = Chronicle.record_overrule(state.room.id, overrule)
+
+    {:ok, _} =
+      Keeper.overrule(
+        overrule.anchors,
+        overrule.bridges,
+        %{
+          closeness: overrule.couple_closeness,
+          reasoning: overrule.couple_reasoning,
+          quip: overrule.couple_quip
+        }
+      )
+
+    state
+  rescue
+    error ->
+      Logger.error("the overrule could not be recorded: #{Exception.message(error)}")
       state
   end
 

@@ -552,6 +552,92 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "overruling a grade through the Room" do
+    setup do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      # Fake grader: "cairn" and "beacon" share no prefix -> closeness 0
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "beacon")
+      await_reveal(slug)
+
+      %{slug: slug, mara: mara, jacob: jacob}
+    end
+
+    test "proposing an overrule broadcasts and shows in snapshot", ctx do
+      :ok = Rooms.subscribe(ctx.slug)
+      :ok = Rooms.propose_overrule(ctx.slug, ctx.mara.id)
+
+      assert_receive :room_changed
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.overrule.pending?
+      assert view.overrule.proposer_id == ctx.mara.id
+      assert view.reveal.closeness == 0
+    end
+
+    test "agreeing to the overrule updates the grade and records in Chronicle", ctx do
+      :ok = Rooms.propose_overrule(ctx.slug, ctx.mara.id)
+      :ok = Rooms.agree_overrule(ctx.slug, ctx.jacob.id)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.reveal.closeness == 100
+      assert view.reveal.melded?
+      assert view.phase == :closed
+      assert view.overrule == nil
+
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      assert [overrule] = MeaningGame.Chronicle.overrules(room.id)
+      assert overrule.proposer_seat_id == ctx.mara.id
+      assert overrule.machine_closeness == 0
+      assert overrule.couple_closeness == 100
+    end
+
+    test "declining an overrule leaves the grade untouched", ctx do
+      :ok = Rooms.propose_overrule(ctx.slug, ctx.mara.id)
+      :ok = Rooms.decline_overrule(ctx.slug, ctx.jacob.id)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.reveal.closeness == 0
+      refute view.reveal.melded?
+      assert view.overrule == nil
+    end
+
+    test "overruling on the final attempt records the overrule without duplicate Chronicle pages" do
+      attempt_cap(1)
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "beacon")
+      await_reveal(slug)
+
+      # Attempt 1 was the final attempt (cap is 1), so page is closed
+      view = Rooms.snapshot(slug, mara.id)
+      assert view.phase == :closed
+
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: slug)
+      initial_page_count = MeaningGame.Repo.aggregate(MeaningGame.Chronicle.Page, :count)
+
+      # Propose and agree to overrule
+      :ok = Rooms.propose_overrule(slug, mara.id)
+      :ok = Rooms.agree_overrule(slug, jacob.id)
+
+      view = Rooms.snapshot(slug, mara.id)
+      assert view.reveal.closeness == 100
+      assert view.reveal.melded?
+      assert view.phase == :closed
+
+      # No duplicate page was written to the Chronicle
+      assert MeaningGame.Repo.aggregate(MeaningGame.Chronicle.Page, :count) == initial_page_count
+      assert [overrule] = MeaningGame.Chronicle.overrules(room.id)
+      assert overrule.machine_closeness == 0
+      assert overrule.couple_closeness == 100
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do

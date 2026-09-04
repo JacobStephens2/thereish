@@ -36,6 +36,7 @@ defmodule MeaningGame.Chronicle.Verdict do
     field :forward, :integer
     field :reverse, :integer
     field :reasoning_reverse, :string
+    field :overruled, :boolean, default: false
     field :position, :integer
 
     belongs_to :attempt, MeaningGame.Chronicle.Attempt
@@ -62,6 +63,7 @@ defmodule MeaningGame.Chronicle.Verdict do
       :forward,
       :reverse,
       :reasoning_reverse,
+      :overruled,
       :position
     ])
     |> validate_required([:attempt_id, :seat_ids, :bridges, :graded, :position])
