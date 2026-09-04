@@ -9,7 +9,7 @@ defmodule MeaningGame.Steward.Author do
 
   alias MeaningGame.Steward.Legality
 
-  @version "author-1"
+  @version "author-2"
 
   def version, do: @version
 
@@ -62,11 +62,11 @@ defmodule MeaningGame.Steward.Author do
              o([
                {"miss", o([{"type", "string"}])},
                {"adjacent", o([{"type", "string"}])},
-               {"near", o([{"type", "string"}])},
+               {"close", o([{"type", "string"}])},
                {"meld", o([{"type", "string"}])},
                {"deep_meld", o([{"type", "string"}])}
              ])},
-            {"required", ["miss", "adjacent", "near", "meld", "deep_meld"]},
+            {"required", ["miss", "adjacent", "close", "meld", "deep_meld"]},
             {"additionalProperties", false}
           ])}
        ])},
@@ -227,7 +227,7 @@ defmodule MeaningGame.Steward.Author do
   3. Deep bridges: at least two deeper, subtler bridging words that reward reflection and land on the top rung (90+).
   4. Likely bridges: 3 to 8 bridging words you foresee players reaching for (must include the bait and the deep bridges).
   5. Why these: narrate the misdirection and why these Anchors invite interesting divergence.
-  6. Band scripts: prewritten fallback remarks for each of the five ladder bands (miss, adjacent, near, meld, deep_meld).
+  6. Band scripts: prewritten fallback remarks for each of the five ladder bands (miss, adjacent, close, meld, deep_meld).
 
   Legality rules (enforced strictly):
   - Every anchor, bait, and bridge must be a single, common lowercase English word (letters only, no spaces, hyphens, or punctuation).
@@ -311,7 +311,7 @@ defmodule MeaningGame.Steward.Author do
         end
 
       left in likely and right in likely ->
-        :near
+        :close
 
       left in likely or right in likely ->
         :adjacent

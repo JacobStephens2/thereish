@@ -403,7 +403,7 @@ defmodule MeaningGame.GameTest do
 
       assert Enum.map(reveal.pairs, & &1.closeness) == [90, 60, 30]
       assert reveal.closeness == 60
-      assert reveal.band == :near
+      assert reveal.band == :close
       refute reveal.melded?
     end
 
@@ -910,7 +910,7 @@ defmodule MeaningGame.GameTest do
                   anchors: ["lantern", "harbour"],
                   bridges: ["dock", "wharf"],
                   grade: 62,
-                  band: "near",
+                  band: "close",
                   model: "test",
                   prompt_version: "v1",
                   label: "fair"

@@ -42,11 +42,11 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       provisional_room = %{
         phase: :assaying,
         assayer_step: :provisional,
-        provisional_band: :near
+        provisional_band: :close
       }
 
       html = render_component(&assaying/1, room: provisional_room)
-      assert html =~ "Provisional reading: near"
+      assert html =~ "Provisional reading: close"
     end
   end
 
@@ -166,6 +166,38 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       # Must not look like an error state / sting
       refute html =~ "alert-error"
       refute html =~ "text-error"
+    end
+
+    test "close band presents with passable flavour" do
+      close_room = %{
+        phase: :reveal,
+        reveal: %{
+          closeness: 60,
+          band: :close,
+          melded?: false,
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "dock"}
+          ],
+          pairs: [
+            %{
+              seat_ids: ["s1", "s2"],
+              names: ["Melissa", "Jacob"],
+              closeness: 60,
+              band: :close,
+              melded?: false,
+              quip: "Passable.",
+              reasoning: "Close enough."
+            }
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: close_room)
+
+      assert html =~ ~s(data-arrival="close")
+      assert html =~ "close"
+      assert html =~ "Passable."
     end
 
     test "the quip reads as a punchline and reasoning is framed for argument", %{meld_room: room} do

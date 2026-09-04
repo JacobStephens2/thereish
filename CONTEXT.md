@@ -81,7 +81,7 @@ How near two Bridges landed to each other, on the Ladder's scale. Every unordere
 _Avoid_: score, similarity, distance, rating
 
 **Ladder**:
-The scale a Closeness is read on and the bands it is read into — miss, adjacent, near, meld, deep meld. A Meld starts at the floor of the meld band. Boundaries are configuration, because every one of them is a calibration question the couch answers; the wording that dresses a band is the Assayer's.
+The scale a Closeness is read on and the bands it is read into — miss, adjacent, close, meld, deep meld. A Meld starts at the floor of the meld band. Boundaries are configuration, because every one of them is a calibration question the couch answers; the wording that dresses a band is the Assayer's.
 _Avoid_: scale (on its own), rubric, tiers, grade bands
 
 **Beat**:

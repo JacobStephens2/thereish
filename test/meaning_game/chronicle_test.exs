@@ -620,7 +620,7 @@ defmodule MeaningGame.ChronicleTest do
           band_scripts: %{
             "miss" => "m",
             "adjacent" => "a",
-            "near" => "n",
+            "close" => "c",
             "meld" => "meld",
             "deep_meld" => "dm"
           },

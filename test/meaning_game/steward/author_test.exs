@@ -36,13 +36,33 @@ defmodule MeaningGame.Steward.AuthorTest do
           band_scripts: %{
             "miss" => "miss",
             "adjacent" => "adj",
-            "near" => "near",
+            "close" => "close",
             "meld" => "meld"
           }
         )
         |> Jason.decode!()
 
       assert {:error, _why} = Author.check_schema(json)
+    end
+
+    test "rejects old band scripts keyed on near" do
+      json =
+        authored_page_json(
+          band_scripts: %{
+            "miss" => "miss",
+            "adjacent" => "adj",
+            "near" => "near",
+            "meld" => "meld",
+            "deep_meld" => "deep"
+          }
+        )
+        |> Jason.decode!()
+
+      assert {:error, _why} = Author.check_schema(json)
+    end
+
+    test "prompts and pages carry bumped prompt_version author-2" do
+      assert Author.version() == "author-2"
     end
   end
 
