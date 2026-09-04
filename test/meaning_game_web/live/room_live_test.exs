@@ -901,6 +901,53 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "blinding in rendered views (ticket 13)" do
+    setup do
+      slug = open_room()
+
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      %{slug: slug, mara: mara, jacob: jacob, stage: stage}
+    end
+
+    test "arm labels are blinded on stage and on phones during play", ctx do
+      # During bridging phase:
+      mara_html = render(ctx.mara)
+      jacob_html = render(ctx.jacob)
+      stage_html = render(ctx.stage)
+
+      for html <- [mara_html, jacob_html, stage_html] do
+        refute html =~ ~r/\barm\s*=\s*["'](bait|plain)["']/i
+        refute html =~ ~r/\barm:\s*(bait|plain)\b/i
+        refute html =~ "data-arm"
+      end
+
+      # Commit bridges and reveal
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+      await_reveal_on(ctx.mara)
+      await_reveal_on(ctx.stage)
+
+      # During reveal phase:
+      mara_reveal = render(ctx.mara)
+      jacob_reveal = render(ctx.jacob)
+      stage_reveal = render(ctx.stage)
+
+      for html <- [mara_reveal, jacob_reveal, stage_reveal] do
+        refute html =~ ~r/\barm\s*=\s*["'](bait|plain)["']/i
+        refute html =~ ~r/\barm:\s*(bait|plain)\b/i
+        refute html =~ "data-arm"
+        refute html =~ "bait-scored"
+        refute html =~ "plain-scored"
+      end
+    end
+  end
+
   # The default Room is the one Room without a slug of its own, so the test that
   # touches it has to put it away itself.
   defp stop_default_room do

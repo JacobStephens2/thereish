@@ -895,6 +895,120 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "A/B experiments harness (ticket 13)" do
+    setup do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      %{slug: slug, mara: mara, jacob: jacob}
+    end
+
+    test "arm labels are blinded in the snapshot during play", ctx do
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      refute Map.has_key?(view, :arm)
+      refute Map.has_key?(view, :current_arm)
+
+      json = Jason.encode!(view)
+      refute json =~ ~r/"arm"\s*:\s*"bait"/
+      refute json =~ ~r/"arm"\s*:\s*"plain"/
+    end
+
+    test "every Page assignment and outcome are Chronicle events", ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      await_reveal(ctx.slug)
+
+      assert [assignment] = MeaningGame.Chronicle.experiment_assignments(room.id)
+      assert assignment.arm in ["bait", "plain"]
+      assert assignment.experiment_id == "bait_against_plain"
+
+      assert [outcome] = MeaningGame.Chronicle.experiment_outcomes(room.id)
+      assert outcome.arm == assignment.arm
+      assert outcome.melded == true
+      assert outcome.attempts_count == 1
+    end
+
+    test "scoring respects arm: bait convergence scores 75 in bait arm and 100 in plain arm",
+         ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "lighthouse")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "lighthouse")
+      reveal_view = await_reveal(ctx.slug)
+
+      [outcome1] = MeaningGame.Chronicle.experiment_outcomes(room.id)
+
+      if outcome1.arm == "bait" do
+        assert reveal_view.reveal.closeness == 75
+        assert outcome1.trap_converged == true
+      else
+        assert reveal_view.reveal.closeness == 100
+        assert outcome1.trap_converged == false
+      end
+
+      # Seed another page in authored pool with known bait
+      chapter = "stratified-test-chapter"
+
+      {:ok, _} =
+        MeaningGame.Pages.insert_page(%{
+          id: "P-DETERMINISTIC-01",
+          chapter: chapter,
+          theme: chapter,
+          anchors: ["beacon", "shore"],
+          bait: "light",
+          deep_bridges: ["reef"],
+          likely_bridges: ["light", "reef"],
+          why_these: "Test chapter",
+          band_scripts: %{
+            "miss" => "m",
+            "adjacent" => "a",
+            "near" => "n",
+            "meld" => "meld",
+            "deep_meld" => "dm"
+          },
+          meta: %{model: "fake", attempts: 1, cost_usd: 0.0}
+        })
+
+      # Pre-seed plain in chapter history so next assignment is deterministically bait
+      {:ok, _} =
+        MeaningGame.Chronicle.record_experiment_assignment(room.id, %{
+          page_identifier: "P-DETERMINISTIC-00",
+          experiment_id: "bait_against_plain",
+          arm: "plain",
+          chapter: chapter,
+          assigned_at: DateTime.utc_now()
+        })
+
+      assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "light")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "light")
+      reveal2 = await_reveal(ctx.slug)
+
+      # Deterministically assigned to bait because plain was trailing
+      outcomes = MeaningGame.Chronicle.experiment_outcomes(room.id)
+      outcome2 = List.last(outcomes)
+      assert outcome2.arm == "bait"
+      assert reveal2.reveal.closeness == 75
+      assert outcome2.trap_converged == true
+    end
+
+    test "unblinding is a deliberate action recorded in the Chronicle", ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+
+      refute MeaningGame.Chronicle.experiment_unblinded?(room.id)
+
+      assert :ok = Rooms.unblind_experiment(ctx.slug, ctx.jacob.id)
+      assert MeaningGame.Chronicle.experiment_unblinded?(room.id)
+
+      [unblinding] = MeaningGame.Chronicle.experiment_unblindings(room.id)
+      assert unblinding.seat_id == ctx.jacob.id
+      assert unblinding.experiment_id == "bait_against_plain"
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do

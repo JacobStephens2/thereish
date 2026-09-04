@@ -680,5 +680,67 @@ defmodule MeaningGame.ChronicleTest do
       digest = Chronicle.digest(room.id)
       assert digest =~ "[Give: #{give}]"
     end
+
+    test "assignment and outcome are Chronicle events, blinded until unblinded", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      # 1. Assignment event at Page start
+      {:ok, assignment} =
+        Chronicle.record_experiment_assignment(room.id, %{
+          page_identifier: "P001",
+          experiment_id: "bait_against_plain",
+          arm: "bait",
+          chapter: "the harbour",
+          assigned_at: DateTime.utc_now()
+        })
+
+      assert assignment.arm == "bait"
+      assert assignment.chapter == "the harbour"
+
+      # Initially blinded
+      refute Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
+
+      # 2. Outcome event at Page close
+      {:ok, outcome} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "P001",
+          experiment_id: "bait_against_plain",
+          arm: "bait",
+          melded: true,
+          closeness: 75,
+          attempts_count: 2,
+          closed_because: "meld",
+          trap_converged: true
+        })
+
+      assert outcome.trap_converged == true
+      assert outcome.arm == "bait"
+
+      # Verify events appear in query
+      assignments = Chronicle.experiment_assignments(room.id)
+      assert Enum.any?(assignments, &(&1.page_identifier == "P001" and &1.arm == "bait"))
+
+      assert [recorded_outcome] = Chronicle.experiment_outcomes(room.id)
+      assert recorded_outcome.melded == true
+
+      # Qualitative readout works
+      readout = Chronicle.experiment_readout(room.id)
+      assert readout.bait.pages_count == 1
+      assert readout.bait.melded_count == 1
+      assert readout.bait.trap_sprung_count == 1
+      assert readout.summary_narrative =~ "Bait-scored"
+
+      # 3. Deliberate unblinding
+      {:ok, unblinding} =
+        Chronicle.record_experiment_unblinding(room.id, %{
+          experiment_id: "bait_against_plain",
+          seat_id: ctx.jacob.id,
+          unblinded_at: DateTime.utc_now(),
+          notes: "Couch night review"
+        })
+
+      assert unblinding.experiment_id == "bait_against_plain"
+      assert Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
+    end
   end
 end

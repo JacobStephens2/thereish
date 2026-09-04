@@ -93,6 +93,56 @@ defmodule MeaningGame.Keeper do
   end
 
   @doc """
+  Grades a pair of Bridges and applies experimental arm grading rules.
+
+  A/B variant grading lives behind the Keeper seam (CONTEXT.md).
+  """
+  @spec assay(request(), map() | nil, atom() | String.t() | nil) ::
+          {:ok, verdict()} | {:error, term()}
+  def assay(request, page, arm) do
+    case assay(request) do
+      {:ok, verdict} ->
+        bridges = request.bridges || []
+
+        graded =
+          MeaningGame.Experiments.apply_arm_closeness(verdict, page, arm || :plain, bridges)
+
+        {:ok, graded}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Assigns and records an experiment arm for a Page at Page start.
+
+  Stratified by Chapter so no single arm collects all easy meaning-spaces.
+  A/B assignment lives behind the Keeper seam (CONTEXT.md).
+  """
+  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | nil) :: :bait | :plain
+  def assign_arm(_room_id, nil), do: :bait
+
+  def assign_arm(room_id, page) do
+    chapter = page[:chapter] || page["chapter"] || "default"
+    page_id = page[:id] || page["id"] || "unknown"
+
+    past_arms = MeaningGame.Chronicle.chapter_assignments(room_id, chapter, "bait_against_plain")
+    arm = MeaningGame.Experiments.assign_arm(past_arms)
+
+    _ =
+      MeaningGame.Chronicle.record_experiment_assignment(room_id, %{
+        page_identifier: to_string(page_id),
+        experiment_id: "bait_against_plain",
+        arm: to_string(arm),
+        chapter: chapter,
+        assigned_at: DateTime.utc_now()
+      })
+
+    arm
+  end
+
+  @doc """
   Rewrites the precedent for this pair with the couple's ruling.
 
   A joint player overrule is the only thing in the system that rewrites

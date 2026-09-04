@@ -161,6 +161,14 @@ defmodule MeaningGame.Rooms do
           :ok | {:error, :give_required | :no_such_seat | term()}
   def give(slug, seat_id, give), do: call(slug, {:give, seat_id, give})
 
+  @doc """
+  Deliberately unblinds an experiment in the Room (ticket 13).
+  """
+  @spec unblind_experiment(String.t(), String.t() | nil, String.t()) :: :ok | {:error, term()}
+  def unblind_experiment(slug, seat_id, experiment_id \\ "bait_against_plain") do
+    call(slug, {:unblind_experiment, seat_id, experiment_id})
+  end
+
   @doc "The Seat this browser already holds in the Room, without typing a name."
   @spec rejoin(String.t(), String.t()) :: {:ok, map()} | :error
   def rejoin(slug, device_token), do: call(slug, {:rejoin, device_token})
