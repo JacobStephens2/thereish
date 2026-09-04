@@ -6,7 +6,7 @@ This ticket builds the one seam through which the game talks to language models.
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent — one item outstanding, see below
+**Status:** resolved
 
 - [x] A single Keeper interface covering the Assayer role, with the live adapter and the existing fake as its two implementations
 - [x] Per-role model and effort are configuration, so swapping the Assayer is a setting and not a refactor. Live Assayer is Gemini 3.8 Flash at low effort, per ADR-0005
@@ -18,17 +18,33 @@ This ticket builds the one seam through which the game talks to language models.
 - [x] The Assayer quips live on the players' actual Bridges. It grades and never rules
 - [x] N Seats grade as N choose 2 pairs, capped at six Seats for v1
 - [x] Keeper tests run against recorded responses: schema rejection and retry, both orderings, hedging taking the first response. One live smoke test per role, tagged and excluded from the default run, so the suite never spends money
-- [ ] Round-trip latency measured from the VPS against the p95 target of 4 seconds
+- [x] Round-trip latency measured from the VPS against the p95 target of 4 seconds
 
-  The harness is built and documented — `MeaningGame.Keeper.Latency.measure/1`, run from the VPS with the command in `docs/deploy.md`, "Measuring the round trip". The measurement itself has not been taken: no `GEMINI_API_KEY` was in the session, so neither the live smoke test nor twenty real grades from the droplet have been run. Two commands close it, in this order:
+  Measured 2026-09-04 from the droplet, inside the release image, with
+  `MeaningGame.Keeper.Latency.measure()` — twenty real grades through the
+  shipped path, both orderings and hedging included. **p50 1,464 ms, p95
+  2,444 ms against the 4,000 ms target: met.** No grade failed, and twenty of
+  them cost $0.018, so an evening of five Pages is about two cents.
 
-  ```sh
-  GEMINI_API_KEY=... mix test --include live     # the model id and the schema still answer
-  bin/deploy                                      # with the key in the server's .env
-  ssh jacob@stephens.page 'cd /var/www/meld.stephens.page && \
-    docker compose -f docker-compose.app.yml exec app \
-    /app/bin/meaning_game eval "MeaningGame.Keeper.Latency.measure()"'
-  ```
+  | | ms |
+  |---|---|
+  | p50 | 1,464 |
+  | p95 | 2,444 |
+  | max | 5,684 |
+
+  Two things the run says beyond the target. **The p50 is inside the 2.5 s
+  beat**, which is the reveal working as designed: the verdict is normally
+  already held when the theatre ends, and the beat is the pause rather than the
+  wait. And **the max is not**: one grade in twenty took 5.7 s, past the
+  ladder's first rung, so "the Assayer is still reading" is a line the couple
+  will genuinely see now and then rather than a defensive branch. It is still
+  far inside the 9 s deadline and the 10 s give-up.
+
+  Repeatability held up, which is the whole reason ADR-0005 chose this model:
+  tide/moon graded 74, 72, 74, 74 across four runs and cut/history 27, 24, 23,
+  23 — ranges of 2 and 4, against the 30-to-35 the prototype measured on GLM.
+  Ordering disagreement was 0 to 4 points on every pair except tide/moon's
+  first run.
 
 ## Comments
 
@@ -105,3 +121,17 @@ touches a Room here anyway.
 produces the fifteen graded pairs the cap is about; `bin/deploy` warns when the
 server's `.env` has no `GEMINI_API_KEY`, because an evening where every Page
 reads "No verdict" would be a missing line in a file rather than a design.
+
+**Played on the deployed site.** Two Seats joined a `smoke` Room at
+meld.stephens.page and committed "lighthouse" and "cargo" between lantern and
+harbour. Gemini graded it 39, adjacent — "Both relate to maritime harbour
+settings, but a lighthouse is a coastal navigational structure while cargo
+refers to transported goods" — and quipped "One was dutifully watching from the
+lighthouse while the other was busy unloading all the cargo." The stage drew the
+Bridges, then the number, then the joke, then the argument, then the
+carry-forward line, which is the reveal as designed. Two phones in one browser
+profile share a session cookie and so share a Seat, so the two Bridges were
+committed through `Rooms.commit_bridge/3` on the running node while the stage
+was watched in the browser. The Bridges were chosen to miss, so the Page stayed
+open and nothing went into the Chronicle; the `smoke` Room and its two Seats are
+still in Postgres, harmless and ignorable.
