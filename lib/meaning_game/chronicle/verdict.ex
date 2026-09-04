@@ -8,8 +8,11 @@ defmodule MeaningGame.Chronicle.Verdict do
   is a thing that happened and belongs in the record.
 
   `model`, `prompt_version`, `latency_ms` and `cost_usd` are what keep the model
-  policy measured rather than remembered. They are null on a verdict that never
-  arrived, because nothing came back to attribute it to.
+  policy measured rather than remembered. `forward`, `reverse` and
+  `reasoning_reverse` are the two orderings the grade was the mean of, kept so
+  that a grade the couple want to argue with can be argued with in detail. All
+  of them are null on a verdict that never arrived, because nothing came back to
+  attribute it to.
   """
   use Ecto.Schema
 
@@ -25,10 +28,14 @@ defmodule MeaningGame.Chronicle.Verdict do
     field :closeness, :integer
     field :band, :string
     field :reasoning, :string
+    field :quip, :string
     field :model, :string
     field :prompt_version, :string
     field :latency_ms, :integer
     field :cost_usd, :decimal
+    field :forward, :integer
+    field :reverse, :integer
+    field :reasoning_reverse, :string
     field :position, :integer
 
     belongs_to :attempt, MeaningGame.Chronicle.Attempt
@@ -47,10 +54,14 @@ defmodule MeaningGame.Chronicle.Verdict do
       :closeness,
       :band,
       :reasoning,
+      :quip,
       :model,
       :prompt_version,
       :latency_ms,
       :cost_usd,
+      :forward,
+      :reverse,
+      :reasoning_reverse,
       :position
     ])
     |> validate_required([:attempt_id, :seat_ids, :bridges, :graded, :position])

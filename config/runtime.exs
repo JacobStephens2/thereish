@@ -27,6 +27,15 @@ if config_env() != :test do
     http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 end
 
+# The Assayer's key, in every environment that has one. It is set here rather
+# than read where it is used so that a key is configuration like the model and
+# the effort are, and so that nothing goes looking at the environment in the
+# middle of a reveal. A missing key is not fatal: the game says it has no
+# verdict, loudly, and the couple make the call.
+if key = System.get_env("GEMINI_API_KEY") do
+  config :meaning_game, :keeper, roles: [assayer: [api_key: key]]
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :meaning_game, MeaningGameWeb.Endpoint,

@@ -99,6 +99,47 @@ polling, which is exactly the latency the couch-night hosting decision exists to
 measure honestly. It needs Apache 2.4.47+; the VPS runs 2.4.58. If that role
 ever grows a websocket option, this vhost should move back onto it.
 
+### The Assayer's key
+
+The live Assayer is Gemini 3.8 Flash (ADR-0005), and it is reached with an API
+key that `deploy/provision.sh` cannot generate. It lives in the same `.env` as
+the other secrets, on one line:
+
+```sh
+ssh jacob@stephens.page
+sudo -e /var/www/meld.stephens.page/.env    # GEMINI_API_KEY=...
+cd /var/www/meld.stephens.page && docker compose -f docker-compose.app.yml up -d
+```
+
+On the Mac it goes in `.env.local` for the release image, and in the shell for
+`mix phx.server`.
+
+Without it the game runs and grades nothing: every Page reads "No verdict. This
+one is yours to call," which is the honest failure and a miserable evening.
+`bin/deploy` warns when the line is missing, and the container logs
+`GEMINI_API_KEY is not set` on the first Bridge committed.
+
+Nothing else about the Assayer is a secret. Which model, at what effort, hedged
+how many ways, and how long it waits are all in `config/config.exs` under
+`:keeper`, so swapping the Assayer is a commit rather than a server visit.
+
+### Measuring the round trip
+
+The reveal is a fixed 2.5 second beat and the Assayer has to fit a p95 of four
+seconds inside it (design law 10). That is a claim about this machine's distance
+from Google, so it is measured from this machine, after any deploy that touches
+the prompt, the schema, or the model:
+
+```sh
+ssh jacob@stephens.page 'cd /var/www/meld.stephens.page && \
+  docker compose -f docker-compose.app.yml exec app \
+  /app/bin/meaning_game eval "MeaningGame.Keeper.Latency.measure()"'
+```
+
+Twenty real grades, sequentially, on a fixed set of pairs spread across the
+ladder; it prints each one as it lands and then p50, p95, max, and what it
+spent. It costs cents.
+
 ## The URLs
 
 | | |

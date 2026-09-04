@@ -31,8 +31,28 @@ defmodule MeaningGame.Rooms.Server do
   Assayer thinks, because a phone asking what it missed must not be stuck behind
   a model. An Assayer that raises or exits is a verdict the game does not have,
   which is a rule it already knows: the pair goes ungraded and the call goes to
-  the players. An Assayer that simply never answers is what the escalation
-  ladder is for, and that is not built yet.
+  the players.
+
+  ## An Assayer that is slow, rather than absent
+
+  Design law 10 gives the reveal a ceiling: visible activity through four
+  seconds, a provisional reading at eight, and at ten the game states it has no
+  verdict. This process runs that ladder, because it is made of time. Each step
+  moves what every screen says; the last one is not a step but the end of the
+  wait — the pairs still outstanding are recorded as ungraded and the call goes
+  to the couple, which is design law 3's joint authority arriving by the back
+  door rather than an invented number.
+
+  The ladder is armed when the Assayer is asked and disarmed when it answers,
+  not when the reveal appears. Those differ by the beat, and an Assayer that
+  answered in 200 ms is not slow just because the theatre is still running.
+
+  A timer that fires in the same instant a verdict arrives leaves its message in
+  the mailbox, where cancelling it cannot reach. That message is harmless, and
+  the reason is the mailbox's own order: it was posted before the verdict was,
+  so it is read before the verdict is, and long before anything could start a
+  fresh ladder for it to be mistaken for. What it finds is a ladder already
+  stood down, which is the last `{:escalate, _}` clause below.
   """
   use GenServer, restart: :permanent
 
@@ -61,7 +81,15 @@ defmodule MeaningGame.Rooms.Server do
     with {:ok, room} <- Store.get_or_create_room(slug, seat_limit) do
       seats = Store.list_seats(room.id)
       game = Game.init(seat_limit: room.seat_limit, seats: seats, page: Pages.first())
-      state = %{room: room, game: game, beat: nil, held: [], opened_at: nil}
+
+      state = %{
+        room: room,
+        game: game,
+        beat: nil,
+        held: [],
+        opened_at: nil,
+        assayer: nil
+      }
 
       {:ok, opened(state)}
     end
@@ -107,23 +135,52 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  # The one thing a snapshot says that the rules did not: how long the Assayer
+  # has been thinking. It is the Room's to answer because it is made of time,
+  # and the Game keeps no clock.
   def handle_call({:snapshot, viewer}, _from, state) do
-    {:reply, Game.view(state.game, viewer), state}
+    {:reply, Map.put(Game.view(state.game, viewer), :assayer_step, step(state)), state}
   end
 
   # A verdict that arrives during the beat waits it out. The players were
   # promised a fixed beat, and an Assayer that answered in 200 ms must not turn
-  # the reveal into a flinch.
+  # the reveal into a flinch. The escalation ladder is stood down either way:
+  # this Assayer has answered.
   @impl true
-  def handle_info({:assayed, event}, %{beat: beat} = state) when beat != nil do
-    {:noreply, %{state | held: state.held ++ [event]}}
-  end
+  def handle_info({:assayed, event}, state) do
+    state = answered(state, pair(event))
 
-  def handle_info({:assayed, event}, state), do: {:noreply, apply_events(state, [event])}
+    if state.beat do
+      {:noreply, %{state | held: state.held ++ [event]}}
+    else
+      {:noreply, apply_events(state, [event])}
+    end
+  end
 
   def handle_info(:beat_over, state) do
     {:noreply, apply_events(%{state | beat: nil, held: []}, state.held)}
   end
+
+  # Ten seconds is where the game stops waiting and says so. Every pair still
+  # outstanding is recorded as ungraded, which the rules already answer by
+  # revealing without a number and handing the ruling to the couple. A verdict
+  # that turns up afterwards changes nothing: a pair is graded once.
+  def handle_info({:escalate, :unavailable}, %{assayer: %{outstanding: outstanding}} = state) do
+    events = Enum.map(outstanding, &{:verdict_unavailable, %{pair: &1}})
+
+    {:noreply, apply_events(%{state | assayer: nil}, events)}
+  end
+
+  def handle_info({:escalate, step}, %{assayer: assayer} = state) when assayer != nil do
+    state = %{state | assayer: %{assayer | step: step, timer: escalate_after(step)}}
+    broadcast(state.room.slug)
+
+    {:noreply, state}
+  end
+
+  # The Assayer answered between the timer firing and this process reading its
+  # message. Nothing to escalate.
+  def handle_info({:escalate, _step}, state), do: {:noreply, state}
 
   # The browser's own Seat wins over the name it typed, so typing someone else's
   # name on a phone that is already seated cannot take their Seat.
@@ -218,8 +275,65 @@ defmodule MeaningGame.Rooms.Server do
       send(room, {:assayed, verdict_event(pair, assay(request))})
     end)
 
-    state
+    waiting_on(state, pair)
   end
+
+  # The ladder starts with the first pair the Assayer is asked about and covers
+  # all of them, because what the couple are watching is one reveal rather than
+  # one request.
+  defp waiting_on(%{assayer: nil} = state, pair) do
+    %{
+      state
+      | assayer: %{
+          step: :grading,
+          timer: escalate_after(:grading),
+          outstanding: MapSet.new([pair])
+        }
+    }
+  end
+
+  defp waiting_on(%{assayer: assayer} = state, pair) do
+    %{state | assayer: %{assayer | outstanding: MapSet.put(assayer.outstanding, pair)}}
+  end
+
+  # An Assayer that has answered about every pair is not slow, however long the
+  # beat still has to run.
+  defp answered(%{assayer: nil} = state, _pair), do: state
+
+  defp answered(%{assayer: assayer} = state, pair) do
+    outstanding = MapSet.delete(assayer.outstanding, pair)
+
+    if MapSet.size(outstanding) == 0 do
+      Process.cancel_timer(assayer.timer)
+
+      %{state | assayer: nil}
+    else
+      %{state | assayer: %{assayer | outstanding: outstanding}}
+    end
+  end
+
+  defp escalate_after(step) do
+    next = next_step(step)
+
+    Process.send_after(self(), {:escalate, next}, escalation_ms(next) - escalation_ms(step))
+  end
+
+  defp next_step(:grading), do: :slow
+  defp next_step(:slow), do: :provisional
+  defp next_step(:provisional), do: :unavailable
+
+  defp escalation_ms(:grading), do: 0
+
+  defp escalation_ms(step) do
+    :meaning_game |> Application.fetch_env!(:assayer_escalation_ms) |> Keyword.fetch!(step)
+  end
+
+  # What every screen is told about the wait. Nothing once the Assayer has
+  # answered — a Page still in its beat is a Page whose grade is in.
+  defp step(%{assayer: nil}), do: nil
+  defp step(%{assayer: %{step: step}}), do: step
+
+  defp pair({_kind, %{pair: pair}}), do: pair
 
   # An Assayer that blows up has failed to grade, which is a thing the game has
   # a rule for. It is not a thing the Room should die of.

@@ -118,10 +118,14 @@ defmodule MeaningGame.Chronicle do
       closeness: verdict.closeness,
       band: verdict.band && to_string(verdict.band),
       reasoning: verdict.reasoning,
+      quip: verdict.quip,
       model: meta[:model],
       prompt_version: meta[:prompt_version],
       latency_ms: meta[:latency_ms],
       cost_usd: meta[:cost_usd],
+      forward: meta[:forward],
+      reverse: meta[:reverse],
+      reasoning_reverse: meta[:reasoning_reverse],
       position: position
     })
     |> Repo.insert!()

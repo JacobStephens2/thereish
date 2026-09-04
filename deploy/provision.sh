@@ -65,6 +65,9 @@ else
 SECRET_KEY_BASE=$(openssl rand -base64 48 | tr -d '\n')
 DATABASE_URL=ecto://${DB_USER}:${DB_PASSWORD}@host.docker.internal/${DB_NAME}
 PHX_HOST=${HOST}
+# The Assayer's key, which this script cannot generate. Paste it here: without
+# one the game runs and grades nothing, saying "no verdict" on every Page.
+GEMINI_API_KEY=
 ENV
   chmod 600 "${ENV_FILE}"
   echo "wrote ${ENV_FILE}"

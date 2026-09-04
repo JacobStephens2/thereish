@@ -117,6 +117,16 @@ defmodule MeaningGame.ChronicleTest do
       assert verdict.prompt_version == "fake-1"
       assert verdict.latency_ms >= 0
       assert Decimal.eq?(verdict.cost_usd, 0)
+
+      # The joke goes in the book too: the Chronicle is a thing they read, not a
+      # table of measurements.
+      assert verdict.quip =~ "cairn"
+
+      # And both orderings the grade was the mean of, so that a grade they want
+      # to argue with can be argued with in detail.
+      assert verdict.forward == 80
+      assert verdict.reverse == 80
+      assert verdict.reasoning_reverse =~ "cairo"
     end
 
     test "records a verdict that never came as a verdict that never came", ctx do

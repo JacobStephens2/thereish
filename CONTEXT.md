@@ -68,6 +68,10 @@ _Avoid_: match, hit, win
 What the Assayer says about one pair of Bridges: a Closeness and the reasoning behind it. A pair the Assayer could not grade has no Verdict, which is a thing the game says out loud rather than a zero it invents.
 _Avoid_: result, judgement, ruling (the couple rule; the Assayer only grades)
 
+**Quip**:
+The Assayer's one line of comedy at the reveal, written about the two Bridges the players actually wrote. It rides on the Verdict beside the reasoning and is not the grade's justification — it is what makes the graded number a punchline rather than a ruling.
+_Avoid_: joke (on its own), flavour text, band script (the Author's prewritten fallback), roast
+
 **Phase**:
 Where a Page has got to — waiting for the Room to fill, bridging, assaying, revealed. It is derived from the state rather than stored in it, so nothing has to remember to advance it.
 _Avoid_: status, step, stage (the laptop is the stage), state

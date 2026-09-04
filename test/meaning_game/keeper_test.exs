@@ -1,0 +1,187 @@
+defmodule MeaningGame.KeeperTest do
+  @moduledoc """
+  The live Assayer, against recorded responses.
+
+  Everything here asks the same question the couch asks — grade this pair of
+  Bridges — and checks the things that are true of a grade whatever the model
+  said: that both orderings were asked and both were kept, that a malformed
+  answer was sent back rather than shown, that a hedged pair of requests was one
+  question asked twice, and that a failure is a failure rather than a number.
+
+  Nothing here asserts on what the Assayer is asked. The words of the question
+  are going to move as the couple calibrate it, and a test that froze them would
+  turn every calibration into a test failure. The one thing any of this compares
+  is that two hedged requests are byte-identical to each other, which is a fact
+  about hedging rather than about the wording.
+  """
+  # Which model answers, how often, and how patiently is application
+  # configuration, and these tests move it.
+  use ExUnit.Case, async: false
+
+  # A rejected answer is logged, and half of these tests reject one on purpose.
+  @moduletag :capture_log
+
+  import MeaningGame.KeeperFixtures
+
+  alias MeaningGame.Keeper.Live
+
+  @pair %{anchors: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
+
+  # Which way round this request asked, named by the Bridge it put first.
+  defp ordering(body), do: first_bridge(body, @pair.bridges)
+
+  describe "grading a pair" do
+    test "both orderings are graded, and both are kept beside the grade" do
+      recorded(fn conn, body ->
+        case ordering(body) do
+          "beacon" -> Req.Test.json(conn, response(verdict(closeness: 80, reasoning: "Forward.")))
+          "cairn" -> Req.Test.json(conn, response(verdict(closeness: 40, reasoning: "Reverse.")))
+        end
+      end)
+
+      {:ok, verdict} = Live.assay(@pair)
+
+      # The grade is the mean of the two orderings, and neither of them is lost:
+      # a wide gap is the most useful thing to know about a grade that looks
+      # wrong, and the couple cannot argue with evidence that was discarded.
+      assert verdict.closeness == 60
+      assert verdict.meta.forward == 80
+      assert verdict.meta.reverse == 40
+      assert verdict.reasoning == "Forward."
+      assert verdict.meta.reasoning_reverse == "Reverse."
+    end
+
+    test "the quip and the provenance ride along with the grade" do
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, response(verdict(quip: "Both of you went looking for the shore.")))
+      end)
+
+      {:ok, verdict} = Live.assay(@pair)
+
+      assert verdict.quip == "Both of you went looking for the shore."
+      assert verdict.meta.model == "gemini-3.8-flash"
+      assert verdict.meta.prompt_version == MeaningGame.Keeper.Assay.version()
+      # Two orderings, hedged two ways, and every token any of them spent.
+      assert verdict.meta.cost_usd > 0
+    end
+  end
+
+  describe "the validator has the last word" do
+    setup do
+      assayer(requests: 1, retries: 2)
+    end
+
+    test "an answer the schema rejects is asked for again rather than shown" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        case asked(counts, ordering(body)) do
+          # A closeness the ladder has no rung for. The schema catches it, and
+          # what the players see is the corrected answer.
+          1 -> Req.Test.json(conn, response(verdict(closeness: 4000)))
+          _ -> Req.Test.json(conn, response(verdict(closeness: 55)))
+        end
+      end)
+
+      assert {:ok, verdict} = Live.assay(@pair)
+      assert verdict.closeness == 55
+      assert Agent.get(counts, &Map.values/1) == [2, 2]
+    end
+
+    test "an answer that is not JSON at all is asked for again" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        case asked(counts, ordering(body)) do
+          1 -> Req.Test.json(conn, response("These two words are pretty close, I'd say."))
+          _ -> Req.Test.json(conn, response(verdict(closeness: 55)))
+        end
+      end)
+
+      assert {:ok, verdict} = Live.assay(@pair)
+      assert verdict.closeness == 55
+    end
+
+    test "a model that never produces a valid answer is no verdict, not a crash" do
+      assayer(requests: 1, retries: 1)
+
+      recorded(fn conn, _body -> Req.Test.json(conn, response(verdict(closeness: 4000))) end)
+
+      assert {:error, {:rejected, why}} = Live.assay(@pair)
+      assert why =~ "schema"
+    end
+  end
+
+  describe "hedging" do
+    setup do
+      assayer(requests: 2, retries: 0)
+    end
+
+    test "fires two identical requests to one model and takes the first answer" do
+      counts = counts()
+      test = self()
+
+      recorded(fn conn, body ->
+        ordering = ordering(body)
+        send(test, {:asked, ordering, body})
+
+        case asked(counts, ordering) do
+          1 ->
+            # Both requests are in flight before either is answered, which is
+            # what makes this hedging rather than a retry.
+            once_asked(counts, ordering, 2)
+            Req.Test.json(conn, response(verdict(closeness: 80)))
+
+          _ ->
+            # The straggler. It answers differently so that a reveal built on it
+            # would be visible, and late enough that taking it would be a choice
+            # rather than a race.
+            Process.sleep(300)
+            Req.Test.json(conn, response(verdict(closeness: 20)))
+        end
+      end)
+
+      {:ok, verdict} = Live.assay(@pair)
+
+      assert verdict.closeness == 80
+
+      # Identical requests, not a race between two different questions: hedging
+      # against a second question would make the grade a coin toss between two
+      # distributions (design law 11).
+      assert_receive {:asked, "beacon", first}
+      assert_receive {:asked, "beacon", second}
+      assert first == second
+      assert_receive {:asked, "cairn", _}
+      assert_receive {:asked, "cairn", _}
+    end
+  end
+
+  describe "when the Assayer cannot answer" do
+    setup do
+      assayer(requests: 1, retries: 0)
+    end
+
+    test "a provider that errors is no verdict rather than a zero" do
+      recorded(fn conn, _body ->
+        Plug.Conn.send_resp(conn, 503, "upstream is having a moment")
+      end)
+
+      assert {:error, {:http, 503, _body}} = Live.assay(@pair)
+    end
+
+    # A recorded response is served in this process rather than over a socket,
+    # so what runs out here is the grading's whole budget rather than one
+    # request's socket timeout. That is the one that has to hold: the escalation
+    # ladder gives up at ten seconds, and it can only do that if the Keeper has.
+    test "a provider that never answers gives up before the game does" do
+      assayer(requests: 1, retries: 0, deadline_ms: 50)
+
+      recorded(fn conn, _body ->
+        Process.sleep(5_000)
+        Req.Test.json(conn, response(verdict()))
+      end)
+
+      assert {:error, :timeout} = Live.assay(@pair)
+    end
+  end
+end

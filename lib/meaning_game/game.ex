@@ -69,6 +69,11 @@ defmodule MeaningGame.Game do
   @typedoc """
   What the Assayer said about one pair, or that it could not say.
 
+  `quip` is the joke it made about the two words these players actually wrote.
+  The rules keep it beside the reasoning and never read it: the reveal is the
+  product, and the line that makes it funny is not chrome the view can invent
+  for itself.
+
   `meta` is provenance — which model answered, at what prompt version, how long
   it took, what it cost. The rules carry it to the Chronicle and never read it;
   a grade is a grade whoever produced it.
@@ -77,6 +82,7 @@ defmodule MeaningGame.Game do
           graded?: boolean(),
           closeness: integer() | nil,
           reasoning: String.t() | nil,
+          quip: String.t() | nil,
           meta: map()
         }
 
@@ -105,7 +111,13 @@ defmodule MeaningGame.Game do
           {:seat_joined, seat()}
           | {:bridge_committed, %{seat_id: String.t(), bridge: String.t()}}
           | {:verdict_received,
-             %{pair: pair(), closeness: integer(), reasoning: String.t(), meta: map()}}
+             %{
+               pair: pair(),
+               closeness: integer(),
+               reasoning: String.t(),
+               quip: String.t(),
+               meta: map()
+             }}
           | {:verdict_unavailable, %{pair: pair(), meta: map()}}
           | {:attempt_advanced, %{seat_id: String.t()}}
           | {:page_started, %{seat_id: String.t(), page: page()}}
@@ -201,6 +213,7 @@ defmodule MeaningGame.Game do
       graded?: true,
       closeness: verdict.closeness,
       reasoning: verdict.reasoning,
+      quip: Map.get(verdict, :quip),
       meta: Map.get(verdict, :meta, %{})
     })
   end
@@ -210,6 +223,7 @@ defmodule MeaningGame.Game do
       graded?: false,
       closeness: nil,
       reasoning: nil,
+      quip: nil,
       meta: Map.get(event, :meta, %{})
     })
   end
@@ -299,8 +313,14 @@ defmodule MeaningGame.Game do
   defp anchors(_state, :waiting), do: nil
   defp anchors(state, _phase), do: state.anchors
 
+  # The pair is a key and is sorted, so that both orderings of it name one
+  # thing. The Bridges inside the request are not: they go in roster order, the
+  # order the reveal puts them in, so that the sentence the Assayer writes and
+  # the joke it makes name the two words in the order they are on the screen.
   defp assay(state, pair) do
-    {:assay, pair, %{anchors: state.anchors, bridges: Enum.map(pair, &state.bridges[&1])}}
+    bridges = for seat <- state.seats, seat.id in pair, do: state.bridges[seat.id]
+
+    {:assay, pair, %{anchors: state.anchors, bridges: bridges}}
   end
 
   # A pair is graded once. The Room can deliver the same verdict twice — a
@@ -430,7 +450,8 @@ defmodule MeaningGame.Game do
       seat_ids: Enum.map(seats, & &1.id),
       names: Enum.map(seats, & &1.name),
       graded?: verdict.graded?,
-      reasoning: verdict.reasoning
+      reasoning: verdict.reasoning,
+      quip: verdict.quip
     })
   end
 
