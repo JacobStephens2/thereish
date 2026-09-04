@@ -39,13 +39,19 @@ defmodule MeaningGame.Chronicle.Markdown do
     closed_detail = "#{outcome_str} (#{page.closed_because})"
     closeness_str = if page.closeness, do: "#{page.closeness} / 100", else: "None"
 
-    meta_lines = [
-      "### Page #{index}: #{anchors_str}",
-      "- Outcome: #{closed_detail}",
-      "- Closeness: #{closeness_str}",
-      "- Opened: #{page.opened_at && DateTime.to_iso8601(page.opened_at)}",
-      "- Closed: #{page.closed_at && DateTime.to_iso8601(page.closed_at)}"
-    ]
+    give_lines = if page[:give], do: ["- Give: #{page.give}"], else: []
+
+    meta_lines =
+      [
+        "### Page #{index}: #{anchors_str}",
+        "- Outcome: #{closed_detail}",
+        "- Closeness: #{closeness_str}"
+      ] ++
+        give_lines ++
+        [
+          "- Opened: #{page.opened_at && DateTime.to_iso8601(page.opened_at)}",
+          "- Closed: #{page.closed_at && DateTime.to_iso8601(page.closed_at)}"
+        ]
 
     attempts_md =
       page.attempts
@@ -225,12 +231,22 @@ defmodule MeaningGame.Chronicle.Markdown do
     closeness_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Closeness:"))
     closeness = parse_closeness(closeness_line)
 
+    give_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Give:"))
+
+    give =
+      if give_line do
+        give_line
+        |> String.replace_prefix("- Give:", "")
+        |> String.trim()
+      end
+
     attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
 
     %{
       anchors: anchors,
       melded: melded,
       closeness: closeness,
+      give: give,
       attempts: attempts
     }
   end

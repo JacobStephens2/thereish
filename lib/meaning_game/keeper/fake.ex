@@ -35,31 +35,70 @@ defmodule MeaningGame.Keeper.Fake do
 
   @impl true
   def author(chapter, opts \\ []) do
-    give = Keyword.get(opts, :give)
+    delay = author_delay_ms()
+    if delay > 0, do: Process.sleep(delay)
 
-    json = %{
-      "theme" => chapter,
-      "anchors" => ["backyard", "weekend"],
-      "bait" => "barbecue",
-      "deep_bridges" => ["lawnmower", "chores"],
-      "likely_bridges" => ["barbecue", "lawnmower", "chores", "family", "party"],
-      "why_these" => "The backyard and weekend anchors invite barbecue as the immediate trap.",
-      "band_scripts" => %{
-        "miss" => "Different neighbourhoods entirely.",
-        "adjacent" => "On the same block, across the street.",
-        "near" => "In the same backyard.",
-        "meld" => "You both saw the grill.",
-        "deep_meld" => "Two minds at the mower."
-      }
-    }
+    case author_mode() do
+      :ok ->
+        give = Keyword.get(opts, :give)
 
-    {:ok,
-     MeaningGame.Keeper.Author.page(json, chapter, give, %{
-       model: "fake-author",
-       attempts: 1,
-       cost_usd: 0.0,
-       latency_ms: 0
-     })}
+        anchors =
+          if give do
+            give_anchors(give)
+          else
+            ["backyard", "weekend"]
+          end
+
+        bait = if give, do: "clover", else: "barbecue"
+        deep_bridges = if give, do: ["saint", "church"], else: ["lawnmower", "chores"]
+        likely_bridges = [bait | deep_bridges] ++ ["prayer", "faith"]
+
+        json = %{
+          "theme" => give || chapter,
+          "anchors" => anchors,
+          "bait" => bait,
+          "deep_bridges" => deep_bridges,
+          "likely_bridges" => likely_bridges,
+          "why_these" => "The anchors invite #{bait} as the immediate trap.",
+          "band_scripts" => %{
+            "miss" => "Different neighbourhoods entirely.",
+            "adjacent" => "On the same block, across the street.",
+            "near" => "In the same backyard.",
+            "meld" => "You both saw the grill.",
+            "deep_meld" => "Two minds at the mower."
+          }
+        }
+
+        {:ok,
+         MeaningGame.Keeper.Author.page(json, chapter, give, %{
+           model: "fake-author",
+           attempts: 1,
+           cost_usd: 0.0,
+           latency_ms: delay
+         })}
+
+      :refused ->
+        {:error, :refused}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :raise ->
+        raise "this Author is having a moment"
+    end
+  end
+
+  defp give_anchors("hospital" <> _), do: ["nurse", "clinic"]
+  defp give_anchors(_give), do: ["candle", "chapel"]
+
+  defp author_delay_ms, do: config_get(:author_delay_ms, 0)
+  defp author_mode, do: config_get(:author_mode, :ok)
+
+  defp config_get(key, default) do
+    :meaning_game
+    |> Application.get_env(:keeper, [])
+    |> Keyword.get(:fake, [])
+    |> Keyword.get(key, default)
   end
 
   defp grade(left, right) do

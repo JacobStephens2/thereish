@@ -90,6 +90,28 @@ defmodule MeaningGame.PagesTest do
       assert {:ok, drawn2} = Pages.draw(room_id)
       assert drawn2.chapter == "suburban family life"
     end
+
+    test "authoring for a Give tags pages with the give and allows targeted draw" do
+      room_id = Ecto.UUID.generate()
+
+      # Author two pages for a give
+      give = "the world St. Thérèse grew up in"
+      assert {:ok, pages} = Pages.author_give(give, count: 2)
+      assert length(pages) == 2
+      assert Enum.all?(pages, &(&1.give == give))
+
+      # Draw specifically for this give
+      assert {:ok, drawn} = Pages.draw(room_id, give: give)
+      assert drawn.give == give
+      assert drawn.anchors != nil
+
+      # Draw second page for this give
+      assert {:ok, drawn2} = Pages.draw(room_id, give: give)
+      assert drawn2.give == give
+
+      # Give is now exhausted
+      assert {:error, :pool_exhausted} = Pages.draw(room_id, give: give)
+    end
   end
 
   describe "first/1 and next/2" do

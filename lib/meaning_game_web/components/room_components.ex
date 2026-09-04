@@ -42,20 +42,65 @@ defmodule MeaningGameWeb.RoomComponents do
 
   attr :room, :map, required: true
 
+  @doc "Announcements about Gives: when new Pages have arrived, or when an Author run failed."
+  def give_announcement(assigns) do
+    ~H"""
+    <div
+      :if={@room[:give_announcement]}
+      data-role="give-announcement"
+      class="rounded-xl border border-primary/40 bg-primary/10 p-5 text-center transition-all"
+    >
+      <p class="text-xs uppercase tracking-widest font-semibold text-primary">New Setting Arrived</p>
+      <p class="mt-1 text-2xl font-bold">
+        The Author heard you: "{@room.give_announcement.give}"
+      </p>
+      <p class="mt-1 text-sm opacity-75">
+        {@room.give_announcement.count} new Page{if @room.give_announcement.count == 1,
+          do: "",
+          else: "s"} added to tonight's pool.
+      </p>
+    </div>
+
+    <div
+      :if={@room[:give_failure]}
+      data-role="give-failure"
+      class="rounded-xl border border-warning/40 bg-warning/10 p-5 text-center transition-all"
+    >
+      <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+      <p class="mt-1 text-lg font-medium text-warning-content">
+        The Author couldn't write for "{@room.give_failure.give}": {@room.give_failure.reason}.
+      </p>
+      <p class="mt-1 text-sm opacity-70">
+        Playing on from the existing pool.
+      </p>
+    </div>
+    """
+  end
+
+  attr :room, :map, required: true
+
   @doc "The two words the Page hangs between, shown to everyone at once."
   def anchors(assigns) do
     ~H"""
-    <div
-      :if={@room.anchors}
-      data-role="anchors"
-      class="flex flex-wrap items-center justify-center gap-4"
-    >
-      <span
-        :for={anchor <- @room.anchors}
-        class="rounded-lg bg-base-200 px-5 py-3 text-3xl font-semibold tracking-tight"
+    <div :if={@room.anchors} class="flex flex-col items-center gap-3">
+      <p
+        :if={@room[:page_give]}
+        data-role="page-give"
+        class="text-xs uppercase tracking-widest font-semibold text-primary"
       >
-        {anchor}
-      </span>
+        Setting: {@room.page_give}
+      </p>
+      <div
+        data-role="anchors"
+        class="flex flex-wrap items-center justify-center gap-4"
+      >
+        <span
+          :for={anchor <- @room.anchors}
+          class="rounded-lg bg-base-200 px-5 py-3 text-3xl font-semibold tracking-tight"
+        >
+          {anchor}
+        </span>
+      </div>
     </div>
     """
   end

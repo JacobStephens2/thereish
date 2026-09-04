@@ -751,6 +751,150 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "naming a setting (ticket 12)" do
+    setup do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      # Seed one normal page in pool so room has existing pool
+      {:ok, _} =
+        MeaningGame.Pages.insert_page(%{
+          id: "P-EXISTING-01",
+          chapter: "the harbour",
+          theme: "the harbour",
+          give: nil,
+          anchors: ["lantern", "harbour"],
+          bait: "lighthouse",
+          deep_bridges: ["beacon", "buoy"],
+          likely_bridges: ["lighthouse", "beacon", "buoy"],
+          why_these: "Harbour anchors",
+          band_scripts: %{
+            "miss" => "m",
+            "adjacent" => "a",
+            "near" => "n",
+            "meld" => "meld",
+            "deep_meld" => "dm"
+          },
+          meta: %{model: "fake-author", prompt_version: "v1", attempts: 1, cost_usd: 0.0}
+        })
+
+      keeper = Application.fetch_env!(:meaning_game, :keeper)
+      on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
+
+      %{slug: slug, mara: mara, jacob: jacob, keeper: keeper}
+    end
+
+    test "a Give requires a seat and non-blank input", ctx do
+      assert {:error, :no_such_seat} = Rooms.give(ctx.slug, "not-a-seat", "my setting")
+      assert {:error, :give_required} = Rooms.give(ctx.slug, ctx.mara.id, "")
+      assert {:error, :give_required} = Rooms.give(ctx.slug, ctx.mara.id, "   ")
+    end
+
+    test "a Give queues a background Author run, play continues meanwhile, and arriving Pages join pool",
+         ctx do
+      # Configure fake author to take 15ms per page
+      fake_config = Keyword.get(ctx.keeper, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :keeper,
+        Keyword.put(
+          ctx.keeper,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 15, author_mode: :ok)
+        )
+      )
+
+      give = "the world St. Thérèse grew up in"
+      assert :ok = Rooms.give(ctx.slug, ctx.mara.id, give)
+
+      # In-flight immediately:
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.give_status != nil
+      assert view.give_status.status == :in_flight
+      assert view.give_status.give == give
+
+      # Play continues meanwhile! Commit bridges on current page without stalling:
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      await_reveal(ctx.slug)
+
+      view_mid = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view_mid.phase == :closed
+
+      # Wait for background Author task to complete
+      view_landed =
+        eventually(
+          fn ->
+            v = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            v[:give_status] && v.give_status[:status] == :landed && v
+          end,
+          "the Author task never completed"
+        )
+
+      assert view_landed.give_status.status == :landed
+      assert view_landed.give_announcement != nil
+      assert view_landed.give_announcement.give == give
+      assert view_landed.give_announcement.count > 0
+
+      # The arriving pages have joined the pool
+      give_pages =
+        MeaningGame.Repo.all(from(p in MeaningGame.Pages.AuthoredPage, where: p.give == ^give))
+
+      assert length(give_pages) == view_landed.give_announcement.count
+
+      # Starting the next page moves to the Give setting!
+      assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      view_next = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view_next.page_give == give
+      assert view_next.anchors != nil
+    end
+
+    test "a failed or refused Author run degrades cleanly and leaves the evening playable", ctx do
+      # Configure fake author to fail/refuse
+      fake_config = Keyword.get(ctx.keeper, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :keeper,
+        Keyword.put(
+          ctx.keeper,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 10, author_mode: :refused)
+        )
+      )
+
+      give = "some forbidden content"
+      assert :ok = Rooms.give(ctx.slug, ctx.mara.id, give)
+
+      # Wait for task to fail
+      view =
+        eventually(
+          fn ->
+            v = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            v[:give_status] && v.give_status[:status] == :failed && v
+          end,
+          "the Author failure never landed"
+        )
+
+      assert view.give_status.status == :failed
+      assert view.give_status.give == give
+      assert view.give_failure != nil
+      assert view.give_failure.give == give
+      assert view.give_failure.reason =~ "declined"
+
+      # The evening remains completely playable from existing pool:
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      await_reveal(ctx.slug)
+
+      view_after = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view_after.phase == :closed
+      assert view_after.reveal != nil
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do

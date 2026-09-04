@@ -600,5 +600,85 @@ defmodule MeaningGame.ChronicleTest do
       assert markdown =~ "Mara: fair"
       assert markdown =~ "Jacob: too harsh"
     end
+
+    test "pages authored from a Give are tagged with it and appear in the Chronicle that way",
+         ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      give = "the language of Children's Hospital"
+
+      {:ok, page_attrs} =
+        MeaningGame.Pages.insert_page(%{
+          id: "P-GIVE-01",
+          chapter: give,
+          give: give,
+          theme: give,
+          anchors: ["nurse", "clinic"],
+          bait: "hospital",
+          deep_bridges: ["triage", "pager"],
+          likely_bridges: ["hospital", "triage", "pager"],
+          why_these: "Hospital language invites obvious bridges.",
+          band_scripts: %{
+            "miss" => "m",
+            "adjacent" => "a",
+            "near" => "n",
+            "meld" => "meld",
+            "deep_meld" => "dm"
+          },
+          meta: %{model: "fake-author", prompt_version: "v1", attempts: 1, cost_usd: 0.0}
+        })
+
+      # Play the page
+      now = DateTime.utc_now()
+
+      entry = %{
+        page: page_attrs,
+        closed_because: :meld,
+        melded?: true,
+        closeness: 85,
+        attempts: [
+          %{
+            number: 1,
+            anchors: ["nurse", "clinic"],
+            closeness: 85,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "hospital"},
+              %{seat_id: ctx.jacob.id, bridge: "hospital"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [ctx.mara.id, ctx.jacob.id],
+                bridges: ["hospital", "hospital"],
+                graded?: true,
+                closeness: 85,
+                band: :meld,
+                reasoning: "Both named hospital.",
+                quip: "Hospital shift.",
+                meta: %{model: "fake", prompt_version: "v1", latency_ms: 100, cost_usd: 0.0}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+
+      # In book view:
+      [view] = Chronicle.book(room.id)
+      assert view.give == give
+      assert view.anchors == ["nurse", "clinic"]
+
+      # In Markdown rendering:
+      markdown = Chronicle.to_markdown(room.id)
+      assert markdown =~ "- Give: #{give}"
+
+      # Round-trips in Markdown parsing:
+      assert {:ok, [parsed]} = Chronicle.from_markdown(markdown)
+      assert parsed.give == give
+
+      # Appears in digest:
+      digest = Chronicle.digest(room.id)
+      assert digest =~ "[Give: #{give}]"
+    end
   end
 end
