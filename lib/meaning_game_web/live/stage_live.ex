@@ -40,6 +40,10 @@ defmodule MeaningGameWeb.StageLive do
   defp join_url(%{"slug" => slug}), do: url(~p"/r/#{slug}")
   defp join_url(_params), do: url(~p"/")
 
+  defp chronicle_path(slug) do
+    if slug == Rooms.default_slug(), do: ~p"/chronicle", else: ~p"/r/#{slug}/chronicle"
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -49,7 +53,15 @@ defmodule MeaningGameWeb.StageLive do
       class="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-12 px-8 py-16"
     >
       <header class="flex flex-col gap-2">
-        <h1 class="text-4xl font-semibold">Meaning Game</h1>
+        <div class="flex items-center justify-between">
+          <h1 class="text-4xl font-semibold">Meaning Game</h1>
+          <.link
+            navigate={chronicle_path(@slug)}
+            class="text-base font-medium underline opacity-70 hover:opacity-100"
+          >
+            The Chronicle
+          </.link>
+        </div>
         <p class="text-xl opacity-70">
           Join at <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
         </p>

@@ -123,6 +123,10 @@ defmodule MeaningGameWeb.RoomLive do
   defp message(:not_bridging), do: "Too late for this one."
   defp message(:no_such_seat), do: "You are not in this Room any more. Reload."
 
+  defp chronicle_path(slug) do
+    if slug == Rooms.default_slug(), do: ~p"/chronicle", else: ~p"/r/#{slug}/chronicle"
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -131,7 +135,15 @@ defmodule MeaningGameWeb.RoomLive do
       phx-hook=".ResyncOnWake"
       class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12"
     >
-      <h1 class="text-2xl font-semibold">Meaning Game</h1>
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-semibold">Meaning Game</h1>
+        <.link
+          navigate={chronicle_path(@slug)}
+          class="text-sm font-medium underline opacity-70 hover:opacity-100"
+        >
+          The Chronicle
+        </.link>
+      </div>
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">
         <.input name="name" value={@name} label="Your name" autocomplete="off" autofocus />

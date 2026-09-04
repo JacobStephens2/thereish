@@ -26,6 +26,14 @@ defmodule MeaningGameWeb.Router do
     live "/r/:slug", RoomLive, :room
     live "/r/:slug/stage", StageLive, :stage
 
+    live "/chronicle", ChronicleLive, :default_room
+    live "/book", ChronicleLive, :default_room
+    live "/r/:slug/chronicle", ChronicleLive, :room
+    live "/r/:slug/book", ChronicleLive, :room
+
+    get "/chronicle.md", ChronicleController, :export
+    get "/r/:slug/chronicle.md", ChronicleController, :export
+
     live "/check", CheckLive, :show
   end
 
