@@ -180,6 +180,33 @@ defmodule MeaningGameWeb.RoomLiveTest do
       end
     end
 
+    test "an illegal bridge is caught on the phone before commit and on commit", ctx do
+      ctx.mara
+      |> form("[data-role=bridge-form]", %{"bridge" => "lanterns"})
+      |> render_change()
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=bridge-error]",
+               "\"lanterns\" shares a root with \"lantern\"."
+             )
+
+      commit(ctx.mara, "lanterns")
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=bridge-error]",
+               "\"lanterns\" shares a root with \"lantern\"."
+             )
+
+      assert has_element?(ctx.mara, "[data-role=bridge-form]")
+      refute has_element?(ctx.mara, "[data-role=your-bridge]")
+
+      commit(ctx.mara, "beacon")
+      assert has_element?(ctx.mara, "[data-role=your-bridge]", "beacon")
+      refute has_element?(ctx.mara, "[data-role=bridge-form]")
+    end
+
     test "a Bridge is written on one phone and seen on none of the others", ctx do
       commit(ctx.mara, "cairn")
 
@@ -228,11 +255,55 @@ defmodule MeaningGameWeb.RoomLiveTest do
         assert eventually(fn -> has_element?(view, "[data-role=phase][data-step=slow]") end)
       end
 
+      assert eventually(fn ->
+               has_element?(ctx.stage, "[data-role=phase][data-step=provisional]")
+             end)
+
       # And when it never answers, the game says so and the call is theirs.
       html = await_reveal_on(ctx.stage)
 
       assert html =~ "No verdict"
       assert html =~ "yours to call"
+    end
+
+    test "tapping next_page when pool is exhausted displays a friendly message", ctx do
+      # Insert 1 page into pool
+      {:ok, _page} =
+        MeaningGame.Pages.insert_page(%{
+          id: "P-LV-POOL",
+          chapter: "pool test",
+          theme: "pool test",
+          give: nil,
+          anchors: ["sun", "sand"],
+          bait: "beach",
+          deep_bridges: ["dune", "tide"],
+          likely_bridges: ["beach", "dune", "tide"],
+          why_these: "Sun and sand invite beach.",
+          band_scripts: %{
+            "miss" => "Away from water.",
+            "adjacent" => "Near the shore.",
+            "near" => "On the sand.",
+            "meld" => "At the beach.",
+            "deep_meld" => "In the dunes."
+          },
+          meta: %{model: "fake", attempts: 1, cost_usd: 0.0}
+        })
+
+      # Mark this page as already played so pool has pages in table but none unplayed
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      {:ok, _} = MeaningGame.Pages.draw(room.id)
+
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+      await_reveal_on(ctx.stage)
+
+      # Room is closed because cairn and cairo meld
+      assert has_element?(ctx.mara, "[data-role=one-more]")
+
+      # Tapping "one-more" calls next_page; pool is exhausted
+      render_click(element(ctx.mara, "[data-role=one-more]"))
+
+      assert has_element?(ctx.mara, "[data-role=page-error]", "That's every Page for tonight.")
     end
 
     test "a miss is graded and said out loud, same as a Meld", ctx do

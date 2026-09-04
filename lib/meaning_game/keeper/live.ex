@@ -64,6 +64,22 @@ defmodule MeaningGame.Keeper.Live do
     end
   end
 
+  @impl true
+  def author(chapter, opts \\ []) do
+    role = Keeper.role(:author)
+    give = Keyword.get(opts, :give)
+    digest = Keyword.get(opts, :digest)
+    prompt = MeaningGame.Keeper.Author.prompt(chapter, give, digest)
+
+    case Gate.answer(role, prompt, &MeaningGame.Keeper.Author.check/1) do
+      {:ok, answer} ->
+        {:ok, MeaningGame.Keeper.Author.page(answer.json, chapter, give, answer)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp grade_live(role, anchors, left, right, prompt_version) do
     [forward, reverse] =
       [{left, right}, {right, left}]

@@ -257,6 +257,26 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, :bridge_required} = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "  ")
     end
 
+    test "an accidental rule break does not cost an attempt or commit", ctx do
+      assert {:error, {:illegal_bridge, "\"lanterns\" shares a root with \"lantern\"."}} =
+               Rooms.commit_bridge(ctx.slug, ctx.mara.id, "lanterns")
+
+      assert {:error, {:illegal_bridge, "\"xyzzyq\" is not in the dictionary."}} =
+               Rooms.commit_bridge(ctx.slug, ctx.mara.id, "xyzzyq")
+
+      assert {:error, {:illegal_bridge, "Not in this Room."}} =
+               Rooms.commit_bridge(ctx.slug, ctx.mara.id, "damn")
+
+      # Mara's seat is still uncommitted and attempt is still 1
+      snapshot = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert snapshot.phase == :bridging
+      assert snapshot.your_bridge == nil
+      assert snapshot.attempt.number == 1
+
+      # A legal bridge succeeds
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "beacon")
+    end
+
     test "an Assayer that falls over is a Page that still reveals", ctx do
       keeper(mode: :raise)
 
@@ -346,7 +366,11 @@ defmodule MeaningGame.RoomsTest do
 
     test "says it is still reading, and then that it is still nothing", ctx do
       assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
-      assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :provisional end)
+
+      assert eventually(fn ->
+               snap = Rooms.snapshot(ctx.slug, nil)
+               snap.assayer_step == :provisional and snap.provisional_band != nil
+             end)
     end
 
     test "gives up at the last rung and hands the ruling to the players", ctx do
@@ -355,6 +379,7 @@ defmodule MeaningGame.RoomsTest do
       assert view.reveal.closeness == nil
       assert view.reveal.melded? == false
       refute hd(view.reveal.pairs).graded?
+      assert hd(view.reveal.pairs).quip != nil
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
 
       # The wait is over, so nothing on any screen is still narrating it.
@@ -635,6 +660,47 @@ defmodule MeaningGame.RoomsTest do
       assert [overrule] = MeaningGame.Chronicle.overrules(room.id)
       assert overrule.machine_closeness == 0
       assert overrule.couple_closeness == 100
+    end
+  end
+
+  describe "authored pool in Room lifecycle" do
+    test "draws next Page from authored pool and refuses to repeat when exhausted" do
+      {:ok, _page} =
+        MeaningGame.Pages.insert_page(%{
+          id: "P-POOL-1",
+          chapter: "room pool chapter",
+          theme: "room pool chapter",
+          give: nil,
+          anchors: ["candle", "shadow"],
+          bait: "flame",
+          deep_bridges: ["glow", "darkness"],
+          likely_bridges: ["flame", "glow", "darkness", "wax"],
+          why_these: "Candle and shadow invite flame.",
+          band_scripts: %{
+            "miss" => "Lost in dark.",
+            "adjacent" => "Near the light.",
+            "near" => "In the glow.",
+            "meld" => "Two minds at the flame.",
+            "deep_meld" => "Deep shadow."
+          },
+          meta: %{model: "fake", attempts: 1, cost_usd: 0.0}
+        })
+
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      # First page of room was drawn from pool
+      snapshot = Rooms.snapshot(slug, mara.id)
+      assert snapshot.anchors == ["candle", "shadow"]
+
+      # Play through to meld it
+      :ok = Rooms.commit_bridge(slug, mara.id, "flame")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "flame")
+      await_reveal(slug)
+
+      # Next page call refuses to repeat because pool is drained
+      assert {:error, :pool_exhausted} = Rooms.next_page(slug, mara.id)
     end
   end
 

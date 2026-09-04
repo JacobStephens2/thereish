@@ -80,7 +80,7 @@ defmodule MeaningGame.Rooms.Server do
 
     with {:ok, room} <- Store.get_or_create_room(slug, seat_limit) do
       seats = Store.list_seats(room.id)
-      game = Game.init(seat_limit: room.seat_limit, seats: seats, page: Pages.first())
+      game = Game.init(seat_limit: room.seat_limit, seats: seats, page: Pages.first(room.id))
 
       state = %{
         room: room,
@@ -147,14 +147,32 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
-  # A fresh Page starts the Room's clock again, because how long a Page took is
-  # a fact about that Page and the Game keeps no clock of its own.
   def handle_call({:next_page, seat_id}, _from, state) do
-    event = {:page_started, %{seat_id: seat_id, page: Pages.next(state.game.page.id)}}
+    view = Game.view(state.game, seat_id)
 
-    case Game.apply(state.game, event) do
-      {:ok, game, effects} -> {:reply, :ok, advance(%{state | opened_at: nil}, game, effects)}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+    cond do
+      is_nil(view.you) ->
+        {:reply, {:error, :no_such_seat}, state}
+
+      view.phase != :closed ->
+        {:reply, {:error, :page_open}, state}
+
+      true ->
+        case Pages.next(state.game.page.id, state.room.id) do
+          {:ok, next_page} ->
+            event = {:page_started, %{seat_id: seat_id, page: next_page}}
+
+            case Game.apply(state.game, event) do
+              {:ok, game, effects} ->
+                {:reply, :ok, advance(%{state | opened_at: nil}, game, effects)}
+
+              {:error, reason} ->
+                {:reply, {:error, reason}, state}
+            end
+
+          {:error, :pool_exhausted} = error ->
+            {:reply, error, state}
+        end
     end
   end
 
@@ -162,7 +180,13 @@ defmodule MeaningGame.Rooms.Server do
   # has been thinking. It is the Room's to answer because it is made of time,
   # and the Game keeps no clock.
   def handle_call({:snapshot, viewer}, _from, state) do
-    {:reply, Map.put(Game.view(state.game, viewer), :assayer_step, step(state)), state}
+    view =
+      state.game
+      |> Game.view(viewer)
+      |> Map.put(:assayer_step, step(state))
+      |> Map.put(:provisional_band, provisional_band(state))
+
+    {:reply, view, state}
   end
 
   # A verdict that arrives during the beat waits it out. The players were
@@ -376,6 +400,26 @@ defmodule MeaningGame.Rooms.Server do
   # answered — a Page still in its beat is a Page whose grade is in.
   defp step(%{assayer: nil}), do: nil
   defp step(%{assayer: %{step: step}}), do: step
+
+  defp provisional_band(%{assayer: %{step: :provisional, outstanding: outstanding}} = state) do
+    with pair when not is_nil(pair) <- Enum.at(outstanding, 0),
+         [seat_a, seat_b] <- pair,
+         left when is_binary(left) <- Map.get(state.game.bridges, seat_a),
+         right when is_binary(right) <- Map.get(state.game.bridges, seat_b) do
+      Pages.provisional_reading(state.game.page, left, right)
+    else
+      _ ->
+        case Map.values(state.game.bridges) do
+          [left, right | _] when is_binary(left) and is_binary(right) ->
+            Pages.provisional_reading(state.game.page, left, right)
+
+          _ ->
+            nil
+        end
+    end
+  end
+
+  defp provisional_band(_state), do: nil
 
   defp pair({_kind, %{pair: pair}}), do: pair
 

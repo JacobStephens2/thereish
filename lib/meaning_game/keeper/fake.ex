@@ -33,6 +33,35 @@ defmodule MeaningGame.Keeper.Fake do
     end
   end
 
+  @impl true
+  def author(chapter, opts \\ []) do
+    give = Keyword.get(opts, :give)
+
+    json = %{
+      "theme" => chapter,
+      "anchors" => ["backyard", "weekend"],
+      "bait" => "barbecue",
+      "deep_bridges" => ["lawnmower", "chores"],
+      "likely_bridges" => ["barbecue", "lawnmower", "chores", "family", "party"],
+      "why_these" => "The backyard and weekend anchors invite barbecue as the immediate trap.",
+      "band_scripts" => %{
+        "miss" => "Different neighbourhoods entirely.",
+        "adjacent" => "On the same block, across the street.",
+        "near" => "In the same backyard.",
+        "meld" => "You both saw the grill.",
+        "deep_meld" => "Two minds at the mower."
+      }
+    }
+
+    {:ok,
+     MeaningGame.Keeper.Author.page(json, chapter, give, %{
+       model: "fake-author",
+       attempts: 1,
+       cost_usd: 0.0,
+       latency_ms: 0
+     })}
+  end
+
   defp grade(left, right) do
     shared = shared_prefix(left, right)
     closeness = round(200 * shared / (String.length(left) + String.length(right)))

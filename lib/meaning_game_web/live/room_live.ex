@@ -39,6 +39,7 @@ defmodule MeaningGameWeb.RoomLive do
      |> assign(:name, "")
      |> assign(:error, nil)
      |> assign(:bridge_error, nil)
+     |> assign(:page_error, nil)
      |> assign(:seat, seat_for_device(slug, device_token))
      |> resync()}
   end
@@ -52,6 +53,23 @@ defmodule MeaningGameWeb.RoomLive do
       {:error, reason} ->
         {:noreply, assign(socket, name: name, error: message(reason))}
     end
+  end
+
+  def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
+    anchors = (socket.assigns.room && socket.assigns.room.anchors) || []
+    trimmed = String.trim(bridge)
+
+    error =
+      if trimmed == "" do
+        nil
+      else
+        case MeaningGame.Keeper.Legality.check_bridge(trimmed, anchors) do
+          :ok -> nil
+          {:illegal, why} -> why
+        end
+      end
+
+    {:noreply, assign(socket, :bridge_error, error)}
   end
 
   def handle_event("commit_bridge", %{"bridge" => bridge}, socket) do
@@ -71,9 +89,13 @@ defmodule MeaningGameWeb.RoomLive do
   end
 
   def handle_event("next_page", _params, socket) do
-    Rooms.next_page(socket.assigns.slug, socket.assigns.seat.id)
+    case Rooms.next_page(socket.assigns.slug, socket.assigns.seat.id) do
+      :ok ->
+        {:noreply, socket |> assign(:page_error, nil) |> resync()}
 
-    {:noreply, resync(socket)}
+      {:error, reason} ->
+        {:noreply, assign(socket, :page_error, message(reason))}
+    end
   end
 
   def handle_event("propose_overrule", _params, socket) do
@@ -122,6 +144,9 @@ defmodule MeaningGameWeb.RoomLive do
   defp message(:already_committed), do: "That one is committed. No taking it back."
   defp message(:not_bridging), do: "Too late for this one."
   defp message(:no_such_seat), do: "You are not in this Room any more. Reload."
+  defp message({:illegal_bridge, reason}), do: reason
+  defp message(:pool_exhausted), do: "That's every Page for tonight."
+  defp message(_), do: "Something went wrong. Try again."
 
   defp chronicle_path(slug) do
     if slug == Rooms.default_slug(), do: ~p"/chronicle", else: ~p"/r/#{slug}/chronicle"
@@ -163,6 +188,7 @@ defmodule MeaningGameWeb.RoomLive do
         :if={@seat && @room.phase == :bridging && @room.your_bridge == nil}
         id="bridge-form"
         data-role="bridge-form"
+        phx-change="validate_bridge"
         phx-submit="commit_bridge"
         class="flex flex-col gap-2"
       >
@@ -213,7 +239,8 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.ending room={@room} />
 
-      <div :if={@seat && @room.phase == :closed} class="flex justify-center">
+      <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
+        <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>
         <.button phx-click="next_page" data-role="one-more" variant="primary">One more?</.button>
       </div>
 

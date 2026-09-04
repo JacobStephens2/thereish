@@ -50,6 +50,10 @@ defmodule MeaningGame.Keeper.Gate do
 
   defp ask(role, prompt, check, retries_left, spent) do
     case role.provider.complete(request(role, prompt)) do
+      {:ok, %{stop_reason: cap} = response} when cap in ["max_tokens", "length"] ->
+        spent = add(spent, response)
+        {:error, {:max_tokens, "hit the output token cap (stop_reason=#{cap})"}, spent}
+
       {:ok, response} ->
         spent = add(spent, response)
 

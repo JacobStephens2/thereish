@@ -62,8 +62,18 @@ defmodule MeaningGame.Keeper.Provider do
   a provider would be, so that the Keeper's own tests never call anybody and
   never spend anything.
   """
-  @spec http_options() :: keyword()
-  def http_options, do: config(:http_options, [])
+  @spec http_options(module() | nil) :: keyword()
+  def http_options(provider \\ nil) do
+    opts = config(:http_options, [])
+
+    case {provider, opts[:plug]} do
+      {provider, {Req.Test, _}} when not is_nil(provider) ->
+        Keyword.put(opts, :plug, {Req.Test, provider})
+
+      _ ->
+        opts
+    end
+  end
 
   defp prices, do: config(:prices, %{})
 
