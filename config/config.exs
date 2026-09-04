@@ -9,12 +9,32 @@ import Config
 
 config :meaning_game,
   ecto_repos: [MeaningGame.Repo],
-  generators: [timestamp_type: :utc_datetime, binary_id: true],
+  # Microseconds, because insertion order is display order: the roster, the
+  # reveal, and every Chronicle table to come are read in the order the rows
+  # were written, and a second is wide enough for two players to tie in.
+  generators: [timestamp_type: :utc_datetime_usec, binary_id: true],
   # How many Seats a new Room holds. Two is a setting, not an assumption: no
   # rule anywhere is written for a pair rather than for a list (ADR-0007).
   seats_per_room: 2,
   # The Room the bare URL opens, so the couch needs no path to remember.
-  default_room_slug: "couch"
+  default_room_slug: "couch",
+  # The reveal is a fixed beat, not a wait (design law 10). One number for every
+  # grade in v1: whether a harsh grade should be revealed sooner is a question
+  # the couch answers, not one to guess at here.
+  reveal_beat_ms: 2500,
+  # The ladder a closeness is read on. All of it is configuration because all of
+  # it is calibration — the boundaries move as the couple's fairness taps say
+  # they should, and a Meld starts at the floor of the `meld` band.
+  ladder: [
+    scale: 0..100,
+    bands: [miss: 0, adjacent: 30, near: 55, meld: 75, deep_meld: 90]
+  ]
+
+# The one seam to the models. Only the fake is on the other side of it until the
+# live Assayer arrives; `fake` is what makes a verdict slow or absent in a test.
+config :meaning_game, :keeper,
+  adapter: MeaningGame.Keeper.Fake,
+  fake: [delay_ms: 0, mode: :grade]
 
 # Configure the endpoint
 config :meaning_game, MeaningGameWeb.Endpoint,

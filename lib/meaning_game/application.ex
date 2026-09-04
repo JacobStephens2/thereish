@@ -17,6 +17,10 @@ defmodule MeaningGame.Application do
       # for Postgres and for whoever just opened a URL.
       {Registry, keys: :unique, name: MeaningGame.Rooms.Registry},
       {DynamicSupervisor, strategy: :one_for_one, name: MeaningGame.Rooms.Supervisor},
+      # Every call to a model runs in a task of its own, so that an Assayer that
+      # is slow, or that dies, is something the Room waits on rather than
+      # something that happens to it.
+      {Task.Supervisor, name: MeaningGame.Keeper.Tasks},
       # Start to serve requests, typically the last entry
       MeaningGameWeb.Endpoint
     ]

@@ -60,6 +60,26 @@ _Avoid_: answer, guess, submission
 A converged Bridge — the players' Bridges assayed close enough to count as one mind.
 _Avoid_: match, hit, win
 
+**Verdict**:
+What the Assayer says about one pair of Bridges: a Closeness and the reasoning behind it. A pair the Assayer could not grade has no Verdict, which is a thing the game says out loud rather than a zero it invents.
+_Avoid_: result, judgement, ruling (the couple rule; the Assayer only grades)
+
+**Phase**:
+Where a Page has got to — waiting for the Room to fill, bridging, assaying, revealed. It is derived from the state rather than stored in it, so nothing has to remember to advance it.
+_Avoid_: status, step, stage (the laptop is the stage), state
+
+**Closeness**:
+How near two Bridges landed to each other, on the Ladder's scale. Every unordered pair of Seats gets one; a Page's headline number is the mean across the pairs.
+_Avoid_: score, similarity, distance, rating
+
+**Ladder**:
+The scale a Closeness is read on and the bands it is read into — miss, adjacent, near, meld, deep meld. A Meld starts at the floor of the meld band. Boundaries are configuration, because every one of them is a calibration question the couch answers; the wording that dresses a band is the Assayer's.
+_Avoid_: scale (on its own), rubric, tiers, grade bands
+
+**Beat**:
+The fixed pause between the last Bridge committed and the reveal. It is theatre, not a wait: the Assayer grades during it, and a verdict that lands early is held until it is over.
+_Avoid_: delay, loading, spinner, timeout
+
 **Bait**:
 The obvious Bridge the Author plants; converging on it is a Meld on the lowest rung.
 _Avoid_: decoy (the clover's word), trap, red herring

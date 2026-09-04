@@ -14,7 +14,20 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
   defp join(view, name), do: view |> form("form", %{"name" => name}) |> render_submit()
 
+  defp commit(view, bridge) do
+    view |> form("[data-role=bridge-form]", %{"bridge" => bridge}) |> render_submit()
+  end
+
   defp phone(slug), do: build_conn() |> get(~p"/r/#{slug}")
+
+  # The reveal arrives on its own time — a beat, then a verdict — so a view
+  # waits for it here the way a phone on the couch does.
+  defp await_reveal(view) do
+    eventually(
+      fn -> has_element?(view, "[data-role=reveal]") && render(view) end,
+      "the reveal never arrived on this view"
+    )
+  end
 
   # Just the page, without LiveView's own wrapper, whose session tokens are new
   # on every connection and say nothing about what the player sees.
@@ -146,6 +159,108 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "playing a Page" do
+    setup do
+      slug = open_room()
+      melissa_conn = get(build_conn(), ~p"/r/#{slug}")
+      {:ok, melissa, _} = live(melissa_conn)
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      %{slug: slug, melissa: melissa, melissa_conn: melissa_conn, jacob: jacob, stage: stage}
+    end
+
+    test "the Anchors are up on both phones and the stage", ctx do
+      for view <- [ctx.melissa, ctx.jacob, ctx.stage] do
+        assert has_element?(view, "[data-role=anchors]", "lantern")
+        assert has_element?(view, "[data-role=anchors]", "harbour")
+      end
+    end
+
+    test "a Bridge is written on one phone and seen on none of the others", ctx do
+      commit(ctx.melissa, "cairn")
+
+      assert has_element?(ctx.melissa, "[data-role=your-bridge]", "cairn")
+      refute has_element?(ctx.melissa, "[data-role=bridge-form]")
+
+      refute render(ctx.jacob) =~ "cairn"
+      refute render(ctx.stage) =~ "cairn"
+
+      # What the other phone and the stage are told is that she is done, and
+      # nothing else.
+      for view <- [ctx.jacob, ctx.stage] do
+        assert has_element?(view, "[data-seat][data-committed=true]", "Melissa")
+        assert has_element?(view, "[data-seat][data-committed=false]", "Jacob")
+      end
+
+      assert has_element?(ctx.jacob, "[data-role=bridge-form]")
+    end
+
+    test "the last commit reveals both Bridges, graded, on all three screens", ctx do
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      for view <- [ctx.melissa, ctx.jacob, ctx.stage] do
+        html = await_reveal(view)
+
+        assert html =~ "cairn"
+        assert html =~ "cairo"
+        assert has_element?(view, "[data-role=closeness]", "80")
+        assert has_element?(view, "[data-role=band]", "meld")
+        assert has_element?(view, "[data-role=reasoning]", "share 4 letters")
+      end
+    end
+
+    test "a miss is graded and said out loud, same as a Meld", ctx do
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "beacon")
+
+      html = await_reveal(ctx.stage)
+
+      assert html =~ "cairn"
+      assert html =~ "beacon"
+      assert has_element?(ctx.stage, "[data-role=closeness]", "0")
+      assert has_element?(ctx.stage, "[data-role=band]", "miss")
+    end
+
+    test "a phone that locked through the reveal wakes into it", ctx do
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+      await_reveal(ctx.stage)
+
+      Process.flag(:trap_exit, true)
+      ref = Process.monitor(ctx.melissa.pid)
+      Process.exit(ctx.melissa.pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, _pid, :killed}
+
+      {:ok, again, html} = live(get(ctx.melissa_conn, ~p"/r/#{ctx.slug}"))
+
+      assert html =~ "cairn"
+      assert has_element?(again, "[data-role=closeness]", "80")
+    end
+
+    test "an empty Bridge is a nudge rather than a commit", ctx do
+      assert commit(ctx.melissa, "   ") =~ "Write a word first."
+      assert has_element?(ctx.melissa, "[data-role=bridge-form]")
+    end
+
+    test "the Assayer having no verdict is said plainly", ctx do
+      keeper(mode: :unavailable)
+
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      html = await_reveal(ctx.stage)
+
+      assert html =~ "cairn"
+      assert html =~ "No verdict"
+      refute has_element?(ctx.stage, "[data-role=closeness]")
+    end
+  end
+
   describe "a URL with no Room behind it" do
     test "is a 404 rather than a Room conjured out of the typo" do
       assert_error_sent 404, fn -> get(build_conn(), "/r/NOT-A-SLUG") end
@@ -154,6 +269,30 @@ defmodule MeaningGameWeb.RoomLiveTest do
   end
 
   describe "the stage" do
+    test "says who melded with whom when there are more than two of them" do
+      slug = open_room(seat_limit: 3)
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      # Melissa and Jacob land on the same word. Ada is somewhere else. Nobody
+      # writes anything until the third of them is in the Room.
+      phones =
+        for {name, bridge} <- [{"Melissa", "cairn"}, {"Jacob", "cairo"}, {"Ada", "beacon"}] do
+          {:ok, view, _} = live(phone(slug))
+          join(view, name)
+          {view, bridge}
+        end
+
+      for {view, bridge} <- phones, do: commit(view, bridge)
+
+      await_reveal(stage)
+
+      assert has_element?(stage, "[data-role=pair][data-melded=true]", "Melissa + Jacob")
+      refute has_element?(stage, "[data-role=pair][data-melded=true]", "Ada")
+      assert has_element?(stage, "[data-role=pair][data-melded=false]", "Ada")
+      # One pair out of three melding is not the Page melding.
+      assert has_element?(stage, "[data-role=band]", "miss")
+    end
+
     test "shows the URL a phone should open" do
       slug = open_room()
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
