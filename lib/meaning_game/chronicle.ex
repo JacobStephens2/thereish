@@ -3,8 +3,8 @@ defmodule MeaningGame.Chronicle do
   The record of everything played, written once and never rewritten.
 
   A Page arrives here when it closes, as the whole thing at once: the authored
-  document, every attempt in order, what each Seat wrote on each, and what the
-  Assayer said about each pair. Nothing here updates a row and nothing deletes
+  document, every attempt in order, what each Seat wrote on each, and the one
+  Verdict the Assayer gave those Bridges read together (ADR-0010). Nothing here updates a row and nothing deletes
   one — the log is the version history (ADR-0003), which is why the couple
   correcting the record later will be another row rather than an edit to this
   one.
@@ -563,6 +563,9 @@ defmodule MeaningGame.Chronicle do
               "  Attempt #{attempt.number}: #{bridges_str}. Verdict: #{single.closeness}#{band_str}#{reason_str}"
             ]
 
+          # An attempt written before ADR-0010, when the Assayer answered one
+          # pair at a time. The book is append-only, so those rows are still
+          # read out the way they were written.
           multiple ->
             pair_lines =
               Enum.map(multiple, fn v ->

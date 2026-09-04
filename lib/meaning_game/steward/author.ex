@@ -281,43 +281,37 @@ defmodule MeaningGame.Steward.Author do
   end
 
   @doc """
-  Computes a provisional reading from the Author's likely_bridges table.
+  Computes a provisional reading of an Attempt's Bridges from the Author's
+  likely_bridges table.
+
+  It reads every Bridge together, the way the Assayer does (ADR-0010): all of
+  them the same word is a Meld — a deep one if that word is one the Author
+  planted deep — all of them among the likely Bridges is close, any of them is
+  adjacent, and none is a miss. At two Bridges that is the reading the couch has
+  always had at eight seconds.
   """
-  @spec provisional_reading(map(), String.t(), String.t()) :: atom()
-  def provisional_reading(page, left, right) do
-    left = String.downcase(String.trim(left || ""))
-    right = String.downcase(String.trim(right || ""))
+  @spec provisional_reading(map(), [String.t()]) :: atom()
+  def provisional_reading(page, bridges) when is_list(bridges) do
+    words = Enum.map(bridges, &normalize/1)
 
-    bait = String.downcase(String.trim(page[:bait] || page["bait"] || ""))
-
-    deep =
-      Enum.map(
-        page[:deep_bridges] || page["deep_bridges"] || [],
-        &String.downcase(String.trim(&1))
-      )
-
-    likely =
-      Enum.map(
-        page[:likely_bridges] || page["likely_bridges"] || [],
-        &String.downcase(String.trim(&1))
-      )
+    bait = normalize(page[:bait] || page["bait"])
+    deep = Enum.map(page[:deep_bridges] || page["deep_bridges"] || [], &normalize/1)
+    likely = Enum.map(page[:likely_bridges] || page["likely_bridges"] || [], &normalize/1)
 
     cond do
-      left == right ->
-        cond do
-          left == bait -> :meld
-          left in deep -> :deep_meld
-          true -> :meld
-        end
-
-      left in likely and right in likely ->
-        :close
-
-      left in likely or right in likely ->
-        :adjacent
-
-      true ->
-        :miss
+      words == [] -> :miss
+      match?([_agreed], Enum.uniq(words)) -> agreed_reading(hd(words), bait, deep)
+      Enum.all?(words, &(&1 in likely)) -> :close
+      Enum.any?(words, &(&1 in likely)) -> :adjacent
+      true -> :miss
     end
   end
+
+  # Everyone wrote the same word. The Bait is the Meld the Page was expecting;
+  # a word the Author planted deep is the deeper one.
+  defp agreed_reading(word, bait, deep) do
+    if word != bait and word in deep, do: :deep_meld, else: :meld
+  end
+
+  defp normalize(word), do: (word || "") |> String.trim() |> String.downcase()
 end

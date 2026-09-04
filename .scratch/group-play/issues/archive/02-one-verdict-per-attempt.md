@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (The Assayer reads every Bridge together).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 This is the ruling of ADR-0010 applied to the rules module, the Room process and the reveal. It is the largest ticket; it may be split into rules-only and Room-plus-reveal if one context window is not enough, in which case the rules land first with their tests and the Room follows.
 
@@ -14,13 +14,13 @@ This is the ruling of ADR-0010 applied to the rules module, the Room process and
 
 **The reveal.** The components draw one Verdict: every Bridge card, the climbing number and band, the quip, the reasoning, a line naming the two furthest words, then the fairness taps on phones. Flavour copy is count-aware ("One mind, two heads" at two, four at four). The carry line names the words. The stage draws the same components.
 
-- [ ] The last commit owes exactly one assay carrying every Bridge in roster order, plus the beat
-- [ ] One Verdict reveals for every Seat; the headline is its Closeness; the Page melds when it reaches the meld band
-- [ ] The two furthest words carry forward as the next Anchors; with no Verdict, the first two in roster order carry and the view says so
-- [ ] An overrule needs every Seat in the Room; three of four is not enough; a decline clears the proposal; the overrule rewrites Precedent for the Bridge list
-- [ ] A fairness tap records against the Attempt's Verdict with every Bridge
-- [ ] The Room escalates one slow Verdict to provisional and then to no verdict, and the provisional reading treats "every Bridge" correctly
-- [ ] The reveal on phone and stage shows every Bridge, one number, one band, one quip, one reasoning line, the two furthest words by name, and count-aware copy
-- [ ] The rules tests drive four Seats through commit, reveal, carry, overrule and tap on the projected view; the three-Seat tests are rewritten for one Verdict
-- [ ] The Room tests cover creation of four Seats, one reveal after the beat, escalation, and snapshot-back
-- [ ] Every two-Seat test in the rules, Room and LiveView suites passes with its assertions unchanged
+- [x] The last commit owes exactly one assay carrying every Bridge in roster order, plus the beat
+- [x] One Verdict reveals for every Seat; the headline is its Closeness; the Page melds when it reaches the meld band
+- [x] The two furthest words carry forward as the next Anchors; with no Verdict, the first two in roster order carry and the view says so
+- [x] An overrule needs every Seat in the Room; three of four is not enough; a decline clears the proposal; the overrule rewrites Precedent for the Bridge list
+- [x] A fairness tap records against the Attempt's Verdict with every Bridge
+- [x] The Room escalates one slow Verdict to provisional and then to no verdict, and the provisional reading treats "every Bridge" correctly
+- [x] The reveal on phone and stage shows every Bridge, one number, one band, one quip, one reasoning line, the two furthest words by name, and count-aware copy
+- [x] The rules tests drive four Seats through commit, reveal, carry, overrule and tap on the projected view; the three-Seat tests are rewritten for one Verdict
+- [x] The Room tests cover creation of four Seats, one reveal after the beat, escalation, and snapshot-back
+- [~] Every two-Seat test in the rules, Room and LiveView suites passes with its assertions unchanged — with one exception this ticket's own ruling forces: the two-Seat tests that read `reveal.pairs` had to be rewritten against the one Verdict, because "the `pairs` list in the view goes away". Every other two-Seat test kept its assertions; the helper *call shapes* changed (one closeness rather than a list) but not what they assert.

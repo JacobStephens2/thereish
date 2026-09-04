@@ -62,17 +62,13 @@ defmodule MeaningGameWeb.RoomComponentsTest do
             %{seat_id: "s1", name: "Mara", bridge: "cairn"},
             %{seat_id: "s2", name: "Jacob", bridge: "cairo"}
           ],
-          pairs: [
-            %{
-              seat_ids: ["s1", "s2"],
-              names: ["Mara", "Jacob"],
-              closeness: 80,
-              band: :meld,
-              melded?: true,
-              overruled?: false,
-              quip: "\"cairn\" and \"cairo\" walk into a bar.",
-              reasoning: "They share 4 letters."
-            }
+          graded?: true,
+          overruled?: false,
+          quip: "\"cairn\" and \"cairo\" walk into a bar.",
+          reasoning: "They share 4 letters.",
+          furthest: [
+            %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "cairo"}
           ]
         }
       }
@@ -87,17 +83,13 @@ defmodule MeaningGameWeb.RoomComponentsTest do
             %{seat_id: "s1", name: "Mara", bridge: "cairn"},
             %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
           ],
-          pairs: [
-            %{
-              seat_ids: ["s1", "s2"],
-              names: ["Mara", "Jacob"],
-              closeness: 24,
-              band: :miss,
-              melded?: false,
-              overruled?: false,
-              quip: "\"cairn\" and \"beacon\" have never met.",
-              reasoning: "Different roads entirely."
-            }
+          graded?: true,
+          overruled?: false,
+          quip: "\"cairn\" and \"beacon\" have never met.",
+          reasoning: "Different roads entirely.",
+          furthest: [
+            %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
           ]
         }
       }
@@ -112,18 +104,11 @@ defmodule MeaningGameWeb.RoomComponentsTest do
             %{seat_id: "s1", name: "Mara", bridge: "cairn"},
             %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
           ],
-          pairs: [
-            %{
-              seat_ids: ["s1", "s2"],
-              names: ["Mara", "Jacob"],
-              closeness: nil,
-              band: nil,
-              melded?: false,
-              overruled?: false,
-              quip: nil,
-              reasoning: nil
-            }
-          ]
+          graded?: false,
+          overruled?: false,
+          quip: nil,
+          reasoning: nil,
+          furthest: nil
         }
       }
 
@@ -179,16 +164,13 @@ defmodule MeaningGameWeb.RoomComponentsTest do
             %{seat_id: "s1", name: "Mara", bridge: "cairn"},
             %{seat_id: "s2", name: "Jacob", bridge: "dock"}
           ],
-          pairs: [
-            %{
-              seat_ids: ["s1", "s2"],
-              names: ["Mara", "Jacob"],
-              closeness: 60,
-              band: :close,
-              melded?: false,
-              quip: "Different enough.",
-              reasoning: "Close enough."
-            }
+          graded?: true,
+          overruled?: false,
+          quip: "Different enough.",
+          reasoning: "Close enough.",
+          furthest: [
+            %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "dock"}
           ]
         }
       }
@@ -221,6 +203,37 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ "steps aside" or html =~ "handing over" or html =~ "yields"
     end
 
+    test "the two furthest words are named, with whoever wrote them", %{miss_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="furthest")
+      assert html =~ "cairn (Mara)"
+      assert html =~ "beacon (Jacob)"
+    end
+
+    test "a table that wrote one word has no two ends to name", %{meld_room: room} do
+      agreed =
+        put_in(room.reveal.furthest, [
+          %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+          %{seat_id: "s2", name: "Jacob", bridge: "cairn"}
+        ])
+
+      refute render_component(&reveal/1, room: agreed) =~ ~s(data-role="furthest")
+    end
+
+    test "the flavour counts the heads at the table", %{meld_room: room} do
+      four =
+        put_in(room.reveal.bridges, [
+          %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+          %{seat_id: "s2", name: "Jacob", bridge: "cairo"},
+          %{seat_id: "s3", name: "Ada", bridge: "cairns"},
+          %{seat_id: "s4", name: "Ida", bridge: "cairo"}
+        ])
+
+      assert render_component(&reveal/1, room: four) =~ "One mind, four heads"
+      assert render_component(&reveal/1, room: room) =~ "One mind, two heads"
+    end
+
     test "stage and phone show complementary perspectives", %{meld_room: room} do
       seat = %{id: "s1", name: "Mara"}
 
@@ -233,6 +246,27 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       # Stage is public theater
       assert stage_html =~ ~s(data-mode="stage")
       refute stage_html =~ ~s(data-you="true")
+    end
+  end
+
+  describe "the carry line" do
+    test "names the two words the next attempt will hang between" do
+      room = %{phase: :reveal, next_anchors: ["cairn", "beacon"], next_anchors_chosen?: true}
+
+      html = render_component(&carry_forward/1, room: room)
+
+      assert html =~ ~s(data-role="carry-forward")
+      assert html =~ "cairn and beacon"
+      refute html =~ "nobody chose"
+    end
+
+    test "says when the Assayer did not choose them" do
+      room = %{phase: :reveal, next_anchors: ["cairn", "beacon"], next_anchors_chosen?: false}
+
+      html = render_component(&carry_forward/1, room: room)
+
+      assert html =~ "cairn and beacon"
+      assert html =~ "nobody chose"
     end
   end
 end

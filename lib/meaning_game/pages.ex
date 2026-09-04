@@ -255,7 +255,7 @@ defmodule MeaningGame.Pages do
   @doc """
   Computes a provisional reading from the Author's likely_bridges table.
   """
-  defdelegate provisional_reading(page, left, right), to: MeaningGame.Steward.Author
+  defdelegate provisional_reading(page, bridges), to: MeaningGame.Steward.Author
 
   defp pool_has_pages? do
     Repo.exists?(AuthoredPage)

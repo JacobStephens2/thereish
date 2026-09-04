@@ -4,8 +4,9 @@ defmodule MeaningGame.GameTest do
 
   Everything here goes through `init`, `apply` and `view`, because that is all a
   Room has to work with and all a later Page will have either. Where a test
-  needs a pair of Seats to grade, it takes the pair out of the effects the rules
-  emitted rather than assembling one itself — the Room has nothing else either.
+  needs the Bridges that were sent for grading, it takes them out of the effects
+  the rules emitted rather than assembling them itself — the Room has nothing
+  else either.
   """
   use ExUnit.Case, async: true
 
@@ -42,51 +43,52 @@ defmodule MeaningGame.GameTest do
     end)
   end
 
-  defp assays(effects), do: Enum.filter(effects, &match?({:assay, _pair, _request}, &1))
+  defp assays(effects), do: Enum.filter(effects, &match?({:assay, _request}, &1))
 
   defp chronicles(effects), do: Enum.filter(effects, &match?({:chronicle, _entry}, &1))
 
-  # Grades the pairs in the order they were asked for.
-  defp grade(state, effects, closenesses) do
-    {state, _effects} = graded(state, effects, closenesses)
+  # Grades the one assay the last commit asked for.
+  defp grade(state, effects, closeness, furthest \\ nil) do
+    {state, _effects} = graded(state, effects, closeness, furthest)
 
     state
   end
 
-  # The same, keeping what the last verdict left the Room owing — which is
-  # nothing at all unless that verdict was the one that closed the Page.
-  defp graded(state, effects, closenesses) do
-    effects
-    |> assays()
-    |> Enum.zip(closenesses)
-    |> Enum.reduce({state, []}, fn {{:assay, pair, _request}, closeness}, {state, _effects} ->
-      event =
-        {:verdict_received,
-         %{
-           pair: pair,
-           closeness: closeness,
-           reasoning: "because",
-           meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
-         }}
+  # The same, keeping what the verdict left the Room owing — which is nothing at
+  # all unless it was the verdict that closed the Page.
+  #
+  # An Assayer that grades names the two Bridges that landed furthest apart. A
+  # test that does not care which two gets the first two in roster order, which
+  # at two Seats is both of them.
+  defp graded(state, effects, closeness, furthest) do
+    [{:assay, request}] = assays(effects)
 
-      {:ok, state, effects} = Game.apply(state, event)
-      {state, effects}
-    end)
+    event =
+      {:verdict_received,
+       %{
+         closeness: closeness,
+         reasoning: "because",
+         furthest: furthest || Enum.take(request.bridges, 2),
+         meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
+       }}
+
+    {:ok, state, effects} = Game.apply(state, event)
+    {state, effects}
   end
 
   # The whole Page in one line, for tests that are about the reveal rather than
   # the road to it.
-  defp revealed(bridges, closenesses) do
+  defp revealed(bridges, closeness) do
     {state, effects} = commit_all(bridging(), bridges)
-    grade(state, effects, closenesses)
+    grade(state, effects, closeness)
   end
 
   # One attempt played all the way to a graded reveal, handing back whatever the
-  # last verdict left owing.
-  defp attempt(state, bridges, closenesses) do
+  # verdict left owing.
+  defp attempt(state, bridges, closeness, furthest \\ nil) do
     {state, effects} = commit_all(state, bridges)
 
-    graded(state, effects, closenesses)
+    graded(state, effects, closeness, furthest)
   end
 
   defp again(state, name \\ "Mara") do
@@ -110,16 +112,27 @@ defmodule MeaningGame.GameTest do
       state = if n == 1, do: state, else: again(state)
       {w1, w2} = Enum.at(@miss_words, n - 1)
 
-      attempt(state, [{"Mara", w1}, {"Jacob", w2}], [10])
+      attempt(state, [{"Mara", w1}, {"Jacob", w2}], 10)
     end)
   end
 
-  # Three Seats with every Bridge in: the Page that has three pairs to grade.
+  # Three Seats with every Bridge in: three words for the Assayer to read as one
+  # set.
   defp three_committed do
     commit_all(bridging(["Mara", "Jacob", "Ada"]), [
       {"Mara", "cairn"},
       {"Jacob", "beacon"},
       {"Ada", "wharf"}
+    ])
+  end
+
+  # Two couples at a table, every Bridge in: the evening this was built for.
+  defp four_committed do
+    commit_all(bridging(["Mara", "Jacob", "Ada", "Ida"]), [
+      {"Mara", "cairn"},
+      {"Jacob", "beacon"},
+      {"Ada", "wharf"},
+      {"Ida", "signal"}
     ])
   end
 
@@ -289,29 +302,26 @@ defmodule MeaningGame.GameTest do
   end
 
   describe "the last commit" do
-    test "asks for one assay per pair and starts the beat" do
+    test "asks for exactly one assay and starts the beat" do
       {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
 
       assert :beat in effects
-      assert [{:assay, pair, request}] = assays(effects)
-      assert Enum.sort(pair) == pair
-      assert Enum.sort(pair) == Enum.sort(["seat-Mara", "seat-Jacob"])
+      assert [{:assay, request}] = assays(effects)
       assert request.anchors == ["lantern", "harbour"]
 
-      # In roster order, not in the pair key's order. The Assayer writes a
-      # sentence and a joke naming both words, and they should read in the order
-      # the reveal shows them rather than in whatever order two Seat ids happen
-      # to sort in.
+      # In roster order, the order the reveal shows them in, so that the
+      # sentence the Assayer writes and the joke it makes name the words in the
+      # order they are on the screen.
       assert request.bridges == ["cairn", "beacon"]
 
       assert Game.view(state, nil).phase == :assaying
     end
 
-    test "three Seats make three pairs, all asked for at once" do
-      {_state, effects} =
-        three_committed()
+    test "four Seats are still one assay, carrying four Bridges in roster order" do
+      {_state, effects} = four_committed()
 
-      assert length(assays(effects)) == 3
+      assert [{:assay, request}] = assays(effects)
+      assert request.bridges == ["cairn", "beacon", "wharf", "signal"]
     end
 
     test "nothing is asked for until every Seat has committed" do
@@ -335,7 +345,7 @@ defmodule MeaningGame.GameTest do
 
       assert Game.view(state, nil).reveal == nil
 
-      state = grade(state, effects, [60])
+      state = grade(state, effects, 60)
 
       for viewer <- ["seat-Mara", "seat-Jacob", nil] do
         view = Game.view(state, viewer)
@@ -350,114 +360,147 @@ defmodule MeaningGame.GameTest do
     end
 
     test "carries the closeness, the band and the Assayer's reasoning" do
-      view = Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], [78]), nil)
+      view = Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], 78), nil)
 
       assert view.reveal.closeness == 78
       assert view.reveal.band == :meld
       assert view.reveal.melded? == true
-      assert [pair] = view.reveal.pairs
-      assert pair.names == ["Mara", "Jacob"]
-      assert pair.closeness == 78
-      assert pair.reasoning == "because"
-      assert pair.melded? == true
+      assert view.reveal.graded? == true
+      assert view.reveal.reasoning == "because"
     end
 
     test "the meld threshold is where a Meld starts and one under it is not one" do
       threshold = MeaningGame.Ladder.meld_threshold()
 
-      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], [threshold]), nil).reveal.melded?
+      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], threshold), nil).reveal.melded?
 
       refute Game.view(
-               revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], [threshold - 1]),
+               revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], threshold - 1),
                nil
              ).reveal.melded?
     end
 
     test "each band is read at its own floor" do
       for {band, floor} <- MeaningGame.Ladder.bands() do
-        view = Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], [floor]), nil)
+        view = Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], floor), nil)
 
         assert view.reveal.band == band
       end
     end
 
     test "a closeness off the scale is brought back onto it" do
-      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], [140]), nil).reveal.closeness ==
+      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], 140), nil).reveal.closeness ==
                100
 
-      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], [-20]), nil).reveal.closeness ==
+      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], -20), nil).reveal.closeness ==
                0
     end
   end
 
   describe "scoring at N seats" do
     setup do
-      {state, effects} =
-        three_committed()
+      {state, effects} = four_committed()
 
-      %{ungraded: state, effects: effects, state: grade(state, effects, [90, 60, 30])}
+      %{
+        ungraded: state,
+        effects: effects,
+        state: grade(state, effects, 60, ["beacon", "wharf"])
+      }
     end
 
-    test "the headline number is the mean across every pair", %{state: state} do
+    test "one number for the whole table, not one per pair", %{state: state} do
       reveal = Game.view(state, nil).reveal
 
-      assert Enum.map(reveal.pairs, & &1.closeness) == [90, 60, 30]
       assert reveal.closeness == 60
       assert reveal.band == :close
       refute reveal.melded?
+      refute Map.has_key?(reveal, :pairs)
     end
 
-    test "the stage is told who melded with whom", %{state: state} do
-      melded =
-        for pair <- Game.view(state, nil).reveal.pairs, pair.melded?, do: pair.names
+    test "every Bridge is on the reveal, with the name that wrote it", %{state: state} do
+      reveal = Game.view(state, "seat-Ada").reveal
 
-      assert melded == [["Mara", "Jacob"]]
+      assert Enum.map(reveal.bridges, &{&1.name, &1.bridge}) == [
+               {"Mara", "cairn"},
+               {"Jacob", "beacon"},
+               {"Ada", "wharf"},
+               {"Ida", "signal"}
+             ]
     end
 
-    test "the reveal waits for the last pair", ctx do
-      partly_graded = grade(ctx.ungraded, Enum.take(assays(ctx.effects), 2), [90, 60])
+    test "one quip and one sentence of reasoning, however many wrote", %{state: state} do
+      reveal = Game.view(state, nil).reveal
 
-      assert Game.view(partly_graded, nil).phase == :assaying
-      assert Game.view(partly_graded, nil).reveal == nil
+      assert reveal.reasoning == "because"
+      assert is_binary(reveal.quip) or is_nil(reveal.quip)
+    end
+
+    test "the two furthest words are named, and whose they are", %{state: state} do
+      reveal = Game.view(state, nil).reveal
+
+      assert Enum.map(reveal.furthest, &{&1.name, &1.bridge}) == [
+               {"Jacob", "beacon"},
+               {"Ada", "wharf"}
+             ]
+    end
+
+    test "the Page melds when that one number reaches the meld band", ctx do
+      melded = grade(ctx.ungraded, ctx.effects, MeaningGame.Ladder.meld_threshold())
+
+      assert Game.view(melded, nil).reveal.melded?
+      assert Game.view(melded, nil).phase == :closed
+    end
+
+    test "three Seats are one set as well, not three pairs" do
+      {state, effects} = three_committed()
+
+      assert [{:assay, request}] = assays(effects)
+      assert request.bridges == ["cairn", "beacon", "wharf"]
+
+      reveal = Game.view(grade(state, effects, 45, ["cairn", "wharf"]), nil).reveal
+
+      assert reveal.closeness == 45
+      assert length(reveal.bridges) == 3
+      assert Enum.map(reveal.furthest, & &1.name) == ["Mara", "Ada"]
+    end
+
+    test "the reveal waits for the Verdict", ctx do
+      assert Game.view(ctx.ungraded, nil).phase == :assaying
+      assert Game.view(ctx.ungraded, nil).reveal == nil
     end
   end
 
   describe "a verdict that never comes" do
     test "the Page still reveals, with no number and no Meld" do
-      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
-      [{:assay, pair, _request}] = assays(effects)
+      {state, _effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
 
-      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{pair: pair}})
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
       reveal = Game.view(state, nil).reveal
 
       assert Game.view(state, nil).phase == :reveal
       assert reveal.closeness == nil
       assert reveal.band == nil
       assert reveal.melded? == false
-      assert [pair_view] = reveal.pairs
-      refute pair_view.graded?
+      refute reveal.graded?
       assert Enum.map(reveal.bridges, & &1.bridge) == ["cairn", "beacon"]
     end
 
-    test "one ungraded pair does not cost the others their number" do
-      {state, effects} =
-        three_committed()
+    test "at four Seats it is one absence rather than six" do
+      {state, _effects} = four_committed()
 
-      [first | rest] = assays(effects)
-      state = grade(state, rest, [60, 30])
-      {:assay, pair, _request} = first
-      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{pair: pair}})
-
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
       reveal = Game.view(state, nil).reveal
 
-      assert reveal.closeness == 45
-      assert Enum.map(reveal.pairs, & &1.graded?) == [false, true, true]
+      refute reveal.graded?
+      assert reveal.closeness == nil
+      assert reveal.furthest == nil
+      assert length(reveal.bridges) == 4
     end
   end
 
   describe "a miss carries forward" do
     test "the two failed Bridges become the next attempt's Anchors" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
       assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
 
@@ -476,13 +519,13 @@ defmodule MeaningGame.GameTest do
     end
 
     test "the Page keeps the Anchors it was authored with" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
       assert again(state).page.anchors == ["lantern", "harbour"]
     end
 
     test "the attempt that was played is kept, so the arc can be read at the end" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
       assert [first] = Game.view(again(state), nil).played
       assert first.number == 1
@@ -492,32 +535,40 @@ defmodule MeaningGame.GameTest do
       assert first.band == :miss
     end
 
-    test "at three Seats it is the pair that missed by the most" do
-      {state, effects} = three_committed()
-      state = grade(state, effects, [90, 60, 30])
+    test "at four Seats it is the two the Assayer named, whoever wrote them" do
+      {state, effects} = four_committed()
+      state = grade(state, effects, 30, ["beacon", "signal"])
 
-      # Mara + Jacob 90, Mara + Ada 60, Jacob + Ada 30. The widest gap is
-      # the one worth asking them to bridge, and Mara's Bridge is not in it.
-      assert Game.view(state, nil).next_anchors == ["beacon", "wharf"]
-      assert Game.view(again(state), nil).anchors == ["beacon", "wharf"]
+      # The Assayer read four words together and said these two are the ends of
+      # the table. Nothing here recomputes that.
+      assert Game.view(state, nil).next_anchors == ["beacon", "signal"]
+      assert Game.view(state, nil).next_anchors_chosen? == true
+      assert Game.view(again(state), nil).anchors == ["beacon", "signal"]
     end
 
-    test "a pair the Assayer could not grade is not the widest gap" do
-      {state, effects} = three_committed()
-      [first | rest] = assays(effects)
-      {:assay, pair, _request} = first
-      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{pair: pair}})
-      state = grade(state, rest, [60, 30])
+    test "with no Verdict the first two in roster order carry, and the view says so" do
+      {state, _effects} = four_committed()
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
 
-      # An unknown is not a miss, so the ungraded Mara + Jacob pair loses to
-      # the graded 30.
-      assert Game.view(state, nil).next_anchors == ["beacon", "wharf"]
+      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_anchors_chosen? == false
+      assert Game.view(again(state), nil).anchors == ["cairn", "beacon"]
+    end
+
+    test "a word nobody wrote is no choice: the roster carries, and the view says so" do
+      {state, effects} = four_committed()
+      state = grade(state, effects, 30, ["beacon", "lighthouse"])
+
+      # "lighthouse" is a paraphrase of nobody's Bridge. Sending the table to an
+      # Anchor none of them wrote would be a Page they were never asked to play.
+      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_anchors_chosen? == false
+      assert Game.view(state, nil).reveal.furthest == nil
     end
 
     test "a Page nobody could grade at all still carries something forward" do
-      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
-      [{:assay, pair, _request}] = assays(effects)
-      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{pair: pair}})
+      {state, _effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
 
       assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
       assert Game.view(again(state), nil).anchors == ["cairn", "beacon"]
@@ -538,7 +589,7 @@ defmodule MeaningGame.GameTest do
     end
 
     test "only a Seat in this Room may start the next attempt" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
       assert {:error, :no_such_seat} =
                Game.apply(state, {:attempt_advanced, %{seat_id: "seat-Ada"}})
@@ -547,7 +598,7 @@ defmodule MeaningGame.GameTest do
 
   describe "a Page closes" do
     test "the moment a Meld lands, however many attempts were left" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], [80])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], 80)
 
       for viewer <- ["seat-Mara", "seat-Jacob", nil] do
         view = Game.view(state, viewer)
@@ -604,10 +655,10 @@ defmodule MeaningGame.GameTest do
 
   describe "the Chronicle is owed a closed Page" do
     test "with every attempt, every Bridge and every verdict on it" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
       {_state, effects} =
-        attempt(again(state), [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], [82])
+        attempt(again(state), [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], 82)
 
       assert [{:chronicle, entry}] = chronicles(effects)
       assert entry.page == @page
@@ -633,6 +684,7 @@ defmodule MeaningGame.GameTest do
       assert [verdict] = second.verdicts
       assert verdict.names == ["Mara", "Jacob"]
       assert verdict.bridges == ["wharf", "wharfinger"]
+      assert verdict.furthest == ["wharf", "wharfinger"]
       assert verdict.seat_ids == ["seat-Mara", "seat-Jacob"]
       assert verdict.graded? == true
       assert verdict.closeness == 82
@@ -654,22 +706,22 @@ defmodule MeaningGame.GameTest do
     end
 
     test "and a verdict that never came is a row rather than a gap" do
-      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
-      [{:assay, pair, _request}] = assays(effects)
-      state = again(elem(Game.apply(state, {:verdict_unavailable, %{pair: pair}}), 1))
+      {state, _effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+      state = again(elem(Game.apply(state, {:verdict_unavailable, %{}}), 1))
 
-      {_state, effects} = attempt(state, [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], [82])
+      {_state, effects} = attempt(state, [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], 82)
 
       assert [{:chronicle, entry}] = chronicles(effects)
       assert [first, _second] = entry.attempts
       assert [verdict] = first.verdicts
       assert verdict.graded? == false
       assert verdict.closeness == nil
+      assert verdict.furthest == nil
       assert verdict.bridges == ["cairn", "beacon"]
     end
 
     test "and nothing is owed while the Page is still open" do
-      {_state, effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      {_state, effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
       assert chronicles(effects) == []
     end
@@ -677,7 +729,7 @@ defmodule MeaningGame.GameTest do
 
   describe "one more?" do
     setup do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], [80])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], 80)
 
       %{closed: state}
     end
@@ -700,7 +752,7 @@ defmodule MeaningGame.GameTest do
     end
 
     test "cannot take a Page away from the couple in the middle of one" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
       next = %{id: "test-page-2", anchors: ["desert", "mirror"]}
 
       assert {:error, :page_open} =
@@ -721,29 +773,28 @@ defmodule MeaningGame.GameTest do
   describe "a verdict is a ruling, not a suggestion" do
     test "the grade that landed first is the grade that stands" do
       {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
-      graded = grade(state, effects, [78])
-      [{:assay, pair, _request}] = assays(effects)
+      graded = grade(state, effects, 78)
 
       second_thought =
-        {:verdict_received, %{pair: pair, closeness: 12, reasoning: "on reflection"}}
+        {:verdict_received, %{closeness: 12, reasoning: "on reflection", furthest: []}}
 
       assert {:ok, ^graded, []} = Game.apply(graded, second_thought)
       assert Game.view(graded, nil).reveal.closeness == 78
     end
 
-    test "a verdict for a pair this Room does not have is refused" do
-      {state, _effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+    test "a verdict for an attempt the Page has moved on from is refused" do
+      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+      moved_on = again(grade(state, effects, 10))
 
-      event = {:verdict_received, %{pair: ["seat-Ada", "seat-Zoe"], closeness: 90, reasoning: ""}}
+      late = {:verdict_received, %{closeness: 90, reasoning: "at last", furthest: []}}
 
-      assert {:error, :no_verdict_expected} = Game.apply(state, event)
+      assert {:error, :no_verdict_expected} = Game.apply(moved_on, late)
     end
 
     test "a verdict for a Page whose Bridges are not all in is refused" do
       {:ok, state, []} = commit(bridging(), "Mara", "cairn")
 
-      pair = Enum.sort(["seat-Mara", "seat-Jacob"])
-      event = {:verdict_received, %{pair: pair, closeness: 90, reasoning: ""}}
+      event = {:verdict_received, %{closeness: 90, reasoning: "", furthest: []}}
 
       assert {:error, :no_verdict_expected} = Game.apply(state, event)
     end
@@ -752,10 +803,7 @@ defmodule MeaningGame.GameTest do
   describe "overruling a grade" do
     setup do
       {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
-      revealed = grade(state, effects, [41])
-      pair = hd(assays(effects)) |> elem(1)
-
-      %{revealed: revealed, pair: pair}
+      %{revealed: grade(state, effects, 41)}
     end
 
     test "any Seat can propose an overrule from the reveal", ctx do
@@ -811,7 +859,7 @@ defmodule MeaningGame.GameTest do
       view = Game.view(agreed, nil)
       assert view.reveal.closeness == 100
       assert view.reveal.melded?
-      assert view.reveal.pairs |> hd() |> Map.get(:overruled?)
+      assert view.reveal.overruled?
       assert view.phase == :closed
       assert view.closed == %{because: :meld, attempt: 1}
       assert view.overrule == nil
@@ -844,9 +892,9 @@ defmodule MeaningGame.GameTest do
       refute view.reveal.melded?
     end
 
-    test "a three-Seat Room needs all three Seats to agree" do
-      {state, effects} = three_committed()
-      revealed = grade(state, effects, [40, 30, 20])
+    test "a four-Seat Room needs all four Seats to agree, and three is not enough" do
+      {state, effects} = four_committed()
+      revealed = grade(state, effects, 30)
 
       assert {:ok, p1, []} =
                Game.apply(revealed, {:overrule_proposed, %{seat_id: "seat-Mara"}})
@@ -854,19 +902,38 @@ defmodule MeaningGame.GameTest do
       assert Game.view(p1, nil).reveal.closeness == 30
       assert Game.view(p1, nil).overrule.pending?
 
-      # Second seat agrees: 2 of 3, still pending!
-      assert {:ok, p2, []} =
-               Game.apply(p1, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+      # Two of four, then three of four: still the machine's number.
+      assert {:ok, p2, []} = Game.apply(p1, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+      assert {:ok, p3, []} = Game.apply(p2, {:overrule_agreed, %{seat_id: "seat-Ada"}})
 
-      assert Game.view(p2, nil).reveal.closeness == 30
-      assert Game.view(p2, nil).overrule.pending?
+      assert Game.view(p3, nil).reveal.closeness == 30
+      assert Game.view(p3, nil).overrule.pending?
 
-      # Third seat agrees: 3 of 3, now takes effect!
+      # The fourth agrees, and the table has ruled.
       assert {:ok, agreed, effects} =
-               Game.apply(p2, {:overrule_agreed, %{seat_id: "seat-Ada"}})
+               Game.apply(p3, {:overrule_agreed, %{seat_id: "seat-Ida"}})
 
       assert Game.view(agreed, nil).overrule == nil
-      assert Enum.any?(effects, &match?({:overrule, _}, &1))
+      assert Game.view(agreed, nil).reveal.closeness == 100
+      assert Game.view(agreed, nil).reveal.overruled?
+
+      # The Precedent it rewrites is the one for the whole Bridge list.
+      assert {:overrule, overrule} = Enum.find(effects, &match?({:overrule, _}, &1))
+      assert overrule.bridges == ["cairn", "beacon", "wharf", "signal"]
+    end
+
+    test "a declined proposal clears it and leaves the grade alone at four Seats" do
+      {state, effects} = four_committed()
+      revealed = grade(state, effects, 30)
+
+      {:ok, proposed, []} =
+        Game.apply(revealed, {:overrule_proposed, %{seat_id: "seat-Mara"}})
+
+      assert {:ok, declined, []} =
+               Game.apply(proposed, {:overrule_declined, %{seat_id: "seat-Ida"}})
+
+      assert Game.view(declined, nil).overrule == nil
+      assert Game.view(declined, nil).reveal.closeness == 30
     end
 
     test "the proposal expires cleanly if the Page moves on", ctx do
@@ -891,7 +958,7 @@ defmodule MeaningGame.GameTest do
       {state, effects} =
         commit_all(bridging(), [{"Mara", "dock"}, {"Jacob", "wharf"}])
 
-      revealed = grade(state, effects, [62])
+      revealed = grade(state, effects, 62)
       %{revealed: revealed}
     end
 
@@ -959,6 +1026,22 @@ defmodule MeaningGame.GameTest do
                Game.apply(ctx.revealed, {:attempt_advanced, %{seat_id: "seat-Jacob"}})
 
       assert Game.view(advanced, "seat-Mara").attempt.number == 2
+    end
+
+    test "at four Seats the tap records the one grade and every Bridge under it" do
+      {state, effects} = four_committed()
+      revealed = grade(state, effects, 45)
+
+      assert {:ok, _tapped, [{:fairness_tap, tap}]} =
+               Game.apply(
+                 revealed,
+                 {:fairness_tapped, %{seat_id: "seat-Ida", label: "too_harsh"}}
+               )
+
+      assert tap.bridges == ["cairn", "beacon", "wharf", "signal"]
+      assert tap.grade == 45
+      assert tap.band == "adjacent"
+      assert tap.label == "too_harsh"
     end
 
     test "cannot tap when not revealed" do

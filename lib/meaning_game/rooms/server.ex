@@ -20,18 +20,17 @@ defmodule MeaningGame.Rooms.Server do
 
   ## It owns time, and the rules do not
 
-  The rules answer the last commit with two things owed: an assay for every pair
-  of Seats, and a beat. This process performs both — a Task each for the
-  Assayer, a timer for the beat — and holds every verdict that comes back until
-  the beat is over. That is the whole of the reveal's theatre, and it is why the
-  Game itself can be driven in a test as a list of events with no clock in
-  sight.
+  The rules answer the last commit with two things owed: one assay carrying
+  every Bridge, and a beat. This process performs both — a Task for the Assayer,
+  a timer for the beat — and holds the verdict that comes back until the beat is
+  over. That is the whole of the reveal's theatre, and it is why the Game itself
+  can be driven in a test as a list of events with no clock in sight.
 
   A verdict is never waited on inline. The Room stays answerable while the
   Assayer thinks, because a phone asking what it missed must not be stuck behind
   a model. An Assayer that raises or exits is a verdict the game does not have,
-  which is a rule it already knows: the pair goes ungraded and the call goes to
-  the players.
+  which is a rule it already knows: the Attempt goes ungraded and the call goes
+  to the players.
 
   ## An Assayer that is slow, rather than absent
 
@@ -39,7 +38,7 @@ defmodule MeaningGame.Rooms.Server do
   seconds, a provisional reading at eight, and at ten the game states it has no
   verdict. This process runs that ladder, because it is made of time. Each step
   moves what every screen says; the last one is not a step but the end of the
-  wait — the pairs still outstanding are recorded as ungraded and the call goes
+  wait — the Verdict still outstanding is recorded as absent and the call goes
   to the couple, which is design law 3's joint authority arriving by the back
   door rather than an invented number.
 
@@ -288,7 +287,7 @@ defmodule MeaningGame.Rooms.Server do
   # this Assayer has answered.
   @impl true
   def handle_info({:assayed, event}, state) do
-    state = answered(state, pair(event))
+    state = answered(state)
 
     if state.beat do
       {:noreply, %{state | held: state.held ++ [event]}}
@@ -301,14 +300,12 @@ defmodule MeaningGame.Rooms.Server do
     {:noreply, apply_events(%{state | beat: nil, held: []}, state.held)}
   end
 
-  # Ten seconds is where the game stops waiting and says so. Every pair still
-  # outstanding is recorded as ungraded, which the rules already answer by
-  # revealing without a number and handing the ruling to the couple. A verdict
-  # that turns up afterwards changes nothing: a pair is graded once.
-  def handle_info({:escalate, :unavailable}, %{assayer: %{outstanding: outstanding}} = state) do
-    events = Enum.map(outstanding, &{:verdict_unavailable, %{pair: &1}})
-
-    {:noreply, apply_events(%{state | assayer: nil}, events)}
+  # Ten seconds is where the game stops waiting and says so. The Verdict is
+  # recorded as absent, which the rules already answer by revealing without a
+  # number and handing the ruling to the couple. A verdict that turns up
+  # afterwards changes nothing: an Attempt is graded once.
+  def handle_info({:escalate, :unavailable}, %{assayer: %{}} = state) do
+    {:noreply, apply_events(%{state | assayer: nil}, [{:verdict_unavailable, %{}}])}
   end
 
   def handle_info({:escalate, step}, %{assayer: assayer} = state) when assayer != nil do
@@ -496,50 +493,33 @@ defmodule MeaningGame.Rooms.Server do
       state
   end
 
-  defp perform({:assay, pair, request}, state) do
+  defp perform({:assay, request}, state) do
     room = self()
     arm = state[:current_arm] || :bait
     page = state.game.page
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
-      send(room, {:assayed, verdict_event(pair, assay(request, page, arm))})
+      send(room, {:assayed, verdict_event(assay(request, page, arm))})
     end)
 
-    waiting_on(state, pair)
+    waiting_on(state)
   end
 
-  # The ladder starts with the first pair the Assayer is asked about and covers
-  # all of them, because what the couple are watching is one reveal rather than
-  # one request.
-  defp waiting_on(%{assayer: nil} = state, pair) do
-    %{
-      state
-      | assayer: %{
-          step: :grading,
-          timer: escalate_after(:grading),
-          outstanding: MapSet.new([pair])
-        }
-    }
+  # One assay per Attempt, so the ladder is armed by the asking and there is
+  # nothing to keep a set of: what the couple are watching is one reveal and it
+  # is now one request.
+  defp waiting_on(state) do
+    %{state | assayer: %{step: :grading, timer: escalate_after(:grading)}}
   end
 
-  defp waiting_on(%{assayer: assayer} = state, pair) do
-    %{state | assayer: %{assayer | outstanding: MapSet.put(assayer.outstanding, pair)}}
-  end
+  # An Assayer that has answered is not slow, however long the beat still has to
+  # run.
+  defp answered(%{assayer: nil} = state), do: state
 
-  # An Assayer that has answered about every pair is not slow, however long the
-  # beat still has to run.
-  defp answered(%{assayer: nil} = state, _pair), do: state
+  defp answered(%{assayer: assayer} = state) do
+    Process.cancel_timer(assayer.timer)
 
-  defp answered(%{assayer: assayer} = state, pair) do
-    outstanding = MapSet.delete(assayer.outstanding, pair)
-
-    if MapSet.size(outstanding) == 0 do
-      Process.cancel_timer(assayer.timer)
-
-      %{state | assayer: nil}
-    else
-      %{state | assayer: %{assayer | outstanding: outstanding}}
-    end
+    %{state | assayer: nil}
   end
 
   defp escalate_after(step) do
@@ -563,27 +543,17 @@ defmodule MeaningGame.Rooms.Server do
   defp step(%{assayer: nil}), do: nil
   defp step(%{assayer: %{step: step}}), do: step
 
-  defp provisional_band(%{assayer: %{step: :provisional, outstanding: outstanding}} = state) do
-    with pair when not is_nil(pair) <- Enum.at(outstanding, 0),
-         [seat_a, seat_b] <- pair,
-         left when is_binary(left) <- Map.get(state.game.bridges, seat_a),
-         right when is_binary(right) <- Map.get(state.game.bridges, seat_b) do
-      Pages.provisional_reading(state.game.page, left, right)
-    else
-      _ ->
-        case Map.values(state.game.bridges) do
-          [left, right | _] when is_binary(left) and is_binary(right) ->
-            Pages.provisional_reading(state.game.page, left, right)
+  # Eight seconds in, the Author's own table reads every Bridge that was written,
+  # in roster order — the same set the Assayer was handed.
+  defp provisional_band(%{assayer: %{step: :provisional}} = state) do
+    bridges = for seat <- state.game.seats, do: Map.get(state.game.bridges, seat.id)
 
-          _ ->
-            nil
-        end
+    if bridges != [] and Enum.all?(bridges, &is_binary/1) do
+      Pages.provisional_reading(state.game.page, bridges)
     end
   end
 
   defp provisional_band(_state), do: nil
-
-  defp pair({_kind, %{pair: pair}}), do: pair
 
   # An Assayer that blows up has failed to grade, which is a thing the game has
   # a rule for. It is not a thing the Room should die of.
@@ -603,13 +573,11 @@ defmodule MeaningGame.Rooms.Server do
   # Room's job. The rules only say that a beat is owed.
   defp beat_ms, do: Application.fetch_env!(:meaning_game, :reveal_beat_ms)
 
-  defp verdict_event(pair, {:ok, verdict}) do
-    {:verdict_received, Map.put(verdict, :pair, pair)}
-  end
+  defp verdict_event({:ok, verdict}), do: {:verdict_received, verdict}
 
   # The Assayer failing is a rule, not an exception: the game says it has no
   # verdict and the call goes to the players.
-  defp verdict_event(pair, {:error, _reason}), do: {:verdict_unavailable, %{pair: pair}}
+  defp verdict_event({:error, _reason}), do: {:verdict_unavailable, %{}}
 
   defp broadcast(slug) do
     Phoenix.PubSub.broadcast(MeaningGame.PubSub, MeaningGame.Rooms.topic(slug), :room_changed)

@@ -150,7 +150,7 @@ defmodule MeaningGame.ChronicleTest do
       assert verdict.model == nil
     end
 
-    test "at three Seats is three verdict rows against one attempt" do
+    test "at three Seats is still one verdict row, naming all three Bridges" do
       slug = open_room(seat_limit: 3)
       attempt_cap(1)
 
@@ -166,8 +166,10 @@ defmodule MeaningGame.ChronicleTest do
       assert [page] = chronicled(slug)
       assert [attempt] = page.attempts
       assert length(attempt.bridges) == 3
-      assert length(attempt.verdicts) == 3
-      assert Enum.all?(attempt.verdicts, &(length(&1.seat_ids) == 2))
+      assert [verdict] = attempt.verdicts
+      assert length(verdict.seat_ids) == 3
+      assert verdict.bridges == ["cairn", "cairo", "beacon"]
+      assert length(verdict.furthest) == 2
     end
   end
 

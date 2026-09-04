@@ -132,6 +132,8 @@ defmodule MeaningGame.Chronicle.Markdown do
             lines
           end
 
+        # An attempt written before ADR-0010, when the Assayer answered one pair
+        # at a time. The book is append-only, so those rows still read as pairs.
         multiple ->
           Enum.flat_map(multiple, fn v ->
             band_str = if v.band, do: " (#{v.band})", else: ""

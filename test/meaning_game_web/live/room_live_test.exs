@@ -481,7 +481,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
   end
 
   describe "the stage" do
-    test "says who melded with whom when there are more than two of them" do
+    test "shows one verdict for the whole table when there are more than two of them" do
       slug = open_room(seat_limit: 3)
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
@@ -498,10 +498,19 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       await_reveal_on(stage)
 
-      assert has_element?(stage, "[data-role=pair][data-melded=true]", "Mara + Jacob")
-      refute has_element?(stage, "[data-role=pair][data-melded=true]", "Ada")
-      assert has_element?(stage, "[data-role=pair][data-melded=false]", "Ada")
-      # One pair out of three melding is not the Page melding.
+      # Every Bridge, one number in one band, one quip, one line of reasoning,
+      # and the two words the table is sent to next (ADR-0010).
+      for bridge <- ~w(cairn cairo beacon) do
+        assert has_element?(stage, "[data-bridge]", bridge)
+      end
+
+      assert has_element?(stage, "[data-role=closeness]")
+      assert has_element?(stage, "[data-role=quip]")
+      assert has_element?(stage, "[data-role=reasoning]")
+      assert has_element?(stage, "[data-role=furthest]", "beacon (Ada)")
+      refute has_element?(stage, "[data-role=pair]")
+
+      # Two of three landing on one word is not the table being of one mind.
       assert has_element?(stage, "[data-role=band]", "miss")
     end
 
