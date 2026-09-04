@@ -193,8 +193,7 @@ defmodule MeaningGame.Steward do
   Computed from the event log, never stored (spec, "The Chronicle"). When the
   Chronicle is empty, returns the default starting message.
   """
-  @spec digest(Ecto.UUID.t() | String.t()) :: String.t()
-  def digest(room_id_or_slug), do: MeaningGame.Chronicle.digest(room_id_or_slug)
+  defdelegate digest(room_id_or_slug), to: MeaningGame.Chronicle
 
   defp timed(verdict, latency_ms) do
     Map.update(verdict, :meta, %{latency_ms: latency_ms}, &Map.put(&1, :latency_ms, latency_ms))

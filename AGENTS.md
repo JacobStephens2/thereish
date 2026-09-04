@@ -6,7 +6,7 @@ Issues live as markdown files under `.scratch/<feature>/`. See `docs/agents/issu
 
 ### Triage labels
 
-Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `resolved`, `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

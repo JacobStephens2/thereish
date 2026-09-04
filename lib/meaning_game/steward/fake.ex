@@ -114,7 +114,7 @@ defmodule MeaningGame.Steward.Fake do
       # every screen the quip is drawn on is exercised by a test that never
       # calls anybody (ADR-0005).
       quip: "\"#{left}\" and \"#{right}\" walk into a bar. The bar has no opinion.",
-      # Provenance the Chronicle wants from every grader, answered honestly by
+      # Provenance the Chronicle wants from every Assayer, answered honestly by
       # the one that has no model behind it and costs nothing to run. Both
       # orderings agree because this Assayer is a symmetric function of two
       # words: grading it twice is the same arithmetic twice.
