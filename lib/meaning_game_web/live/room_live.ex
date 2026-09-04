@@ -40,6 +40,8 @@ defmodule MeaningGameWeb.RoomLive do
      |> assign(:error, nil)
      |> assign(:bridge_error, nil)
      |> assign(:page_error, nil)
+     |> assign(:give_input, "")
+     |> assign(:give_error, nil)
      |> assign(:seat, seat_for_device(slug, device_token))
      |> resync()}
   end
@@ -124,6 +126,22 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("submit_give", %{"give" => give}, socket) do
+    trimmed = String.trim(give || "")
+
+    if trimmed == "" do
+      {:noreply, assign(socket, :give_error, "Type a setting first.")}
+    else
+      case Rooms.give(socket.assigns.slug, socket.assigns.seat.id, trimmed) do
+        :ok ->
+          {:noreply, socket |> assign(give_input: "", give_error: nil) |> resync()}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, :give_error, message(reason))}
+      end
+    end
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
@@ -144,6 +162,7 @@ defmodule MeaningGameWeb.RoomLive do
     assign(socket, :room, Rooms.snapshot(socket.assigns.slug, seat_id))
   end
 
+  defp message(:give_required), do: "Type a setting first."
   defp message(:name_required), do: "Type a name first."
   defp message(:name_too_long), do: "That name is longer than #{Seat.name_max()} characters."
   defp message(:room_full), do: "Every seat is taken. Ask whoever is in there to make room."
@@ -255,6 +274,54 @@ defmodule MeaningGameWeb.RoomLive do
       <section class="flex flex-col gap-2">
         <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>
         <.roster room={@room} />
+      </section>
+
+      <section
+        :if={@seat && @room.phase != :waiting}
+        class="flex flex-col gap-2 border-t border-base-300 pt-6"
+      >
+        <h2 class="text-sm uppercase tracking-wide opacity-60">Give a setting</h2>
+        <form
+          id="give-form"
+          data-role="give-form"
+          phx-submit="submit_give"
+          class="flex flex-col gap-2"
+        >
+          <div class="flex items-center gap-2">
+            <.input
+              name="give"
+              value={@give_input}
+              placeholder="e.g. the world St. Thérèse grew up in"
+              class="flex-1"
+              autocomplete="off"
+            />
+            <.button>Give</.button>
+          </div>
+          <p :if={@give_error} data-role="give-error" class="text-sm text-error">
+            {@give_error}
+          </p>
+          <p
+            :if={@room[:give_status] && @room.give_status[:status] == :in_flight}
+            data-role="give-status"
+            class="text-sm opacity-70"
+          >
+            The Author is writing Pages for "{@room.give_status.give}"...
+          </p>
+          <p
+            :if={@room[:give_status] && @room.give_status[:status] == :landed}
+            data-role="give-status"
+            class="text-sm font-medium text-success"
+          >
+            Pages for "{@room.give_status.give}" have arrived.
+          </p>
+          <p
+            :if={@room[:give_status] && @room.give_status[:status] == :failed}
+            data-role="give-status"
+            class="text-sm font-medium text-warning"
+          >
+            The Author couldn't write for "{@room.give_status.give}": {@room.give_status.reason}. Playing on.
+          </p>
+        </form>
       </section>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResyncOnWake">

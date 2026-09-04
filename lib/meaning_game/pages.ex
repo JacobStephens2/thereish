@@ -147,6 +147,7 @@ defmodule MeaningGame.Pages do
   @spec draw(Ecto.UUID.t() | nil, keyword()) :: {:ok, map()} | {:error, :pool_exhausted}
   def draw(room_id, opts \\ []) do
     chapter = Keyword.get(opts, :chapter)
+    give = Keyword.get(opts, :give)
 
     query =
       from(p in AuthoredPage,
@@ -156,10 +157,15 @@ defmodule MeaningGame.Pages do
       )
 
     query =
-      if chapter do
-        from(p in query, where: p.chapter == ^chapter)
-      else
-        query
+      cond do
+        give ->
+          from(p in query, where: p.give == ^give)
+
+        chapter ->
+          from(p in query, where: p.chapter == ^chapter)
+
+        true ->
+          query
       end
 
     case Repo.one(query) do
@@ -172,6 +178,18 @@ defmodule MeaningGame.Pages do
         |> Repo.update!()
         |> then(&{:ok, to_page_map(&1)})
     end
+  end
+
+  @doc """
+  Authors `count` Pages ahead of play against a Give (named meaning-space) and fills the pool.
+  """
+  @spec author_give(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def author_give(give, opts \\ []) do
+    count = Keyword.get(opts, :count, 3)
+    opts = Keyword.put(opts, :give, give)
+    chapter = Keyword.get(opts, :chapter, give)
+
+    author_chapter(chapter, count, opts)
   end
 
   @doc """
@@ -204,9 +222,9 @@ defmodule MeaningGame.Pages do
   The opening Page for a Room. Draws from pool if available, otherwise falls
   back to first hand-written page.
   """
-  @spec first(Ecto.UUID.t() | nil) :: MeaningGame.Game.page()
-  def first(room_id \\ nil) do
-    case draw(room_id) do
+  @spec first(Ecto.UUID.t() | nil, keyword()) :: MeaningGame.Game.page()
+  def first(room_id \\ nil, opts \\ []) do
+    case draw(room_id, opts) do
       {:ok, page} -> page
       {:error, :pool_exhausted} -> hd(@hand_written_pool)
     end
@@ -216,17 +234,17 @@ defmodule MeaningGame.Pages do
   The Page after this one. Draws from pool if available, otherwise returns
   {:error, :pool_exhausted} when pool is active, or advances hand-written ring.
   """
-  @spec next(String.t(), Ecto.UUID.t() | nil) ::
+  @spec next(String.t(), Ecto.UUID.t() | nil, keyword()) ::
           {:ok, MeaningGame.Game.page()} | {:error, :pool_exhausted}
-  def next(page_id, room_id \\ nil) do
+  def next(page_id, room_id \\ nil, opts \\ []) do
     # If pool has been authored, draw from pool; refuse to repeat when drained
     if pool_has_pages?() do
-      draw(room_id)
+      draw(room_id, opts)
     else
       # Hand-written fallback when pool has no pages at all
       next_page =
         case Enum.find_index(@hand_written_pool, &(&1.id == page_id)) do
-          nil -> first(room_id)
+          nil -> first(room_id, opts)
           index -> Enum.at(@hand_written_pool, rem(index + 1, length(@hand_written_pool)))
         end
 

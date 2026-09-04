@@ -67,6 +67,8 @@ defmodule MeaningGameWeb.StageLive do
         </p>
       </header>
 
+      <.give_announcement room={@room} />
+
       <.attempt room={@room} />
 
       <.anchors room={@room} />

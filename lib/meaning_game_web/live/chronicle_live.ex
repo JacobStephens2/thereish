@@ -175,9 +175,18 @@ defmodule MeaningGameWeb.ChronicleLive do
           <!-- Page Header -->
           <div class="flex flex-wrap items-start justify-between gap-2 border-b border-base-200 pb-3">
             <div>
-              <h2 class="text-2xl font-bold tracking-tight">
-                {Enum.join(page.anchors, " · ")}
-              </h2>
+              <div class="flex flex-wrap items-center gap-2">
+                <h2 class="text-2xl font-bold tracking-tight">
+                  {Enum.join(page.anchors, " · ")}
+                </h2>
+                <span
+                  :if={page[:give]}
+                  data-role="give-tag"
+                  class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+                >
+                  Give: {page.give}
+                </span>
+              </div>
               <p class="text-xs opacity-50">
                 {page.closed_at && Calendar.strftime(page.closed_at, "%b %d, %Y at %I:%M %p")}
               </p>

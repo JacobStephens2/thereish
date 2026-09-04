@@ -154,6 +154,13 @@ defmodule MeaningGame.Rooms do
   @spec next_page(String.t(), String.t()) :: :ok | {:error, :page_open | :no_such_seat}
   def next_page(slug, seat_id), do: call(slug, {:next_page, seat_id})
 
+  @doc """
+  Names a setting on the spot (a Give) and begins authoring Pages for it in the background.
+  """
+  @spec give(String.t(), String.t(), String.t()) ::
+          :ok | {:error, :give_required | :no_such_seat | term()}
+  def give(slug, seat_id, give), do: call(slug, {:give, seat_id, give})
+
   @doc "The Seat this browser already holds in the Room, without typing a name."
   @spec rejoin(String.t(), String.t()) :: {:ok, map()} | :error
   def rejoin(slug, device_token), do: call(slug, {:rejoin, device_token})

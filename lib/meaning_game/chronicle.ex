@@ -273,8 +273,10 @@ defmodule MeaningGame.Chronicle do
         "Unmelded after #{length(page.attempts)} attempts"
       end
 
+    give_str = if page[:give], do: " [Give: #{page.give}]", else: ""
+
     lines = [
-      "Page #{index} (#{anchors_str}) — #{outcome_str}"
+      "Page #{index} (#{anchors_str})#{give_str} — #{outcome_str}"
     ]
 
     attempt_lines =
@@ -456,6 +458,9 @@ defmodule MeaningGame.Chronicle do
       id: page.id,
       room_id: page.room_id,
       document: page.document,
+      give: page.document["give"] || page.document[:give],
+      theme: page.document["theme"] || page.document[:theme],
+      chapter: page.document["chapter"] || page.document[:chapter],
       anchors: opening_anchors,
       closed_because: page.closed_because,
       melded: page.melded,

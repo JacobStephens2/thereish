@@ -18,6 +18,10 @@ defmodule MeaningGameWeb.RoomLiveTest do
     view |> form("[data-role=bridge-form]", %{"bridge" => bridge}) |> render_submit()
   end
 
+  defp give_setting(view, give) do
+    view |> form("[data-role=give-form]", %{"give" => give}) |> render_submit()
+  end
+
   defp phone(slug), do: build_conn() |> get(~p"/r/#{slug}")
 
   # The reveal arrives on its own time — a beat, then a verdict — so a view
@@ -767,6 +771,133 @@ defmodule MeaningGameWeb.RoomLiveTest do
       ctx.melissa |> element("[data-role=one-more]") |> render_click()
 
       assert render(ctx.melissa) =~ "The word between them"
+    end
+  end
+
+  describe "naming a setting on the phone (ticket 12)" do
+    setup do
+      slug = open_room()
+
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      keeper = Application.fetch_env!(:meaning_game, :keeper)
+      on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage, keeper: keeper}
+    end
+
+    test "a Give can be typed from a phone in free language, announced on stage, and moves the game there",
+         ctx do
+      # Configure fake author to take 20ms per page
+      fake_config = Keyword.get(ctx.keeper, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :keeper,
+        Keyword.put(
+          ctx.keeper,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 20, author_mode: :ok)
+        )
+      )
+
+      # Give form is visible on phones
+      assert has_element?(ctx.melissa, "[data-role=give-form]")
+      assert has_element?(ctx.jacob, "[data-role=give-form]")
+
+      give = "the world St. Thérèse grew up in"
+      give_setting(ctx.melissa, give)
+
+      # Immediate status feedback on phone
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=give-status]",
+               "The Author is writing Pages for"
+             )
+
+      # Play continues meanwhile!
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+      await_reveal_on(ctx.melissa)
+
+      # Stage announces when Pages land
+      eventually(
+        fn ->
+          has_element?(ctx.stage, "[data-role=give-announcement]") &&
+            render(ctx.stage) =~ "The Author heard you"
+        end,
+        "the stage never announced the Give arrival"
+      )
+
+      assert has_element?(ctx.stage, "[data-role=give-announcement]", give)
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=give-status]",
+               "Pages for \"#{give}\" have arrived."
+             )
+
+      # Tap 'One more?' to move to the new setting
+      assert has_element?(ctx.melissa, "[data-role=one-more]")
+      ctx.melissa |> element("[data-role=one-more]") |> render_click()
+
+      # Both phones and stage now show the Setting tag!
+      eventually(
+        fn ->
+          has_element?(ctx.melissa, "[data-role=page-give]") &&
+            has_element?(ctx.stage, "[data-role=page-give]")
+        end,
+        "the page never showed the Setting tag"
+      )
+
+      assert has_element?(ctx.melissa, "[data-role=page-give]", "Setting: #{give}")
+      assert has_element?(ctx.stage, "[data-role=page-give]", "Setting: #{give}")
+    end
+
+    test "a failed or refused Author run is surfaced honestly on stage and phone and leaves play intact",
+         ctx do
+      # Configure fake author to fail/refuse
+      fake_config = Keyword.get(ctx.keeper, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :keeper,
+        Keyword.put(
+          ctx.keeper,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 10, author_mode: :refused)
+        )
+      )
+
+      give = "forbidden territory"
+      give_setting(ctx.melissa, give)
+
+      # Stage announces failure honestly
+      eventually(
+        fn ->
+          has_element?(ctx.stage, "[data-role=give-failure]", "The Author couldn't write")
+        end,
+        "the stage never showed the Give failure notice"
+      )
+
+      assert has_element?(ctx.stage, "[data-role=give-failure]", give)
+      assert has_element?(ctx.melissa, "[data-role=give-status]", "Playing on.")
+
+      # The evening remains playable:
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+      await_reveal_on(ctx.melissa)
+      assert has_element?(ctx.melissa, "[data-role=reveal]")
+    end
+
+    test "submitting an empty Give shows an error", ctx do
+      give_setting(ctx.melissa, "   ")
+      assert has_element?(ctx.melissa, "[data-role=give-error]", "Type a setting first.")
     end
   end
 
