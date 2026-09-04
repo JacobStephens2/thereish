@@ -1,9 +1,9 @@
-defmodule MeaningGame.Keeper.Provider do
+defmodule MeaningGame.Steward.Provider do
   @moduledoc """
   The wire: what a provider is asked for and what it hands back.
 
   This is the innermost layer of the one seam, and the only place in the
-  codebase where a company's name appears. Above it the Keeper knows about
+  codebase where a company's name appears. Above it the Steward knows about
   roles, orderings, hedging and validation; below it there is an HTTP request to
   somebody's endpoint. Which provider is behind a role is configuration, so
   moving the Assayer from one company to another is a setting rather than a
@@ -59,7 +59,7 @@ defmodule MeaningGame.Keeper.Provider do
   Options handed to every HTTP request the providers make.
 
   Empty in the ordinary case. It is how the tests put a recorded response where
-  a provider would be, so that the Keeper's own tests never call anybody and
+  a provider would be, so that the Steward's own tests never call anybody and
   never spend anything.
   """
   @spec http_options(module() | nil) :: keyword()
@@ -78,6 +78,6 @@ defmodule MeaningGame.Keeper.Provider do
   defp prices, do: config(:prices, %{})
 
   defp config(key, default) do
-    :meaning_game |> Application.fetch_env!(:keeper) |> Keyword.get(key, default)
+    :meaning_game |> Application.fetch_env!(:steward) |> Keyword.get(key, default)
   end
 end

@@ -65,7 +65,7 @@ defmodule MeaningGameWeb.RoomLive do
       if trimmed == "" do
         nil
       else
-        case MeaningGame.Keeper.Legality.check_bridge(trimmed, anchors) do
+        case MeaningGame.Steward.Legality.check_bridge(trimmed, anchors) do
           :ok -> nil
           {:illegal, why} -> why
         end

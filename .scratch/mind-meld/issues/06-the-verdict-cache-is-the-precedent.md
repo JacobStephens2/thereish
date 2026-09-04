@@ -6,7 +6,7 @@
 
 **Status:** resolved
 
-- [x] A verdict cache keyed by model, prompt version, and normalized inputs, living behind the Keeper
+- [x] A verdict cache keyed by model, prompt version, and normalized inputs, living behind the Steward
 - [x] Both orderings of a pair collapse to a single cache key
 - [x] The cache stores exactly what the players were shown, and returns exactly that on a later hit, per ADR-0006
 - [x] A cache hit skips the provider entirely, so a repeat is instant
@@ -16,11 +16,11 @@
 
 ## Comments
 
-**The verdict cache is `MeaningGame.Keeper.Precedent`.** Backed by a Postgres `precedents` table with a unique index on `key`. It lives directly behind `MeaningGame.Keeper.Live` (and `Keeper.assay`).
+**The verdict cache is `MeaningGame.Steward.Precedent`.** Backed by a Postgres `precedents` table with a unique index on `key`. It lives directly behind `MeaningGame.Steward.Live` (and `Steward.assay`).
 
 **Deterministic normalization and canonical keying.** Normalization applies Unicode NFC normalization, downcasing, trimming, and collapsing whitespace (`String.split/1 |> Enum.join(" ")`). Both bridges and anchors are normalized and sorted before hashing (`:crypto.hash(:sha256, Jason.encode!([model, prompt_version, sorted_anchors, sorted_bridges])) |> Base.encode16(case: :lower)`), so reversing player order, anchor order, or varying whitespace/casing never forks a key.
 
 **No silent rewrites.** `Precedent.put` uses `on_conflict: :nothing, conflict_target: :key`, so once a verdict is stored, subsequent calls (including second opinions) cannot overwrite it. Only a joint player overrule (ticket 07) will rewrite precedent.
 
-**Instant cache hits.** On a cache hit, `Live.assay` returns the reconstituted verdict immediately, skipping tasks, provider requests, hedging, and JSON validation entirely. Monotonic latency measured by `Keeper.assay` is instantaneous (< 50ms).
+**Instant cache hits.** On a cache hit, `Live.assay` returns the reconstituted verdict immediately, skipping tasks, provider requests, hedging, and JSON validation entirely. Monotonic latency measured by `Steward.assay` is instantaneous (< 50ms).
 

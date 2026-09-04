@@ -1,4 +1,4 @@
-defmodule MeaningGame.Keeper.Author do
+defmodule MeaningGame.Steward.Author do
   @moduledoc """
   The Author role: pre-generates Pages ahead of play against a named Chapter.
 
@@ -7,7 +7,7 @@ defmodule MeaningGame.Keeper.Author do
   and fallback band scripts. Contract shapes come from `prototype/keeper/REPORT.md`.
   """
 
-  alias MeaningGame.Keeper.Legality
+  alias MeaningGame.Steward.Legality
 
   @version "author-1"
 

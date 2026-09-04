@@ -1,8 +1,8 @@
-defmodule MeaningGame.KeeperSmokeTest do
+defmodule MeaningGame.StewardSmokeTest do
   @moduledoc """
   The one test that actually calls a provider.
 
-  Recorded responses prove that the Keeper does the right thing with an answer.
+  Recorded responses prove that the Steward does the right thing with an answer.
   Only this proves that the answer still comes back — that the model id is still
   served, that the schema is still honoured, that the key in the environment
   works, and that the whole round trip fits inside a reveal. It is excluded from
@@ -20,10 +20,10 @@ defmodule MeaningGame.KeeperSmokeTest do
 
   @moduletag :live
 
-  import MeaningGame.KeeperFixtures
+  import MeaningGame.StewardFixtures
 
-  alias MeaningGame.Keeper
   alias MeaningGame.Ladder
+  alias MeaningGame.Steward
 
   setup do
     let_it_call_the_provider()
@@ -31,7 +31,7 @@ defmodule MeaningGame.KeeperSmokeTest do
 
   test "the Assayer grades a real pair, in both orderings, inside the beat" do
     {:ok, verdict} =
-      Keeper.assay(%{anchors: ["ocean", "night"], bridges: ["tide", "moon"]})
+      Steward.assay(%{anchors: ["ocean", "night"], bridges: ["tide", "moon"]})
 
     assert verdict.closeness in 0..100
     assert Ladder.read(verdict.closeness).band != nil
@@ -47,7 +47,7 @@ defmodule MeaningGame.KeeperSmokeTest do
     assert verdict.meta.cost_usd > 0
 
     # The p95 target the reveal has to absorb is four seconds. One call is not a
-    # p95 — `MeaningGame.Keeper.Latency` is — but a single round trip over that
+    # p95 — `MeaningGame.Steward.Latency` is — but a single round trip over that
     # is a result on its own.
     assert verdict.meta.latency_ms < 4_000
 

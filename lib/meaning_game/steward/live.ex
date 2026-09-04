@@ -1,8 +1,8 @@
-defmodule MeaningGame.Keeper.Live do
+defmodule MeaningGame.Steward.Live do
   @moduledoc """
   The Assayer with a real model behind it.
 
-  It is one of the two adapters that satisfy `MeaningGame.Keeper`, and the game
+  It is one of the two adapters that satisfy `MeaningGame.Steward`, and the game
   cannot tell it from the other one: the Room asks for a pair of Bridges to be
   graded and gets back a closeness, a sentence, and a joke. Everything that
   makes a live grade different from a fake one — a provider, two orderings, two
@@ -12,7 +12,7 @@ defmodule MeaningGame.Keeper.Live do
   ## Both orderings, because the model has a favourite side
 
   Which of the two Bridges is listed first changes the answer, and how much it
-  changes it tracks the model's tier (design law 12) — the Keeper prototype
+  changes it tracks the model's tier (design law 12) — the Steward prototype
   caught an 85-point swing on one pair from reversing the players. So every pair
   is graded twice, in parallel, once each way, and the number the players see is
   the mean of the two. Both orderings are kept on the verdict, along with the
@@ -39,16 +39,16 @@ defmodule MeaningGame.Keeper.Live do
   `:verdict_unavailable` in the Room, and the couple are asked to make the call
   themselves. It is never a number this module made up.
   """
-  @behaviour MeaningGame.Keeper
+  @behaviour MeaningGame.Steward
 
-  alias MeaningGame.Keeper
-  alias MeaningGame.Keeper.Assay
-  alias MeaningGame.Keeper.Gate
-  alias MeaningGame.Keeper.Precedent
+  alias MeaningGame.Steward
+  alias MeaningGame.Steward.Assay
+  alias MeaningGame.Steward.Gate
+  alias MeaningGame.Steward.Precedent
 
   @impl true
   def assay(%{anchors: anchors, bridges: [left, right]}) do
-    role = Keeper.role(:assayer)
+    role = Steward.role(:assayer)
     model = role.model
     prompt_version = Map.get(role, :prompt_version, Assay.version())
 
@@ -66,14 +66,14 @@ defmodule MeaningGame.Keeper.Live do
 
   @impl true
   def author(chapter, opts \\ []) do
-    role = Keeper.role(:author)
+    role = Steward.role(:author)
     give = Keyword.get(opts, :give)
     digest = Keyword.get(opts, :digest)
-    prompt = MeaningGame.Keeper.Author.prompt(chapter, give, digest)
+    prompt = MeaningGame.Steward.Author.prompt(chapter, give, digest)
 
-    case Gate.answer(role, prompt, &MeaningGame.Keeper.Author.check/1) do
+    case Gate.answer(role, prompt, &MeaningGame.Steward.Author.check/1) do
       {:ok, answer} ->
-        {:ok, MeaningGame.Keeper.Author.page(answer.json, chapter, give, answer)}
+        {:ok, MeaningGame.Steward.Author.page(answer.json, chapter, give, answer)}
 
       {:error, reason} ->
         {:error, reason}

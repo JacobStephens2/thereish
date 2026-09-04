@@ -12,7 +12,7 @@
 
 The design brief parks naming twice, and has never unparked it:
 
-- *"**Naming, parked until after couch night**: both games' real names; the umbrella term for the machine's roles ("Keeper" proposed, on hold). The session atom is settled as Page."*
+- *"**Naming, parked until after couch night**: both games' real names; the umbrella term for the machine's roles is settled as Steward (ADR-0009). The session atom is settled as Page."*
 - *"**Naming**: Jacob wants a dedicated session for the game's name and alternatives; parked, not forgotten."*
 
 "Mind-Meld" sits on exactly the same footing as its A/B partner, which the brief flags explicitly: *"the clover candidate (working label "Chronicle Clover" — **deliberately *not* a real name**; too close to So Clover)"*. Both were placeholders. The clover label got a collision note; Mind-Meld never got the same scrutiny.
@@ -84,7 +84,7 @@ Historical note worth keeping: **Hasbro filed *BIO MELD* in Class 28 in 1996** a
 - [x] `CONTEXT.md` glossary is updated — in particular the **Anchors** entry, which currently reads "a Mind-Meld Page"
 - [ ] The design brief's two "Naming" bullets move from Open questions to Settled decisions
 - [ ] The rename is applied across docs, ADRs, research notes, the tracker directory, and the deploy subdomain (`bin/deploy`, the Apache vhost, DNS, and the TLS cert)
-- [x] The umbrella term for the machine's roles ("Keeper", still on hold per the same brief bullet) is settled in the same session or explicitly re-parked
+- [x] The umbrella term for the machine's roles is settled as Steward in ADR-0009
 
 ## Out of scope
 

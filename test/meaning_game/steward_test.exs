@@ -1,4 +1,4 @@
-defmodule MeaningGame.KeeperTest do
+defmodule MeaningGame.StewardTest do
   @moduledoc """
   The live Assayer, against recorded responses.
 
@@ -21,9 +21,9 @@ defmodule MeaningGame.KeeperTest do
   # A rejected answer is logged, and half of these tests reject one on purpose.
   @moduletag :capture_log
 
-  import MeaningGame.KeeperFixtures
+  import MeaningGame.StewardFixtures
 
-  alias MeaningGame.Keeper.Live
+  alias MeaningGame.Steward.Live
 
   @pair %{anchors: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
 
@@ -60,7 +60,7 @@ defmodule MeaningGame.KeeperTest do
 
       assert verdict.quip == "Both of you went looking for the shore."
       assert verdict.meta.model == "gemini-3.8-flash"
-      assert verdict.meta.prompt_version == MeaningGame.Keeper.Assay.version()
+      assert verdict.meta.prompt_version == MeaningGame.Steward.Assay.version()
       # Two orderings, hedged two ways, and every token any of them spent.
       assert verdict.meta.cost_usd > 0
     end
@@ -172,7 +172,7 @@ defmodule MeaningGame.KeeperTest do
     # A recorded response is served in this process rather than over a socket,
     # so what runs out here is the grading's whole budget rather than one
     # request's socket timeout. That is the one that has to hold: the escalation
-    # ladder gives up at ten seconds, and it can only do that if the Keeper has.
+    # ladder gives up at ten seconds, and it can only do that if the Steward has.
     test "a provider that never answers gives up before the game does" do
       assayer(requests: 1, retries: 0, deadline_ms: 50)
 
@@ -252,17 +252,17 @@ defmodule MeaningGame.KeeperTest do
       assert Agent.get(counts, &Map.values/1) == [2, 2]
     end
 
-    test "Keeper.assay returns the cached precedent instantly" do
-      assayer(adapter: MeaningGame.Keeper.Live)
+    test "Steward.assay returns the cached precedent instantly" do
+      assayer(adapter: MeaningGame.Steward.Live)
 
       recorded(fn conn, _body ->
         Req.Test.json(conn, response(verdict(closeness: 90, reasoning: "Instant.")))
       end)
 
-      assert {:ok, verdict1} = MeaningGame.Keeper.assay(@pair)
+      assert {:ok, verdict1} = MeaningGame.Steward.assay(@pair)
       assert verdict1.closeness == 90
 
-      assert {:ok, verdict2} = MeaningGame.Keeper.assay(@pair)
+      assert {:ok, verdict2} = MeaningGame.Steward.assay(@pair)
       assert verdict2.closeness == 90
       assert verdict2.reasoning == "Instant."
       assert verdict2.meta.latency_ms < 50
@@ -287,7 +287,7 @@ defmodule MeaningGame.KeeperTest do
       }
 
       assert {:ok, _} =
-               MeaningGame.Keeper.overrule(
+               MeaningGame.Steward.overrule(
                  @pair.anchors,
                  @pair.bridges,
                  couple_ruling

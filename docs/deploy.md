@@ -140,7 +140,7 @@ one is yours to call," which is the honest failure and a miserable evening.
 
 Nothing else about the Assayer is a secret. Which model, at what effort, hedged
 how many ways, and how long it waits are all in `config/config.exs` under
-`:keeper`, so swapping the Assayer is a commit rather than a server visit.
+`:steward`, so swapping the Assayer is a commit rather than a server visit.
 
 ### Measuring the round trip
 
@@ -152,7 +152,7 @@ the prompt, the schema, or the model:
 ```sh
 ssh jacob@stephens.page 'cd /var/www/meld.stephens.page && \
   docker compose -f docker-compose.app.yml exec app \
-  /app/bin/meaning_game eval "MeaningGame.Keeper.Latency.measure()"'
+  /app/bin/meaning_game eval "MeaningGame.Steward.Latency.measure()"'
 ```
 
 Twenty real grades, sequentially, on a fixed set of pairs spread across the

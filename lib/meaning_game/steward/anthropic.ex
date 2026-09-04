@@ -1,4 +1,4 @@
-defmodule MeaningGame.Keeper.Anthropic do
+defmodule MeaningGame.Steward.Anthropic do
   @moduledoc """
   Anthropic models (Fable 5.1 as Author) through their Messages API.
 
@@ -6,11 +6,11 @@ defmodule MeaningGame.Keeper.Anthropic do
   Server-side refusal fallbacks are opted in via beta header, and
   stop_reason: "max_tokens" is surfaced directly for terminal handling.
   """
-  @behaviour MeaningGame.Keeper.Provider
+  @behaviour MeaningGame.Steward.Provider
 
   require Logger
 
-  alias MeaningGame.Keeper.Provider
+  alias MeaningGame.Steward.Provider
 
   @url "https://api.anthropic.com/v1/messages"
   @version "2023-06-01"

@@ -1,25 +1,25 @@
-defmodule MeaningGame.Keeper do
+defmodule MeaningGame.Steward do
   @moduledoc """
   The one seam through which the game talks to language models.
 
   Nothing else in the codebase knows a provider exists. Model choice, per-role
   effort, hedging, caching, and schema validation all end up behind here; today
   the only role that has crossed it is the Assayer, and exactly two adapters
-  satisfy it — `MeaningGame.Keeper.Live`, which talks to a provider, and
-  `MeaningGame.Keeper.Fake`, which every test that is not a hand-run smoke test
+  satisfy it — `MeaningGame.Steward.Live`, which talks to a provider, and
+  `MeaningGame.Steward.Fake`, which every test that is not a hand-run smoke test
   grades against. Two adapters is what makes this a seam rather than a
   hypothesis.
 
   Which adapter is in use is configuration, so a test and the couch differ by a
   setting rather than by a code path:
 
-      config :meaning_game, :keeper, adapter: MeaningGame.Keeper.Fake
+      config :meaning_game, :steward, adapter: MeaningGame.Steward.Fake
 
   So is what each role is answered by. Swapping the Assayer for another model,
   another effort, or another company is `config/config.exs` and nothing else
   (spec, "Operating it"):
 
-      config :meaning_game, :keeper,
+      config :meaning_game, :steward,
         roles: [assayer: [provider: ..., model: ..., effort: ...]]
 
   An assay is asked for a pair of Bridges at a time. That is what the Room has
@@ -95,7 +95,7 @@ defmodule MeaningGame.Keeper do
   @doc """
   Grades a pair of Bridges and applies experimental arm grading rules.
 
-  A/B variant grading lives behind the Keeper seam (CONTEXT.md).
+  A/B variant grading lives behind the Steward seam (CONTEXT.md).
   """
   @spec assay(request(), map() | nil, atom() | String.t() | nil) ::
           {:ok, verdict()} | {:error, term()}
@@ -118,7 +118,7 @@ defmodule MeaningGame.Keeper do
   Assigns and records an experiment arm for a Page at Page start.
 
   Stratified by Chapter so no single arm collects all easy meaning-spaces.
-  A/B assignment lives behind the Keeper seam (CONTEXT.md).
+  A/B assignment lives behind the Steward seam (CONTEXT.md).
   """
   @spec assign_arm(Ecto.UUID.t() | String.t(), map() | nil) :: :bait | :plain
   def assign_arm(_room_id, nil), do: :bait
@@ -152,9 +152,9 @@ defmodule MeaningGame.Keeper do
           {:ok, term()} | {:error, term()}
   def overrule(anchors, bridges, ruling) do
     role = role(:assayer)
-    prompt_version = Map.get(role, :prompt_version, MeaningGame.Keeper.Assay.version())
+    prompt_version = Map.get(role, :prompt_version, MeaningGame.Steward.Assay.version())
 
-    MeaningGame.Keeper.Precedent.overrule(role.model, prompt_version, anchors, bridges, ruling)
+    MeaningGame.Steward.Precedent.overrule(role.model, prompt_version, anchors, bridges, ruling)
   end
 
   @doc """
@@ -168,7 +168,7 @@ defmodule MeaningGame.Keeper do
   @spec role(atom()) :: map()
   def role(name) do
     :meaning_game
-    |> Application.fetch_env!(:keeper)
+    |> Application.fetch_env!(:steward)
     |> Keyword.fetch!(:roles)
     |> Keyword.fetch!(name)
     |> Map.new()
@@ -184,7 +184,7 @@ defmodule MeaningGame.Keeper do
   """
   @spec seat_cap() :: pos_integer()
   def seat_cap do
-    :meaning_game |> Application.fetch_env!(:keeper) |> Keyword.fetch!(:seat_cap)
+    :meaning_game |> Application.fetch_env!(:steward) |> Keyword.fetch!(:seat_cap)
   end
 
   @doc """
@@ -201,6 +201,6 @@ defmodule MeaningGame.Keeper do
   end
 
   defp adapter do
-    :meaning_game |> Application.fetch_env!(:keeper) |> Keyword.fetch!(:adapter)
+    :meaning_game |> Application.fetch_env!(:steward) |> Keyword.fetch!(:adapter)
   end
 end

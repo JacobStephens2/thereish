@@ -47,17 +47,17 @@ config :meaning_game,
 #
 # Everything about a role is here rather than in the code, so that swapping the
 # Assayer is a setting and not a refactor: the model, the effort, how many
-# identical requests are hedged, and how long the Keeper waits before it says it
+# identical requests are hedged, and how long the Steward waits before it says it
 # has nothing. The Assayer is Gemini 3.8 Flash at low effort per ADR-0005 —
 # chosen for repeatability, because a constant offset is calibrated once by the
 # couple while noise makes the first grade on a borderline pair a dice roll that
 # the cache then freezes as precedent.
-config :meaning_game, :keeper,
-  adapter: MeaningGame.Keeper.Live,
+config :meaning_game, :steward,
+  adapter: MeaningGame.Steward.Live,
   fake: [delay_ms: 0, mode: :grade],
   roles: [
     assayer: [
-      provider: MeaningGame.Keeper.Gemini,
+      provider: MeaningGame.Steward.Gemini,
       model: "gemini-3.8-flash",
       # Thinking cannot be turned off on 3.8 Flash; low is the floor.
       effort: "low",
@@ -66,7 +66,7 @@ config :meaning_game, :keeper,
       # hedging shortens a tail made of queueing, and does nothing for a tail
       # made of generation (design law 11).
       requests: 2,
-      # A rejected answer is asked for again, twice, before the Keeper gives up.
+      # A rejected answer is asked for again, twice, before the Steward gives up.
       retries: 2,
       # How long one request may take. The measured p95 for a whole verdict is
       # around a second, so four is a request that has gone wrong — and it is
@@ -74,7 +74,7 @@ config :meaning_game, :keeper,
       # budget below, which is what makes the retries real (design law 14).
       timeout_ms: 4_000,
       # The whole grading's budget, retries and all. Under the ten seconds at
-      # which the reveal stops waiting, so that the Keeper has already said it
+      # which the reveal stops waiting, so that the Steward has already said it
       # has nothing by the time the game does.
       deadline_ms: 9_000,
       # Filled in from GEMINI_API_KEY by `config/runtime.exs`. A key is a
@@ -82,7 +82,7 @@ config :meaning_game, :keeper,
       api_key: nil
     ],
     author: [
-      provider: MeaningGame.Keeper.Anthropic,
+      provider: MeaningGame.Steward.Anthropic,
       model: "claude-fable-5-1",
       effort: "max",
       max_tokens: 100_000,

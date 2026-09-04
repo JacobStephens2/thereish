@@ -240,7 +240,7 @@ defmodule MeaningGame.Game do
         {:error, :bridge_required}
 
       true ->
-        case MeaningGame.Keeper.Legality.check_bridge(bridge, state.anchors) do
+        case MeaningGame.Steward.Legality.check_bridge(bridge, state.anchors) do
           :ok -> committed(%{state | bridges: Map.put(state.bridges, seat_id, bridge)})
           {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
         end
@@ -493,7 +493,7 @@ defmodule MeaningGame.Game do
 
       case bridges do
         [left, right] when is_binary(left) and is_binary(right) ->
-          band = MeaningGame.Keeper.Author.provisional_reading(page, left, right)
+          band = MeaningGame.Steward.Author.provisional_reading(page, left, right)
           Map.get(scripts, to_string(band)) || Map.get(scripts, band)
 
         _ ->

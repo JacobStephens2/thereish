@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Scope, measured 2026-09-04:** 150 occurrences of "Mind-Meld". `docs/design-brief.md` (9), `.scratch/naming/issues/01-the-games-real-name.md` (10), ADRs 0004 / 0005 / 0007 / 0008, `docs/deploy.md`, `docs/research/two-player-communication-mechanics.md`, `docs/research/model-selection-for-play.md`, `lib/meaning_game/keeper/author.ex` and `assay.ex` (one each, in prose), and `.scratch/mind-meld/` — a spec plus 10 issues, which is a `git mv` and not only a `sed`.
+**Scope, measured 2026-09-04:** 150 occurrences of "Mind-Meld". `docs/design-brief.md` (9), `.scratch/naming/issues/01-the-games-real-name.md` (10), ADRs 0004 / 0005 / 0007 / 0008, `docs/deploy.md`, `docs/research/two-player-communication-mechanics.md`, `docs/research/model-selection-for-play.md`, `lib/meaning_game/steward/author.ex` and `assay.ex` (one each, in prose), and `.scratch/mind-meld/` — a spec plus 10 issues, which is a `git mv` and not only a `sed`.
 
 **The four naming research notes keep saying "Mind-Meld".** `name-mind-meld-availability.md` alone holds 61 of the 150, and all four are dated primary sources *about* that name. Renaming them would falsify the record that justified the decision.
 

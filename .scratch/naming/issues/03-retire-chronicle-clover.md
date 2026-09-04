@@ -13,5 +13,5 @@ Note `docs/design-brief.md` currently reads *"Chronicle Clover stays parked on `
 - [ ] `docs/design-brief.md` records the clover retired, unplayed, with the date
 - [ ] The A/B framing that assumed two Page machines is corrected wherever it survives in the brief
 - [ ] `.scratch/mind-meld/spec.md` and ADR-0004's cross-references no longer imply a live second game
-- [ ] `lib/meaning_game/keeper/fake.ex` no longer refers to the clover as current
+- [ ] `lib/meaning_game/steward/fake.ex` no longer refers to the clover as current
 - [ ] Research notes are left alone — they are dated primary sources, not statements about today

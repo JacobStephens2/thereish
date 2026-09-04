@@ -1,4 +1,4 @@
-defmodule MeaningGame.Keeper.Assay do
+defmodule MeaningGame.Steward.Assay do
   @moduledoc """
   What the Assayer is asked, and what counts as an answer.
 

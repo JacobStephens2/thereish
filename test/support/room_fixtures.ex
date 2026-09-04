@@ -29,15 +29,15 @@ defmodule MeaningGame.RoomFixtures do
   @doc """
   Turns the fake Assayer's dials for one test: `delay_ms` and `mode`.
 
-  See `MeaningGame.Keeper.Fake` for what they do. Configuration is global, so a
+  See `MeaningGame.Steward.Fake` for what they do. Configuration is global, so a
   test that reaches for this cannot be async — which is true of every test that
   touches a Room anyway.
   """
-  def keeper(opts) do
-    keeper = restore(:keeper)
-    fake = Keyword.merge(Keyword.fetch!(keeper, :fake), opts)
+  def steward(opts) do
+    steward = restore(:steward)
+    fake = Keyword.merge(Keyword.fetch!(steward, :fake), opts)
 
-    Application.put_env(:meaning_game, :keeper, Keyword.put(keeper, :fake, fake))
+    Application.put_env(:meaning_game, :steward, Keyword.put(steward, :fake, fake))
   end
 
   @doc "The reveal beat for one test, in milliseconds."

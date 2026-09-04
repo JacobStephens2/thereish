@@ -14,7 +14,7 @@ The standing rule from the naming session is that the title may never reuse a wo
 
 - [ ] `config/config.exs` names the band `close`, with floors unchanged
 - [ ] The Author's JSON schema and its `required` list use `close`, and the prompt version is bumped
-- [ ] Seeded band scripts in `lib/meaning_game/pages.ex` and `lib/meaning_game/keeper/fake.ex` are keyed on `close`
+- [ ] Seeded band scripts in `lib/meaning_game/pages.ex` and `lib/meaning_game/steward/fake.ex` are keyed on `close`
 - [ ] The presentation clause in `lib/meaning_game_web/components/room_components.ex` matches `:close`
 - [ ] `passable` appears as fallback flavour for the `close` band, not as a band atom
 - [ ] `mix test` is green; no pre-generated Page is served against the old schema

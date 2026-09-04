@@ -44,7 +44,7 @@ defmodule MeaningGame.Rooms.Room do
     # (ADR-0007), and this is the number the couch can afford in v1.
     |> validate_number(:seat_limit,
       greater_than_or_equal_to: 2,
-      less_than_or_equal_to: MeaningGame.Keeper.seat_cap()
+      less_than_or_equal_to: MeaningGame.Steward.seat_cap()
     )
     |> unique_constraint(:slug)
   end

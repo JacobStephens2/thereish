@@ -16,11 +16,11 @@ Design law 3: humans hold final authority, and an overrule is a story rather tha
 - [x] The Chronicle records the overrule with the machine's original ruling, the couple's ruling, and who proposed it
 - [x] The proposal is visible on both phones and on the stage while it is pending, and expires cleanly if the Page moves on
 - [x] Rules tests cover unanimity required, a declined proposal leaving the grade untouched, and a three-Seat Room needing all three
-- [x] A Keeper test confirms the overruled key returns the couple's ruling afterwards
+- [x] A Steward test confirms the overruled key returns the couple's ruling afterwards
 
 ## Comments
 
-**Joint overrules rewrite precedent.** `MeaningGame.Keeper.Precedent.overrule/5` and `MeaningGame.Keeper.overrule/3` rewrite the precedent row for that key using `on_conflict: {:replace, [:closeness, :reasoning, :quip, :updated_at]}`, making future identical pairs inherit the couple's house law directly from the cache without calling the model provider.
+**Joint overrules rewrite precedent.** `MeaningGame.Steward.Precedent.overrule/5` and `MeaningGame.Steward.overrule/3` rewrite the precedent row for that key using `on_conflict: {:replace, [:closeness, :reasoning, :quip, :updated_at]}`, making future identical pairs inherit the couple's house law directly from the cache without calling the model provider.
 
 **Pure Game rules and unanimity.** `MeaningGame.Game` handles `{:overrule_proposed, ...}`, `{:overrule_agreed, ...}`, and `{:overrule_declined, ...}` purely with zero I/O. An overrule requires unanimous agreement across all Seats in the Room. When agreed, it transitions the verdict to closeness 100 (`deep meld`), emits `{:overrule, overrule_data}`, and if the Page melds and closes, emits `{:chronicle, ...}` without duplicate writes if already closed. If declined, or when an attempt advances or new page starts, any pending overrule proposal expires cleanly.
 

@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Decided in ADR-0009. The roles are people with jobs, so their umbrella is a person with a job rather than a name for the seam itself; and `Steward` is one letter from `Stewart`, leaving a host persona somewhere to grow if the stage view ever gets one.
 
@@ -12,9 +12,9 @@ Decided in ADR-0009. The roles are people with jobs, so their umbrella is a pers
 
 Do it as **one atomic change**, not expand–contract. The blast radius is wide but the app has no external consumers, so a directory move plus a mechanical rename lands green in a single commit; a staged migration would cost more than it buys.
 
-- [ ] `lib/meaning_game/keeper/` and `keeper.ex` are moved to `steward/` and `steward.ex`, and every module is renamed to match
-- [ ] Config keys, application children and fixtures use the new name
-- [ ] `mix test` is green and `mix compile --warnings-as-errors` is clean
-- [ ] `docs/design-brief.md`, `docs/deploy.md`, `docs/research/llm-in-word-games.md`, ADR-0005 and ADR-0006 say Steward
-- [ ] Issues under `.scratch/mind-meld/` that name the Keeper are updated
-- [ ] No occurrence of "Keeper" survives outside `CONTEXT.md`'s `_Avoid_` line and ADR-0009's own account of the decision
+- [x] `lib/meaning_game/keeper/` and `keeper.ex` are moved to `steward/` and `steward.ex`, and every module is renamed to match
+- [x] Config keys, application children and fixtures use the new name
+- [x] `mix test` is green and `mix compile --warnings-as-errors` is clean
+- [x] `docs/design-brief.md`, `docs/deploy.md`, `docs/research/llm-in-word-games.md`, ADR-0005 and ADR-0006 say Steward
+- [x] Issues under `.scratch/mind-meld/` that name the Keeper are updated
+- [x] No occurrence of "Keeper" survives outside `CONTEXT.md`'s `_Avoid_` line and ADR-0009's own account of the decision

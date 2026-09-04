@@ -250,7 +250,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
     test "a slow Assayer is narrated on every screen rather than left as a hang", ctx do
       escalation(slow: 50, provisional: 400, unavailable: 700)
-      keeper(delay_ms: 5_000)
+      steward(delay_ms: 5_000)
 
       commit(ctx.melissa, "cairn")
       commit(ctx.jacob, "cairo")
@@ -344,7 +344,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
 
     test "the Assayer having no verdict is said plainly", ctx do
-      keeper(mode: :unavailable)
+      steward(mode: :unavailable)
 
       commit(ctx.melissa, "cairn")
       commit(ctx.jacob, "cairo")
@@ -691,7 +691,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
     test "the 10-second no-verdict path is staged as deliberate handover rather than broken",
          ctx do
-      keeper(mode: :unavailable)
+      steward(mode: :unavailable)
 
       commit(ctx.melissa, "cairn")
       commit(ctx.jacob, "cairo")
@@ -785,22 +785,22 @@ defmodule MeaningGameWeb.RoomLiveTest do
       join(melissa, "Melissa")
       join(jacob, "Jacob")
 
-      keeper = Application.fetch_env!(:meaning_game, :keeper)
-      on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
+      steward = Application.fetch_env!(:meaning_game, :steward)
+      on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
 
-      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage, keeper: keeper}
+      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage, steward: steward}
     end
 
     test "a Give can be typed from a phone in free language, announced on stage, and moves the game there",
          ctx do
       # Configure fake author to take 20ms per page
-      fake_config = Keyword.get(ctx.keeper, :fake, [])
+      fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
         :meaning_game,
-        :keeper,
+        :steward,
         Keyword.put(
-          ctx.keeper,
+          ctx.steward,
           :fake,
           Keyword.merge(fake_config, author_delay_ms: 20, author_mode: :ok)
         )
@@ -862,13 +862,13 @@ defmodule MeaningGameWeb.RoomLiveTest do
     test "a failed or refused Author run is surfaced honestly on stage and phone and leaves play intact",
          ctx do
       # Configure fake author to fail/refuse
-      fake_config = Keyword.get(ctx.keeper, :fake, [])
+      fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
         :meaning_game,
-        :keeper,
+        :steward,
         Keyword.put(
-          ctx.keeper,
+          ctx.steward,
           :fake,
           Keyword.merge(fake_config, author_delay_ms: 10, author_mode: :refused)
         )

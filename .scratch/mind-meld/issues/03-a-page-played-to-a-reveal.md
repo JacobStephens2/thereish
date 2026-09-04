@@ -1,8 +1,8 @@
-# 03: A hardcoded Page played to a reveal, graded by the fake Keeper
+# 03: A hardcoded Page played to a reveal, graded by the fake Steward
 
 **What to build:** The stage shows two Anchors. On each phone, privately, each player types a Bridge and commits it. Neither sees the other's until both have committed. The instant the last Seat commits, a fixed 2.5 second beat runs, and then the stage reveals both Bridges side by side with a closeness number, a ladder band, and the Assayer's reasoning. Above the meld threshold it is a Meld.
 
-The Page content is hardcoded and the verdict comes from the fake Keeper. No provider is called. This ticket proves the rules and the theatre before any model exists.
+The Page content is hardcoded and the verdict comes from the fake Steward. No provider is called. This ticket proves the rules and the theatre before any model exists.
 
 **Blocked by:** 02.
 
@@ -27,7 +27,7 @@ The Page content is hardcoded and the verdict comes from the fake Keeper. No pro
 - [x] The beat is a fixed 2.5 seconds for every grade. No shortening on a harsh grade in v1
 - [x] Scoring is a pairwise meld map: every unordered pair of Seats gets a closeness, the headline number is the mean across pairs, and the stage shows who melded with whom. Two Seats is one pair, with nothing special-cased
 - [x] Meld threshold, the 0 to 100 scale, and the five ladder bands (miss, adjacent, near, meld, deep meld) are named configuration, not constants scattered through the rules
-- [x] The fake Keeper returns deterministic verdicts with controllable delay, and is the same fake every later test uses
+- [x] The fake Steward returns deterministic verdicts with controllable delay, and is the same fake every later test uses
 - [x] Rules tests drive a whole Page as a list of events and assert on the projected view, including a three-Seat Page producing three pairs and a correct mean
 - [x] A LiveView test drives two phones and a stage from Anchors to reveal
 - [x] The whole rules surface is small enough to read in one sitting
@@ -65,7 +65,7 @@ typing their name.
 Named configuration: `reveal_beat_ms: 2500`, and a `ladder` of `scale: 0..100`
 with `bands: [miss: 0, adjacent: 30, near: 55, meld: 75, deep_meld: 90]`. The
 meld threshold is the floor of the `meld` band rather than a second number that
-could drift away from it. `MeaningGame.Keeper` is the seam with one adapter
+could drift away from it. `MeaningGame.Steward` is the seam with one adapter
 behind it; the fake grades on letters shared from the front, which is not a
 similarity measure but a dial a test can turn — "cairn"/"cairo" is 80, and
 "cairn"/"beacon" is 0 — with `delay_ms` and `mode: :unavailable | :raise`.
@@ -76,7 +76,7 @@ landing on all three.
 
 **What the review caught.** The stage computed which pairs melded and never drew
 it, which is a checkbox on this ticket; there is a per-pair meld marker now and
-a three-Seat LiveView test for it. A Keeper adapter that *raised* rather than
+a three-Seat LiveView test for it. A Steward adapter that *raised* rather than
 returning an error left the Page stuck in `:assaying` forever — the Room now
 turns a raise or an exit into the same `verdict_unavailable` the rules already
 knew about, and the fake has a `:raise` mode to prove it. The nil-handling
