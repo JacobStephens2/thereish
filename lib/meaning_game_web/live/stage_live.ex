@@ -73,7 +73,7 @@ defmodule MeaningGameWeb.StageLive do
 
       <.assaying room={@room} />
 
-      <.reveal room={@room} />
+      <.reveal room={@room} mode={:stage} />
 
       <.overrule_banner room={@room} />
 
