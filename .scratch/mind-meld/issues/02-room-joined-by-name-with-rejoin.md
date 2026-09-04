@@ -6,7 +6,7 @@ This ticket is ADR-0002's kill criterion. If Phoenix cannot reach this inside th
 
 **Blocked by:** 01.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] Joining a Room takes a name and nothing else. No account, no password, no email
 - [x] A Seat carries a stable id and a device token kept in the browser; reopening the URL restores that Seat
@@ -19,7 +19,7 @@ This ticket is ADR-0002's kill criterion. If Phoenix cannot reach this inside th
 - [x] Room state survives a client disconnect, and the Room process is supervised so a crash restarts clean
 - [x] Tests through the Room's interface: two Seats join, a third joins, a Seat disconnects and snapshots back to the identical view, a Seat rejoins by device token
 - [x] A LiveView test drives two phone views plus a stage through join and roster display
-- [ ] Verified on the real deployment with two actual phones, not only in tests
+- [x] Verified on the real deployment with two actual phones, not only in tests
 
 ## Comments
 
@@ -73,3 +73,19 @@ spec asks for three, and the two extra were reachable only from tests, so they
 are private now and the tests go through `view/2` like everything else. A slug
 no Room could have used to 500; it is a 404. `Game` is in `CONTEXT.md` now,
 because it was a concept the code used and the glossary did not have.
+
+**2026-09-03 — closed. ADR-0002's kill criterion passed.** Jacob had all three
+devices — two phones and the laptop stage — in the Room on
+<https://meld.stephens.page> at once. He closed the tab on his phone and
+reopened the URL and was straight back in his own Seat; he locked the phone,
+unlocked it, and was still in. That is the criterion, met on the real
+deployment, well inside three evenings. **Phoenix stays**; the TypeScript and
+Socket.IO fallback is off the table and ADR-0002 needs no revisiting.
+
+Commit `c50d4b1`, deployed the same day.
+
+One thing still unwatched rather than verified: whether the stage's Screen Wake
+Lock actually keeps the laptop awake across a long idle stretch. The hook is
+there and the API is present in the browser, but no one has yet sat through a
+quiet ten minutes with the stage open to see the screen not sleep. It will
+announce itself on the first evening if it is wrong.
