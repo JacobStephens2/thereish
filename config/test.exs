@@ -22,6 +22,10 @@ config :meaning_game, MeaningGameWeb.Endpoint,
   secret_key_base: "GGMqZggnqg1t8Q+zsg6ClM7aAnFwYXJk0/zQFqiGudcO7XNGYHZaGz9qrpv/LDYt",
   server: true
 
+# The couch is promised 2.5 seconds; a test suite is not. Tests that are about
+# the beat itself set their own with `MeaningGame.RoomFixtures.beat/1`.
+config :meaning_game, reveal_beat_ms: 5
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

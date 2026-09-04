@@ -26,7 +26,7 @@ defmodule MeaningGame.Rooms.Seat do
 
     belongs_to :room, MeaningGame.Rooms.Room
 
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
 
   @doc "The longest name a Seat may be held under."

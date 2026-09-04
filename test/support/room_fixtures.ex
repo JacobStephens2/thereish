@@ -26,5 +26,78 @@ defmodule MeaningGame.RoomFixtures do
   @doc "A token standing in for one browser's."
   def device_token, do: "device-#{System.unique_integer([:positive])}"
 
+  @doc """
+  Turns the fake Assayer's dials for one test: `delay_ms` and `mode`.
+
+  See `MeaningGame.Keeper.Fake` for what they do. Configuration is global, so a
+  test that reaches for this cannot be async — which is true of every test that
+  touches a Room anyway.
+  """
+  def keeper(opts) do
+    keeper = restore(:keeper)
+    fake = Keyword.merge(Keyword.fetch!(keeper, :fake), opts)
+
+    Application.put_env(:meaning_game, :keeper, Keyword.put(keeper, :fake, fake))
+  end
+
+  @doc "The reveal beat for one test, in milliseconds."
+  def beat(ms) do
+    restore(:reveal_beat_ms)
+
+    Application.put_env(:meaning_game, :reveal_beat_ms, ms)
+  end
+
+  @doc """
+  The Room's view once it has reached `phase`.
+
+  The Room reaches a reveal on its own time — a beat runs, a verdict arrives —
+  so a test that wants to look at one waits for it the way a phone does.
+  """
+  def await_phase(slug, phase) do
+    eventually(
+      fn ->
+        view = MeaningGame.Rooms.snapshot(slug, nil)
+        view.phase == phase && view
+      end,
+      "the Room never reached #{inspect(phase)}"
+    )
+  end
+
+  @doc """
+  The first truthy thing `check` returns, or a failure saying what never
+  happened.
+
+  For the handful of things a test cannot be handed synchronously: a beat
+  running out, a verdict arriving, a view catching up.
+  """
+  def eventually(check, what \\ "the thing being waited for never happened") do
+    deadline = System.monotonic_time(:millisecond) + 2_000
+
+    keep_trying(check, what, deadline)
+  end
+
+  defp keep_trying(check, what, deadline) do
+    cond do
+      result = check.() ->
+        result
+
+      System.monotonic_time(:millisecond) > deadline ->
+        raise what
+
+      true ->
+        Process.sleep(5)
+        keep_trying(check, what, deadline)
+    end
+  end
+
+  # Hands back the current value as well as putting it back afterwards, because
+  # every caller wants both.
+  defp restore(key) do
+    previous = Application.fetch_env!(:meaning_game, key)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, key, previous) end)
+
+    previous
+  end
+
   defp unique_slug, do: "test-#{System.unique_integer([:positive])}"
 end

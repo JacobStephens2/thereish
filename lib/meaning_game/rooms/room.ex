@@ -23,7 +23,7 @@ defmodule MeaningGame.Rooms.Room do
 
     has_many :seats, MeaningGame.Rooms.Seat
 
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
 
   @doc "The shape a slug has to have, so a mistyped URL can be turned away early."

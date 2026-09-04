@@ -90,6 +90,19 @@ defmodule MeaningGame.Rooms do
     end
   end
 
+  @doc """
+  Writes one Seat's Bridge into the Page, for good.
+
+  A Bridge is private until every Seat has committed one, and the last commit is
+  what sets the reveal going — the Assayer is asked about every pair at once and
+  the beat starts alongside it. Neither happens here: they are the Room's to
+  perform, and this call returns the moment the rules have accepted the word.
+  """
+  @spec commit_bridge(String.t(), String.t(), String.t()) ::
+          :ok
+          | {:error, :not_bridging | :no_such_seat | :already_committed | :bridge_required}
+  def commit_bridge(slug, seat_id, bridge), do: call(slug, {:commit_bridge, seat_id, bridge})
+
   @doc "The Seat this browser already holds in the Room, without typing a name."
   @spec rejoin(String.t(), String.t()) :: {:ok, map()} | :error
   def rejoin(slug, device_token), do: call(slug, {:rejoin, device_token})

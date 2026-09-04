@@ -164,6 +164,126 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "playing a Page" do
+    setup do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.subscribe(slug)
+
+      %{slug: slug, mara: mara, jacob: jacob}
+    end
+
+    test "the Anchors are up for both phones and the stage", ctx do
+      for viewer <- [ctx.mara.id, ctx.jacob.id, nil] do
+        view = Rooms.snapshot(ctx.slug, viewer)
+
+        assert view.phase == :bridging
+        assert [_lantern, _harbour] = view.anchors
+      end
+    end
+
+    test "the last Bridge in fires the Assayer and the reveal lands", ctx do
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
+
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+
+      assert_receive :room_changed
+      view = await_phase(ctx.slug, :reveal)
+
+      assert view.reveal.closeness == 80
+      assert view.reveal.band == :meld
+      assert view.reveal.melded?
+      assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
+      assert [pair] = view.reveal.pairs
+      assert pair.reasoning =~ "cairn"
+    end
+
+    test "the reveal is held for the beat rather than shown the moment it is graded", ctx do
+      beat(200)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+
+      # Long enough for the fake Assayer to have answered several times over,
+      # and well short of the beat the players were promised.
+      Process.sleep(50)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
+
+      assert await_phase(ctx.slug, :reveal).reveal.closeness == 0
+    end
+
+    test "a Bridge nobody else can see until they have written their own", ctx do
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+
+      jacob = Rooms.snapshot(ctx.slug, ctx.jacob.id)
+
+      assert jacob.your_bridge == nil
+      refute inspect(jacob) =~ "cairn"
+      assert Enum.map(jacob.seats, & &1.committed?) == [true, false]
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).your_bridge == "cairn"
+    end
+
+    test "a committed Bridge is final", ctx do
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+
+      assert {:error, :already_committed} =
+               Rooms.commit_bridge(ctx.slug, ctx.mara.id, "beacon")
+
+      assert {:error, :bridge_required} = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "  ")
+    end
+
+    test "an Assayer that falls over is a Page that still reveals", ctx do
+      keeper(mode: :raise)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+
+      view = await_phase(ctx.slug, :reveal)
+
+      assert view.reveal.closeness == nil
+      refute hd(view.reveal.pairs).graded?
+      assert Process.alive?(GenServer.whereis(Server.via(ctx.slug)))
+    end
+
+    test "an Assayer with no verdict hands the call to the players", ctx do
+      keeper(mode: :unavailable)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+
+      view = await_phase(ctx.slug, :reveal)
+
+      assert view.reveal.closeness == nil
+      assert view.reveal.melded? == false
+      refute hd(view.reveal.pairs).graded?
+      assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
+    end
+
+    test "a phone that slept through the whole Page snapshots straight into the reveal", ctx do
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      await_phase(ctx.slug, :reveal)
+
+      mara = Rooms.snapshot(ctx.slug, ctx.mara.id)
+
+      assert mara.phase == :reveal
+      assert mara.reveal == Rooms.snapshot(ctx.slug, nil).reveal
+    end
+
+    test "a slow Assayer does not block the Room", ctx do
+      keeper(delay_ms: 100)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+
+      # The Room answers while the verdict is still out.
+      assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
+      assert await_phase(ctx.slug, :reveal).reveal.closeness == 80
+    end
+  end
+
   describe "supervision" do
     test "a crashed Room comes back with its Seats" do
       slug = open_room()
@@ -176,8 +296,32 @@ defmodule MeaningGame.RoomsTest do
       Process.exit(pid, :kill)
       assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
 
-      assert eventually(fn -> Rooms.snapshot(slug, mara.id) end) == before
+      assert once_restarted(fn -> Rooms.snapshot(slug, mara.id) end) == before
       assert Rooms.rejoin(slug, token) == {:ok, mara}
+    end
+
+    test "a crashed Room comes back at the Anchors, and the Page in progress is gone" do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_phase(slug, :reveal)
+
+      pid = GenServer.whereis(Server.via(slug))
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      # Bridges and verdicts live in the process and nowhere else, so this is
+      # what a crash costs until the Chronicle writes Page events down. Both
+      # Seats are still here; the Page they were playing is not.
+      view = once_restarted(fn -> Rooms.snapshot(slug, mara.id) end)
+
+      assert view.phase == :bridging
+      assert view.reveal == nil
+      assert view.your_bridge == nil
+      assert Enum.map(view.seats, & &1.name) == ["Mara", "Jacob"]
     end
   end
 
@@ -212,13 +356,13 @@ defmodule MeaningGame.RoomsTest do
 
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
-  defp eventually(fun, tries \\ 50) do
+  defp once_restarted(fun, tries \\ 50) do
     fun.()
   catch
     :exit, reason ->
       if tries > 0 do
         Process.sleep(10)
-        eventually(fun, tries - 1)
+        once_restarted(fun, tries - 1)
       else
         exit(reason)
       end
