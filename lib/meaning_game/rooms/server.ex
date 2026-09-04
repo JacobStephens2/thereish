@@ -366,6 +366,9 @@ defmodule MeaningGame.Rooms.Server do
   defp format_give_error({:max_tokens, _}), do: "too broad or complex"
   defp format_give_error(:refused), do: "content declined"
   defp format_give_error({:refusal, msg}), do: "declined: #{msg}"
+  defp format_give_error(%Req.TransportError{reason: :timeout}), do: "timed out"
+  defp format_give_error(%{reason: :timeout}), do: "timed out"
+  defp format_give_error(:timeout), do: "timed out"
   defp format_give_error(reason) when is_binary(reason), do: reason
   defp format_give_error(reason) when is_atom(reason), do: to_string(reason)
   defp format_give_error(reason), do: inspect(reason)

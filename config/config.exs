@@ -84,7 +84,7 @@ config :meaning_game, :steward,
     author: [
       provider: MeaningGame.Steward.Anthropic,
       model: "claude-fable-5-1",
-      effort: "max",
+      effort: "low",
       max_tokens: 100_000,
       retries: 2,
       timeout_ms: 120_000,
