@@ -168,7 +168,7 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       refute html =~ "text-error"
     end
 
-    test "close band presents with passable flavour" do
+    test "close band presents with passable fallback flavour" do
       close_room = %{
         phase: :reveal,
         reveal: %{
@@ -186,7 +186,7 @@ defmodule MeaningGameWeb.RoomComponentsTest do
               closeness: 60,
               band: :close,
               melded?: false,
-              quip: "Passable.",
+              quip: "Different enough.",
               reasoning: "Close enough."
             }
           ]
@@ -198,6 +198,7 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ ~s(data-arrival="close")
       assert html =~ "close"
       assert html =~ "Passable."
+      assert html =~ "Different enough."
     end
 
     test "the quip reads as a punchline and reasoning is framed for argument", %{meld_room: room} do

@@ -39,6 +39,10 @@ defmodule MeaningGame.Ladder do
   @spec bands() :: keyword(integer())
   def bands, do: config(:bands)
 
+  @doc "The names of the bands on the ladder, lowest first, as atoms."
+  @spec band_names() :: [atom()]
+  def band_names, do: Keyword.keys(bands())
+
   @doc "The closeness at which two Bridges count as one mind."
   @spec meld_threshold() :: integer()
   def meld_threshold, do: Keyword.fetch!(bands(), :meld)

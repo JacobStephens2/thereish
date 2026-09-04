@@ -25,4 +25,4 @@ The standing rule from the naming session is that the title may never reuse a wo
 2. Bumped Author prompt version from `"author-1"` to `"author-2"`, updated the JSON schema properties and required list to use `"close"`, and updated `provisional_reading/3` to return `:close`.
 3. Re-keyed all seeded band scripts in `lib/meaning_game/pages.ex`, `lib/meaning_game/steward/fake.ex`, `priv/repo/seeds.exs`, and test fixtures on `"close"`.
 4. Staged `"Passable."` as fallback flavour for the `:close` band in `lib/meaning_game_web/components/room_components.ex` and seeded band scripts.
-5. All 296 tests passing green and formatted cleanly with `mix precommit`.
+5. All 301 tests passing green and formatted cleanly with `mix precommit` (including `MeaningGame.Ladder.band_names/0` schema derivation and code smell cleanups).

@@ -139,24 +139,24 @@ defmodule MeaningGame.PagesTest do
   end
 
   describe "provisional_reading/3" do
-    test "scores meld for bait and deep meld for deep bridges" do
+    test "reads meld for bait and deep meld for deep bridges" do
       assert Pages.provisional_reading(@valid_page, "barbecue", "barbecue") == :meld
       assert Pages.provisional_reading(@valid_page, "lawnmower", "lawnmower") == :deep_meld
       assert Pages.provisional_reading(@valid_page, "chores", "chores") == :deep_meld
       assert Pages.provisional_reading(@valid_page, "family", "family") == :meld
     end
 
-    test "scores close when both are in likely_bridges" do
+    test "reads close when both are in likely_bridges" do
       assert Pages.provisional_reading(@valid_page, "lawnmower", "family") == :close
       assert Pages.provisional_reading(@valid_page, "barbecue", "chores") == :close
     end
 
-    test "scores adjacent when one is in likely_bridges" do
+    test "reads adjacent when one is in likely_bridges" do
       assert Pages.provisional_reading(@valid_page, "lawnmower", "airplane") == :adjacent
       assert Pages.provisional_reading(@valid_page, "spaceship", "family") == :adjacent
     end
 
-    test "scores miss when neither is in likely_bridges" do
+    test "reads miss when neither is in likely_bridges" do
       assert Pages.provisional_reading(@valid_page, "spaceship", "airplane") == :miss
     end
   end
