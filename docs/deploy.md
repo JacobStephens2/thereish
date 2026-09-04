@@ -142,6 +142,30 @@ Nothing else about the Assayer is a secret. Which model, at what effort, hedged
 how many ways, and how long it waits are all in `config/config.exs` under
 `:steward`, so swapping the Assayer is a commit rather than a server visit.
 
+### The Author's key
+
+The live Author is Claude Fable 5.1 (design brief, "Model policy, v1"), reached
+with an Anthropic API key that `deploy/provision.sh` cannot generate. It lives in
+the same `.env` as the other secrets:
+
+```sh
+ssh jacob@stephens.page
+sudo -e /var/www/meld.stephens.page/.env    # ANTHROPIC_API_KEY=...
+cd /var/www/meld.stephens.page && docker compose -f docker-compose.app.yml up -d
+```
+
+On the Mac it goes in `.env.local` for the release image, and in the shell for
+`mix phx.server`.
+
+Without it the game plays on from the pre-authored pool: entering a Give at
+the couch surfaces "The Author couldn't write for '<give>': no_api_key.
+Playing on from the existing pool." `bin/deploy` warns when the line is missing,
+and the container logs `ANTHROPIC_API_KEY is not set` when an Author run is
+attempted.
+
+When the Scribe is implemented to write Chronicle recaps post-play, it is
+planned to use `claude-fable-5-1` as well and will share this key.
+
 ### Measuring the round trip
 
 The reveal is a fixed 2.5 second beat and the Assayer has to fit a p95 of four

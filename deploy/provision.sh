@@ -68,6 +68,9 @@ PHX_HOST=${HOST}
 # The Assayer's key, which this script cannot generate. Paste it here: without
 # one the game runs and grades nothing, saying "no verdict" on every Page.
 GEMINI_API_KEY=
+# The Author's key (Anthropic Claude Fable 5.1). Paste it here: without it
+# the game plays from the static pool and the Author cannot write for Gives.
+ANTHROPIC_API_KEY=
 ENV
   chmod 600 "${ENV_FILE}"
   echo "wrote ${ENV_FILE}"
