@@ -22,19 +22,19 @@ defmodule MeaningGame.Steward do
       config :meaning_game, :steward,
         roles: [assayer: [provider: ..., model: ..., effort: ...]]
 
-  An assay is asked for a pair of Bridges at a time. That is what the Room has
-  to route a verdict back to, and it is what a Page with more than two Seats
-  turns into: one request per unordered pair, all fired at once. Pairs grow
-  quadratically, which is why `seat_cap/0` exists.
+  An assay is asked for one Attempt at a time: the Anchors, and every Bridge
+  written between them, read together and answered once (ADR-0010). A table of
+  four is one request rather than six, and the reveal it feeds is one number
+  rather than six.
   """
 
-  @typedoc "The Anchors, and the two Bridges written between them."
+  @typedoc "The Anchors, and every Bridge written between them, in roster order."
   @type request :: %{anchors: [String.t()], bridges: [String.t()]}
 
   @typedoc """
   Which model answered, at what prompt version, how long it took and what it
-  cost — and, because every pair is graded in both orderings, what each ordering
-  said. Every verdict carries it and the Chronicle writes it down, so that the
+  cost — and, because every Attempt is graded in both orderings, what each
+  ordering said. Every verdict carries it and the Chronicle writes it down, so that the
   model policy is measured rather than remembered and a grade that looks wrong
   can be argued with in detail.
   """
@@ -49,14 +49,16 @@ defmodule MeaningGame.Steward do
         }
 
   @typedoc """
-  A grade on the ladder's scale, the sentence the players argue with, and the
-  line the reveal is funny with — written about the two words they actually
-  wrote (ADR-0005).
+  A grade on the ladder's scale, the sentence the players argue with, the line
+  the reveal is funny with — written about the words they actually wrote
+  (ADR-0005) — and the two of those words that landed furthest apart, which are
+  the next Attempt's Anchors.
   """
   @type verdict :: %{
           closeness: integer(),
           reasoning: String.t(),
           quip: String.t(),
+          furthest: [String.t()],
           meta: meta()
         }
 
@@ -72,7 +74,7 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Grades how close two Bridges landed.
+  Grades how close an Attempt's Bridges landed to one another.
 
   How long it took is measured here rather than by the caller, because the
   provenance of a model call is the seam's business and nothing on the other
@@ -93,7 +95,7 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Grades a pair of Bridges and applies experimental arm grading rules.
+  Grades an Attempt's Bridges and applies experimental arm grading rules.
 
   A/B variant grading lives behind the Steward seam (CONTEXT.md).
   """
@@ -143,7 +145,7 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Rewrites the precedent for this pair with the couple's ruling.
+  Rewrites the precedent for these Bridges with the players' ruling.
 
   A joint player overrule is the only thing in the system that rewrites
   precedent (ADR-0006, design law 3).
@@ -177,10 +179,10 @@ defmodule MeaningGame.Steward do
   @doc """
   The most Seats a Room may hold while the Assayer is grading it live.
 
-  Pairs grow quadratically — six Seats is fifteen graded pairs on every attempt
-  — so the cap is about what one reveal can afford in requests and in seconds,
-  not about what the rules can express. The rules are written for a list of any
-  length (ADR-0007).
+  Not a cost: an Attempt is one grading request however many Seats wrote into it
+  (ADR-0010). The cap is about the phone — six Bridges is what a reveal can show
+  at once — and about how long a list of words one model can be asked to hold one
+  opinion about. The rules are written for a list of any length (ADR-0007).
   """
   @spec seat_cap() :: pos_integer()
   def seat_cap do

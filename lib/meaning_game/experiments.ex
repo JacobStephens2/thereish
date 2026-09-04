@@ -69,9 +69,10 @@ defmodule MeaningGame.Experiments do
 
   In the :plain arm, the Assayer's standard grading is preserved.
   In the :bait arm:
-  - Converging on the planted bait is scored as a Meld on the lowest rung (75).
-  - Converging on a deep bridge is rewarded with the top rung (95+).
-  - Other responses keep standard Assayer closeness.
+  - Every Bridge landing on the planted bait is scored as a Meld on the lowest
+    rung (75).
+  - Every Bridge landing on a deep bridge is rewarded with the top rung (95+).
+  - Anything short of the whole table agreeing keeps standard Assayer closeness.
 
   Note: To preserve blinding during active play, arm labels and trap notices
   are never written into verdict.reasoning (which is visible on phones and stage).
@@ -88,12 +89,12 @@ defmodule MeaningGame.Experiments do
     if Map.get(verdict, :overruled?, false) or Map.get(verdict.meta || %{}, :overruled, false) do
       verdict
     else
-      [left, right] =
-        case bridges do
-          [l, r | _] -> [normalize_word(l), normalize_word(r)]
-          [l] -> [normalize_word(l), ""]
-          _ -> ["", ""]
-        end
+      # "Both Bridges" at two Seats is "every Bridge" at any number of them
+      # (ADR-0010): the trap is only sprung when the whole table walked into it,
+      # and the deep reward is only earned when the whole table went deep. Three
+      # players on the bait and one elsewhere is a table that did not converge,
+      # and the Assayer's own number already says so.
+      written = Enum.map(bridges, &normalize_word/1)
 
       bait = normalize_word(page[:bait] || page["bait"])
 
@@ -102,7 +103,10 @@ defmodule MeaningGame.Experiments do
         |> Enum.map(&normalize_word/1)
 
       cond do
-        left != "" and left == bait and right == bait ->
+        written == [] or Enum.any?(written, &(&1 == "")) ->
+          verdict
+
+        bait != "" and Enum.all?(written, &(&1 == bait)) ->
           # Converged on the bait trap: a Meld on the lowest rung (75) per ADR-0004.
           # Blinding: Do NOT leak arm or "bait trap" into player-visible reasoning during play!
           meta = Map.put(verdict.meta || %{}, :trap_sprung, true)
@@ -113,7 +117,7 @@ defmodule MeaningGame.Experiments do
               meta: meta
           }
 
-        left != "" and left in deep_bridges and right in deep_bridges ->
+        Enum.all?(written, &(&1 in deep_bridges)) ->
           # Converged on deep bridges: top rung (:deep_meld)
           meta = Map.put(verdict.meta || %{}, :deep_convergence, true)
 

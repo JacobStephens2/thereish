@@ -8,11 +8,20 @@ defmodule MeaningGame.Steward.Precedent do
   later hit, skipping the provider entirely (ADR-0006).
 
   Keyed by model, prompt version, and normalized inputs:
-  - Both orderings of a pair collapse to a single key: one Seat bridging
-    "beacon" and the other "cairn" hits the same precedent as the reverse.
+  - Every ordering of an Attempt's Bridges collapses to a single key: one Seat
+    bridging "beacon" and the other "cairn" hits the same precedent as the
+    reverse, and a table of four hits the same one whichever order the Seats
+    were filled in.
   - Normalization is deterministic and documented: NFC unicode normalization,
     downcasing, and collapsing whitespace, so a trailing space or a capital
     letter does not fork a key.
+
+  A row carries the two Bridges the Assayer named as furthest apart, because a
+  cache hit has to replay the whole Verdict and those two words are the next
+  Attempt's Anchors (ADR-0010). An overrule rewrites what the players argued
+  about — the grade, the reasoning, the quip — and leaves the furthest pair
+  alone: the couple ruled on how close the words were, not on which two of them
+  were the far ones.
 
   Nothing silently rewrites a precedent: offline annotations never touch the
   cache. Only a joint player overrule (design law 3) will rewrite it.
@@ -39,6 +48,7 @@ defmodule MeaningGame.Steward.Precedent do
     field :forward, :integer
     field :reverse, :integer
     field :reasoning_reverse, :string
+    field :furthest, {:array, :string}
     field :cost_usd, :decimal
 
     timestamps(type: :utc_datetime_usec)
@@ -59,6 +69,7 @@ defmodule MeaningGame.Steward.Precedent do
       :forward,
       :reverse,
       :reasoning_reverse,
+      :furthest,
       :cost_usd
     ])
     |> validate_required([
@@ -141,6 +152,10 @@ defmodule MeaningGame.Steward.Precedent do
       forward: get_in(verdict, [:meta, :forward]),
       reverse: get_in(verdict, [:meta, :reverse]),
       reasoning_reverse: get_in(verdict, [:meta, :reasoning_reverse]),
+      # Verbatim, and neither normalised nor sorted like the key's inputs: these
+      # two words are about to be shown as the next Attempt's Anchors, so they
+      # are kept as the players wrote them.
+      furthest: Map.get(verdict, :furthest),
       cost_usd: get_in(verdict, [:meta, :cost_usd])
     }
 
@@ -203,6 +218,7 @@ defmodule MeaningGame.Steward.Precedent do
       closeness: precedent.closeness,
       reasoning: precedent.reasoning,
       quip: precedent.quip,
+      furthest: precedent.furthest,
       meta: %{
         model: precedent.model,
         prompt_version: precedent.prompt_version,

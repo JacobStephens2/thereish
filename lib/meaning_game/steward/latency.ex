@@ -15,10 +15,16 @@ defmodule MeaningGame.Steward.Latency do
       docker compose -f docker-compose.app.yml exec app \
         bin/meaning_game eval 'MeaningGame.Steward.Latency.measure()'
 
-  The pairs are fixed so that two runs are comparable, and they are spread
+  The requests are fixed so that two runs are comparable, and they are spread
   across the ladder — an identical pair, a near miss, a wide miss — because a
   grade the model finds easy and a grade it has to think about are not the same
   round trip.
+
+  One of them is a table of four rather than a couple. The reveal beat is the
+  same beat at four Seats as at two (ADR-0010), so the number it has to fit
+  inside has to be measured at the table size it now serves: four words is a
+  longer prompt, a wider judgement and a furthest pair to pick, and none of that
+  is free.
   """
 
   alias MeaningGame.Steward
@@ -26,16 +32,20 @@ defmodule MeaningGame.Steward.Latency do
   # The p95 the reveal has to absorb, in milliseconds.
   @target_ms 4_000
 
-  @pairs [
+  @requests [
     %{anchors: ["ocean", "night"], bridges: ["moon", "moon"]},
     %{anchors: ["ocean", "night"], bridges: ["tide", "moon"]},
     %{anchors: ["coffee", "morning"], bridges: ["cup", "mug"]},
     %{anchors: ["mirror", "river"], bridges: ["reflection", "reflect"]},
-    %{anchors: ["paper", "scar"], bridges: ["cut", "history"]}
+    %{anchors: ["paper", "scar"], bridges: ["cut", "history"]},
+    # A table of four: three words in one neighbourhood and one wandering off,
+    # which is the reading ADR-0010 asks the Assayer to make and the longest
+    # prompt it is asked to make it from.
+    %{anchors: ["harbour", "dusk"], bridges: ["lighthouse", "beacon", "lamp", "gull"]}
   ]
 
   @doc """
-  Grades `runs` pairs one after another and reports what it took.
+  Grades `runs` requests one after another and reports what it took.
 
   Sequentially, because what is being measured is one reveal's round trip and
   the couch only ever has one in flight.
@@ -62,10 +72,10 @@ defmodule MeaningGame.Steward.Latency do
   # One grade, announced as it happens: a run against a provider that has gone
   # slow should be visible while it is still running rather than at the end.
   defp one(number, runs) do
-    pair = Enum.at(@pairs, rem(number - 1, length(@pairs)))
-    result = Steward.assay(pair)
+    request = Enum.at(@requests, rem(number - 1, length(@requests)))
+    result = Steward.assay(request)
 
-    IO.puts("  #{number}/#{runs} #{Enum.join(pair.bridges, " / ")}: #{said(result)}")
+    IO.puts("  #{number}/#{runs} #{Enum.join(request.bridges, " / ")}: #{said(result)}")
 
     result
   end

@@ -10,6 +10,14 @@ defmodule MeaningGame.Steward.Fake do
   is not a hand-run smoke test grades against this, so the numbers a test asserts
   on are the ones it chose.
 
+  At more than two Bridges it stays a dial. The Closeness is the mean of that
+  same shared-prefix grade over every pair, and the two words it names as
+  furthest apart are the pair that scored lowest, ties going to whichever came
+  first in roster order. At exactly two Bridges there is one pair, so the mean is
+  that pair's grade and the furthest two are the only two — which is what makes
+  every grade the couch's tests were written against still the grade they get
+  (ADR-0010).
+
   Two knobs, both configuration, both for the tests that need the Room to be
   waiting on something:
 
@@ -23,11 +31,11 @@ defmodule MeaningGame.Steward.Fake do
   @behaviour MeaningGame.Steward
 
   @impl true
-  def assay(%{anchors: [_, _], bridges: [left, right]}) do
+  def assay(%{anchors: [_, _], bridges: bridges}) when length(bridges) >= 2 do
     delay_ms() |> Process.sleep()
 
     case mode() do
-      :grade -> {:ok, grade(left, right)}
+      :grade -> {:ok, grade(bridges)}
       :unavailable -> {:error, :no_verdict}
       :raise -> raise "this Assayer is having a moment"
     end
@@ -113,12 +121,22 @@ defmodule MeaningGame.Steward.Fake do
     |> Keyword.get(key, default)
   end
 
-  defp grade(left, right) do
+  defp grade(bridges) do
+    graded = for pair <- every_pair(bridges), do: {pair, pair_closeness(pair)}
+    closeness = graded |> Enum.map(&elem(&1, 1)) |> mean()
+
+    # The pair the arithmetic liked least, which is this Assayer's whole idea of
+    # two words having landed far apart. `min_by` keeps the first of a tie, and
+    # the pairs come out in roster order, so a table that ties gets the same
+    # answer every time it plays.
+    {[left, right], _lowest} = Enum.min_by(graded, &elem(&1, 1))
     shared = shared_prefix(left, right)
-    closeness = round(200 * shared / (String.length(left) + String.length(right)))
 
     %{
       closeness: closeness,
+      # The reasoning, the quip and the reverse reading all name the furthest
+      # two, which at two Bridges is both of them: every sentence this Assayer
+      # has ever written about a pair is the sentence it still writes.
       reasoning:
         "\"#{left}\" and \"#{right}\" share #{shared} letters from the front. " <>
           "That is all this Assayer knows how to look at.",
@@ -126,9 +144,10 @@ defmodule MeaningGame.Steward.Fake do
       # every screen the quip is drawn on is exercised by a test that never
       # calls anybody (ADR-0005).
       quip: "\"#{left}\" and \"#{right}\" walk into a bar. The bar has no opinion.",
+      furthest: [left, right],
       # Provenance the Chronicle wants from every Assayer, answered honestly by
       # the one that has no model behind it and costs nothing to run. Both
-      # orderings agree because this Assayer is a symmetric function of two
+      # orderings agree because this Assayer is a symmetric function of a set of
       # words: grading it twice is the same arithmetic twice.
       meta: %{
         model: "fake",
@@ -141,6 +160,23 @@ defmodule MeaningGame.Steward.Fake do
       }
     }
   end
+
+  # Every unordered pair, in roster order, so that the tie-break is the order the
+  # Seats are sitting in rather than the order a map happened to iterate.
+  defp every_pair(bridges) do
+    for {left, i} <- Enum.with_index(bridges),
+        {right, j} <- Enum.with_index(bridges),
+        i < j,
+        do: [left, right]
+  end
+
+  defp pair_closeness([left, right]) do
+    round(200 * shared_prefix(left, right) / (String.length(left) + String.length(right)))
+  end
+
+  # Rounded once at the end. At two Bridges there is one pair and rounding an
+  # already-rounded number changes nothing, which is the point.
+  defp mean(closenesses), do: round(Enum.sum(closenesses) / length(closenesses))
 
   defp shared_prefix(left, right) do
     left

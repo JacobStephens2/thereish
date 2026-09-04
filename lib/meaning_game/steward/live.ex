@@ -3,21 +3,26 @@ defmodule MeaningGame.Steward.Live do
   The Assayer with a real model behind it.
 
   It is one of the two adapters that satisfy `MeaningGame.Steward`, and the game
-  cannot tell it from the other one: the Room asks for a pair of Bridges to be
-  graded and gets back a closeness, a sentence, and a joke. Everything that
-  makes a live grade different from a fake one — a provider, two orderings, two
-  identical requests, a validator, a price — is spent here and mentioned nowhere
-  else.
+  cannot tell it from the other one: the Room asks for an Attempt's Bridges to be
+  graded and gets back a closeness, a sentence, the two words furthest apart, and
+  a joke. Everything that makes a live grade different from a fake one — a
+  provider, two orderings, two identical requests, a validator, a price — is
+  spent here and mentioned nowhere else.
 
   ## Both orderings, because the model has a favourite side
 
-  Which of the two Bridges is listed first changes the answer, and how much it
-  changes it tracks the model's tier (design law 12) — the Steward prototype
-  caught an 85-point swing on one pair from reversing the players. So every pair
-  is graded twice, in parallel, once each way, and the number the players see is
-  the mean of the two. Both orderings are kept on the verdict, along with the
-  reverse ordering's reasoning: a wide gap between them is the single most useful
-  thing to know about a grade that looks wrong.
+  Which Bridge is listed first changes the answer, and how much it changes it
+  tracks the model's tier (design law 12) — the Steward prototype caught an
+  85-point swing on one pair from reversing the players. So every Attempt is
+  graded twice, in parallel, in roster order and in its reverse, and the number
+  the players see is the mean of the two. Both orderings are kept on the verdict,
+  along with the reverse ordering's reasoning: a wide gap between them is the
+  single most useful thing to know about a grade that looks wrong.
+
+  Two orderings and not more. Four Bridges have twenty-four orderings, and
+  grading all of them would be a different experiment with a different budget;
+  roster order against its reverse is the same correction at four that it is at
+  two (ADR-0010).
 
   ## Hedging, because the tail is the network
 
@@ -47,18 +52,18 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward.Precedent
 
   @impl true
-  def assay(%{anchors: anchors, bridges: [left, right]}) do
+  def assay(%{anchors: anchors, bridges: bridges}) when length(bridges) >= 2 do
     role = Steward.role(:assayer)
     model = role.model
     prompt_version = Map.get(role, :prompt_version, Assay.version())
 
-    case Precedent.get(model, prompt_version, anchors, [left, right]) do
+    case Precedent.get(model, prompt_version, anchors, bridges) do
       {:ok, verdict} ->
         {:ok, verdict}
 
       :miss ->
-        with {:ok, verdict} <- grade_live(role, anchors, left, right, prompt_version) do
-          Precedent.put(model, prompt_version, anchors, [left, right], verdict)
+        with {:ok, verdict} <- grade_live(role, anchors, bridges, prompt_version) do
+          Precedent.put(model, prompt_version, anchors, bridges, verdict)
           {:ok, verdict}
         end
     end
@@ -80,11 +85,11 @@ defmodule MeaningGame.Steward.Live do
     end
   end
 
-  defp grade_live(role, anchors, left, right, prompt_version) do
+  defp grade_live(role, anchors, bridges, prompt_version) do
     [forward, reverse] =
-      [{left, right}, {right, left}]
-      |> Enum.map(fn {first, second} ->
-        Task.async(fn -> graded(role, anchors, first, second) end)
+      [bridges, Enum.reverse(bridges)]
+      |> Enum.map(fn ordering ->
+        Task.async(fn -> graded(role, anchors, ordering) end)
       end)
       # The grading's whole budget: one request's timeout is `timeout_ms`, and
       # this is what all of them together, retries included, may spend before
@@ -108,12 +113,14 @@ defmodule MeaningGame.Steward.Live do
       [{:error, :timeout}, {:error, :timeout}]
   end
 
-  defp graded(role, anchors, first, second) do
-    prompt = Assay.prompt(anchors, first, second)
+  defp graded(role, anchors, ordering) do
+    prompt = Assay.prompt(anchors, ordering)
+    check = &Assay.check(&1, ordering)
 
-    case first_answer(role.requests, fn -> Gate.answer(role, prompt, &Assay.check/1) end) do
+    case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
       {:ok, answer} ->
-        {:ok, Map.merge(Assay.verdict(answer.json), Map.take(answer, [:model, :cost_usd]))}
+        {:ok,
+         Map.merge(Assay.verdict(answer.json, ordering), Map.take(answer, [:model, :cost_usd]))}
 
       {:error, reason} ->
         {:error, reason}
@@ -160,10 +167,12 @@ defmodule MeaningGame.Steward.Live do
   end
 
   # The grade is the mean of the two orderings and the words are the forward
-  # one's, because one reveal shows one sentence and one joke. The reverse
-  # ordering's own reasoning is kept beside them rather than thrown away: when
-  # the couple argue with a grade, the two arguments the model made are the
-  # evidence.
+  # one's, because one reveal shows one sentence, one joke and one carry-forward.
+  # The furthest pair is the forward ordering's for the same reason the reasoning
+  # is: the two orderings can name different pairs, and the next Attempt's Anchors
+  # have to be one pair rather than an average of two. The reverse ordering's own
+  # reasoning is kept beside them rather than thrown away: when the players argue
+  # with a grade, the two arguments the model made are the evidence.
   #
   # The cost is both orderings' answers, retries included — and not the hedged
   # requests that lost, whose usage nobody waited around to hear.
@@ -172,6 +181,7 @@ defmodule MeaningGame.Steward.Live do
       closeness: round((forward.closeness + reverse.closeness) / 2),
       reasoning: forward.reasoning,
       quip: forward.quip,
+      furthest: forward.furthest,
       meta: %{
         model: forward.model,
         prompt_version: prompt_version,
