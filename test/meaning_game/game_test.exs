@@ -44,15 +44,33 @@ defmodule MeaningGame.GameTest do
 
   defp assays(effects), do: Enum.filter(effects, &match?({:assay, _pair, _request}, &1))
 
+  defp chronicles(effects), do: Enum.filter(effects, &match?({:chronicle, _entry}, &1))
+
   # Grades the pairs in the order they were asked for.
   defp grade(state, effects, closenesses) do
+    {state, _effects} = graded(state, effects, closenesses)
+
+    state
+  end
+
+  # The same, keeping what the last verdict left the Room owing — which is
+  # nothing at all unless that verdict was the one that closed the Page.
+  defp graded(state, effects, closenesses) do
     effects
     |> assays()
     |> Enum.zip(closenesses)
-    |> Enum.reduce(state, fn {{:assay, pair, _request}, closeness}, state ->
-      event = {:verdict_received, %{pair: pair, closeness: closeness, reasoning: "because"}}
-      {:ok, state, []} = Game.apply(state, event)
-      state
+    |> Enum.reduce({state, []}, fn {{:assay, pair, _request}, closeness}, {state, _effects} ->
+      event =
+        {:verdict_received,
+         %{
+           pair: pair,
+           closeness: closeness,
+           reasoning: "because",
+           meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
+         }}
+
+      {:ok, state, effects} = Game.apply(state, event)
+      {state, effects}
     end)
   end
 
@@ -61,6 +79,30 @@ defmodule MeaningGame.GameTest do
   defp revealed(bridges, closenesses) do
     {state, effects} = commit_all(bridging(), bridges)
     grade(state, effects, closenesses)
+  end
+
+  # One attempt played all the way to a graded reveal, handing back whatever the
+  # last verdict left owing.
+  defp attempt(state, bridges, closenesses) do
+    {state, effects} = commit_all(state, bridges)
+
+    graded(state, effects, closenesses)
+  end
+
+  defp again(state, name \\ "Mara") do
+    {:ok, state, []} = Game.apply(state, {:attempt_advanced, %{seat_id: "seat-" <> name}})
+
+    state
+  end
+
+  # Misses `count` times over, carrying forward each time there is an attempt
+  # left to carry into. The Bridges differ every time so that the Anchors do.
+  defp missed_through(count) do
+    Enum.reduce(1..count, {bridging(), []}, fn n, {state, _effects} ->
+      state = if n == 1, do: state, else: again(state)
+
+      attempt(state, [{"Mara", "cairn#{n}"}, {"Jacob", "beacon#{n}"}], [10])
+    end)
   end
 
   # Three Seats with every Bridge in: the Page that has three pairs to grade.
@@ -279,7 +321,7 @@ defmodule MeaningGame.GameTest do
 
       assert Game.view(state, nil).reveal == nil
 
-      state = grade(state, effects, [78])
+      state = grade(state, effects, [60])
 
       for viewer <- ["seat-Mara", "seat-Jacob", nil] do
         view = Game.view(state, viewer)
@@ -396,6 +438,269 @@ defmodule MeaningGame.GameTest do
 
       assert reveal.closeness == 45
       assert Enum.map(reveal.pairs, & &1.graded?) == [false, true, true]
+    end
+  end
+
+  describe "a miss carries forward" do
+    test "the two failed Bridges become the next attempt's Anchors" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+
+      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
+
+      state = again(state)
+
+      for viewer <- ["seat-Mara", "seat-Jacob", nil] do
+        view = Game.view(state, viewer)
+
+        assert view.phase == :bridging
+        assert view.anchors == ["cairn", "beacon"]
+        assert view.attempt == %{number: 2, of: Game.attempt_cap()}
+        assert view.reveal == nil
+        assert view.your_bridge == nil
+        assert Enum.map(view.seats, & &1.committed?) == [false, false]
+      end
+    end
+
+    test "the Page keeps the Anchors it was authored with" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+
+      assert again(state).page.anchors == ["lantern", "harbour"]
+    end
+
+    test "the attempt that was played is kept, so the arc can be read at the end" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+
+      assert [first] = Game.view(again(state), nil).played
+      assert first.number == 1
+      assert first.anchors == ["lantern", "harbour"]
+      assert Enum.map(first.bridges, & &1.bridge) == ["cairn", "beacon"]
+      assert first.closeness == 10
+      assert first.band == :miss
+    end
+
+    test "at three Seats it is the pair that missed by the most" do
+      {state, effects} = three_committed()
+      state = grade(state, effects, [90, 60, 30])
+
+      # Mara + Jacob 90, Mara + Ada 60, Jacob + Ada 30. The widest gap is
+      # the one worth asking them to bridge, and Mara's Bridge is not in it.
+      assert Game.view(state, nil).next_anchors == ["beacon", "harbourmaster"]
+      assert Game.view(again(state), nil).anchors == ["beacon", "harbourmaster"]
+    end
+
+    test "a pair the Assayer could not grade is not the widest gap" do
+      {state, effects} = three_committed()
+      [first | rest] = assays(effects)
+      {:assay, pair, _request} = first
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{pair: pair}})
+      state = grade(state, rest, [60, 30])
+
+      # An unknown is not a miss, so the ungraded Mara + Jacob pair loses to
+      # the graded 30.
+      assert Game.view(state, nil).next_anchors == ["beacon", "harbourmaster"]
+    end
+
+    test "a Page nobody could grade at all still carries something forward" do
+      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+      [{:assay, pair, _request}] = assays(effects)
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{pair: pair}})
+
+      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
+      assert Game.view(again(state), nil).anchors == ["cairn", "beacon"]
+    end
+
+    test "there is nothing to carry forward before the reveal" do
+      state = bridging()
+
+      assert Game.view(state, nil).next_anchors == nil
+
+      assert {:error, :not_revealed} =
+               Game.apply(state, {:attempt_advanced, %{seat_id: "seat-Mara"}})
+
+      {:ok, state, []} = commit(state, "Mara", "cairn")
+
+      assert {:error, :not_revealed} =
+               Game.apply(state, {:attempt_advanced, %{seat_id: "seat-Mara"}})
+    end
+
+    test "only a Seat in this Room may start the next attempt" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+
+      assert {:error, :no_such_seat} =
+               Game.apply(state, {:attempt_advanced, %{seat_id: "seat-Ada"}})
+    end
+  end
+
+  describe "a Page closes" do
+    test "the moment a Meld lands, however many attempts were left" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], [80])
+
+      for viewer <- ["seat-Mara", "seat-Jacob", nil] do
+        view = Game.view(state, viewer)
+
+        assert view.phase == :closed
+        assert view.closed == %{because: :meld, attempt: 1}
+        # The reveal is still up: closing a Page is an ending to the reveal, not
+        # a screen that replaces it.
+        assert view.reveal.closeness == 80
+        assert view.reveal.melded?
+        assert view.next_anchors == nil
+      end
+    end
+
+    test "when the last attempt is spent, unmelded" do
+      {state, _effects} = missed_through(Game.attempt_cap())
+      view = Game.view(state, nil)
+
+      assert view.phase == :closed
+      assert view.closed == %{because: :attempts_spent, attempt: Game.attempt_cap()}
+      assert view.reveal.melded? == false
+      assert view.reveal.closeness == 10
+    end
+
+    test "one attempt short of the cap it is still open" do
+      {state, _effects} = missed_through(Game.attempt_cap() - 1)
+
+      assert Game.view(state, nil).phase == :reveal
+      assert Game.view(state, nil).closed == nil
+    end
+
+    test "and a closed Page takes no more attempts and no more Bridges" do
+      {state, _effects} = missed_through(Game.attempt_cap())
+
+      assert {:error, :page_closed} =
+               Game.apply(state, {:attempt_advanced, %{seat_id: "seat-Mara"}})
+
+      assert {:error, :not_bridging} = commit(state, "Mara", "cairn")
+    end
+
+    test "with the whole arc of it readable" do
+      {state, _effects} = missed_through(3)
+      played = Game.view(again(state), nil).played
+
+      assert Enum.map(played, & &1.number) == [1, 2, 3]
+
+      assert Enum.map(played, & &1.anchors) == [
+               ["lantern", "harbour"],
+               ["cairn1", "beacon1"],
+               ["cairn2", "beacon2"]
+             ]
+    end
+  end
+
+  describe "the Chronicle is owed a closed Page" do
+    test "with every attempt, every Bridge and every verdict on it" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+
+      {_state, effects} =
+        attempt(again(state), [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], [82])
+
+      assert [{:chronicle, entry}] = chronicles(effects)
+      assert entry.page == @page
+      assert entry.closed_because == :meld
+      assert entry.melded? == true
+      assert entry.closeness == 82
+
+      assert [first, second] = entry.attempts
+      assert first.number == 1
+      assert first.anchors == ["lantern", "harbour"]
+
+      assert Enum.map(first.bridges, &{&1.name, &1.bridge}) == [
+               {"Mara", "cairn"},
+               {"Jacob", "beacon"}
+             ]
+
+      assert first.closeness == 10
+      assert first.melded? == false
+
+      assert second.anchors == ["cairn", "beacon"]
+      assert second.melded? == true
+
+      assert [verdict] = second.verdicts
+      assert verdict.names == ["Mara", "Jacob"]
+      assert verdict.bridges == ["wharf", "wharfinger"]
+      assert verdict.seat_ids == ["seat-Mara", "seat-Jacob"]
+      assert verdict.graded? == true
+      assert verdict.closeness == 82
+      assert verdict.band == :meld
+      assert verdict.reasoning == "because"
+      assert verdict.meta.model == "test"
+      assert verdict.meta.prompt_version == "v1"
+      assert verdict.meta.latency_ms == 12
+      assert verdict.meta.cost_usd == 0.0001
+    end
+
+    test "when it closes unmelded too" do
+      {_state, effects} = missed_through(Game.attempt_cap())
+
+      assert [{:chronicle, entry}] = chronicles(effects)
+      assert entry.closed_because == :attempts_spent
+      assert entry.melded? == false
+      assert length(entry.attempts) == Game.attempt_cap()
+    end
+
+    test "and a verdict that never came is a row rather than a gap" do
+      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+      [{:assay, pair, _request}] = assays(effects)
+      state = again(elem(Game.apply(state, {:verdict_unavailable, %{pair: pair}}), 1))
+
+      {_state, effects} = attempt(state, [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], [82])
+
+      assert [{:chronicle, entry}] = chronicles(effects)
+      assert [first, _second] = entry.attempts
+      assert [verdict] = first.verdicts
+      assert verdict.graded? == false
+      assert verdict.closeness == nil
+      assert verdict.bridges == ["cairn", "beacon"]
+    end
+
+    test "and nothing is owed while the Page is still open" do
+      {_state, effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+
+      assert chronicles(effects) == []
+    end
+  end
+
+  describe "one more?" do
+    setup do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], [80])
+
+      %{closed: state}
+    end
+
+    test "starts a fresh Page in the same Room, with the same Seats", ctx do
+      next = %{id: "test-page-2", anchors: ["desert", "mirror"]}
+
+      assert {:ok, state, []} =
+               Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Mara", page: next}})
+
+      view = Game.view(state, "seat-Mara")
+
+      assert view.phase == :bridging
+      assert view.anchors == ["desert", "mirror"]
+      assert view.attempt == %{number: 1, of: Game.attempt_cap()}
+      assert view.reveal == nil
+      assert view.closed == nil
+      assert view.played == []
+      assert names(view) == ["Mara", "Jacob"]
+    end
+
+    test "cannot take a Page away from the couple in the middle of one" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], [10])
+      next = %{id: "test-page-2", anchors: ["desert", "mirror"]}
+
+      assert {:error, :page_open} =
+               Game.apply(state, {:page_started, %{seat_id: "seat-Mara", page: next}})
+
+      assert {:error, :page_open} =
+               Game.apply(bridging(), {:page_started, %{seat_id: "seat-Mara", page: next}})
+    end
+
+    test "is a tap only someone in the Room can make", ctx do
+      next = %{id: "test-page-2", anchors: ["desert", "mirror"]}
+
+      assert {:error, :no_such_seat} =
+               Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Ada", page: next}})
     end
   end
 

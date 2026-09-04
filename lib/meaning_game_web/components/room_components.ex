@@ -28,7 +28,7 @@ defmodule MeaningGameWeb.RoomComponents do
           <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
           <span>{seat.name}</span>
           <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
-          <span :if={seat.committed? and @room.phase != :reveal} class="text-sm opacity-60">
+          <span :if={seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
             has written a bridge
           </span>
         </li>
@@ -57,6 +57,27 @@ defmodule MeaningGameWeb.RoomComponents do
         {anchor}
       </span>
     </div>
+    """
+  end
+
+  attr :room, :map, required: true
+
+  @doc """
+  Which try this is, and how many the Page gets.
+
+  Shown while a Page is being played and not once it has ended, because at the
+  end the number that matters is which attempt it landed on rather than how many
+  are left.
+  """
+  def attempt(assigns) do
+    ~H"""
+    <p
+      :if={@room.phase in [:bridging, :assaying, :reveal]}
+      data-role="attempt"
+      class="text-center text-sm uppercase tracking-widest opacity-60"
+    >
+      Attempt {@room.attempt.number} of {@room.attempt.of}
+    </p>
     """
   end
 
@@ -127,6 +148,80 @@ defmodule MeaningGameWeb.RoomComponents do
     </section>
     """
   end
+
+  attr :room, :map, required: true
+
+  @doc """
+  What a miss means, said out loud on every screen: the Bridges that missed are
+  the next attempt's Anchors.
+
+  One component rather than a line on each view, because "a miss converges" is a
+  rule, and a rule said in two wordings is two rules.
+  """
+  def carry_forward(assigns) do
+    ~H"""
+    <p
+      :if={@room.phase == :reveal}
+      data-role="carry-forward"
+      class="text-center text-sm opacity-70"
+    >
+      Those two words become the next anchors.
+    </p>
+    """
+  end
+
+  attr :room, :map, required: true
+
+  @doc """
+  The end of a Page, said as an ending.
+
+  A Page that ran out of attempts has not gone wrong, and this line is the whole
+  difference between an ending and an error message: the players spent five
+  tries on two words and did not converge, which is the game working.
+  """
+  def ending(assigns) do
+    ~H"""
+    <section :if={@room.closed} data-role="ending" class="flex flex-col items-center gap-4">
+      <p data-role="ending-line" class="max-w-prose text-center text-xl">
+        {ending_line(@room.closed)}
+      </p>
+
+      <ol :if={@room.played != []} data-role="arc" class="flex flex-col gap-1 text-sm opacity-70">
+        <li
+          :for={attempt <- @room.played}
+          data-attempt={attempt.number}
+          class="flex flex-wrap items-baseline justify-center gap-2"
+        >
+          <span>{Enum.join(attempt.anchors, " + ")}</span>
+          <span aria-hidden="true">→</span>
+          <span class="font-semibold">
+            {attempt.bridges |> Enum.map(& &1.bridge) |> Enum.join(" · ")}
+          </span>
+          <span>{attempt.closeness || "no verdict"}</span>
+        </li>
+      </ol>
+    </section>
+    """
+  end
+
+  # The Page landed it. Which attempt it took is the story, so it is the thing
+  # the line names.
+  defp ending_line(%{because: :meld, attempt: 1}), do: "That's the Page — melded first try."
+
+  defp ending_line(%{because: :meld, attempt: attempt}),
+    do: "That's the Page — melded on attempt #{attempt}."
+
+  defp ending_line(%{because: :attempts_spent, attempt: attempt}),
+    do: "That's the Page — #{attempt} attempts, and the words kept their distance."
+
+  @doc """
+  Whether the Room is still between the Anchors and the reveal.
+
+  Once the Bridges are up on the screen, who had already written one and what
+  this phone wrote are answered by the reveal itself, and saying it twice makes
+  the reveal read as a page still in progress.
+  """
+  def mid_page?(room), do: room.phase in [:bridging, :assaying]
 
   # The rules name a rung; nobody says "deep_meld" out loud.
   defp band(nil), do: ""

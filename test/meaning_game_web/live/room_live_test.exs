@@ -22,7 +22,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
   # The reveal arrives on its own time — a beat, then a verdict — so a view
   # waits for it here the way a phone on the couch does.
-  defp await_reveal(view) do
+  defp await_reveal_on(view) do
     eventually(
       fn -> has_element?(view, "[data-role=reveal]") && render(view) end,
       "the reveal never arrived on this view"
@@ -204,7 +204,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.jacob, "cairo")
 
       for view <- [ctx.mara, ctx.jacob, ctx.stage] do
-        html = await_reveal(view)
+        html = await_reveal_on(view)
 
         assert html =~ "cairn"
         assert html =~ "cairo"
@@ -218,7 +218,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "beacon")
 
-      html = await_reveal(ctx.stage)
+      html = await_reveal_on(ctx.stage)
 
       assert html =~ "cairn"
       assert html =~ "beacon"
@@ -229,7 +229,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
     test "a phone that locked through the reveal wakes into it", ctx do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
-      await_reveal(ctx.stage)
+      await_reveal_on(ctx.stage)
 
       Process.flag(:trap_exit, true)
       ref = Process.monitor(ctx.mara.pid)
@@ -253,11 +253,127 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
-      html = await_reveal(ctx.stage)
+      html = await_reveal_on(ctx.stage)
 
       assert html =~ "cairn"
       assert html =~ "No verdict"
       refute has_element?(ctx.stage, "[data-role=closeness]")
+    end
+  end
+
+  describe "a Page that misses, and a Page that ends" do
+    setup do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      %{
+        slug: slug,
+        mara: mara,
+        jacob: jacob,
+        stage: stage,
+        screens: [mara, jacob, stage]
+      }
+    end
+
+    defp press(view, role), do: view |> element("[data-role=#{role}]") |> render_click()
+
+    defp miss(ctx, mara_bridge \\ "cairn", jacob_bridge \\ "beacon") do
+      commit(ctx.mara, mara_bridge)
+      commit(ctx.jacob, jacob_bridge)
+
+      await_reveal_on(ctx.stage)
+    end
+
+    test "the failed Bridges become the next attempt's Anchors, on every screen", ctx do
+      miss(ctx)
+
+      # The tap says what it is going to do before it does it.
+      assert has_element?(ctx.mara, "[data-role=again]", "cairn and beacon")
+      assert has_element?(ctx.stage, "[data-role=carry-forward]")
+      refute has_element?(ctx.stage, "[data-role=again]")
+
+      press(ctx.mara, "again")
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=anchors]", "cairn")
+        assert has_element?(view, "[data-role=anchors]", "beacon")
+        assert has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
+        refute has_element?(view, "[data-role=reveal]")
+      end
+
+      assert has_element?(ctx.jacob, "[data-role=bridge-form]")
+    end
+
+    test "a Meld is the end of the Page and says so", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+      await_reveal_on(ctx.stage)
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=ending-line]", "melded first try")
+        # The grade the reveal landed on is still up under it.
+        assert has_element?(view, "[data-role=closeness]", "80")
+        refute has_element?(view, "[data-role=again]")
+        refute has_element?(view, "[data-role=attempt]")
+      end
+
+      assert has_element?(ctx.mara, "[data-role=one-more]")
+      refute has_element?(ctx.stage, "[data-role=one-more]")
+    end
+
+    test "the last attempt ends it unmelded, with the arc of how it got there", ctx do
+      attempt_cap(2)
+
+      miss(ctx)
+      press(ctx.jacob, "again")
+      miss(ctx, "wharf", "gantry")
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=ending-line]", "2 attempts")
+        assert has_element?(view, "[data-role=arc] [data-attempt='1']", "lantern + harbour")
+        assert has_element?(view, "[data-role=arc] [data-attempt='1']", "cairn · beacon")
+        refute has_element?(view, "[data-role=again]")
+      end
+    end
+
+    test "one more? is one tap, and the next Page is up for both of them", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+      await_reveal_on(ctx.stage)
+
+      press(ctx.mara, "one-more")
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=anchors]", "desert")
+        assert has_element?(view, "[data-role=attempt]", "Attempt 1 of 5")
+        refute has_element?(view, "[data-role=ending]")
+        refute has_element?(view, "[data-role=reveal]")
+      end
+
+      # Same Seats, no name retyped, straight into the next Page.
+      assert has_element?(ctx.jacob, "[data-role=bridge-form]")
+      assert has_element?(ctx.jacob, "[data-seat]", "Mara")
+    end
+
+    test "both of them tapping at once is one next attempt, not two", ctx do
+      miss(ctx)
+
+      press(ctx.mara, "again")
+
+      # Jacob's thumb was already on the way down. The event is pushed rather
+      # than clicked, because his button is gone from the screen by now and the
+      # tap that outran the re-render is the whole point.
+      render_click(ctx.jacob, "next_attempt", %{})
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
+        assert has_element?(view, "[data-role=anchors]", "cairn")
+      end
     end
   end
 
@@ -284,7 +400,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       for {view, bridge} <- phones, do: commit(view, bridge)
 
-      await_reveal(stage)
+      await_reveal_on(stage)
 
       assert has_element?(stage, "[data-role=pair][data-melded=true]", "Mara + Jacob")
       refute has_element?(stage, "[data-role=pair][data-melded=true]", "Ada")

@@ -103,6 +103,27 @@ defmodule MeaningGame.Rooms do
           | {:error, :not_bridging | :no_such_seat | :already_committed | :bridge_required}
   def commit_bridge(slug, seat_id, bridge), do: call(slug, {:commit_bridge, seat_id, bridge})
 
+  @doc """
+  Carries the failed Bridges forward and starts the next attempt at the same
+  Page.
+
+  Any Seat may tap it, because the couple are on one couch and the reveal is
+  over for both of them at once. A Page that has closed refuses: five attempts
+  is five attempts.
+  """
+  @spec next_attempt(String.t(), String.t()) ::
+          :ok | {:error, :not_revealed | :page_closed | :no_such_seat}
+  def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
+
+  @doc """
+  "One more?" — a fresh Page in the same Room, with the same Seats.
+
+  Only from a Page that has closed, so that the tap can never take a Page away
+  from the couple in the middle of one.
+  """
+  @spec next_page(String.t(), String.t()) :: :ok | {:error, :page_open | :no_such_seat}
+  def next_page(slug, seat_id), do: call(slug, {:next_page, seat_id})
+
   @doc "The Seat this browser already holds in the Room, without typing a name."
   @spec rejoin(String.t(), String.t()) :: {:ok, map()} | :error
   def rejoin(slug, device_token), do: call(slug, {:rejoin, device_token})

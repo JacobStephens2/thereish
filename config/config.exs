@@ -22,6 +22,10 @@ config :meaning_game,
   # grade in v1: whether a harsh grade should be revealed sooner is a question
   # the couch answers, not one to guess at here.
   reveal_beat_ms: 2500,
+  # How many tries a Page gets before it closes unmelded. Five is a guess about
+  # how long a converging arc stays funny, which makes it a setting the couch
+  # moves rather than a number in the rules.
+  attempts_per_page: 5,
   # The ladder a closeness is read on. All of it is configuration because all of
   # it is calibration — the boundaries move as the couple's fairness taps say
   # they should, and a Meld starts at the floor of the `meld` band.

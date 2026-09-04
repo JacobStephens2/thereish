@@ -190,7 +190,7 @@ defmodule MeaningGame.RoomsTest do
       assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
 
       assert_receive :room_changed
-      view = await_phase(ctx.slug, :reveal)
+      view = await_reveal(ctx.slug)
 
       assert view.reveal.closeness == 80
       assert view.reveal.band == :meld
@@ -211,7 +211,7 @@ defmodule MeaningGame.RoomsTest do
       Process.sleep(50)
       assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
 
-      assert await_phase(ctx.slug, :reveal).reveal.closeness == 0
+      assert await_reveal(ctx.slug).reveal.closeness == 0
     end
 
     test "a Bridge nobody else can see until they have written their own", ctx do
@@ -240,7 +240,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
 
-      view = await_phase(ctx.slug, :reveal)
+      view = await_reveal(ctx.slug)
 
       assert view.reveal.closeness == nil
       refute hd(view.reveal.pairs).graded?
@@ -253,7 +253,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
 
-      view = await_phase(ctx.slug, :reveal)
+      view = await_reveal(ctx.slug)
 
       assert view.reveal.closeness == nil
       assert view.reveal.melded? == false
@@ -264,11 +264,12 @@ defmodule MeaningGame.RoomsTest do
     test "a phone that slept through the whole Page snapshots straight into the reveal", ctx do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
-      await_phase(ctx.slug, :reveal)
+      await_reveal(ctx.slug)
 
       mara = Rooms.snapshot(ctx.slug, ctx.mara.id)
 
-      assert mara.phase == :reveal
+      # They melded, so the Page she woke into is a Page that has ended.
+      assert mara.phase == :closed
       assert mara.reveal == Rooms.snapshot(ctx.slug, nil).reveal
     end
 
@@ -280,7 +281,107 @@ defmodule MeaningGame.RoomsTest do
 
       # The Room answers while the verdict is still out.
       assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
-      assert await_phase(ctx.slug, :reveal).reveal.closeness == 80
+      assert await_reveal(ctx.slug).reveal.closeness == 80
+    end
+  end
+
+  describe "the attempt ladder" do
+    setup do
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      %{slug: slug, mara: mara, jacob: jacob}
+    end
+
+    # One attempt, missed or melded depending on the two words handed in.
+    defp play(ctx, mara_bridge, jacob_bridge) do
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, mara_bridge)
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, jacob_bridge)
+
+      await_reveal(ctx.slug)
+    end
+
+    test "a miss carries both Bridges forward and the next attempt is up", ctx do
+      view = play(ctx, "cairn", "beacon")
+
+      assert view.phase == :reveal
+      assert view.next_anchors == ["cairn", "beacon"]
+
+      assert :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+
+      for viewer <- [ctx.mara.id, ctx.jacob.id, nil] do
+        view = Rooms.snapshot(ctx.slug, viewer)
+
+        assert view.phase == :bridging
+        assert view.anchors == ["cairn", "beacon"]
+        assert view.attempt.number == 2
+        assert view.your_bridge == nil
+      end
+    end
+
+    test "the Room is not the thing that decides to try again", ctx do
+      play(ctx, "cairn", "beacon")
+
+      # Nobody has tapped, so the reveal is still up and still the same one.
+      Process.sleep(20)
+
+      assert Rooms.snapshot(ctx.slug, nil).phase == :reveal
+      assert Rooms.snapshot(ctx.slug, nil).attempt.number == 1
+    end
+
+    test "only a Seat in the Room can start the next attempt", ctx do
+      play(ctx, "cairn", "beacon")
+
+      assert {:error, :no_such_seat} = Rooms.next_attempt(ctx.slug, Ecto.UUID.generate())
+      assert Rooms.snapshot(ctx.slug, nil).attempt.number == 1
+    end
+
+    test "a Meld closes the Page there and then", ctx do
+      view = play(ctx, "cairn", "cairo")
+
+      assert view.phase == :closed
+      assert view.closed == %{because: :meld, attempt: 1}
+      assert view.reveal.melded?
+      assert {:error, :page_closed} = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+    end
+
+    test "the last attempt closes the Page unmelded", ctx do
+      attempt_cap(2)
+
+      play(ctx, "cairn", "beacon")
+      :ok = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+      view = play(ctx, "wharf", "gantry")
+
+      assert view.phase == :closed
+      assert view.closed == %{because: :attempts_spent, attempt: 2}
+      refute view.reveal.melded?
+      assert Enum.map(view.played, & &1.anchors) == [["lantern", "harbour"]]
+    end
+
+    test "one more? is a fresh Page with the same Seats", ctx do
+      play(ctx, "cairn", "cairo")
+
+      assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+
+      for viewer <- [ctx.mara.id, ctx.jacob.id, nil] do
+        view = Rooms.snapshot(ctx.slug, viewer)
+
+        assert view.phase == :bridging
+        assert view.attempt.number == 1
+        assert view.anchors != ["lantern", "harbour"]
+        assert view.reveal == nil
+        assert view.played == []
+        assert Enum.map(view.seats, & &1.name) == ["Mara", "Jacob"]
+      end
+    end
+
+    test "one more? is refused while the Page is still being played", ctx do
+      assert {:error, :page_open} = Rooms.next_page(ctx.slug, ctx.mara.id)
+
+      play(ctx, "cairn", "beacon")
+
+      assert {:error, :page_open} = Rooms.next_page(ctx.slug, ctx.mara.id)
     end
   end
 
@@ -306,7 +407,7 @@ defmodule MeaningGame.RoomsTest do
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
-      await_phase(slug, :reveal)
+      await_reveal(slug)
 
       pid = GenServer.whereis(Server.via(slug))
       ref = Process.monitor(pid)

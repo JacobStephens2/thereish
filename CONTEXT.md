@@ -56,6 +56,10 @@ _Avoid_: prompt (collides with the model-prompt sense), pair, cue
 A player's answer — the word whose meaning spans the Anchors.
 _Avoid_: answer, guess, submission
 
+**Attempt**:
+One try at a Page: a set of Anchors, a Bridge from every Seat, and a Verdict for every pair. A Page gets a fixed number of them, and a miss carries the two failed Bridges forward as the next Attempt's Anchors, so the Attempts of one Page are a converging arc rather than repeated guesses.
+_Avoid_: try, turn, round, guess, retry
+
 **Meld**:
 A converged Bridge — the players' Bridges assayed close enough to count as one mind.
 _Avoid_: match, hit, win

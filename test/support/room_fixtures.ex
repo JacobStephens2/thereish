@@ -48,6 +48,18 @@ defmodule MeaningGame.RoomFixtures do
   end
 
   @doc """
+  How many attempts a Page gets, for one test.
+
+  Two is usually enough to watch a Page run out of them, and five rounds of
+  typing to prove the same rule is five rounds of nothing.
+  """
+  def attempt_cap(attempts) do
+    restore(:attempts_per_page)
+
+    Application.put_env(:meaning_game, :attempts_per_page, attempts)
+  end
+
+  @doc """
   The Room's view once it has reached `phase`.
 
   The Room reaches a reveal on its own time — a beat runs, a verdict arrives —
@@ -60,6 +72,23 @@ defmodule MeaningGame.RoomFixtures do
         view.phase == phase && view
       end,
       "the Room never reached #{inspect(phase)}"
+    )
+  end
+
+  @doc """
+  The Room's view once the reveal is up, whether or not it closed the Page.
+
+  What a test that plays a Page is waiting for is the reveal landing; whether
+  the grade also ended the Page is the thing under test rather than the thing to
+  wait on.
+  """
+  def await_reveal(slug) do
+    eventually(
+      fn ->
+        view = MeaningGame.Rooms.snapshot(slug, nil)
+        view.reveal != nil && view
+      end,
+      "the reveal never landed in this Room"
     )
   end
 
