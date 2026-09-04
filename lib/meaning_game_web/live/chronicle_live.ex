@@ -94,12 +94,37 @@ defmodule MeaningGameWeb.ChronicleLive do
     end
   end
 
+  def handle_event("unblind_experiment", _params, socket) do
+    room_id = socket.assigns.room.id
+    seat_id = socket.assigns.seat && socket.assigns.seat.id
+
+    {:ok, _} =
+      Chronicle.record_experiment_unblinding(room_id, %{
+        experiment_id: "bait_against_plain",
+        seat_id: seat_id,
+        unblinded_at: DateTime.utc_now(),
+        notes: "Deliberate unblinding from Chronicle"
+      })
+
+    Phoenix.PubSub.broadcast(MeaningGame.PubSub, "room:#{socket.assigns.slug}", :room_changed)
+
+    {:noreply, load_pages(socket)}
+  end
+
   @impl true
   def handle_info(:room_changed, socket), do: {:noreply, load_pages(socket)}
   def handle_info(:chronicle_changed, socket), do: {:noreply, load_pages(socket)}
 
   defp load_pages(socket) do
-    assign(socket, :pages, Chronicle.book(socket.assigns.room.id))
+    room_id = socket.assigns.room.id
+    pages = Chronicle.book(room_id)
+    unblinded = Chronicle.experiment_unblinded?(room_id, "bait_against_plain")
+    readout = Chronicle.experiment_readout(room_id, "bait_against_plain")
+
+    socket
+    |> assign(:pages, pages)
+    |> assign(:unblinded, unblinded)
+    |> assign(:readout, readout)
   end
 
   defp default_correction_params do
@@ -156,6 +181,107 @@ defmodule MeaningGameWeb.ChronicleLive do
         </div>
       </header>
 
+      <!-- Experiment Harness (Ticket 13) -->
+      <section
+        data-role="experiment-card"
+        class="flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
+      >
+        <div class="flex items-start justify-between gap-2 border-b border-base-200 pb-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold uppercase tracking-wider opacity-60">Experiment</span>
+              <span
+                :if={!@unblinded}
+                data-role="blinded-banner"
+                class="rounded-full bg-base-200 px-2.5 py-0.5 text-xs font-semibold opacity-70"
+              >
+                Blinded during play
+              </span>
+              <span
+                :if={@unblinded}
+                data-role="unblinded-banner"
+                class="rounded-full bg-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary"
+              >
+                Deliberately Unblinded
+              </span>
+            </div>
+            <h2 class="text-xl font-bold tracking-tight mt-1">Bait against plain</h2>
+            <p class="text-xs opacity-70 mt-0.5">
+              Testing ADR-0004's misdirection decision. Declared sample size: 20 Pages.
+            </p>
+          </div>
+          <div>
+            <button
+              :if={!@unblinded}
+              phx-click="unblind_experiment"
+              data-role="unblind-button"
+              class="rounded-lg bg-neutral px-3 py-1.5 text-xs font-semibold text-neutral-content hover:opacity-90 cursor-pointer"
+            >
+              Unblind Experiment
+            </button>
+          </div>
+        </div>
+
+        <div class="text-xs opacity-75">
+          <p>
+            <span class="font-semibold">Declared outcomes:</span>
+            Meld rate, attempts to meld, fairness preferences, overrules, and bait trap convergence.
+          </p>
+        </div>
+
+        <!-- Qualitative Readout when unblinded -->
+        <div
+          :if={@unblinded && @readout}
+          data-role="experiment-readout"
+          class="flex flex-col gap-3 mt-1 pt-3 border-t border-base-200"
+        >
+          <h3 class="text-sm font-bold uppercase tracking-wider opacity-70">Qualitative Readout</h3>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div
+              data-role="readout-arm-bait"
+              class="rounded-lg bg-base-200/60 p-3 flex flex-col gap-1 text-xs"
+            >
+              <span class="font-bold text-sm text-secondary">Bait-scored Pages</span>
+              <div>Pages played: <span class="font-semibold">{@readout.bait.pages_count}</span></div>
+              <div>Meld rate: <span class="font-semibold">{@readout.bait.meld_rate}</span></div>
+              <div>
+                Mean attempts:
+                <span class="font-semibold">{@readout.bait.mean_attempts_to_meld}</span>
+              </div>
+              <div>
+                Traps sprung: <span class="font-semibold">{@readout.bait.trap_sprung_count}</span>
+              </div>
+              <div class="mt-1 opacity-75">Fairness: {@readout.bait.fairness_summary}</div>
+            </div>
+
+            <div
+              data-role="readout-arm-plain"
+              class="rounded-lg bg-base-200/60 p-3 flex flex-col gap-1 text-xs"
+            >
+              <span class="font-bold text-sm opacity-80">Plain Pages</span>
+              <div>Pages played: <span class="font-semibold">{@readout.plain.pages_count}</span></div>
+              <div>Meld rate: <span class="font-semibold">{@readout.plain.meld_rate}</span></div>
+              <div>
+                Mean attempts:
+                <span class="font-semibold">{@readout.plain.mean_attempts_to_meld}</span>
+              </div>
+              <div>
+                Overrules: <span class="font-semibold">{@readout.plain.overrules_count}</span>
+              </div>
+              <div class="mt-1 opacity-75">Fairness: {@readout.plain.fairness_summary}</div>
+            </div>
+          </div>
+
+          <div
+            data-role="readout-narrative"
+            class="rounded-lg bg-base-200/30 p-3 text-xs italic opacity-90 border border-base-300/50"
+          >
+            "{@readout.summary_narrative}"
+          </div>
+        </div>
+      </section>
+
       <div
         :if={@pages == []}
         data-role="empty-chronicle"
@@ -185,6 +311,27 @@ defmodule MeaningGameWeb.ChronicleLive do
                   class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
                   Give: {page.give}
+                </span>
+                <span
+                  :if={page[:experiment_unblinded] && page[:arm]}
+                  data-role="arm-tag"
+                  class="rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs font-semibold text-secondary"
+                >
+                  Arm: {String.capitalize(page.arm)}
+                </span>
+                <span
+                  :if={page[:experiment_unblinded] && page[:trap_converged]}
+                  data-role="trap-tag"
+                  class="rounded-full bg-warning/20 px-2.5 py-0.5 text-xs font-semibold text-warning"
+                >
+                  Bait trap sprung
+                </span>
+                <span
+                  :if={page[:experiment_unblinded] && page[:deep_converged]}
+                  data-role="deep-tag"
+                  class="rounded-full bg-info/20 px-2.5 py-0.5 text-xs font-semibold text-info"
+                >
+                  Deep meld
                 </span>
               </div>
               <p class="text-xs opacity-50">

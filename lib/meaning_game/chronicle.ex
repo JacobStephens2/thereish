@@ -23,6 +23,9 @@ defmodule MeaningGame.Chronicle do
   alias MeaningGame.Chronicle.Attempt
   alias MeaningGame.Chronicle.Bridge
   alias MeaningGame.Chronicle.Correction
+  alias MeaningGame.Chronicle.ExperimentAssignment
+  alias MeaningGame.Chronicle.ExperimentOutcome
+  alias MeaningGame.Chronicle.ExperimentUnblinding
   alias MeaningGame.Chronicle.FairnessTap
   alias MeaningGame.Chronicle.Overrule
   alias MeaningGame.Chronicle.Page
@@ -177,6 +180,219 @@ defmodule MeaningGame.Chronicle do
   end
 
   @doc """
+  Records one experiment arm assignment for a Page as an append-only event (ticket 13).
+  """
+  @spec record_experiment_assignment(Ecto.UUID.t(), map()) ::
+          {:ok, ExperimentAssignment.t()} | {:error, Ecto.Changeset.t()}
+  def record_experiment_assignment(room_id, attrs) do
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    %ExperimentAssignment{}
+    |> ExperimentAssignment.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Records one experiment outcome for a Page as an append-only event (ticket 13).
+  """
+  @spec record_experiment_outcome(Ecto.UUID.t(), map()) ::
+          {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
+  def record_experiment_outcome(room_id, attrs) do
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    %ExperimentOutcome{}
+    |> ExperimentOutcome.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Records an unblinding action for an experiment as an append-only event (ticket 13).
+  """
+  @spec record_experiment_unblinding(Ecto.UUID.t(), map()) ::
+          {:ok, ExperimentUnblinding.t()} | {:error, Ecto.Changeset.t()}
+  def record_experiment_unblinding(room_id, attrs) do
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    %ExperimentUnblinding{}
+    |> ExperimentUnblinding.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Returns all experiment assignments for a Room, oldest first.
+  """
+  @spec experiment_assignments(Ecto.UUID.t() | String.t(), String.t()) ::
+          [ExperimentAssignment.t()]
+  def experiment_assignments(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(a in ExperimentAssignment,
+      where: a.room_id == ^room_id and a.experiment_id == ^experiment_id,
+      order_by: [asc: a.assigned_at, asc: a.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns all experiment outcomes for a Room, oldest first.
+  """
+  @spec experiment_outcomes(Ecto.UUID.t() | String.t(), String.t()) :: [ExperimentOutcome.t()]
+  def experiment_outcomes(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(o in ExperimentOutcome,
+      where: o.room_id == ^room_id and o.experiment_id == ^experiment_id,
+      order_by: [asc: o.inserted_at, asc: o.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns all unblindings for a Room, oldest first.
+  """
+  @spec experiment_unblindings(Ecto.UUID.t() | String.t(), String.t()) ::
+          [ExperimentUnblinding.t()]
+  def experiment_unblindings(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(u in ExperimentUnblinding,
+      where: u.room_id == ^room_id and u.experiment_id == ^experiment_id,
+      order_by: [asc: u.unblinded_at, asc: u.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Whether the given experiment has been deliberately unblinded in this Room.
+  """
+  @spec experiment_unblinded?(Ecto.UUID.t() | String.t(), String.t()) :: boolean()
+  def experiment_unblinded?(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    Repo.exists?(
+      from(u in ExperimentUnblinding,
+        where: u.room_id == ^room_id and u.experiment_id == ^experiment_id
+      )
+    )
+  end
+
+  @doc """
+  Returns past assigned arms in the given chapter stratum.
+  """
+  @spec chapter_assignments(Ecto.UUID.t() | String.t(), String.t(), String.t()) :: [atom()]
+  def chapter_assignments(room_id_or_slug, chapter, experiment_id \\ "bait_against_plain") do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(a in ExperimentAssignment,
+      where:
+        a.room_id == ^room_id and a.chapter == ^chapter and a.experiment_id == ^experiment_id,
+      order_by: [asc: a.assigned_at, asc: a.id],
+      select: a.arm
+    )
+    |> Repo.all()
+    |> Enum.map(&String.to_atom/1)
+  end
+
+  @doc """
+  Computes the qualitative readout for an experiment in a Room.
+  """
+  @spec experiment_readout(Ecto.UUID.t() | String.t(), String.t()) :: map()
+  def experiment_readout(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+    room_id = resolve_room_id(room_id_or_slug)
+    outcomes = experiment_outcomes(room_id, experiment_id)
+    views = page_views(room_id)
+    taps = fairness_taps(room_id)
+    overrules = overrules(room_id)
+
+    data = summarize_experiment_data(outcomes, taps, overrules, views)
+    MeaningGame.Experiments.qualitative_readout(data)
+  end
+
+  defp summarize_experiment_data(outcomes, taps, overrules, views) do
+    bait_outcomes = Enum.filter(outcomes, &(&1.arm == "bait"))
+    plain_outcomes = Enum.filter(outcomes, &(&1.arm == "plain"))
+
+    bait_page_identifiers =
+      Enum.flat_map(bait_outcomes, &[to_string(&1.page_id), to_string(&1.page_identifier)])
+      |> Enum.reject(&(&1 in ["", "nil"]))
+      |> MapSet.new()
+
+    plain_page_identifiers =
+      Enum.flat_map(plain_outcomes, &[to_string(&1.page_id), to_string(&1.page_identifier)])
+      |> Enum.reject(&(&1 in ["", "nil"]))
+      |> MapSet.new()
+
+    bait_views =
+      Enum.filter(views, fn v ->
+        to_string(v.id) in bait_page_identifiers or
+          to_string(v.document["id"]) in bait_page_identifiers
+      end)
+
+    plain_views =
+      Enum.filter(views, fn v ->
+        to_string(v.id) in plain_page_identifiers or
+          to_string(v.document["id"]) in plain_page_identifiers
+      end)
+
+    {taps_bait, taps_plain} =
+      if bait_views != [] or plain_views != [] do
+        {
+          Enum.flat_map(bait_views, & &1.fairness_taps),
+          Enum.flat_map(plain_views, & &1.fairness_taps)
+        }
+      else
+        page_ids_bait = Enum.map(bait_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
+        page_ids_plain = Enum.map(plain_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
+
+        {
+          Enum.filter(taps, &(&1.page_id in page_ids_bait)),
+          Enum.filter(taps, &(&1.page_id in page_ids_plain))
+        }
+      end
+
+    {overrules_bait_count, overrules_plain_count} =
+      if bait_views != [] or plain_views != [] do
+        {
+          Enum.flat_map(bait_views, & &1.overrules) |> length(),
+          Enum.flat_map(plain_views, & &1.overrules) |> length()
+        }
+      else
+        page_ids_bait = Enum.map(bait_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
+        page_ids_plain = Enum.map(plain_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
+
+        {
+          Enum.count(overrules, &(&1.page_id in page_ids_bait)),
+          Enum.count(overrules, &(&1.page_id in page_ids_plain))
+        }
+      end
+
+    %{
+      bait: %{
+        pages_count: length(bait_outcomes),
+        melded_count: Enum.count(bait_outcomes, & &1.melded),
+        melded_history: Enum.map(bait_outcomes, & &1.melded),
+        attempts_to_meld:
+          bait_outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
+        fairness_taps: Enum.frequencies_by(taps_bait, & &1.label),
+        overrules_count: overrules_bait_count,
+        trap_sprung_count: Enum.count(bait_outcomes, & &1.trap_converged),
+        deep_convergence_count: Enum.count(bait_outcomes, & &1.deep_converged)
+      },
+      plain: %{
+        pages_count: length(plain_outcomes),
+        melded_count: Enum.count(plain_outcomes, & &1.melded),
+        melded_history: Enum.map(plain_outcomes, & &1.melded),
+        attempts_to_meld:
+          plain_outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
+        fairness_taps: Enum.frequencies_by(taps_plain, & &1.label),
+        overrules_count: overrules_plain_count,
+        trap_sprung_count: Enum.count(plain_outcomes, & &1.trap_converged),
+        deep_convergence_count: Enum.count(plain_outcomes, & &1.deep_converged)
+      }
+    }
+  end
+
+  @doc """
   Every closed Page in one Room, oldest first, with its attempts, Bridges and
   verdicts loaded.
 
@@ -224,8 +440,22 @@ defmodule MeaningGame.Chronicle do
     all_overrules = overrules(room_id)
     all_corrections = corrections(room_id)
     all_taps = fairness_taps(room_id)
+    all_assignments = experiment_assignments(room_id)
+    all_outcomes = experiment_outcomes(room_id)
+    unblinded? = experiment_unblinded?(room_id)
 
-    Enum.map(pages, &compute_page_view(&1, all_overrules, all_corrections, all_taps))
+    Enum.map(
+      pages,
+      &compute_page_view(
+        &1,
+        all_overrules,
+        all_corrections,
+        all_taps,
+        all_assignments,
+        all_outcomes,
+        unblinded?
+      )
+    )
   end
 
   @doc """
@@ -327,10 +557,15 @@ defmodule MeaningGame.Chronicle do
     Enum.join(lines ++ attempt_lines ++ overrule_lines ++ correction_lines, "\n")
   end
 
-  @doc """
-  Computes the view of one Page from its event rows, overrules, and corrections.
-  """
-  def compute_page_view(%Page{} = page, all_overrules, all_corrections, all_taps \\ []) do
+  def compute_page_view(
+        %Page{} = page,
+        all_overrules,
+        all_corrections,
+        all_taps \\ [],
+        all_assignments \\ [],
+        all_outcomes \\ [],
+        unblinded? \\ false
+      ) do
     page_overrules =
       Enum.filter(all_overrules, fn o ->
         o.page_id == page.id or
@@ -454,6 +689,29 @@ defmodule MeaningGame.Chronicle do
           [] -> []
         end
 
+    page_ident = to_string(page.document["id"] || page.document[:id] || page.id)
+
+    matching_assignment =
+      Enum.find(all_assignments, fn a ->
+        a.page_id == page.id or
+          (a.room_id == page.room_id and to_string(a.page_identifier) == page_ident)
+      end)
+
+    matching_outcome =
+      Enum.find(all_outcomes, fn o ->
+        o.page_id == page.id or
+          (o.room_id == page.room_id and to_string(o.page_identifier) == page_ident)
+      end)
+
+    raw_arm =
+      (matching_assignment && matching_assignment.arm) ||
+        (matching_outcome && matching_outcome.arm)
+
+    experiment_id =
+      (matching_assignment && matching_assignment.experiment_id) ||
+        (matching_outcome && matching_outcome.experiment_id) ||
+        "bait_against_plain"
+
     %{
       id: page.id,
       room_id: page.room_id,
@@ -470,7 +728,14 @@ defmodule MeaningGame.Chronicle do
       attempts: attempts,
       overrules: Enum.map(page_overrules, &format_overrule/1),
       corrections: Enum.map(page_corrections, &format_correction/1),
-      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1)
+      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1),
+      experiment_id: experiment_id,
+      experiment_unblinded: unblinded?,
+      arm: if(unblinded?, do: raw_arm, else: nil),
+      trap_converged:
+        if(unblinded? && matching_outcome, do: matching_outcome.trap_converged, else: nil),
+      deep_converged:
+        if(unblinded? && matching_outcome, do: matching_outcome.deep_converged, else: nil)
     }
   end
 

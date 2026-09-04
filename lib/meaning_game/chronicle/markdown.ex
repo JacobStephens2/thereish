@@ -41,6 +41,18 @@ defmodule MeaningGame.Chronicle.Markdown do
 
     give_lines = if page[:give], do: ["- Give: #{page.give}"], else: []
 
+    experiment_lines =
+      cond do
+        page[:experiment_unblinded] && page[:arm] ->
+          ["- Experiment: Bait against plain", "- Arm: #{page.arm}"]
+
+        page[:experiment_id] ->
+          ["- Experiment: Blinded (#{page.experiment_id})"]
+
+        true ->
+          []
+      end
+
     meta_lines =
       [
         "### Page #{index}: #{anchors_str}",
@@ -48,6 +60,7 @@ defmodule MeaningGame.Chronicle.Markdown do
         "- Closeness: #{closeness_str}"
       ] ++
         give_lines ++
+        experiment_lines ++
         [
           "- Opened: #{page.opened_at && DateTime.to_iso8601(page.opened_at)}",
           "- Closed: #{page.closed_at && DateTime.to_iso8601(page.closed_at)}"
@@ -240,6 +253,24 @@ defmodule MeaningGame.Chronicle.Markdown do
         |> String.trim()
       end
 
+    experiment_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Experiment:"))
+
+    experiment =
+      if experiment_line do
+        experiment_line
+        |> String.replace_prefix("- Experiment:", "")
+        |> String.trim()
+      end
+
+    arm_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Arm:"))
+
+    arm =
+      if arm_line do
+        arm_line
+        |> String.replace_prefix("- Arm:", "")
+        |> String.trim()
+      end
+
     attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
 
     %{
@@ -247,6 +278,8 @@ defmodule MeaningGame.Chronicle.Markdown do
       melded: melded,
       closeness: closeness,
       give: give,
+      experiment: experiment,
+      arm: arm,
       attempts: attempts
     }
   end

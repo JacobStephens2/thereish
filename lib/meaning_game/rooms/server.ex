@@ -80,7 +80,9 @@ defmodule MeaningGame.Rooms.Server do
 
     with {:ok, room} <- Store.get_or_create_room(slug, seat_limit) do
       seats = Store.list_seats(room.id)
-      game = Game.init(seat_limit: room.seat_limit, seats: seats, page: Pages.first(room.id))
+      page = Pages.first(room.id)
+      game = Game.init(seat_limit: room.seat_limit, seats: seats, page: page)
+      current_arm = assign_and_record_arm(room.id, page)
 
       state = %{
         room: room,
@@ -92,7 +94,8 @@ defmodule MeaningGame.Rooms.Server do
         give_status: nil,
         give_announcement: nil,
         give_failure: nil,
-        active_give: nil
+        active_give: nil,
+        current_arm: current_arm
       }
 
       {:ok, opened(state)}
@@ -220,6 +223,8 @@ defmodule MeaningGame.Rooms.Server do
 
         case draw_result do
           {:ok, next_page, state} ->
+            current_arm = assign_and_record_arm(state.room.id, next_page)
+            state = Map.put(state, :current_arm, current_arm)
             event = {:page_started, %{seat_id: seat_id, page: next_page}}
 
             case Game.apply(state.game, event) do
@@ -241,6 +246,22 @@ defmodule MeaningGame.Rooms.Server do
           {:error, :pool_exhausted} = error ->
             {:reply, error, state}
         end
+    end
+  end
+
+  def handle_call({:unblind_experiment, seat_id, experiment_id}, _from, state) do
+    case Chronicle.record_experiment_unblinding(state.room.id, %{
+           experiment_id: experiment_id || "bait_against_plain",
+           seat_id: seat_id,
+           unblinded_at: DateTime.utc_now(),
+           notes: "Deliberate unblinding"
+         }) do
+      {:ok, _unblinding} ->
+        broadcast(state.room.slug)
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -430,7 +451,45 @@ defmodule MeaningGame.Rooms.Server do
   # bad; taking the Room down in front of the couple, and losing the Page they
   # are looking at along with it, is worse.
   defp perform({:chronicle, entry}, state) do
-    {:ok, _page} = Chronicle.write(state.room.id, entry, state.opened_at)
+    {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
+
+    arm = state[:current_arm] || :bait
+
+    trap_converged =
+      Enum.any?(entry.attempts, fn att ->
+        Enum.any?(att.verdicts, fn v ->
+          (is_map(v.meta) && v.meta[:trap_sprung] == true) or
+            (is_map(v[:meta]) && v[:meta][:trap_sprung] == true)
+        end)
+      end)
+
+    deep_converged =
+      Enum.any?(entry.attempts, fn att ->
+        Enum.any?(att.verdicts, fn v ->
+          (is_map(v.meta) && v.meta[:deep_convergence] == true) or
+            (is_map(v[:meta]) && v[:meta][:deep_convergence] == true)
+        end)
+      end)
+
+    page_identifier =
+      cond do
+        is_map(entry.page) -> entry.page[:id] || entry.page["id"] || page.id
+        true -> page.id
+      end
+
+    _ =
+      Chronicle.record_experiment_outcome(state.room.id, %{
+        page_id: page.id,
+        page_identifier: to_string(page_identifier),
+        experiment_id: "bait_against_plain",
+        arm: to_string(arm),
+        melded: entry.melded?,
+        closeness: entry.closeness,
+        attempts_count: length(entry.attempts),
+        closed_because: to_string(entry.closed_because),
+        trap_converged: trap_converged,
+        deep_converged: deep_converged
+      })
 
     state
   rescue
@@ -471,9 +530,11 @@ defmodule MeaningGame.Rooms.Server do
 
   defp perform({:assay, pair, request}, state) do
     room = self()
+    arm = state[:current_arm] || :bait
+    page = state.game.page
 
     Task.Supervisor.start_child(MeaningGame.Keeper.Tasks, fn ->
-      send(room, {:assayed, verdict_event(pair, assay(request))})
+      send(room, {:assayed, verdict_event(pair, assay(request, page, arm))})
     end)
 
     waiting_on(state, pair)
@@ -558,12 +619,16 @@ defmodule MeaningGame.Rooms.Server do
 
   # An Assayer that blows up has failed to grade, which is a thing the game has
   # a rule for. It is not a thing the Room should die of.
-  defp assay(request) do
-    Keeper.assay(request)
+  defp assay(request, page, arm) do
+    Keeper.assay(request, page, arm)
   rescue
     error -> {:error, error}
   catch
     :exit, reason -> {:error, {:exit, reason}}
+  end
+
+  defp assign_and_record_arm(room_id, page) do
+    Keeper.assign_arm(room_id, page)
   end
 
   # How long the reveal is held is the Room's to know, because running it is the

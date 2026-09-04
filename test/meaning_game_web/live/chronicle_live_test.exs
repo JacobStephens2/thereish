@@ -161,5 +161,42 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       assert rendered =~ "Melissa: fair"
       assert rendered =~ "Jacob: too harsh"
     end
+
+    test "experiment is blinded until deliberately unblinded, then reveals qualitative readout",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairo")
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      # Experiment card is visible with blinded banner
+      assert has_element?(view, "[data-role=experiment-card]")
+      assert has_element?(view, "[data-role=blinded-banner]")
+      assert has_element?(view, "[data-role=unblind-button]")
+
+      # While blinded, no arm tag appears on the page
+      refute has_element?(view, "[data-role=arm-tag]")
+      refute has_element?(view, "[data-role=experiment-readout]")
+
+      # Deliberate unblinding
+      view |> element("[data-role=unblind-button]") |> render_click()
+
+      # Now unblinded banner is shown
+      assert has_element?(view, "[data-role=unblinded-banner]")
+      refute has_element?(view, "[data-role=unblind-button]")
+
+      # Arm tag is now displayed on the played page
+      assert has_element?(view, "[data-role=arm-tag]")
+
+      # Qualitative readout is displayed
+      assert has_element?(view, "[data-role=experiment-readout]")
+      assert has_element?(view, "[data-role=readout-narrative]")
+      readout_text = element(view, "[data-role=experiment-readout]") |> render()
+      assert readout_text =~ "Bait-scored Pages"
+      assert readout_text =~ "Plain Pages"
+
+      # No p-values
+      refute readout_text =~ ~r/p\s*<\s*0\.05/i
+      refute readout_text =~ "p-value"
+    end
   end
 end
