@@ -8,9 +8,28 @@ The apex `stephens.page` is a static site with its own proxies, so the game took
 a subdomain. `meld` names the Mind-Meld mechanic, not the game, which is still
 unnamed.
 
-## The one command
+## Continuous deployment (push to master)
 
-From a clean `master` that is pushed:
+Every push or merge to `master` deploys automatically via GitHub Actions
+(`.github/workflows/deploy.yml`).
+
+The workflow authenticates using a restricted SSH deploy key
+(`github-actions-meld` in `~/.ssh/authorized_keys`) that triggers the droplet's
+fleet deployment manager:
+
+```sh
+site-deploy meld <TARGET_SHA>
+```
+
+Configured in `/etc/site-deploy/sites.toml` under `[sites.meld]`:
+1. Acquires a global and site-specific lock to prevent concurrent deploys on the VPS.
+2. Ensures the server working directory is clean and fast-forwards `master` to the target SHA (skipping build steps if incoming commits only touch `.github/`).
+3. Executes `deploy/deploy.sh` to rebuild the Docker image, run migrations, and recreate the container.
+4. Verifies the deployment healthcheck against `https://meld.stephens.page/check`.
+
+## Manual deploy fallback
+
+When deploying manually from the Mac (e.g. if GitHub Actions is degraded or for immediate control):
 
 ```sh
 bin/deploy
