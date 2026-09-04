@@ -15,6 +15,6 @@ Do it as **one atomic change**, not expand–contract. The blast radius is wide 
 - [x] `lib/meaning_game/keeper/` and `keeper.ex` are moved to `steward/` and `steward.ex`, and every module is renamed to match
 - [x] Config keys, application children and fixtures use the new name
 - [x] `mix test` is green and `mix compile --warnings-as-errors` is clean
-- [x] `docs/design-brief.md`, `docs/deploy.md`, `docs/research/llm-in-word-games.md`, ADR-0005 and ADR-0006 say Steward
+- [x] `docs/design-brief.md`, `docs/deploy.md`, ADR-0005 and ADR-0006 say Steward (`docs/research/llm-in-word-games.md` checked; "adversarial gatekeeper" only)
 - [x] Issues under `.scratch/mind-meld/` that name the Keeper are updated
 - [x] No occurrence of "Keeper" survives outside `CONTEXT.md`'s `_Avoid_` line and ADR-0009's own account of the decision

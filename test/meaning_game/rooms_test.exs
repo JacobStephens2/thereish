@@ -583,7 +583,7 @@ defmodule MeaningGame.RoomsTest do
       {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
-      # Fake grader: "cairn" and "beacon" share no prefix -> closeness 0
+      # Fake Assayer: "cairn" and "beacon" share no prefix -> closeness 0
       :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "beacon")
       await_reveal(slug)

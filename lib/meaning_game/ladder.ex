@@ -55,7 +55,7 @@ defmodule MeaningGame.Ladder do
     |> Enum.find_value(fn {name, floor} -> closeness >= floor && name end)
   end
 
-  # The ladder's numbers are the game's, not the grader's: a model that answers
+  # The ladder's numbers are the game's, not the Assayer's: a model that answers
   # 140 has said "as close as it gets", and the players are shown the top rung
   # rather than a number the ladder has no rung for.
   defp clamp(closeness) do
