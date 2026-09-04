@@ -135,7 +135,9 @@ defmodule MeaningGame.KeeperFixtures do
     keeper = Application.fetch_env!(:meaning_game, :keeper)
     ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :keeper, keeper) end)
 
-    assayer = Keyword.merge(keeper[:roles][:assayer], opts)
+    {top, role_opts} = Keyword.split(opts, [:adapter])
+    keeper = Keyword.merge(keeper, top)
+    assayer = Keyword.merge(keeper[:roles][:assayer], role_opts)
 
     Application.put_env(:meaning_game, :keeper, put_in(keeper[:roles][:assayer], assayer))
   end

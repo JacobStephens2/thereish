@@ -44,11 +44,27 @@ defmodule MeaningGame.Keeper.Live do
   alias MeaningGame.Keeper
   alias MeaningGame.Keeper.Assay
   alias MeaningGame.Keeper.Gate
+  alias MeaningGame.Keeper.Precedent
 
   @impl true
   def assay(%{anchors: anchors, bridges: [left, right]}) do
     role = Keeper.role(:assayer)
+    model = role.model
+    prompt_version = Map.get(role, :prompt_version, Assay.version())
 
+    case Precedent.get(model, prompt_version, anchors, [left, right]) do
+      {:ok, verdict} ->
+        {:ok, verdict}
+
+      :miss ->
+        with {:ok, verdict} <- grade_live(role, anchors, left, right, prompt_version) do
+          Precedent.put(model, prompt_version, anchors, [left, right], verdict)
+          {:ok, verdict}
+        end
+    end
+  end
+
+  defp grade_live(role, anchors, left, right, prompt_version) do
     [forward, reverse] =
       [{left, right}, {right, left}]
       |> Enum.map(fn {first, second} ->
@@ -60,7 +76,7 @@ defmodule MeaningGame.Keeper.Live do
       |> await(role.deadline_ms)
 
     with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
-      {:ok, reconciled(forward, reverse)}
+      {:ok, reconciled(forward, reverse, prompt_version)}
     end
   end
 
@@ -135,14 +151,14 @@ defmodule MeaningGame.Keeper.Live do
   #
   # The cost is both orderings' answers, retries included — and not the hedged
   # requests that lost, whose usage nobody waited around to hear.
-  defp reconciled(forward, reverse) do
+  defp reconciled(forward, reverse, prompt_version) do
     %{
       closeness: round((forward.closeness + reverse.closeness) / 2),
       reasoning: forward.reasoning,
       quip: forward.quip,
       meta: %{
         model: forward.model,
-        prompt_version: Assay.version(),
+        prompt_version: prompt_version,
         cost_usd: forward.cost_usd + reverse.cost_usd,
         forward: forward.closeness,
         reverse: reverse.closeness,
