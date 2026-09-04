@@ -138,26 +138,48 @@ defmodule MeaningGame.PagesTest do
     end
   end
 
-  describe "provisional_reading/3" do
+  describe "provisional_reading at two Bridges" do
     test "reads meld for bait and deep meld for deep bridges" do
-      assert Pages.provisional_reading(@valid_page, "barbecue", "barbecue") == :meld
-      assert Pages.provisional_reading(@valid_page, "lawnmower", "lawnmower") == :deep_meld
-      assert Pages.provisional_reading(@valid_page, "chores", "chores") == :deep_meld
-      assert Pages.provisional_reading(@valid_page, "family", "family") == :meld
+      assert Pages.provisional_reading(@valid_page, ~w(barbecue barbecue)) == :meld
+      assert Pages.provisional_reading(@valid_page, ~w(lawnmower lawnmower)) == :deep_meld
+      assert Pages.provisional_reading(@valid_page, ~w(chores chores)) == :deep_meld
+      assert Pages.provisional_reading(@valid_page, ~w(family family)) == :meld
     end
 
     test "reads close when both are in likely_bridges" do
-      assert Pages.provisional_reading(@valid_page, "lawnmower", "family") == :close
-      assert Pages.provisional_reading(@valid_page, "barbecue", "chores") == :close
+      assert Pages.provisional_reading(@valid_page, ~w(lawnmower family)) == :close
+      assert Pages.provisional_reading(@valid_page, ~w(barbecue chores)) == :close
     end
 
     test "reads adjacent when one is in likely_bridges" do
-      assert Pages.provisional_reading(@valid_page, "lawnmower", "airplane") == :adjacent
-      assert Pages.provisional_reading(@valid_page, "spaceship", "family") == :adjacent
+      assert Pages.provisional_reading(@valid_page, ~w(lawnmower airplane)) == :adjacent
+      assert Pages.provisional_reading(@valid_page, ~w(spaceship family)) == :adjacent
     end
 
     test "reads miss when neither is in likely_bridges" do
-      assert Pages.provisional_reading(@valid_page, "spaceship", "airplane") == :miss
+      assert Pages.provisional_reading(@valid_page, ~w(spaceship airplane)) == :miss
+    end
+  end
+
+  describe "provisional_reading at three and more" do
+    test "every Bridge the same word reads as a Meld, deep if it was planted deep" do
+      assert Pages.provisional_reading(@valid_page, ~w(barbecue barbecue barbecue)) == :meld
+
+      assert Pages.provisional_reading(@valid_page, ~w(lawnmower lawnmower lawnmower)) ==
+               :deep_meld
+    end
+
+    test "every Bridge among the likely ones reads as close" do
+      assert Pages.provisional_reading(@valid_page, ~w(barbecue lawnmower chores family)) ==
+               :close
+    end
+
+    test "one stray among likely Bridges reads as adjacent rather than a miss" do
+      assert Pages.provisional_reading(@valid_page, ~w(barbecue lawnmower spaceship)) == :adjacent
+    end
+
+    test "no Bridge among the likely ones is a miss" do
+      assert Pages.provisional_reading(@valid_page, ~w(spaceship airplane submarine)) == :miss
     end
   end
 end

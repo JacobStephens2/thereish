@@ -36,7 +36,7 @@ defmodule MeaningGame.RoomsTest do
       assert Rooms.snapshot(slug, nil).open_seats == 0
     end
 
-    test "a Room at the Assayer's cap plays, and every pair in it is graded" do
+    test "a Room at the Assayer's cap plays, and every Bridge in it is graded together" do
       slug = open_room(seat_limit: MeaningGame.Steward.seat_cap())
 
       seats =
@@ -47,9 +47,12 @@ defmodule MeaningGame.RoomsTest do
 
       Enum.each(seats, &(:ok = Rooms.commit_bridge(slug, &1.id, "cairn")))
 
-      # Six Seats is fifteen unordered pairs, which is why six is the cap: the
-      # rules would happily do sixty (ADR-0007), and one reveal beat would not.
-      assert length(await_reveal(slug).reveal.pairs) == 15
+      # Six Bridges, one Verdict. The cap is about what a phone can show and
+      # what one reading can hold, not about the bill (ADR-0010).
+      view = await_reveal(slug)
+
+      assert length(view.reveal.bridges) == 6
+      assert view.reveal.closeness == 100
     end
 
     test "a Room too big for the Assayer to grade does not open" do
@@ -219,8 +222,7 @@ defmodule MeaningGame.RoomsTest do
       assert view.reveal.band == :meld
       assert view.reveal.melded?
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
-      assert [pair] = view.reveal.pairs
-      assert pair.reasoning =~ "cairn"
+      assert view.reveal.reasoning =~ "cairn"
     end
 
     test "the reveal is held for the beat rather than shown the moment it is graded", ctx do
@@ -286,7 +288,7 @@ defmodule MeaningGame.RoomsTest do
       view = await_reveal(ctx.slug)
 
       assert view.reveal.closeness == nil
-      refute hd(view.reveal.pairs).graded?
+      refute view.reveal.graded?
       assert Process.alive?(GenServer.whereis(Server.via(ctx.slug)))
     end
 
@@ -300,7 +302,7 @@ defmodule MeaningGame.RoomsTest do
 
       assert view.reveal.closeness == nil
       assert view.reveal.melded? == false
-      refute hd(view.reveal.pairs).graded?
+      refute view.reveal.graded?
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
     end
 
@@ -345,6 +347,89 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "four phones at a table" do
+    setup do
+      slug = open_room(seat_limit: 4)
+
+      seats =
+        for name <- ~w(Melissa Jacob Ada Ida) do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      %{slug: slug, seats: seats}
+    end
+
+    test "the table fills, and the Page is up on all four phones", ctx do
+      for seat <- ctx.seats do
+        view = Rooms.snapshot(ctx.slug, seat.id)
+
+        assert view.phase == :bridging
+        assert view.open_seats == 0
+        assert Enum.map(view.seats, & &1.name) == ["Melissa", "Jacob", "Ada", "Ida"]
+      end
+    end
+
+    test "the last of four Bridges is one reveal, after the beat", ctx do
+      beat(120)
+
+      for {seat, bridge} <- Enum.zip(ctx.seats, ~w(cairn cairo beacon signal)) do
+        assert :ok = Rooms.commit_bridge(ctx.slug, seat.id, bridge)
+      end
+
+      # The theatre still runs at four: the grade is in long before the reveal.
+      assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
+
+      view = await_reveal(ctx.slug)
+
+      assert Enum.map(view.reveal.bridges, & &1.bridge) == ~w(cairn cairo beacon signal)
+      assert is_integer(view.reveal.closeness)
+      assert view.reveal.quip != nil
+      assert length(view.reveal.furthest) == 2
+      assert view.next_anchors == Enum.map(view.reveal.furthest, & &1.bridge)
+    end
+
+    test "a phone that slept through it snapshots back into the same reveal", ctx do
+      for {seat, bridge} <- Enum.zip(ctx.seats, ~w(cairn cairo beacon signal)) do
+        :ok = Rooms.commit_bridge(ctx.slug, seat.id, bridge)
+      end
+
+      await_reveal(ctx.slug)
+      ada = Enum.at(ctx.seats, 2)
+
+      assert Rooms.snapshot(ctx.slug, ada.id).reveal == Rooms.snapshot(ctx.slug, nil).reveal
+      assert Rooms.snapshot(ctx.slug, ada.id).you.name == "Ada"
+    end
+
+    test "one slow Verdict escalates once, and the whole table is told the same thing", ctx do
+      escalation(slow: 50, provisional: 200, unavailable: 400)
+      steward(delay_ms: 5_000)
+
+      for {seat, bridge} <- Enum.zip(ctx.seats, ~w(cairn cairo beacon signal)) do
+        :ok = Rooms.commit_bridge(ctx.slug, seat.id, bridge)
+      end
+
+      assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
+
+      assert eventually(fn ->
+               snap = Rooms.snapshot(ctx.slug, nil)
+               snap.assayer_step == :provisional and snap.provisional_band != nil
+             end)
+
+      view = await_reveal(ctx.slug)
+
+      # One Verdict given up on, not six: the reveal has no number at all, and
+      # nothing is still narrating the wait.
+      refute view.reveal.graded?
+      assert view.reveal.closeness == nil
+      assert view.assayer_step == nil
+
+      for seat <- ctx.seats do
+        assert Rooms.snapshot(ctx.slug, seat.id).reveal.closeness == nil
+      end
+    end
+  end
+
   describe "an Assayer that takes too long" do
     setup do
       slug = open_room()
@@ -378,8 +463,8 @@ defmodule MeaningGame.RoomsTest do
 
       assert view.reveal.closeness == nil
       assert view.reveal.melded? == false
-      refute hd(view.reveal.pairs).graded?
-      assert hd(view.reveal.pairs).quip != nil
+      refute view.reveal.graded?
+      assert view.reveal.quip != nil
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
 
       # The wait is over, so nothing on any screen is still narrating it.
