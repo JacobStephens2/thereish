@@ -15,4 +15,4 @@ Identity follows Jackbox, not SaaS: **joining a room takes only a name**; the se
 
 ## Consequences
 
-Chronicle rows reference seat ids, never accounts; an account maps to many seats. Group scoring rules (pairwise meld map vs. group centroid) remain open for the spec.
+Chronicle rows reference seat ids, never accounts; an account maps to many seats. Group scoring rules (pairwise meld map vs. group centroid) remained open for the spec; settled by ADR-0010, which supersedes the pairwise sketch above — the Assayer grades every Bridge as one set, one Verdict per Attempt.
