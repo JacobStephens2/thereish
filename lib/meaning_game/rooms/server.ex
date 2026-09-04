@@ -14,9 +14,9 @@ defmodule MeaningGame.Rooms.Server do
 
   The Page in progress is the exception, and it is a real one: Bridges and
   verdicts live in this process and nowhere else, so a Room that crashes
-  mid-Page comes back at the Anchors with both Bridges gone. Nothing here can
-  fix that until the Chronicle writes Page events to Postgres as they happen.
-  Until then a crash costs the Page, not the Seats.
+  mid-Page comes back at the Anchors with both Bridges gone. The Chronicle is
+  written when a Page closes, not as it is played, so a crash costs the Page
+  that was in flight — never a Page that finished, and never the Seats.
 
   ## It owns time, and the rules do not
 
@@ -36,6 +36,9 @@ defmodule MeaningGame.Rooms.Server do
   """
   use GenServer, restart: :permanent
 
+  require Logger
+
+  alias MeaningGame.Chronicle
   alias MeaningGame.Game
   alias MeaningGame.Keeper
   alias MeaningGame.Pages
@@ -58,8 +61,9 @@ defmodule MeaningGame.Rooms.Server do
     with {:ok, room} <- Store.get_or_create_room(slug, seat_limit) do
       seats = Store.list_seats(room.id)
       game = Game.init(seat_limit: room.seat_limit, seats: seats, page: Pages.first())
+      state = %{room: room, game: game, beat: nil, held: [], opened_at: nil}
 
-      {:ok, %{room: room, game: game, beat: nil, held: []}}
+      {:ok, opened(state)}
     end
   end
 
@@ -81,6 +85,24 @@ defmodule MeaningGame.Rooms.Server do
   def handle_call({:commit_bridge, seat_id, bridge}, _from, state) do
     case Game.apply(state.game, {:bridge_committed, %{seat_id: seat_id, bridge: bridge}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:next_attempt, seat_id}, _from, state) do
+    case Game.apply(state.game, {:attempt_advanced, %{seat_id: seat_id}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  # A fresh Page starts the Room's clock again, because how long a Page took is
+  # a fact about that Page and the Game keeps no clock of its own.
+  def handle_call({:next_page, seat_id}, _from, state) do
+    event = {:page_started, %{seat_id: seat_id, page: Pages.next(state.game.page.id)}}
+
+    case Game.apply(state.game, event) do
+      {:ok, game, effects} -> {:reply, :ok, advance(%{state | opened_at: nil}, game, effects)}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -147,14 +169,46 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   defp advance(state, game, effects) do
-    state = Enum.reduce(effects, %{state | game: game}, &perform/2)
+    state = Enum.reduce(effects, opened(%{state | game: game}), &perform/2)
     broadcast(state.room.slug)
 
     state
   end
 
+  # A Page starts when it is on screen, not when the Room process booted. The
+  # difference is everyone typing their names, which is not the ten to fifteen
+  # minutes a Page is supposed to take, and it is this timestamp the couch-night
+  # measurement will read.
+  defp opened(%{opened_at: nil} = state) do
+    if Game.view(state.game, nil).phase == :waiting do
+      state
+    else
+      %{state | opened_at: DateTime.utc_now()}
+    end
+  end
+
+  defp opened(state), do: state
+
   defp perform(:beat, state) do
     %{state | beat: Process.send_after(self(), :beat_over, beat_ms()), held: []}
+  end
+
+  # A closed Page goes into the Chronicle before anything else happens, and it
+  # goes in from here rather than from a task: it is a handful of rows to the
+  # same Postgres the Seats came out of, and a Page that closed while the write
+  # was still in flight elsewhere would be a Page that could go missing.
+  #
+  # A write that fails is logged and swallowed. Losing the record of a Page is
+  # bad; taking the Room down in front of the couple, and losing the Page they
+  # are looking at along with it, is worse.
+  defp perform({:chronicle, entry}, state) do
+    {:ok, _page} = Chronicle.write(state.room.id, entry, state.opened_at)
+
+    state
+  rescue
+    error ->
+      Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
+      state
   end
 
   defp perform({:assay, pair, request}, state) do

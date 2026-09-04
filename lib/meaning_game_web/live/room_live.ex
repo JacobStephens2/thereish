@@ -61,6 +61,21 @@ defmodule MeaningGameWeb.RoomLive do
     end
   end
 
+  # Both phones can reach the same button, and on a couch both of them will.
+  # Whichever tap lands second is answered by the Room with the state the first
+  # one left, so there is nothing to say about it beyond showing what is there.
+  def handle_event("next_attempt", _params, socket) do
+    Rooms.next_attempt(socket.assigns.slug, socket.assigns.seat.id)
+
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("next_page", _params, socket) do
+    Rooms.next_page(socket.assigns.slug, socket.assigns.seat.id)
+
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
@@ -110,6 +125,8 @@ defmodule MeaningGameWeb.RoomLive do
         You are <span class="font-semibold">{@seat.name}</span>.
       </p>
 
+      <.attempt :if={@seat} room={@room} />
+
       <.anchors :if={@seat} room={@room} />
 
       <form
@@ -132,7 +149,7 @@ defmodule MeaningGameWeb.RoomLive do
         <.button variant="primary">Commit</.button>
       </form>
 
-      <div :if={@room.your_bridge && @room.phase != :reveal} class="flex flex-col gap-1">
+      <div :if={@room.your_bridge && mid_page?(@room)} class="flex flex-col gap-1">
         <p data-role="your-bridge" class="text-lg">
           You wrote <span class="font-semibold">{@room.your_bridge}</span>.
         </p>
@@ -142,6 +159,22 @@ defmodule MeaningGameWeb.RoomLive do
       <.assaying room={@room} />
 
       <.reveal room={@room} />
+
+      <div
+        :if={@seat && @room.phase == :reveal}
+        class="flex flex-col items-center gap-2 border-t border-base-300 pt-6"
+      >
+        <.carry_forward room={@room} />
+        <.button phx-click="next_attempt" data-role="again" variant="primary">
+          Again — {Enum.join(@room.next_anchors, " and ")}
+        </.button>
+      </div>
+
+      <.ending room={@room} />
+
+      <div :if={@seat && @room.phase == :closed} class="flex justify-center">
+        <.button phx-click="next_page" data-role="one-more" variant="primary">One more?</.button>
+      </div>
 
       <section class="flex flex-col gap-2">
         <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>

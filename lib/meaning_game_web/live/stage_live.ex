@@ -55,11 +55,17 @@ defmodule MeaningGameWeb.StageLive do
         </p>
       </header>
 
+      <.attempt room={@room} />
+
       <.anchors room={@room} />
 
       <.assaying room={@room} />
 
       <.reveal room={@room} />
+
+      <.carry_forward room={@room} />
+
+      <.ending room={@room} />
 
       <section class="flex flex-col gap-4">
         <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>

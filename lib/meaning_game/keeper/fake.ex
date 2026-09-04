@@ -40,7 +40,10 @@ defmodule MeaningGame.Keeper.Fake do
       closeness: round(200 * shared / (String.length(left) + String.length(right))),
       reasoning:
         "\"#{left}\" and \"#{right}\" share #{shared} letters from the front. " <>
-          "That is all this Assayer knows how to look at."
+          "That is all this Assayer knows how to look at.",
+      # Provenance the Chronicle wants from every grader, answered honestly by
+      # the one that has no model behind it and costs nothing to run.
+      meta: %{model: "fake", prompt_version: "fake-1", cost_usd: 0.0}
     }
   end
 
