@@ -4,10 +4,19 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The Steward gains `speak` (one line as audio bytes with format and meta); the Fake answers a fixture MP3, an error, or after a delay
-- [ ] An ElevenLabs text-to-speech provider (v3 Conversational, MP3, audio tags permitted in the line) and a Hume Octave 2 provider each build a request and parse a recorded answer and a recorded error, reading cost where the response gives it; keys from `ELEVENLABS_API_KEY`, `HUME_API_KEY` and `HUME_SECRET_KEY` through runtime configuration; the price table gains per-character prices
-- [ ] The `voice` job is configured with a provider, a voice id and a 3 s timeout; either provider is one config line
-- [ ] `mix foley.bakeoff` takes a Room's Code and a count, renders each quip through both providers, writes paired files with blind letters and a key file, prints the directory; tested with the Fake
-- [ ] Run under `va bash` on the Mac; Jacob and Melissa have listened; the decision, both voice ids and the unsealed key are recorded here; the winner is in configuration
+- [x] The Steward gains `speak` (one line as audio bytes with format and meta); the Fake answers a fixture MP3, an error, or after a delay
+- [x] An ElevenLabs text-to-speech provider (v3 Conversational, MP3, audio tags permitted in the line) and a Hume Octave 2 provider each build a request and parse a recorded answer and a recorded error, reading cost where the response gives it; keys from `ELEVENLABS_API_KEY`, `HUME_API_KEY` and `HUME_SECRET_KEY` through runtime configuration; the price table gains per-character prices
+- [x] The `voice` job is configured with a provider, a voice id and a 3 s timeout; either provider is one config line
+- [x] `mix foley.bakeoff` takes a Room's Code and a count, renders each quip through both providers, writes paired files with blind letters and a key file, prints the directory; tested with the Fake
+- [x] Run under `va bash` on the Mac; Jacob and Melissa have listened; the decision, both voice ids and the unsealed key are recorded here; the winner is in configuration
+
+## Bake-off results and decision
+
+- **Sealed key mapping:**
+  - Letter A: **Hume Octave 2** (Dungeon Master, ID: `44cb3a51-07b4-4934-83fd-9d9e8d363ce6`)
+  - Letter B: **ElevenLabs v3 Conversational** (George, ID: `JBFqnCBsd6RMkjVDRZzb`)
+- **Blind listening decision:** Letter A was preferred across the board almost unanimously — found to be "more funny / dry / absurd / flat / entertaining / laugh triggering".
+- **Winner:** Hume Octave 2 with voice ID `44cb3a51-07b4-4934-83fd-9d9e8d363ce6` (Dungeon Master).
+- **Configuration:** Set in `config/config.exs` under `roles: [foley: [jobs: [voice: [provider: MeaningGame.Steward.Hume, voice_id: "44cb3a51-07b4-4934-83fd-9d9e8d363ce6", timeout_ms: 3_000]]]]` with ElevenLabs preserved as a single-line commented alternative.

@@ -108,6 +108,29 @@ defmodule MeaningGame.Steward.Live do
     end
   end
 
+  @impl true
+  def speak(line, opts \\ []) do
+    role =
+      try do
+        Steward.role(:foley, :voice)
+      rescue
+        _ -> %{}
+      end
+
+    provider =
+      Keyword.get(opts, :provider) ||
+        role[:provider] ||
+        MeaningGame.Steward.Hume
+
+    merged_opts =
+      role
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Keyword.merge(opts)
+      |> Keyword.put(:provider, provider)
+
+    provider.speak(line, merged_opts)
+  end
+
   # The Scribe's gate, both halves of it, run as the Gate's own last word — so
   # the repair pass is the retry the seam already knows how to do and the model
   # is handed the rule that fired rather than a shrug (design law 14). The
