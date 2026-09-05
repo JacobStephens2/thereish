@@ -319,7 +319,7 @@ defmodule MeaningGame.Rooms do
   A claim from the current speaker is a no-op.
   """
   @spec claim_speaker(String.t(), String.t()) :: :ok | {:error, term()}
-  def claim_speaker(slug, device_token), do: call(slug, {:claim_speaker, device_token})
+  def claim_speaker(code, device_token), do: call(code, {:claim_speaker, device_token})
 
   @doc """
   Releases the speaker.
@@ -327,15 +327,15 @@ defmodule MeaningGame.Rooms do
   Releasing with a token other than the current speaker is a no-op.
   """
   @spec release_speaker(String.t(), String.t() | nil) :: :ok | {:error, term()}
-  def release_speaker(slug, device_token \\ nil), do: call(slug, {:release_speaker, device_token})
+  def release_speaker(code, device_token \\ nil), do: call(code, {:release_speaker, device_token})
 
   @doc "Sets the voice on/off switch."
   @spec set_voice(String.t(), boolean()) :: :ok | {:error, term()}
-  def set_voice(slug, enabled), do: call(slug, {:set_voice, enabled})
+  def set_voice(code, enabled), do: call(code, {:set_voice, enabled})
 
   @doc "Sets the house-loop-only on/off switch."
   @spec set_house_loop_only(String.t(), boolean()) :: :ok | {:error, term()}
-  def set_house_loop_only(slug, enabled), do: call(slug, {:set_house_loop_only, enabled})
+  def set_house_loop_only(code, enabled), do: call(code, {:set_house_loop_only, enabled})
 
   @doc "The Seat this browser already holds in the Room, without typing a name."
   @spec rejoin(String.t(), String.t()) :: {:ok, map()} | :error
