@@ -129,6 +129,67 @@ defmodule MeaningGame.Steward.Fake do
   end
 
   @impl true
+  def forge(_brief, opts \\ []) do
+    delay = config_get(:foley_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:forge_mode, :ok) do
+      :ok ->
+        n = Keyword.get(opts, :n, 4)
+
+        candidates =
+          for i <- 1..n do
+            %{
+              bytes: <<255, 251, 144, 100, i::8, 0, 0, 0, 0, 0, 0, 0>>,
+              meta: %{
+                model: "fake",
+                cost_usd: 0.0,
+                latency_ms: delay
+              }
+            }
+          end
+
+        {:ok, candidates}
+
+      :unavailable ->
+        {:error, :no_foley}
+
+      :raise ->
+        raise "this Foley is having a moment"
+    end
+  end
+
+  @impl true
+  def rank(candidates, _brief) do
+    delay = config_get(:foley_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:rank_mode, :ok) do
+      :ok ->
+        ordering =
+          Enum.map(Enum.with_index(candidates, 1), fn {_clip, idx} ->
+            %{
+              index: idx,
+              reason: "Candidate #{idx} fits the brief.",
+              meta: %{
+                model: "fake-ear",
+                cost_usd: 0.0,
+                latency_ms: delay
+              }
+            }
+          end)
+
+        {:ok, ordering}
+
+      :unavailable ->
+        {:error, :no_ear}
+
+      :raise ->
+        raise "this Ear is having a moment"
+    end
+  end
+
+  @impl true
   def name_room([], _taken_codes), do: {:error, :no_history}
 
   def name_room(_digests, _taken_codes) do

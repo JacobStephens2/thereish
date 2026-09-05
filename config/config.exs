@@ -147,6 +147,30 @@ config :meaning_game, :steward,
       hume_api_key: nil,
       hume_secret_key: nil,
       jobs: [
+        effects: [
+          provider: MeaningGame.Steward.ElevenLabs,
+          model: "eleven_text_to_sound_v2",
+          format: "mp3_44100_128",
+          timeout_ms: 30_000,
+          api_key: nil
+        ],
+        music: [
+          provider: MeaningGame.Steward.Mureka,
+          model: "auto",
+          n: 1,
+          deadline_ms: 180_000,
+          poll_interval_ms: 2_000,
+          timeout_ms: 30_000,
+          api_key: nil
+        ],
+        ear: [
+          provider: MeaningGame.Steward.Gemini,
+          model: "gemini-3.8-flash",
+          effort: "low",
+          max_tokens: 1_000,
+          timeout_ms: 30_000,
+          api_key: nil
+        ],
         # Either provider is one config line. Dungeon Master (Hume, bake-off winner) with George (ElevenLabs) as alternative.
         voice: [
           provider: MeaningGame.Steward.Hume,
@@ -165,6 +189,10 @@ config :meaning_game, :steward,
   prices: %{
     "gemini-3.8-flash" => {0.75, 3.75},
     "claude-fable-5-1" => {10.0, 50.0},
+    # ElevenLabs sound generation ($0.10 / 1k characters)
+    "eleven_text_to_sound_v2" => 0.00010,
+    # Mureka instrumental music ($0.04 / track; Mureka's model identifier is "auto")
+    "auto" => {:track, 0.04},
     "eleven_v3_conversational" => 0.00010,
     "octave-2" => 0.00015
   },

@@ -39,3 +39,6 @@ npm-debug.log
 # Secrets for the released app image (see docs/deploy.md). Never in git.
 /.env
 /.env.local
+
+# Foley candidate audio files
+.scratch/**/candidates/
