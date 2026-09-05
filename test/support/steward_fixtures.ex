@@ -201,6 +201,40 @@ defmodule MeaningGame.StewardFixtures do
     Application.put_env(:meaning_game, :steward, live)
   end
 
+  @doc "Puts the real ElevenLabs provider behind the seam for the smoke test."
+  def let_it_call_eleven_labs do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    key =
+      System.get_env("ELEVENLABS_API_KEY") ||
+        flunk("this test calls a provider and needs ELEVENLABS_API_KEY in the environment")
+
+    live =
+      steward
+      |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :foley, :jobs, :effects, :api_key], key)
+
+    Application.put_env(:meaning_game, :steward, live)
+  end
+
+  @doc "Puts the real Mureka provider behind the seam for the smoke test."
+  def let_it_call_mureka do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    key =
+      System.get_env("MUREKA_API_KEY") ||
+        flunk("this test calls a provider and needs MUREKA_API_KEY in the environment")
+
+    live =
+      steward
+      |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :foley, :jobs, :music, :api_key], key)
+
+    Application.put_env(:meaning_game, :steward, live)
+  end
+
   @doc "Puts a recorded response behind the Author's provider for this test."
   def recorded_author(answer) when is_function(answer, 2) do
     Req.Test.stub(MeaningGame.Steward.Anthropic, fn conn ->

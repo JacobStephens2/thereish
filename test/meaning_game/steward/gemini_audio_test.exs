@@ -113,5 +113,17 @@ defmodule MeaningGame.Steward.GeminiAudioTest do
       assert {:error, {:rejected, _why}} =
                Gemini.rank(clips, "Brief", api_key: "test-gemini-key")
     end
+
+    @tag :live
+    test "live gemini ear ranking smoke test" do
+      MeaningGame.StewardFixtures.let_it_call_the_provider()
+      key = System.fetch_env!("GEMINI_API_KEY")
+      clip = <<255, 251, 144, 100, 0, 0, 0, 0, 0, 0, 0, 0>>
+
+      assert {:ok, ranking} =
+               Gemini.rank([clip, clip], "A soft bell chime", api_key: key)
+
+      assert length(ranking) == 2
+    end
   end
 end

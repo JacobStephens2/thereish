@@ -94,7 +94,13 @@ defmodule Mix.Tasks.Foley.Forge do
           end
 
         gen_spend = Enum.sum(Enum.map(candidates, &(&1.meta[:cost_usd] || 0.0)))
-        ear_spend = Enum.sum(Enum.map(ranking, &(&1.meta[:cost_usd] || 0.0)))
+
+        ear_spend =
+          case ranking do
+            [%{meta: %{cost_usd: c}} | _] -> c || 0.0
+            _ -> 0.0
+          end
+
         brief_spend = gen_spend + ear_spend
 
         Mix.shell().info("    Candidates written:")
@@ -157,14 +163,7 @@ To select winners:
   end
 
   defp read_manifest!(path) do
-    content = File.read!(path)
-
-    case Jason.decode(content) do
-      {:ok, map} -> map
-      _ ->
-        {term, _} = Code.eval_string(content)
-        term
-    end
+    path |> File.read!() |> Jason.decode!()
   end
 
   defp lookup_chosen(manifest, brief) do
