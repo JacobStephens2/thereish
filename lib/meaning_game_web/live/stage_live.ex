@@ -25,6 +25,7 @@ defmodule MeaningGameWeb.StageLive do
     if connected?(socket) do
       Rooms.subscribe(slug)
       Rooms.claim_speaker(slug, device_token)
+      MeaningGameWeb.Presence.track_stage(socket, slug)
     end
 
     {:ok,
@@ -65,6 +66,9 @@ defmodule MeaningGameWeb.StageLive do
   # does not know about should still be a crash.
   def handle_info(:chronicle_changed, socket), do: {:noreply, socket}
 
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket),
+    do: {:noreply, socket}
+
   # The stage holds no Seat, so it sees the Room the way anyone standing behind
   # the couch sees it.
   defp resync(socket) do
@@ -90,7 +94,7 @@ defmodule MeaningGameWeb.StageLive do
     >
       <header class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
-          <h1 class="text-4xl font-semibold">Meaning Game</h1>
+          <h1 class="text-4xl font-semibold">Thereish</h1>
           <div class="flex items-center gap-4">
             <button
               :if={@room && @room.speaker?}
@@ -127,11 +131,22 @@ defmodule MeaningGameWeb.StageLive do
       </section>
 
       <section
-        :if={@room.phase == :writing}
+        :if={@room.phase == :writing && is_nil(@room[:author_failure])}
         data-role="writing-stage"
         class="flex flex-col items-center justify-center gap-3 text-center"
       >
-        <.author_writing mode={:stage} />
+        <.author_writing room={@room} mode={:stage} />
+      </section>
+
+      <section
+        :if={@room.phase == :writing && @room[:author_failure]}
+        data-role="author-failure"
+        class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+        <p class="text-2xl font-semibold">
+          The Author couldn't write from these settings: {@room.author_failure}
+        </p>
       </section>
 
       <.attempt room={@room} />

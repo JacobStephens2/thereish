@@ -90,6 +90,7 @@ defmodule MeaningGame.Rooms.Server do
         held: [],
         opened_at: nil,
         assayer: nil,
+        author: nil,
         current_arm: :flash
       }
 
@@ -173,6 +174,8 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   def handle_call({:reset_gives, seat_id}, _from, state) do
+    state = author_answered(state)
+
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -280,6 +283,7 @@ defmodule MeaningGame.Rooms.Server do
       state.game
       |> Game.view(viewer)
       |> Map.put(:assayer_step, step(state))
+      |> Map.put(:author_step, author_step(state))
       |> Map.put(:speaker?, speaker?)
       |> Map.put(:speaker_claimed?, speaker_claimed?)
       |> Map.put(:voice, state.room.voice)
@@ -326,26 +330,54 @@ defmodule MeaningGame.Rooms.Server do
   # message. Nothing to escalate.
   def handle_info({:escalate, _step}, state), do: {:noreply, state}
 
-  def handle_info({:author_completed, {:ok, result}}, state) do
+  def handle_info({:escalate_author, :still_writing}, %{author: author} = state)
+      when author != nil do
+    state = %{
+      state
+      | author: %{author | step: :still_writing, timer: escalate_author_after(:still_writing)}
+    }
+
+    broadcast(state.room.slug)
+    {:noreply, state}
+  end
+
+  def handle_info({:escalate_author, :deadline}, %{author: author} = state)
+      when author != nil do
+    state = author_answered(state)
+    event = {:author_failed, %{reason: "timed out"}}
+    {:noreply, apply_events(state, [event])}
+  end
+
+  def handle_info({:escalate_author, _step}, state), do: {:noreply, state}
+
+  def handle_info({:author_completed, ref, {:ok, result}}, %{author: %{ref: ref}} = state) do
+    state = author_answered(state)
     event = {:page_written, %{bookends: result.bookends, meta: result.meta}}
     {:noreply, apply_events(state, [event])}
   end
 
-  def handle_info({:author_completed, {:error, reason}}, state) do
-    friendly_reason = format_give_error(reason)
+  def handle_info({:author_completed, ref, {:error, reason}}, %{author: %{ref: ref}} = state) do
+    state = author_answered(state)
+    friendly_reason = format_author_error(reason)
     event = {:author_failed, %{reason: friendly_reason}}
     {:noreply, apply_events(state, [event])}
   end
 
-  defp format_give_error({:max_tokens, _}), do: "too broad or complex"
-  defp format_give_error(:refused), do: "content declined"
-  defp format_give_error({:refusal, msg}), do: "declined: #{msg}"
-  defp format_give_error(%Req.TransportError{reason: :timeout}), do: "timed out"
-  defp format_give_error(%{reason: :timeout}), do: "timed out"
-  defp format_give_error(:timeout), do: "timed out"
-  defp format_give_error(reason) when is_binary(reason), do: reason
-  defp format_give_error(reason) when is_atom(reason), do: to_string(reason)
-  defp format_give_error(reason), do: inspect(reason)
+  # Stale, duplicate, or superseded author tasks change nothing
+  def handle_info({:author_completed, _ref, _result}, state), do: {:noreply, state}
+
+  defp format_author_error({:max_tokens, _}), do: "too broad or complex"
+  defp format_author_error(:refused), do: "content declined"
+  defp format_author_error({:refusal, msg}), do: "declined: #{msg}"
+  defp format_author_error(%Req.TransportError{reason: :timeout}), do: "timed out"
+  defp format_author_error(%{reason: :timeout}), do: "timed out"
+  defp format_author_error(:timeout), do: "timed out"
+  defp format_author_error(:unavailable), do: "unavailable"
+  defp format_author_error({:exit, _}), do: "process exited"
+  defp format_author_error(%RuntimeError{message: msg}), do: msg
+  defp format_author_error(reason) when is_binary(reason), do: reason
+  defp format_author_error(reason) when is_atom(reason), do: to_string(reason)
+  defp format_author_error(reason), do: inspect(reason)
 
   # The browser's own Seat wins over the name it typed, so typing someone else's
   # name on a phone that is already seated cannot take their Seat.
@@ -471,28 +503,30 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   defp perform({:author, request}, state) do
+    state = author_answered(state)
     room = self()
     digest = Chronicle.digest(state.room.id)
+    ref = make_ref()
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
         case Steward.author(request, job: :flash, digest: digest) do
           {:ok, result} ->
-            send(room, {:author_completed, {:ok, result}})
+            send(room, {:author_completed, ref, {:ok, result}})
 
           {:error, reason} ->
-            send(room, {:author_completed, {:error, reason}})
+            send(room, {:author_completed, ref, {:error, reason}})
         end
       rescue
         error ->
-          send(room, {:author_completed, {:error, error}})
+          send(room, {:author_completed, ref, {:error, error}})
       catch
         :exit, reason ->
-          send(room, {:author_completed, {:error, {:exit, reason}}})
+          send(room, {:author_completed, ref, {:error, {:exit, reason}}})
       end
     end)
 
-    state
+    waiting_on_author(state, ref)
   end
 
   defp perform({:assay, request}, state) do
@@ -506,6 +540,46 @@ defmodule MeaningGame.Rooms.Server do
 
     waiting_on(state)
   end
+
+  defp waiting_on_author(state, ref) do
+    %{
+      state
+      | author: %{
+          ref: ref,
+          step: :writing,
+          timer: escalate_author_after(:writing)
+        }
+    }
+  end
+
+  defp author_answered(%{author: nil} = state), do: state
+
+  defp author_answered(%{author: author} = state) do
+    if author[:timer], do: Process.cancel_timer(author.timer)
+    %{state | author: nil}
+  end
+
+  defp escalate_author_after(step) do
+    next = next_author_step(step)
+
+    Process.send_after(
+      self(),
+      {:escalate_author, next},
+      author_escalation_ms(next) - author_escalation_ms(step)
+    )
+  end
+
+  defp next_author_step(:writing), do: :still_writing
+  defp next_author_step(:still_writing), do: :deadline
+
+  defp author_escalation_ms(:writing), do: 0
+
+  defp author_escalation_ms(step) do
+    :meaning_game |> Application.fetch_env!(:author_escalation_ms) |> Keyword.fetch!(step)
+  end
+
+  defp author_step(%{author: nil}), do: nil
+  defp author_step(%{author: %{step: step}}), do: step
 
   # One assay per Attempt, so the ladder is armed by the asking and there is
   # nothing to keep a set of: what the couple are watching is one reveal and it
