@@ -2,7 +2,7 @@ defmodule MeaningGame.Chronicle.Attempt do
   @moduledoc """
   One try at a Page: the two words it hung between, and how close the Room got.
 
-  `anchors` is the Page's own on the first attempt and the previous attempt's
+  `bookends` is the Page's own on the first attempt and the previous attempt's
   failed Bridges on every one after it, so the carry-forward is legible from the
   rows alone — reading a Page's attempts in order is reading the arc.
 
@@ -19,7 +19,7 @@ defmodule MeaningGame.Chronicle.Attempt do
 
   schema "chronicle_attempts" do
     field :number, :integer
-    field :anchors, {:array, :string}
+    field :bookends, {:array, :string}
     field :closeness, :integer
     field :melded, :boolean
 
@@ -33,8 +33,8 @@ defmodule MeaningGame.Chronicle.Attempt do
   @doc false
   def changeset(attempt, attrs) do
     attempt
-    |> cast(attrs, [:page_id, :number, :anchors, :closeness, :melded])
-    |> validate_required([:page_id, :number, :anchors, :melded])
+    |> cast(attrs, [:page_id, :number, :bookends, :closeness, :melded])
+    |> validate_required([:page_id, :number, :bookends, :melded])
     |> unique_constraint([:page_id, :number])
   end
 end

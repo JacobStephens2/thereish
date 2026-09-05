@@ -27,7 +27,7 @@ defmodule MeaningGame.Steward.ValeTest do
 
   describe "prose the gate refuses" do
     test "a recap longer than the book has room for" do
-      long = String.duplicate("The couple wrote a word between the anchors again. ", 12)
+      long = String.duplicate("The couple wrote a word between the bookends again. ", 12)
 
       assert {:error, why} = Vale.check(long)
       assert why =~ "Scribe.Length"
@@ -37,7 +37,7 @@ defmodule MeaningGame.Steward.ValeTest do
       assert {:error, why} =
                Vale.check(
                  "What a journey this Page was, a rich tapestry and a true testament " <>
-                   "to how they delve into the anchors together."
+                   "to how they delve into the bookends together."
                )
 
       assert why =~ "Scribe.Grandiose"

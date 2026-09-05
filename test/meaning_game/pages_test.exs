@@ -8,7 +8,7 @@ defmodule MeaningGame.PagesTest do
     chapter: "suburban family life",
     theme: "suburban family life",
     give: nil,
-    anchors: ["backyard", "weekend"],
+    bookends: ["backyard", "weekend"],
     bait: "barbecue",
     deep_bridges: ["lawnmower", "chores"],
     likely_bridges: ["barbecue", "lawnmower", "chores", "family", "party"],
@@ -32,7 +32,7 @@ defmodule MeaningGame.PagesTest do
   describe "pool management" do
     test "inserts authored page into the pool" do
       assert {:ok, page} = Pages.insert_page(@valid_page)
-      assert page.anchors == ["backyard", "weekend"]
+      assert page.bookends == ["backyard", "weekend"]
       assert page.bait == "barbecue"
       assert is_nil(page.played_at)
     end
@@ -43,7 +43,7 @@ defmodule MeaningGame.PagesTest do
 
       assert {:ok, drawn} = Pages.draw(room_id)
       assert drawn.id == page1.id
-      assert drawn.anchors == ["backyard", "weekend"]
+      assert drawn.bookends == ["backyard", "weekend"]
       assert drawn.bait == "barbecue"
 
       # The page is now marked played in the database
@@ -56,8 +56,8 @@ defmodule MeaningGame.PagesTest do
       room_id = Ecto.UUID.generate()
 
       # Add exactly two pages to the pool
-      page1_attrs = %{@valid_page | id: "P000001", anchors: ["kettle", "window"], bait: "steam"}
-      page2_attrs = %{@valid_page | id: "P000002", anchors: ["desert", "mirror"], bait: "mirage"}
+      page1_attrs = %{@valid_page | id: "P000001", bookends: ["kettle", "window"], bait: "steam"}
+      page2_attrs = %{@valid_page | id: "P000002", bookends: ["desert", "mirror"], bait: "mirage"}
 
       {:ok, _} = Pages.insert_page(page1_attrs)
       {:ok, _} = Pages.insert_page(page2_attrs)
@@ -103,7 +103,7 @@ defmodule MeaningGame.PagesTest do
       # Draw specifically for this give
       assert {:ok, drawn} = Pages.draw(room_id, give: give)
       assert drawn.give == give
-      assert drawn.anchors != nil
+      assert drawn.bookends != nil
 
       # Draw second page for this give
       assert {:ok, drawn2} = Pages.draw(room_id, give: give)
@@ -130,7 +130,7 @@ defmodule MeaningGame.PagesTest do
       room_id = Ecto.UUID.generate()
       first = Pages.first(room_id)
       assert first.id != nil
-      assert first.anchors != nil
+      assert first.bookends != nil
 
       assert {:ok, next} = Pages.next(first.id, room_id)
       assert next.id != nil
