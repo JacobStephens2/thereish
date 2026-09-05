@@ -82,6 +82,7 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  attr :room, :map, default: %{}
   attr :mode, :atom, default: :phone
 
   @doc """
@@ -89,7 +90,11 @@ defmodule MeaningGameWeb.RoomComponents do
   """
   def author_writing(assigns) do
     ~H"""
-    <div data-role="beat-meter" class="flex flex-col items-center gap-2">
+    <div
+      data-role="beat-meter"
+      data-step={@room[:author_step] || :writing}
+      class="flex flex-col items-center gap-2"
+    >
       <div class="flex items-center gap-2" aria-hidden="true">
         <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
         <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
@@ -100,7 +105,9 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
     </div>
     <p class={if @mode == :stage, do: "text-2xl font-semibold", else: "text-lg font-medium"}>
-      The Author is reading your settings...
+      {if @room[:author_step] == :still_writing,
+        do: "The Author is still writing...",
+        else: "The Author is reading your settings..."}
     </p>
     """
   end
@@ -595,4 +602,239 @@ defmodule MeaningGameWeb.RoomComponents do
   end
 
   defp you?(seat, bridge), do: seat != nil and seat.id == bridge.seat_id
+
+  attr :state, :atom, default: :none, doc: ":self, :other, or :none"
+
+  def speaker_icon(assigns) do
+    ~H"""
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      class="size-5 inline-block"
+      aria-hidden="true"
+    >
+      <path
+        :if={@state == :none}
+        d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.5A2.25 2.25 0 0 0 2.25 9.75v4.5a2.25 2.25 0 0 0 2.25 2.25h1.94l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 0 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L20.56 12l1.72-1.72a.75.75 0 0 0-1.06-1.06l-1.72 1.72-1.72-1.72Z"
+      />
+      <path
+        :if={@state == :other}
+        d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.5A2.25 2.25 0 0 0 2.25 9.75v4.5a2.25 2.25 0 0 0 2.25 2.25h1.94l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06ZM18.75 12a6.75 6.75 0 0 0-1.9-4.72.75.75 0 0 0-1.06 1.06 5.25 5.25 0 0 1 0 7.32.75.75 0 0 0 1.06 1.06A6.75 6.75 0 0 0 18.75 12Z"
+      />
+      <path
+        :if={@state == :self}
+        d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.5A2.25 2.25 0 0 0 2.25 9.75v4.5a2.25 2.25 0 0 0 2.25 2.25h1.94l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06ZM19.11 4.89a.75.75 0 0 1 1.06 0 10.5 10.5 0 0 1 0 14.85.75.75 0 0 1-1.06-1.06 9 9 0 0 0 0-12.73.75.75 0 0 1 0-1.06ZM16.5 7.5a.75.75 0 0 1 1.06 0 6.75 6.75 0 0 1 0 9.54.75.75 0 0 1-1.06-1.06 5.25 5.25 0 0 0 0-7.42.75.75 0 0 1 0-1.06Z"
+      />
+    </svg>
+    """
+  end
+
+  attr :room, :map, required: true
+
+  def foley_switches(assigns) do
+    ~H"""
+    <div :if={@room[:speaker?]} class="flex items-center gap-3 text-xs opacity-80">
+      <label class="flex items-center gap-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          data-role="voice-switch"
+          checked={@room[:voice] || false}
+          phx-click="toggle_voice"
+          class="checkbox checkbox-xs"
+        />
+        <span>Voice</span>
+      </label>
+      <label class="flex items-center gap-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          data-role="house-loop-switch"
+          checked={@room[:house_loop_only] || false}
+          phx-click="toggle_house_loop_only"
+          class="checkbox checkbox-xs"
+        />
+        <span>House loop only</span>
+      </label>
+    </div>
+    """
+  end
+
+  attr :speaker, :boolean, default: false
+
+  def foley_hook(assigns) do
+    ~H"""
+    <div id="foley-container" phx-hook=".Foley" data-speaker={to_string(@speaker)} class="hidden">
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".Foley">
+      export default {
+        mounted() {
+          this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          if (this.reducedMotion) return
+
+          this.speaker = this.el.dataset.speaker === "true"
+          this.ctx = null
+          this.musicBus = null
+          this.stingsBus = null
+          this.voiceBus = null
+          this.musicSource = null
+          this.audioBuffers = new Map()
+
+          this.initAudio = () => {
+            if (this.ctx) return
+            const AudioContext = window.AudioContext || window.webkitAudioContext
+            if (!AudioContext) return
+            this.ctx = new AudioContext()
+
+            this.musicBus = this.ctx.createGain()
+            this.stingsBus = this.ctx.createGain()
+            this.voiceBus = this.ctx.createGain()
+
+            this.musicBus.gain.setValueAtTime(0.7, this.ctx.currentTime)
+            this.stingsBus.gain.setValueAtTime(1.0, this.ctx.currentTime)
+            this.voiceBus.gain.setValueAtTime(1.0, this.ctx.currentTime)
+
+            this.musicBus.connect(this.ctx.destination)
+            this.stingsBus.connect(this.ctx.destination)
+            this.voiceBus.connect(this.ctx.destination)
+
+            this.updateTapForSound()
+          }
+
+          this.updateTapForSound = () => {
+            const tapBtn = document.getElementById("tap-for-sound")
+            if (tapBtn) {
+              if (this.ctx && this.ctx.state === "running") {
+                tapBtn.style.display = "none"
+              } else {
+                tapBtn.style.display = ""
+              }
+            }
+          }
+
+          this.resumeAudio = async () => {
+            this.initAudio()
+            if (this.ctx && this.ctx.state !== "running") {
+              await this.ctx.resume()
+            }
+            this.updateTapForSound()
+          }
+
+          const tapBtn = document.getElementById("tap-for-sound")
+          if (tapBtn) {
+            tapBtn.addEventListener("click", () => this.resumeAudio())
+          }
+
+          const speakerToggle = document.querySelector("[data-role=speaker-toggle]")
+          if (speakerToggle) {
+            speakerToggle.addEventListener("click", () => this.resumeAudio())
+          }
+
+          this.fetchBuffer = async (url) => {
+            if (this.audioBuffers.has(url)) return this.audioBuffers.get(url)
+            try {
+              const res = await fetch(url)
+              const arrayBuf = await res.arrayBuffer()
+              const audioBuf = await this.ctx.decodeAudioData(arrayBuf)
+              this.audioBuffers.set(url, audioBuf)
+              return audioBuf
+            } catch (err) {
+              return null
+            }
+          }
+
+          this.duckMusic = (durationSeconds = 2.0) => {
+            if (!this.ctx || !this.musicBus) return
+            const now = this.ctx.currentTime
+            this.musicBus.gain.cancelScheduledValues(now)
+            this.musicBus.gain.setTargetAtTime(0.15, now, 0.05)
+            this.musicBus.gain.setTargetAtTime(0.7, now + durationSeconds, 0.2)
+          }
+
+          this.playEffect = async (url, bus, duckDuration = 2.0) => {
+            if (this.reducedMotion) return
+            await this.resumeAudio()
+            if (!this.ctx) return
+            const buf = await this.fetchBuffer(url)
+            if (!buf) return
+            const source = this.ctx.createBufferSource()
+            source.buffer = buf
+            source.connect(bus)
+            if (duckDuration > 0) {
+              this.duckMusic(duckDuration)
+            }
+            source.start(0)
+          }
+
+          this.handleEvent("foley:page", async ({path}) => {
+            if (this.reducedMotion) return
+            await this.resumeAudio()
+            if (!this.ctx) return
+            const trackUrl = path || "/audio/house-loop.mp3"
+            const buf = await this.fetchBuffer(trackUrl)
+            if (!buf) return
+
+            if (this.musicSource) {
+              try { this.musicSource.stop() } catch (_) {}
+            }
+            this.musicSource = this.ctx.createBufferSource()
+            this.musicSource.buffer = buf
+            this.musicSource.loop = true
+            this.musicSource.connect(this.musicBus)
+            this.musicSource.start(0)
+          })
+
+          this.handleEvent("foley:beat", async () => {
+            this.playEffect("/audio/beat.mp3", this.stingsBus, 2.5)
+          })
+
+          this.handleEvent("foley:sting", async ({band}) => {
+            const bandName = (band || "miss").toString().replace("_", "-")
+            this.playEffect(`/audio/sting-${bandName}.mp3`, this.stingsBus, 2.0)
+          })
+
+          this.handleEvent("foley:ending", async ({kind}) => {
+            const endingKind = (kind === "meld") ? "meld" : "unmelded"
+            const delayMs = (kind === "meld") ? 1800 : 0
+            setTimeout(() => {
+              this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 0)
+              if (this.musicSource) {
+                try { this.musicSource.stop() } catch (_) {}
+                this.musicSource = null
+              }
+            }, delayMs)
+          })
+
+          this.handleEvent("foley:stop", () => {
+            if (this.musicSource) {
+              try { this.musicSource.stop() } catch (_) {}
+              this.musicSource = null
+            }
+          })
+
+          this.updateTapForSound()
+        },
+
+        updated() {
+          this.speaker = this.el.dataset.speaker === "true"
+          this.updateTapForSound()
+          if (!this.speaker && this.musicSource) {
+            try { this.musicSource.stop() } catch (_) {}
+            this.musicSource = null
+          }
+        },
+
+        destroyed() {
+          if (this.musicSource) {
+            try { this.musicSource.stop() } catch (_) {}
+            this.musicSource = null
+          }
+          if (this.ctx) {
+            try { this.ctx.close() } catch (_) {}
+            this.ctx = null
+          }
+        }
+      }
+    </script>
+    """
+  end
 end

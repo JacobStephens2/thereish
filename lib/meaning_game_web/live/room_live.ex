@@ -48,6 +48,7 @@ defmodule MeaningGameWeb.RoomLive do
      |> assign(:give_input, "")
      |> assign(:give_error, nil)
      |> assign(:seat, seat_for_device(slug, device_token))
+     |> assign(:room, nil)
      |> resync()}
   end
 
@@ -161,6 +162,21 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("claim_speaker", _params, socket) do
+    Rooms.claim_speaker(socket.assigns.slug, socket.assigns.device_token)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("toggle_voice", _params, socket) do
+    Rooms.set_voice(socket.assigns.slug, !socket.assigns.room.voice)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("toggle_house_loop_only", _params, socket) do
+    Rooms.set_house_loop_only(socket.assigns.slug, !socket.assigns.room.house_loop_only)
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
@@ -190,10 +206,13 @@ defmodule MeaningGameWeb.RoomLive do
 
   defp resync(socket) do
     seat_id = socket.assigns.seat && socket.assigns.seat.id
+    old_room = socket.assigns[:room]
+    new_room = Rooms.snapshot(socket.assigns.slug, seat_id, socket.assigns.device_token)
 
     socket
-    |> assign(:room, Rooms.snapshot(socket.assigns.slug, seat_id))
+    |> assign(:room, new_room)
     |> assign(:stage_present?, MeaningGameWeb.Presence.stage_present?(socket.assigns.slug))
+    |> MeaningGameWeb.Foley.push_foley_events(old_room, new_room)
   end
 
   defp message(:give_required), do: "Type a setting first."
@@ -221,6 +240,39 @@ defmodule MeaningGameWeb.RoomLive do
       phx-hook=".ResyncOnWake"
       class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12"
     >
+      <section
+        :if={@room}
+        data-role="speaker-bar"
+        class="flex items-center justify-between rounded-lg border border-base-300 px-4 py-2"
+      >
+        <button
+          type="button"
+          phx-click="claim_speaker"
+          data-role="speaker-toggle"
+          data-speaker={
+            cond do
+              @room.speaker? -> "self"
+              @room.speaker_claimed? -> "other"
+              true -> "none"
+            end
+          }
+          class="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+        >
+          <.speaker_icon state={
+            cond do
+              @room.speaker? -> :self
+              @room.speaker_claimed? -> :other
+              true -> :none
+            end
+          } />
+          <span :if={@room.speaker?} class="text-primary font-semibold">This phone is speaker</span>
+          <span :if={@room.speaker_claimed? and not @room.speaker?} class="opacity-60">Speaker elsewhere</span>
+          <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
+        </button>
+
+        <.foley_switches room={@room} />
+      </section>
+
       <section
         data-role="room-code"
         class="flex flex-col items-center gap-1 rounded-lg border border-base-300 px-4 py-6"
@@ -281,11 +333,11 @@ defmodule MeaningGameWeb.RoomLive do
       </div>
 
       <div
-        :if={@seat && @room.phase == :writing}
+        :if={@seat && @room.phase == :writing && is_nil(@room[:author_failure])}
         data-role="writing-phase"
         class="flex flex-col items-center justify-center gap-3 text-center"
       >
-        <.author_writing mode={:phone} />
+        <.author_writing room={@room} mode={:phone} />
       </div>
 
       <div
@@ -294,10 +346,12 @@ defmodule MeaningGameWeb.RoomLive do
         class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
       >
         <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
-        <p class="text-sm font-medium">The Author had trouble: {@room.author_failure}</p>
+        <p class="text-sm font-medium">
+          The Author couldn't write from these settings: {@room.author_failure}
+        </p>
         <div class="flex gap-2 mt-2">
-          <.button phx-click="retry_author" data-role="retry-author" variant="primary">Retry Author</.button>
-          <.button phx-click="reset_gives" data-role="reset-gives">New Settings</.button>
+          <.button phx-click="retry_author" data-role="retry-author" variant="primary">Try again</.button>
+          <.button phx-click="reset_gives" data-role="reset-gives">New settings</.button>
         </div>
       </div>
       <.attempt :if={@seat} room={@room} />
@@ -374,7 +428,7 @@ defmodule MeaningGameWeb.RoomLive do
           You are <span class="font-semibold">{@seat.name}</span>.
         </p>
         <div class="flex items-center justify-between">
-          <h1 class="text-lg font-semibold">Meaning Game</h1>
+          <h1 class="text-lg font-semibold">Thereish</h1>
           <.link
             navigate={chronicle_path(@slug)}
             class="text-sm font-medium underline opacity-70 hover:opacity-100"
@@ -396,6 +450,8 @@ defmodule MeaningGameWeb.RoomLive do
           }
         }
       </script>
+
+      <.foley_hook speaker={@room && @room.speaker?} />
     </main>
     """
   end
