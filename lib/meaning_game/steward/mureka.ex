@@ -43,10 +43,15 @@ defmodule MeaningGame.Steward.Mureka do
       poll_interval_ms = Map.get(request, :poll_interval_ms) || Map.get(request, "poll_interval_ms", 2_000)
       timeout_ms = Map.get(request, :timeout_ms) || Map.get(request, "timeout_ms", 30_000)
 
-      deadline_time = System.monotonic_time(:millisecond) + deadline_ms
+      poll_opts = %{
+        key: key,
+        deadline_time: System.monotonic_time(:millisecond) + deadline_ms,
+        poll_interval_ms: poll_interval_ms,
+        timeout_ms: timeout_ms
+      }
 
       with {:ok, task_id} <- start_job(prompt, model, n, key, timeout_ms),
-           {:ok, audio_url} <- poll_job(task_id, key, deadline_time, poll_interval_ms, timeout_ms),
+           {:ok, audio_url} <- poll_job(task_id, poll_opts),
            {:ok, bytes} <- download_url(audio_url, timeout_ms) do
         {:ok,
          %{
@@ -84,31 +89,31 @@ defmodule MeaningGame.Steward.Mureka do
         end
 
       {:ok, %Req.Response{status: status, body: body}} ->
-        {:error, {:http, status, decode_body(body)}}
+        {:error, {:http, status, Provider.decode_body(body)}}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp poll_job(task_id, key, deadline_time, poll_interval_ms, timeout_ms) do
+  defp poll_job(task_id, %{deadline_time: deadline_time} = opts) do
     if System.monotonic_time(:millisecond) >= deadline_time do
       {:error, :timeout}
     else
       url = "#{@base_url}/v1/instrumental/query/#{task_id}"
 
-      opts =
+      req_opts =
         [
           url: url,
-          headers: [{"authorization", "Bearer #{key}"}],
-          receive_timeout: timeout_ms,
+          headers: [{"authorization", "Bearer #{opts.key}"}],
+          receive_timeout: opts.timeout_ms,
           retry: false
         ]
         |> Keyword.merge(Provider.http_options(__MODULE__))
 
-      case Req.get(opts) do
+      case Req.get(req_opts) do
         {:ok, %Req.Response{status: 200, body: body}} ->
-          parsed = decode_body(body)
+          parsed = Provider.decode_body(body)
 
           case parsed["status"] do
             "succeeded" ->
@@ -121,12 +126,12 @@ defmodule MeaningGame.Steward.Mureka do
               {:error, {:failed, status}}
 
             _other ->
-              Process.sleep(poll_interval_ms)
-              poll_job(task_id, key, deadline_time, poll_interval_ms, timeout_ms)
+              Process.sleep(opts.poll_interval_ms)
+              poll_job(task_id, opts)
           end
 
         {:ok, %Req.Response{status: status, body: body}} ->
-          {:error, {:http, status, decode_body(body)}}
+          {:error, {:http, status, Provider.decode_body(body)}}
 
         {:error, reason} ->
           {:error, reason}
@@ -163,13 +168,4 @@ defmodule MeaningGame.Steward.Mureka do
         {:error, :no_api_key}
     end
   end
-
-  defp decode_body(body) when is_binary(body) do
-    case Jason.decode(body) do
-      {:ok, json} -> json
-      _ -> body
-    end
-  end
-
-  defp decode_body(body), do: body
 end

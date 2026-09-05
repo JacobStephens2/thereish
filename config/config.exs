@@ -155,7 +155,9 @@ config :meaning_game, :steward,
   prices: %{
     "gemini-3.8-flash" => {0.75, 3.75},
     "claude-fable-5-1" => {10.0, 50.0},
+    # ElevenLabs sound generation ($0.10 / 1k characters)
     "eleven_text_to_sound_v2" => {:characters, 100.0 / 1.0e6},
+    # Mureka instrumental music ($0.04 / track; Mureka's model identifier is "auto")
     "auto" => {:track, 0.04}
   },
   # The most Seats a Room may hold, because live grading is N choose 2 requests

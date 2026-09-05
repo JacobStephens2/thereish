@@ -98,8 +98,7 @@ defmodule MeaningGame.Steward.ElevenLabs do
   end
 
   defp answer({:ok, %Req.Response{status: status, body: body}}, _model) do
-    decoded = decode_body(body)
-    {:error, {:http, status, decoded}}
+    {:error, {:http, status, Provider.decode_body(body)}}
   end
 
   defp answer({:error, reason}, _model), do: {:error, reason}
@@ -116,13 +115,4 @@ defmodule MeaningGame.Steward.ElevenLabs do
       end
     end)
   end
-
-  defp decode_body(body) when is_binary(body) do
-    case Jason.decode(body) do
-      {:ok, json} -> json
-      _ -> body
-    end
-  end
-
-  defp decode_body(body), do: body
 end
