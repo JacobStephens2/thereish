@@ -39,7 +39,17 @@ defmodule MeaningGame.Chronicle.Markdown do
     closed_detail = "#{outcome_str} (#{page.closed_because})"
     closeness_str = if page.closeness, do: "#{page.closeness} / 100", else: "None"
 
-    give_lines = if page[:give], do: ["- Give: #{page.give}"], else: []
+    give_lines =
+      cond do
+        page[:gives] && page[:gives] != [] ->
+          Enum.map(page.gives, fn g -> "- Give (#{g.seat_name}): #{g.text}" end)
+
+        page[:give] ->
+          ["- Give: #{page.give}"]
+
+        true ->
+          []
+      end
 
     experiment_lines =
       cond do
@@ -56,6 +66,7 @@ defmodule MeaningGame.Chronicle.Markdown do
     meta_lines =
       [
         "### Page #{index}: #{bookends_str}",
+        "- Bookends: #{bookends_str}",
         "- Outcome: #{closed_detail}",
         "- Closeness: #{closeness_str}"
       ] ++
@@ -265,13 +276,29 @@ defmodule MeaningGame.Chronicle.Markdown do
     closeness_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Closeness:"))
     closeness = parse_closeness(closeness_line)
 
-    give_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Give:"))
+    give_lines =
+      Enum.filter(
+        meta_lines,
+        &(String.starts_with?(&1, "- Give:") or Regex.match?(~r/^- Give \([^)]+\):/, &1))
+      )
+
+    gives =
+      Enum.map(give_lines, fn line ->
+        case Regex.run(~r/^- Give \(([^)]+)\):\s*(.*)/, line) do
+          [_, name, text] ->
+            %{seat_name: name, text: text}
+
+          nil ->
+            text = line |> String.replace_prefix("- Give:", "") |> String.trim()
+            %{seat_name: "Player", text: text}
+        end
+      end)
 
     give =
-      if give_line do
-        give_line
-        |> String.replace_prefix("- Give:", "")
-        |> String.trim()
+      case gives do
+        [single] -> single.text
+        [first | _] -> first.text
+        [] -> nil
       end
 
     experiment_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Experiment:"))
@@ -299,6 +326,7 @@ defmodule MeaningGame.Chronicle.Markdown do
       melded: melded,
       closeness: closeness,
       give: give,
+      gives: gives,
       experiment: experiment,
       arm: arm,
       recap: parse_recap(meta_lines),

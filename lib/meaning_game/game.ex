@@ -56,6 +56,10 @@ defmodule MeaningGame.Game do
     :page,
     :bookends,
     attempt: 1,
+    gives: %{},
+    last_gives: %{},
+    author_failure: nil,
+    bookends_taps: %{},
     bridges: %{},
     verdict: nil,
     played: [],
@@ -106,6 +110,10 @@ defmodule MeaningGame.Game do
           page: page() | nil,
           bookends: [String.t()] | nil,
           attempt: pos_integer(),
+          gives: %{String.t() => String.t()},
+          last_gives: %{String.t() => String.t()},
+          author_failure: term(),
+          bookends_taps: %{String.t() => String.t()},
           bridges: %{String.t() => String.t()},
           verdict: verdict() | nil,
           played: [attempt()],
@@ -118,6 +126,19 @@ defmodule MeaningGame.Game do
 
   @type event ::
           {:seat_joined, seat()}
+          | {:give_committed,
+             %{
+               required(:seat_id) => String.t(),
+               required(:give) => String.t()
+             }}
+          | {:page_written,
+             %{
+               required(:bookends) => [String.t()],
+               optional(:meta) => map()
+             }}
+          | {:author_failed, %{required(:reason) => term()}}
+          | {:author_retried, %{required(:seat_id) => String.t()}}
+          | {:gives_reset, %{required(:seat_id) => String.t()}}
           | {:bridge_committed, %{seat_id: String.t(), bridge: String.t()}}
           | {:verdict_received,
              %{
@@ -130,6 +151,7 @@ defmodule MeaningGame.Game do
           | {:verdict_unavailable, %{optional(:meta) => map()}}
           | {:attempt_advanced, %{seat_id: String.t()}}
           | {:page_started, %{seat_id: String.t(), page: page()}}
+          | {:next_page, %{seat_id: String.t()}}
           | {:overrule_proposed,
              %{
                required(:seat_id) => String.t(),
@@ -152,6 +174,7 @@ defmodule MeaningGame.Game do
   """
   @type effect ::
           :beat
+          | {:author, %{gives: [map()]}}
           | {:assay, %{bookends: [String.t()], bridges: [String.t()]}}
           | {:chronicle, map()}
           | {:overrule, map()}
@@ -159,6 +182,11 @@ defmodule MeaningGame.Game do
 
   @type error ::
           :room_full
+          | :not_giving
+          | :not_writing
+          | :give_required
+          | :give_too_long
+          | :not_failed
           | :not_bridging
           | :no_such_seat
           | :already_committed
@@ -189,7 +217,11 @@ defmodule MeaningGame.Game do
       seat_limit: Keyword.fetch!(opts, :seat_limit),
       seats: opts |> Keyword.get(:seats, []) |> Enum.map(&seat/1),
       page: page,
-      bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends"))
+      bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
+      gives: %{},
+      last_gives: %{},
+      author_failure: nil,
+      bookends_taps: %{}
     }
   end
 
@@ -221,6 +253,127 @@ defmodule MeaningGame.Game do
       seated?(state, seat.id) -> {:ok, state, []}
       full?(state) -> {:error, :room_full}
       true -> {:ok, %{state | seats: state.seats ++ [seat]}, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:give_committed, %{seat_id: seat_id} = attrs}) do
+    give = attrs[:give] || attrs[:text] || ""
+    trimmed = String.trim(give)
+
+    cond do
+      phase(state) != :giving ->
+        {:error, :not_giving}
+
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      Map.has_key?(state.gives, seat_id) ->
+        {:error, :already_committed}
+
+      trimmed == "" ->
+        {:error, :give_required}
+
+      String.length(trimmed) > 120 ->
+        {:error, :give_too_long}
+
+      true ->
+        gives = Map.put(state.gives, seat_id, trimmed)
+        last_gives = Map.put(state.last_gives, seat_id, trimmed)
+        state = %{state | gives: gives, last_gives: last_gives}
+
+        if map_size(gives) >= length(state.seats) do
+          request = %{
+            gives:
+              Enum.map(state.seats, fn s ->
+                %{seat_id: s.id, name: s.name, text: gives[s.id], give: gives[s.id]}
+              end)
+          }
+
+          {:ok, state, [{:author, request}]}
+        else
+          {:ok, state, []}
+        end
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:page_written, bookends, meta}) when is_list(bookends) do
+    __MODULE__.apply(state, {:page_written, %{bookends: bookends, meta: meta}})
+  end
+
+  def apply(%__MODULE__{} = state, {:page_written, %{bookends: bookends} = attrs}) do
+    meta = attrs[:meta] || %{}
+
+    cond do
+      state.page != nil ->
+        {:ok, state, []}
+
+      phase(state) != :writing ->
+        {:error, :not_writing}
+
+      true ->
+        page = %{
+          bookends: bookends,
+          gives: state.gives,
+          meta: meta
+        }
+
+        {:ok,
+         %{
+           state
+           | page: page,
+             bookends: bookends,
+             attempt: 1,
+             bridges: %{},
+             verdict: nil,
+             played: [],
+             overrule: nil,
+             overrules: [],
+             fairness_taps: %{},
+             author_failure: nil
+         }, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:author_failed, %{reason: reason}}) do
+    cond do
+      phase(state) != :writing ->
+        {:error, :not_writing}
+
+      true ->
+        {:ok, %{state | author_failure: reason}, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:author_retried, %{seat_id: seat_id}}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) != :writing or is_nil(state.author_failure) ->
+        {:error, :not_failed}
+
+      true ->
+        request = %{
+          gives:
+            Enum.map(state.seats, fn s ->
+              %{seat_id: s.id, name: s.name, text: state.gives[s.id], give: state.gives[s.id]}
+            end)
+        }
+
+        {:ok, %{state | author_failure: nil}, [{:author, request}]}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:gives_reset, %{seat_id: seat_id}}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) != :writing ->
+        {:error, :not_writing}
+
+      true ->
+        {:ok, %{state | gives: %{}, author_failure: nil}, []}
     end
   end
 
@@ -406,6 +559,30 @@ defmodule MeaningGame.Game do
     end
   end
 
+  def apply(%__MODULE__{} = state, {:next_page, %{seat_id: seat_id}}) do
+    with :ok <- taken_by_a_seat(state, seat_id),
+         :ok <- closed_page(state) do
+      last_gives = Map.merge(state.last_gives || %{}, state.gives || %{})
+
+      {:ok,
+       %{
+         state
+         | page: nil,
+           bookends: nil,
+           attempt: 1,
+           gives: %{},
+           last_gives: last_gives,
+           bridges: %{},
+           verdict: nil,
+           played: [],
+           overrule: nil,
+           overrules: [],
+           fairness_taps: %{},
+           author_failure: nil
+       }, []}
+    end
+  end
+
   @doc """
   Projects what one viewer may see: a Seat by its id, or `nil` for a viewer that
   holds no Seat — the stage on the laptop, or a phone still at the name form.
@@ -431,6 +608,10 @@ defmodule MeaningGame.Game do
       page_give: state.page && (state.page[:give] || state.page["give"]),
       page_chapter: state.page && (state.page[:chapter] || state.page["chapter"]),
       page_theme: state.page && (state.page[:theme] || state.page["theme"]),
+      your_give: Map.get(state.gives, viewer),
+      your_last_give: Map.get(state.last_gives, viewer),
+      gives_in: map_size(state.gives),
+      author_failure: state.author_failure,
       your_bridge: Map.get(state.bridges, viewer),
       attempt: %{number: state.attempt, of: attempt_cap()},
       reveal: reveal(state, phase),
@@ -468,7 +649,7 @@ defmodule MeaningGame.Game do
   # Nobody sees the Bookends until everybody can: a player alone in the Room with
   # the two words on screen is a player with a head start on the one still
   # typing their name.
-  defp bookends(_state, :waiting), do: nil
+  defp bookends(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
   defp bookends(state, _phase), do: state.bookends
 
   # The Bridges go in roster order, the order the reveal puts them in, so that
@@ -478,19 +659,6 @@ defmodule MeaningGame.Game do
 
   # Every Bridge of this attempt, in roster order.
   defp written_bridges(state), do: Enum.map(state.seats, &state.bridges[&1.id])
-
-  defp fallback_quip(%{page: %{} = page} = state) do
-    scripts = Map.get(page, :band_scripts) || Map.get(page, "band_scripts")
-
-    if is_map(scripts) do
-      bridges = written_bridges(state)
-
-      if Enum.all?(bridges, &is_binary/1) do
-        band = MeaningGame.Steward.Author.provisional_reading(page, bridges)
-        Map.get(scripts, to_string(band)) || Map.get(scripts, band)
-      end
-    end
-  end
 
   defp fallback_quip(_state), do: nil
 
@@ -519,7 +687,9 @@ defmodule MeaningGame.Game do
   # Bridges, grade them together, show it, and end.
   defp phase(state) do
     cond do
-      state.page == nil or not full?(state) -> :waiting
+      not full?(state) -> :waiting
+      state.page == nil and map_size(state.gives) < length(state.seats) -> :giving
+      state.page == nil -> :writing
       map_size(state.bridges) < length(state.seats) -> :bridging
       state.verdict == nil -> :assaying
       over?(state) -> :closed
@@ -651,6 +821,12 @@ defmodule MeaningGame.Game do
 
     %{
       page: state.page,
+      bookends: state.bookends,
+      gives:
+        Enum.map(state.seats, fn seat ->
+          %{seat_id: seat.id, seat_name: seat.name, text: state.gives[seat.id] || ""}
+        end),
+      author_meta: state.page && (state.page[:meta] || state.page["meta"]),
       closed_because: closed_because(state),
       melded?: melded?(state),
       closeness: headline(state),

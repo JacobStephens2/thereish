@@ -62,9 +62,8 @@ config :meaning_game, :steward,
   http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]
 
 # The escalation ladder, in test time. The shape is what matters — activity,
-# then a provisional reading, then no verdict — and the shape is the same at a
-# fortieth of the wall clock.
-config :meaning_game, assayer_escalation_ms: [slow: 100, provisional: 200, unavailable: 250]
+# then no verdict — and the shape is the same at a fortieth of the wall clock.
+config :meaning_game, assayer_escalation_ms: [slow: 100, unavailable: 250]
 
 # Print only warnings and errors during test
 config :logger, level: :warning

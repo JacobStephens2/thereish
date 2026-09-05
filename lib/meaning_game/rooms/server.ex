@@ -59,7 +59,6 @@ defmodule MeaningGame.Rooms.Server do
 
   alias MeaningGame.Chronicle
   alias MeaningGame.Game
-  alias MeaningGame.Pages
   alias MeaningGame.Rooms.Seat
   alias MeaningGame.Rooms.Store
   alias MeaningGame.Scribe
@@ -82,9 +81,7 @@ defmodule MeaningGame.Rooms.Server do
     # a Room to bring into being.
     with %{} = room <- Store.get_room(slug) do
       seats = Store.list_seats(room.id)
-      page = Pages.first(room.id)
-      game = Game.init(seat_limit: room.seat_limit, seats: seats, page: page)
-      current_arm = assign_and_record_arm(room.id, page)
+      game = Game.init(seat_limit: room.seat_limit, seats: seats)
 
       state = %{
         room: room,
@@ -93,11 +90,7 @@ defmodule MeaningGame.Rooms.Server do
         held: [],
         opened_at: nil,
         assayer: nil,
-        give_status: nil,
-        give_announcement: nil,
-        give_failure: nil,
-        active_give: nil,
-        current_arm: current_arm
+        current_arm: :flash
       }
 
       {:ok, opened(state)}
@@ -166,90 +159,30 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   def handle_call({:give, seat_id, give}, _from, state) do
-    give = String.trim(give || "")
+    case Game.apply(state.game, {:give_committed, %{seat_id: seat_id, give: give}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
 
-    cond do
-      is_nil(find_seat(state, seat_id)) ->
-        {:reply, {:error, :no_such_seat}, state}
+  def handle_call({:retry_author, seat_id}, _from, state) do
+    case Game.apply(state.game, {:author_retried, %{seat_id: seat_id}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
 
-      give == "" ->
-        {:reply, {:error, :give_required}, state}
-
-      true ->
-        room_pid = self()
-        room_id = state.room.id
-        slug = state.room.slug
-        digest = Chronicle.digest(room_id)
-
-        Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
-          author_give_task(room_pid, give, digest)
-        end)
-
-        state =
-          state
-          |> Map.put(:give_status, %{status: :in_flight, give: give, seat_id: seat_id})
-          |> Map.put(:give_failure, nil)
-
-        broadcast(slug)
-        {:reply, :ok, state}
+  def handle_call({:reset_gives, seat_id}, _from, state) do
+    case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
   def handle_call({:next_page, seat_id}, _from, state) do
-    view = Game.view(state.game, seat_id)
-
-    cond do
-      is_nil(view.you) ->
-        {:reply, {:error, :no_such_seat}, state}
-
-      view.phase != :closed ->
-        {:reply, {:error, :page_open}, state}
-
-      true ->
-        draw_result =
-          if state[:active_give] do
-            case Pages.next(state.game.page.id, state.room.id, give: state[:active_give]) do
-              {:ok, next_page} ->
-                {:ok, next_page, state}
-
-              {:error, :pool_exhausted} ->
-                case Pages.next(state.game.page.id, state.room.id) do
-                  {:ok, next_page} -> {:ok, next_page, Map.put(state, :active_give, nil)}
-                  {:error, :pool_exhausted} = err -> err
-                end
-            end
-          else
-            case Pages.next(state.game.page.id, state.room.id) do
-              {:ok, next_page} -> {:ok, next_page, state}
-              {:error, :pool_exhausted} = err -> err
-            end
-          end
-
-        case draw_result do
-          {:ok, next_page, state} ->
-            current_arm = assign_and_record_arm(state.room.id, next_page)
-            state = Map.put(state, :current_arm, current_arm)
-            event = {:page_started, %{seat_id: seat_id, page: next_page}}
-
-            case Game.apply(state.game, event) do
-              {:ok, game, effects} ->
-                state =
-                  if state[:give_announcement] &&
-                       state.give_announcement[:give] == next_page[:give] do
-                    Map.put(state, :give_announcement, nil)
-                  else
-                    state
-                  end
-
-                {:reply, :ok, advance(%{state | opened_at: nil}, game, effects)}
-
-              {:error, reason} ->
-                {:reply, {:error, reason}, state}
-            end
-
-          {:error, :pool_exhausted} = error ->
-            {:reply, error, state}
-        end
+    case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(%{state | opened_at: nil}, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
@@ -277,11 +210,6 @@ defmodule MeaningGame.Rooms.Server do
       state.game
       |> Game.view(viewer)
       |> Map.put(:assayer_step, step(state))
-      |> Map.put(:provisional_band, provisional_band(state))
-      |> Map.put(:give_status, state[:give_status])
-      |> Map.put(:give_announcement, state[:give_announcement])
-      |> Map.put(:give_failure, state[:give_failure])
-      |> Map.put(:active_give, state[:active_give])
 
     {:reply, view, state}
   end
@@ -324,45 +252,15 @@ defmodule MeaningGame.Rooms.Server do
   # message. Nothing to escalate.
   def handle_info({:escalate, _step}, state), do: {:noreply, state}
 
-  def handle_info({:give_completed, {:ok, pages}, give}, state) do
-    state =
-      state
-      |> Map.put(:active_give, give)
-      |> Map.put(:give_status, %{status: :landed, give: give, count: length(pages)})
-      |> Map.put(:give_announcement, %{give: give, count: length(pages)})
-      |> Map.put(:give_failure, nil)
-
-    broadcast(state.room.slug)
-    {:noreply, state}
+  def handle_info({:author_completed, {:ok, result}}, state) do
+    event = {:page_written, %{bookends: result.bookends, meta: result.meta}}
+    {:noreply, apply_events(state, [event])}
   end
 
-  def handle_info({:give_completed, {:error, reason}, give}, state) do
+  def handle_info({:author_completed, {:error, reason}}, state) do
     friendly_reason = format_give_error(reason)
-
-    state =
-      state
-      |> Map.put(:give_status, %{status: :failed, give: give, reason: friendly_reason})
-      |> Map.put(:give_failure, %{give: give, reason: friendly_reason})
-      |> Map.put(:give_announcement, nil)
-
-    broadcast(state.room.slug)
-    {:noreply, state}
-  end
-
-  defp author_give_task(room_pid, give, digest) do
-    case Pages.author_give(give, digest: digest) do
-      {:ok, pages} ->
-        send(room_pid, {:give_completed, {:ok, pages}, give})
-
-      {:error, reason} ->
-        send(room_pid, {:give_completed, {:error, reason}, give})
-    end
-  rescue
-    e ->
-      send(room_pid, {:give_completed, {:error, Exception.message(e)}, give})
-  catch
-    :exit, reason ->
-      send(room_pid, {:give_completed, {:error, inspect(reason)}, give})
+    event = {:author_failed, %{reason: friendly_reason}}
+    {:noreply, apply_events(state, [event])}
   end
 
   defp format_give_error({:max_tokens, _}), do: "too broad or complex"
@@ -374,10 +272,6 @@ defmodule MeaningGame.Rooms.Server do
   defp format_give_error(reason) when is_binary(reason), do: reason
   defp format_give_error(reason) when is_atom(reason), do: to_string(reason)
   defp format_give_error(reason), do: inspect(reason)
-
-  defp find_seat(state, seat_id) do
-    Enum.find(state.game.seats, &(&1.id == seat_id))
-  end
 
   # The browser's own Seat wins over the name it typed, so typing someone else's
   # name on a phone that is already seated cannot take their Seat.
@@ -502,9 +396,34 @@ defmodule MeaningGame.Rooms.Server do
       state
   end
 
+  defp perform({:author, request}, state) do
+    room = self()
+    digest = Chronicle.digest(state.room.id)
+
+    Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
+      try do
+        case Steward.author(request, job: :flash, digest: digest) do
+          {:ok, result} ->
+            send(room, {:author_completed, {:ok, result}})
+
+          {:error, reason} ->
+            send(room, {:author_completed, {:error, reason}})
+        end
+      rescue
+        error ->
+          send(room, {:author_completed, {:error, error}})
+      catch
+        :exit, reason ->
+          send(room, {:author_completed, {:error, {:exit, reason}}})
+      end
+    end)
+
+    state
+  end
+
   defp perform({:assay, request}, state) do
     room = self()
-    arm = state[:current_arm] || :bait
+    arm = state[:current_arm] || :flash
     page = state.game.page
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
@@ -538,8 +457,7 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   defp next_step(:grading), do: :slow
-  defp next_step(:slow), do: :provisional
-  defp next_step(:provisional), do: :unavailable
+  defp next_step(:slow), do: :unavailable
 
   defp escalation_ms(:grading), do: 0
 
@@ -552,18 +470,6 @@ defmodule MeaningGame.Rooms.Server do
   defp step(%{assayer: nil}), do: nil
   defp step(%{assayer: %{step: step}}), do: step
 
-  # Eight seconds in, the Author's own table reads every Bridge that was written,
-  # in roster order — the same set the Assayer was handed.
-  defp provisional_band(%{assayer: %{step: :provisional}} = state) do
-    bridges = for seat <- state.game.seats, do: Map.get(state.game.bridges, seat.id)
-
-    if bridges != [] and Enum.all?(bridges, &is_binary/1) do
-      Pages.provisional_reading(state.game.page, bridges)
-    end
-  end
-
-  defp provisional_band(_state), do: nil
-
   # An Assayer that blows up has failed to grade, which is a thing the game has
   # a rule for. It is not a thing the Room should die of.
   defp assay(request, page, arm) do
@@ -572,10 +478,6 @@ defmodule MeaningGame.Rooms.Server do
     error -> {:error, error}
   catch
     :exit, reason -> {:error, {:exit, reason}}
-  end
-
-  defp assign_and_record_arm(room_id, page) do
-    Steward.assign_arm(room_id, page)
   end
 
   # How long the reveal is held is the Room's to know, because running it is the

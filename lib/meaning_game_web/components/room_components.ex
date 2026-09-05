@@ -42,54 +42,10 @@ defmodule MeaningGameWeb.RoomComponents do
 
   attr :room, :map, required: true
 
-  @doc "Announcements about Gives: when new Pages have arrived, or when an Author run failed."
-  def give_announcement(assigns) do
-    ~H"""
-    <div
-      :if={@room[:give_announcement]}
-      data-role="give-announcement"
-      class="rounded-xl border border-primary/40 bg-primary/10 p-5 text-center transition-all"
-    >
-      <p class="text-xs uppercase tracking-widest font-semibold text-primary">New Setting Arrived</p>
-      <p class="mt-1 text-2xl font-bold">
-        The Author heard you: "{@room.give_announcement.give}"
-      </p>
-      <p class="mt-1 text-sm opacity-75">
-        {@room.give_announcement.count} new Page{if @room.give_announcement.count == 1,
-          do: "",
-          else: "s"} added to tonight's pool.
-      </p>
-    </div>
-
-    <div
-      :if={@room[:give_failure]}
-      data-role="give-failure"
-      class="rounded-xl border border-warning/40 bg-warning/10 p-5 text-center transition-all"
-    >
-      <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
-      <p class="mt-1 text-lg font-medium text-warning-content">
-        The Author couldn't write for "{@room.give_failure.give}": {@room.give_failure.reason}.
-      </p>
-      <p class="mt-1 text-sm opacity-70">
-        Playing on from the existing pool.
-      </p>
-    </div>
-    """
-  end
-
-  attr :room, :map, required: true
-
   @doc "The two words the Page hangs between, shown to everyone at once."
   def bookends(assigns) do
     ~H"""
     <div :if={@room.bookends} class="flex flex-col items-center gap-3">
-      <p
-        :if={@room[:page_give]}
-        data-role="page-give"
-        class="text-xs uppercase tracking-widest font-semibold text-primary"
-      >
-        Setting: {@room.page_give}
-      </p>
       <div
         data-role="bookends"
         class="flex flex-wrap items-center justify-center gap-4"
@@ -129,13 +85,10 @@ defmodule MeaningGameWeb.RoomComponents do
   attr :room, :map, required: true
 
   @doc """
-  The beat, said out loud. Every screen says the same thing during it.
+  The pause while the Assayer reads the Bridges.
 
-  And if the Assayer is slow, every screen says so together: activity through
-  four seconds, a provisional reading at eight, and at ten the game says it has
-  no verdict, which is not a line here because by then there is a reveal to draw
-  (design law 10). A wait the game narrates is a wait; a wait it says nothing
-  about is a hang.
+  Shown when the Room has moved into `:assaying` — which means every Bridge has
+  been committed and the beat is running.
   """
   def assaying(assigns) do
     ~H"""
@@ -143,7 +96,6 @@ defmodule MeaningGameWeb.RoomComponents do
       :if={@room.phase == :assaying}
       data-role="phase"
       data-step={@room.assayer_step || :grading}
-      data-provisional-band={@room[:provisional_band]}
       class="flex flex-col items-center justify-center gap-3 text-center"
     >
       <div
@@ -162,7 +114,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p class="text-lg opacity-70">
-        {waiting_line(@room.assayer_step, @room[:provisional_band])}
+        {waiting_line(@room.assayer_step)}
       </p>
     </div>
     """
@@ -592,19 +544,10 @@ defmodule MeaningGameWeb.RoomComponents do
   defp band(nil), do: ""
   defp band(name), do: name |> to_string() |> String.replace("_", " ")
 
-  # The Assayer has answered and the beat is still running, which is the
-  # ordinary case and reads as the ordinary line.
-  defp waiting_line(step, provisional_band \\ nil)
-  defp waiting_line(nil, _band), do: "Every bridge is in. The Assayer is looking at them."
-  defp waiting_line(:grading, _band), do: waiting_line(nil)
-  defp waiting_line(:slow, _band), do: "The Assayer is still reading. It does this sometimes."
-
-  # The Author's pre-graded table puts a provisional band at eight seconds.
-  defp waiting_line(:provisional, nil), do: "Still nothing. Hold on."
-
-  defp waiting_line(:provisional, band) do
-    "Provisional reading: #{band(band)} (from likely bridges). Still waiting on the Assayer."
-  end
+  defp waiting_line(nil), do: "Every bridge is in. The Assayer is looking at them."
+  defp waiting_line(:grading), do: waiting_line(nil)
+  defp waiting_line(:slow), do: "The Assayer is still reading. It does this sometimes."
+  defp waiting_line(_), do: waiting_line(nil)
 
   defp waiting(%{open_seats: 0, seat_limit: seat_limit}),
     do: "All #{seat_limit} seats taken"

@@ -85,7 +85,8 @@ defmodule MeaningGame.Steward.Assay do
     %{
       system: @system,
       user:
-        "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <> written,
+        "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <>
+          written,
       schema: schema(),
       schema_name: "verdict"
     }
