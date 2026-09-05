@@ -16,7 +16,22 @@ config :meaning_game, MeaningGame.Repo,
 # The server runs during test so `MeaningGameWeb.EndpointTest` can prove the
 # endpoint actually boots and serves over a real socket, not just through
 # `Plug.Test`. Every other test still goes through `Phoenix.ConnTest`.
-test_port = String.to_integer(System.get_env("TEST_PORT") || "4002")
+#
+# One suite per port: because it really listens, two worktrees running
+# `mix test` in the same moment would collide on 4002 with `:eaddrinuse`. The
+# partition that already names the database names the port too, so parallel
+# tickets each get their own; with no partition it is 4002 as before.
+test_port =
+  case System.get_env("TEST_PORT") || System.get_env("MIX_TEST_PARTITION") do
+    nil ->
+      4002
+
+    port when is_binary(port) ->
+      case Integer.parse(port) do
+        {p, ""} -> p
+        _ -> 4010 + :erlang.phash2(port, 990)
+      end
+  end
 
 config :meaning_game, MeaningGameWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: test_port],
@@ -30,15 +45,7 @@ config :meaning_game, reveal_beat_ms: 5
 
 # No test grades against a provider. The suite must never spend money and never
 # depend on somebody's uptime, so the fake is the Assayer here and the handful
-# of tests that exercise the live adapter put a recorded response behind it.
-# Everything else about the Assayer — its provider, model, effort, hedging and
-# prices — is deliberately the couch's own configuration, so that the tests
-# which do exercise the live adapter exercise the settings that will be live.
-#
-# `http_options` fences the suite off from the network entirely: every request a
-# provider adapter makes goes to a recorded response instead. A test that means
-# to call somebody has to say so out loud
-# (`MeaningGame.StewardFixtures.let_it_call_the_provider/0`), and is tagged
+# of tests that actually call somebody (the live smoke test) are tagged
 # `:live` and excluded from the default run.
 config :meaning_game, :steward,
   adapter: MeaningGame.Steward.Fake,
@@ -47,7 +54,10 @@ config :meaning_game, :steward,
     author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"],
     scribe: [
       api_key: "recorded-responses-need-no-key",
-      jobs: [recap: [timeout_ms: 2_000, deadline_ms: 5_000]]
+      jobs: [
+        recap: [timeout_ms: 2_000, deadline_ms: 5_000],
+        naming: [timeout_ms: 500, deadline_ms: 1_000]
+      ]
     ],
     foley: [
       elevenlabs_api_key: "recorded-responses-need-no-key",

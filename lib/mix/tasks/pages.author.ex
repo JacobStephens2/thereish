@@ -44,7 +44,7 @@ defmodule Mix.Tasks.Pages.Author do
         Enum.each(pages, fn page ->
           Mix.shell().info("""
           ✓ Page #{page.id}
-            Anchors:        #{Enum.join(page.anchors, " + ")}
+            Bookends:       #{Enum.join(page.bookends, " + ")}
             Bait:           #{page.bait}
             Deep bridges:   #{Enum.join(page.deep_bridges, ", ")}
             Likely bridges: #{Enum.join(page.likely_bridges, ", ")}
