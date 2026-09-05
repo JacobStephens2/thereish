@@ -166,6 +166,17 @@ attempted.
 When the Scribe is implemented to write Chronicle recaps post-play, it is
 planned to use `claude-fable-5-1` as well and will share this key.
 
+### The keys on the Mac: `va`
+
+Every key the game reads — `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and the Foley's `MUREKA_API_KEY`, `ELEVENLABS_API_KEY`, `HUME_API_KEY` / `HUME_SECRET_KEY` — is in the Bitwarden manifest of Jacob's `vaulted-agent` launcher. A shell or harness started through it has them in the environment and nothing else does:
+
+```sh
+va bash                  # a shell with the keys; then mix phx.server, or a live smoke test
+va claude                # a coding session that can run them
+```
+
+Nothing is written to disk. `.env.local` is only for running the release image on the Mac.
+
 ### Measuring the round trip
 
 The reveal is a fixed 2.5 second beat and the Assayer has to fit a p95 of four

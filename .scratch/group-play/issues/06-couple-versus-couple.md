@@ -1,6 +1,6 @@
 # 06: Couple versus couple
 
-**What to build:** Two couples at one table play the same Anchors as two teams. Jacob and Melissa meld their own pair, Bryan and Evelyn meld theirs, and the reveal compares the two Closenesses — a rival-team race, which is the competitive garnish the design brief keeps for later modes (Melissa enjoys competitive Boggle; research law 6 names the rival-team race as one of the crowd's jobs).
+**What to build:** Two couples at one table play the same Bookends as two teams. Jacob and Melissa meld their own pair, Bryan and Evelyn meld theirs, and the reveal compares the two Closenesses — a rival-team race, which is the competitive garnish the design brief keeps for later modes (Melissa enjoys competitive Boggle; research law 6 names the rival-team race as one of the crowd's jobs).
 
 **Blocked by:** tickets 01–05 of `.scratch/group-play/spec.md`, which builds group play with one Verdict per Attempt (ADR-0010).
 
