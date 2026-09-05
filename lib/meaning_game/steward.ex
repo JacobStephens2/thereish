@@ -184,9 +184,13 @@ defmodule MeaningGame.Steward do
   A joint player overrule is the only thing in the system that rewrites
   precedent (ADR-0006, design law 3).
   """
-  @spec overrule([String.t()], [String.t()], map()) ::
-          {:ok, term()} | {:error, term()}
-  def overrule(bookends, bridges, ruling) do
+  @spec overrule(request(), map()) :: {:ok, term()} | {:error, term()}
+  @spec overrule([String.t()], [String.t()], map()) :: {:ok, term()} | {:error, term()}
+  def overrule(%{bookends: bookends, bridges: bridges}, ruling) do
+    overrule(bookends, bridges, ruling)
+  end
+
+  def overrule(bookends, bridges, ruling) when is_list(bookends) and is_list(bridges) do
     role = role(:assayer)
     prompt_version = Map.get(role, :prompt_version, MeaningGame.Steward.Assay.version())
 
