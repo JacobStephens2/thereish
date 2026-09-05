@@ -130,6 +130,11 @@ defmodule MeaningGame.ChronicleTest do
       assert verdict.forward == 91
       assert verdict.reverse == 91
       assert verdict.reasoning_reverse =~ "cairns"
+
+      # Markdown export and digest retain reasoning even though screens do not
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      assert Chronicle.to_markdown(room.id) =~ "- Reasoning: #{verdict.reasoning}"
+      assert Chronicle.digest(room.id) =~ "Verdict: 91 (meld) — #{verdict.reasoning}"
     end
 
     test "records a verdict that never came as a verdict that never came", ctx do
@@ -885,6 +890,28 @@ defmodule MeaningGame.ChronicleTest do
       [verdict] = attempt.verdicts
 
       assert verdict.furthest == nil
+    end
+  end
+
+  describe "recent_quips/2" do
+    test "returns recent quips from the database in chronological order", ctx do
+      play(ctx, "cairn", "cairns")
+      quips = Chronicle.recent_quips(ctx.slug, 5)
+
+      assert length(quips) == 1
+      assert hd(quips) =~ "walk into a bar"
+    end
+
+    test "falls back to priv/chronicles/<slug>.md when room is not in DB" do
+      quips = Chronicle.recent_quips("DUST", 5)
+
+      assert length(quips) == 5
+
+      assert List.first(quips) ==
+               "Both of you served up plate, proving great minds dish out the same thoughts."
+
+      assert List.last(quips) ==
+               "One brought the raw ingredient while the other rolled the meat into a tidy meatball."
     end
   end
 end

@@ -57,7 +57,6 @@ defmodule MeaningGame.Chronicle.FairnessTap do
         _ -> attrs
       end
 
-
     tap
     |> cast(attrs, [
       :room_id,

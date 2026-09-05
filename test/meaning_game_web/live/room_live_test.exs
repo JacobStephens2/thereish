@@ -241,7 +241,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
         assert html =~ "cairo"
         assert has_element?(view, "[data-role=closeness]", "80")
         assert has_element?(view, "[data-role=band]", "almost")
-        assert has_element?(view, "[data-role=reasoning]", "share 4 letters")
+        refute has_element?(view, "[data-role=reasoning]")
+        refute render(view) =~ "share 4 letters"
         # The joke is about the two words they actually wrote, and it is on
         # every screen the number is on (ADR-0005).
         assert has_element?(view, "[data-role=quip]", "\"cairn\" and \"cairo\"")
@@ -511,8 +512,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       assert has_element?(stage, "[data-role=closeness]")
       assert has_element?(stage, "[data-role=quip]")
-      assert has_element?(stage, "[data-role=reasoning]")
-      assert has_element?(stage, "[data-role=furthest]", "beacon (Ada)")
+      refute has_element?(stage, "[data-role=reasoning]")
+      refute has_element?(stage, "[data-role=furthest]")
       refute has_element?(stage, "[data-role=pair]")
 
       # Two of three landing on one word is not the table being of one mind.
@@ -659,20 +660,42 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       for view <- ctx.screens do
         await_reveal_on(view)
+        html = render(view)
         assert has_element?(view, "[data-role=comparison]")
         assert has_element?(view, "[data-role=closeness]", "91")
         assert has_element?(view, "[data-role=band]", "meld")
-        assert render(view) =~ "ClimbNumber"
-        assert has_element?(view, "[data-role=reasoning]")
-        assert render(view) =~ "reasoning"
+        assert html =~ "ClimbNumber"
+        refute has_element?(view, "[data-role=reasoning]")
+        refute html =~ "reasoning"
         assert has_element?(view, "[data-role=quip]")
         assert has_element?(view, "[data-arrival=meld]")
-        assert render(view) =~ "One mind, two heads"
+        refute html =~ "One mind"
+        refute has_element?(view, "[data-role=furthest]")
+
+        # Order within reveal: comparison -> closeness -> quip
+        {comp_idx, _} = :binary.match(html, ~s(data-role="comparison"))
+        {close_idx, _} = :binary.match(html, ~s(data-role="closeness-display"))
+        {quip_idx, _} = :binary.match(html, ~s(data-role="quip"))
+        assert comp_idx < close_idx
+        assert close_idx < quip_idx
       end
 
       # Phone distinguishes your bridge with (you)
       assert has_element?(ctx.melissa, "[data-bridge][data-you=true]", "Melissa")
       assert has_element?(ctx.melissa, "[data-bridge][data-you=false]", "Jacob")
+
+      # Code card renders in every phase, full Room included
+      assert has_element?(ctx.melissa, "[data-role=room-code]")
+      assert has_element?(ctx.jacob, "[data-role=room-code]")
+
+      # Header and "You are …" render below reveal as a footer on phone
+      phone_html = render(ctx.melissa)
+      {reveal_idx, _} = :binary.match(phone_html, ~s(data-role="reveal"))
+      {footer_idx, _} = :binary.match(phone_html, "<footer")
+      assert reveal_idx < footer_idx
+      assert has_element?(ctx.melissa, "footer [data-role=you]", "Melissa")
+      assert has_element?(ctx.melissa, "footer h1", "Meaning Game")
+      assert has_element?(ctx.melissa, "footer a", "The Chronicle")
 
       # Stage has public stage mode and no private (you) attribution
       assert has_element?(ctx.stage, "[data-mode=stage]")
@@ -689,7 +712,6 @@ defmodule MeaningGameWeb.RoomLiveTest do
         assert has_element?(view, "[data-role=closeness]", "80")
         assert has_element?(view, "[data-role=band]", "almost")
         assert has_element?(view, "[data-arrival=almost]")
-        assert render(view) =~ "Same neighbourhood, distinct framing."
         refute has_element?(view, "[data-role=ending-line]")
       end
 

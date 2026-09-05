@@ -199,18 +199,7 @@ defmodule MeaningGameWeb.RoomLive do
       phx-hook=".ResyncOnWake"
       class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12"
     >
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold">Meaning Game</h1>
-        <.link
-          navigate={chronicle_path(@slug)}
-          class="text-sm font-medium underline opacity-70 hover:opacity-100"
-        >
-          The Chronicle
-        </.link>
-      </div>
-
       <section
-        :if={@room.open_seats > 0}
         data-role="room-code"
         class="flex flex-col items-center gap-1 rounded-lg border border-base-300 px-4 py-6"
       >
@@ -228,10 +217,6 @@ defmodule MeaningGameWeb.RoomLive do
         <p :if={@error} data-role="error" class="text-sm text-error">{@error}</p>
         <.button variant="primary">Join</.button>
       </form>
-
-      <p :if={@seat} data-role="you" class="text-lg">
-        You are <span class="font-semibold">{@seat.name}</span>.
-      </p>
 
       <.attempt :if={@seat} room={@room} />
 
@@ -349,6 +334,21 @@ defmodule MeaningGameWeb.RoomLive do
           </p>
         </form>
       </section>
+
+      <footer class="flex flex-col gap-3 border-t border-base-300 pt-6">
+        <p :if={@seat} data-role="you" class="text-center text-sm opacity-80">
+          You are <span class="font-semibold">{@seat.name}</span>.
+        </p>
+        <div class="flex items-center justify-between">
+          <h1 class="text-lg font-semibold">Meaning Game</h1>
+          <.link
+            navigate={chronicle_path(@slug)}
+            class="text-sm font-medium underline opacity-70 hover:opacity-100"
+          >
+            The Chronicle
+          </.link>
+        </div>
+      </footer>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResyncOnWake">
         export default {
