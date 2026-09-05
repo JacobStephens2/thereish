@@ -82,6 +82,7 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  attr :room, :map, default: %{}
   attr :mode, :atom, default: :phone
 
   @doc """
@@ -89,7 +90,11 @@ defmodule MeaningGameWeb.RoomComponents do
   """
   def author_writing(assigns) do
     ~H"""
-    <div data-role="beat-meter" class="flex flex-col items-center gap-2">
+    <div
+      data-role="beat-meter"
+      data-step={@room[:author_step] || :writing}
+      class="flex flex-col items-center gap-2"
+    >
       <div class="flex items-center gap-2" aria-hidden="true">
         <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
         <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
@@ -100,7 +105,9 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
     </div>
     <p class={if @mode == :stage, do: "text-2xl font-semibold", else: "text-lg font-medium"}>
-      The Author is reading your settings...
+      {if @room[:author_step] == :still_writing,
+        do: "The Author is still writing...",
+        else: "The Author is reading your settings..."}
     </p>
     """
   end

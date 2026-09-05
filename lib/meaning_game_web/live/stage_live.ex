@@ -82,11 +82,22 @@ defmodule MeaningGameWeb.StageLive do
       </section>
 
       <section
-        :if={@room.phase == :writing}
+        :if={@room.phase == :writing && is_nil(@room[:author_failure])}
         data-role="writing-stage"
         class="flex flex-col items-center justify-center gap-3 text-center"
       >
-        <.author_writing mode={:stage} />
+        <.author_writing room={@room} mode={:stage} />
+      </section>
+
+      <section
+        :if={@room.phase == :writing && @room[:author_failure]}
+        data-role="author-failure"
+        class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+        <p class="text-2xl font-semibold">
+          The Author couldn't write from these settings: {@room.author_failure}
+        </p>
       </section>
 
       <.attempt room={@room} />
