@@ -889,6 +889,139 @@ defmodule MeaningGame.ChronicleTest do
 
       assert verdict.furthest == nil
     end
+
+    test "a four-Seat Page writes four Give rows with their Seats and one Verdict row per Attempt with four Seat ids and the furthest pair" do
+      attempt_cap(1)
+      code = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: code)
+
+      seats =
+        for name <- ["Mara", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(code, name, device_token())
+          seat
+        end
+
+      [mara, jacob, ada, sam] = seats
+
+      assert Rooms.snapshot(code, nil).phase == :giving
+      :ok = Rooms.give(code, mara.id, "setting one")
+      :ok = Rooms.give(code, jacob.id, "setting two")
+      :ok = Rooms.give(code, ada.id, "setting three")
+      :ok = Rooms.give(code, sam.id, "setting four")
+
+      await_phase(code, :bridging)
+
+      :ok = Rooms.commit_bridge(code, mara.id, "beacon")
+      :ok = Rooms.commit_bridge(code, jacob.id, "cairn")
+      :ok = Rooms.commit_bridge(code, ada.id, "lamp")
+      :ok = Rooms.commit_bridge(code, sam.id, "seagull")
+
+      await_phase(code, :closed)
+
+      # 4 Give rows written with their Seats
+      [page] = Chronicle.pages(room.id)
+
+      give_rows =
+        Repo.all(
+          from(g in MeaningGame.Chronicle.Give,
+            where: g.page_id == ^page.id,
+            order_by: [asc: g.order]
+          )
+        )
+
+      assert length(give_rows) == 4
+      assert Enum.map(give_rows, & &1.seat_id) == Enum.map(seats, & &1.id)
+
+      assert Enum.map(give_rows, & &1.text) == [
+               "setting one",
+               "setting two",
+               "setting three",
+               "setting four"
+             ]
+
+      # One Verdict row per Attempt with 4 Seat ids and the furthest pair
+      verdict_rows =
+        Repo.all(
+          from(v in MeaningGame.Chronicle.Verdict,
+            join: a in assoc(v, :attempt),
+            where: a.page_id == ^page.id
+          )
+        )
+
+      assert [verdict] = verdict_rows
+      assert length(verdict.seat_ids) == 4
+      assert verdict.seat_ids == Enum.map(seats, & &1.id)
+      assert is_list(verdict.furthest) and length(verdict.furthest) == 2
+      assert Enum.all?(verdict.furthest, &(&1 in ["beacon", "cairn", "lamp", "seagull"]))
+
+      # Book view lists Gives, every Bridge, the one Verdict with reasoning, and the carried words
+      [view] = Chronicle.book(room.id)
+      assert length(view.gives) == 4
+      [attempt] = view.attempts
+      assert length(attempt.bridges) == 4
+      assert [v] = attempt.verdicts
+      assert v.reasoning != nil and v.reasoning != ""
+      assert v.furthest == verdict.furthest
+      assert attempt.carried == verdict.furthest
+
+      # Markdown export renders every Bridge, the one Verdict, and the carried words
+      markdown = Chronicle.to_markdown(room.id)
+      assert markdown =~ "Mara: beacon"
+      assert markdown =~ "Jacob: cairn"
+      assert markdown =~ "Ada: lamp"
+      assert markdown =~ "Sam: seagull"
+      assert markdown =~ "- Reasoning: #{v.reasoning}"
+      assert markdown =~ "- Carried: #{Enum.join(verdict.furthest, " · ")}"
+
+      # Round-trip parsing from Markdown
+      assert {:ok, [parsed_page]} = Chronicle.from_markdown(markdown)
+      assert length(parsed_page.gives) == 4
+      [parsed_attempt] = parsed_page.attempts
+      assert length(parsed_attempt.bridges) == 4
+      assert parsed_attempt.carried == verdict.furthest
+    end
+
+    test "calibration export carries the Bridge list on every tap for N seats" do
+      code = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: code)
+
+      seats =
+        for name <- ["Mara", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(code, name, device_token())
+          seat
+        end
+
+      bridges = ["beacon", "cairn", "lamp", "seagull"]
+
+      for seat <- seats do
+        Chronicle.record_fairness_tap(room.id, %{
+          seat_id: seat.id,
+          attempt_number: 1,
+          bookends: ["lantern", "harbour"],
+          bridges: bridges,
+          grade: 27,
+          band: "miss",
+          model: "gemini-3.8-flash",
+          prompt_version: "assay-3",
+          label: "fair"
+        })
+      end
+
+      dataset = Chronicle.calibration_dataset(room.id)
+      assert length(dataset) == 4
+
+      for entry <- dataset do
+        assert entry.bridges == bridges
+      end
+
+      json_export = Chronicle.export_calibration(room.id, :json)
+      {:ok, parsed_json} = Jason.decode(json_export)
+      assert length(parsed_json) == 4
+
+      for entry <- parsed_json do
+        assert entry["bridges"] == bridges
+      end
+    end
   end
 
   describe "recent_quips/2" do

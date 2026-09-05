@@ -400,6 +400,13 @@ defmodule MeaningGameWeb.ChronicleLive do
                 </div>
                 <p :if={v.reasoning} class="italic opacity-80">"{v.reasoning}"</p>
                 <p :if={v.quip} class="text-xs font-medium opacity-90">{v.quip}</p>
+                <p
+                  :if={v.furthest && length(v.furthest) == 2}
+                  data-role="carried-words"
+                  class="text-xs opacity-70"
+                >
+                  Carried: <span class="font-medium">{Enum.join(v.furthest, " · ")}</span>
+                </p>
               </div>
 
               <!-- Fairness taps on this attempt -->
