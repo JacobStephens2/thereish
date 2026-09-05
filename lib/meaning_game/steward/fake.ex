@@ -120,6 +120,8 @@ defmodule MeaningGame.Steward.Fake do
   end
 
   @impl true
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
   def name_room(_digests, _taken_codes) do
     delay = config_get(:name_delay_ms, 0)
     if delay > 0, do: Process.sleep(delay)

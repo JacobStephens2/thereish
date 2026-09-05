@@ -137,5 +137,9 @@ defmodule MeaningGame.Steward.FakeTest do
         Fake.name_room(["some digest"], ["take"])
       end
     end
+
+    test "the fake Scribe with no history returns :no_history" do
+      assert Fake.name_room([], ["take"]) == {:error, :no_history}
+    end
   end
 end
