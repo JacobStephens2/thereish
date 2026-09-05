@@ -499,14 +499,17 @@ defmodule MeaningGame.Game do
   # assay-3 carries Bookends, Bridges with player names in roster order, earlier
   # Attempts, and Gives.
   defp assay(state) do
+    seat_bridges =
+      Enum.map(state.seats, fn seat ->
+        %{name: seat.name, bridge: state.bridges[seat.id]}
+      end)
+
     {:assay,
      %{
        bookends: state.bookends,
        bridges: written_bridges(state),
-       player_bridges:
-         Enum.map(state.seats, fn seat ->
-           %{player: seat.name, bridge: state.bridges[seat.id]}
-         end),
+       seat_bridges: seat_bridges,
+       player_bridges: seat_bridges,
        earlier_attempts:
          Enum.map(state.played, fn attempt ->
            attempt_bridges = attempt[:bridges] || attempt.bridges || %{}
@@ -516,7 +519,7 @@ defmodule MeaningGame.Game do
              bookends: attempt[:bookends] || attempt.bookends,
              bridges:
                Enum.map(state.seats, fn seat ->
-                 %{player: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
+                 %{name: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
                end)
            }
          end),
@@ -536,7 +539,7 @@ defmodule MeaningGame.Game do
 
           map when is_map(map) ->
             Enum.map(state.seats, fn seat ->
-              %{player: seat.name, give: map[seat.id] || map[seat.name]}
+              %{name: seat.name, give: map[seat.id] || map[seat.name]}
             end)
 
           _ ->
