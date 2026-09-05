@@ -264,11 +264,11 @@ defmodule MeaningGameWeb.RoomLive do
       </div>
 
       <div
-        :if={@seat && @room.phase == :writing}
+        :if={@seat && @room.phase == :writing && is_nil(@room[:author_failure])}
         data-role="writing-phase"
         class="flex flex-col items-center justify-center gap-3 text-center"
       >
-        <.author_writing mode={:phone} />
+        <.author_writing room={@room} mode={:phone} />
       </div>
 
       <div
@@ -277,10 +277,12 @@ defmodule MeaningGameWeb.RoomLive do
         class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
       >
         <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
-        <p class="text-sm font-medium">The Author had trouble: {@room.author_failure}</p>
+        <p class="text-sm font-medium">
+          The Author couldn't write from these settings: {@room.author_failure}
+        </p>
         <div class="flex gap-2 mt-2">
-          <.button phx-click="retry_author" data-role="retry-author" variant="primary">Retry Author</.button>
-          <.button phx-click="reset_gives" data-role="reset-gives">New Settings</.button>
+          <.button phx-click="retry_author" data-role="retry-author" variant="primary">Try again</.button>
+          <.button phx-click="reset_gives" data-role="reset-gives">New settings</.button>
         </div>
       </div>
       <.attempt :if={@seat} room={@room} />

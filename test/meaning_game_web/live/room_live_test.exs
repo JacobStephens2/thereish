@@ -896,7 +896,123 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert render(ctx.jacob) =~ "value=\"misty harbor\""
     end
 
-    test "a failed or refused Author run surfaces on phone with retry and reset options", ctx do
+    test "stage shows waiting count with no give text, then writing animation, then still writing, then failure state",
+         ctx do
+      author_escalation(still_writing: 30, deadline: 100)
+
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 250, author_mode: :ok)
+        )
+      )
+
+      # 1. Stage shows waiting count with no give text
+      give_setting(ctx.melissa, "secret cathedral")
+      eventually(fn -> render(ctx.stage) =~ "Waiting for settings: 1 of 2" end)
+      refute render(ctx.stage) =~ "secret cathedral"
+
+      # 2. Last give in: writing animation on stage and phones
+      give_setting(ctx.jacob, "secret harbour")
+      eventually(fn -> has_element?(ctx.stage, "[data-role=writing-stage]") end)
+      assert has_element?(ctx.melissa, "[data-role=writing-phase]")
+      assert has_element?(ctx.jacob, "[data-role=writing-phase]")
+      assert render(ctx.stage) =~ "The Author is reading your settings..."
+      assert render(ctx.melissa) =~ "The Author is reading your settings..."
+
+      # 3. At five seconds (30ms test time): every screen says the Author is still writing
+      eventually(fn -> render(ctx.stage) =~ "The Author is still writing..." end)
+      assert render(ctx.melissa) =~ "The Author is still writing..."
+      assert render(ctx.jacob) =~ "The Author is still writing..."
+
+      # 4. At deadline: stage and phones show failure state, writing animation gone
+      eventually(fn -> has_element?(ctx.stage, "[data-role=author-failure]") end)
+      assert has_element?(ctx.melissa, "[data-role=author-failure]")
+      assert has_element?(ctx.jacob, "[data-role=author-failure]")
+
+      refute has_element?(ctx.stage, "[data-role=writing-stage]")
+      refute has_element?(ctx.melissa, "[data-role=writing-phase]")
+      refute has_element?(ctx.jacob, "[data-role=writing-phase]")
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=author-failure]",
+               "The Author couldn't write from these settings: timed out"
+             )
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=author-failure]",
+               "The Author couldn't write from these settings: timed out"
+             )
+
+      assert has_element?(
+               ctx.jacob,
+               "[data-role=author-failure]",
+               "The Author couldn't write from these settings: timed out"
+             )
+    end
+
+    test "an Author failure shows Try again and New settings on both phones, and either may retry",
+         ctx do
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :unavailable)
+        )
+      )
+
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=author-failure]") end)
+      assert has_element?(ctx.jacob, "[data-role=author-failure]")
+
+      # Both phones see Try again and New settings
+      for phone <- [ctx.melissa, ctx.jacob] do
+        assert has_element?(phone, "[data-role=retry-author]", "Try again")
+        assert has_element?(phone, "[data-role=reset-gives]", "New settings")
+
+        assert has_element?(
+                 phone,
+                 "[data-role=author-failure]",
+                 "The Author couldn't write from these settings"
+               )
+      end
+
+      # Configure author to succeed on retry
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :ok)
+        )
+      )
+
+      # Either Seat may tap Try again (e.g. Jacob taps)
+      ctx.jacob |> element("[data-role=retry-author]", "Try again") |> render_click()
+
+      # Both phones and stage transition to bridging
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.stage, "[data-role=bookends]") end)
+    end
+
+    test "New settings clears every Give and returns both phones to giving prefilled with last give",
+         ctx do
       fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
@@ -909,18 +1025,25 @@ defmodule MeaningGameWeb.RoomLiveTest do
         )
       )
 
-      give_setting(ctx.melissa, "forbidden cathedral")
-      give_setting(ctx.jacob, "forbidden harbour")
+      give_setting(ctx.melissa, "setting melissa")
+      give_setting(ctx.jacob, "setting jacob")
 
       eventually(fn -> has_element?(ctx.melissa, "[data-role=author-failure]") end)
-      assert has_element?(ctx.melissa, "[data-role=retry-author]")
-      assert has_element?(ctx.melissa, "[data-role=reset-gives]")
+      assert has_element?(ctx.jacob, "[data-role=author-failure]")
 
-      # Clicking reset-gives returns both players to giving form
-      ctx.melissa |> element("[data-role=reset-gives]") |> render_click()
+      # Melissa clicks New settings
+      ctx.melissa |> element("[data-role=reset-gives]", "New settings") |> render_click()
 
+      # Both phones return to giving form
       eventually(fn -> has_element?(ctx.melissa, "[data-role=setting-form]") end)
       assert has_element?(ctx.jacob, "[data-role=setting-form]")
+
+      # Each phone is prefilled with its own last give
+      assert render(ctx.melissa) =~ "value=\"setting melissa\""
+      assert render(ctx.jacob) =~ "value=\"setting jacob\""
+
+      # Stage returns to giving count 0 of 2
+      eventually(fn -> render(ctx.stage) =~ "Waiting for settings: 0 of 2" end)
     end
 
     test "submitting an empty Give shows an error", ctx do
