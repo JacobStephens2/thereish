@@ -80,7 +80,7 @@ defmodule MeaningGame.Steward do
         }
 
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
-  @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
 
   @doc """
@@ -100,11 +100,16 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Pre-generates a Page ahead of play against a named Chapter.
+  Writes two Bookends live from player settings (Gives).
   """
-  @spec author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
-  def author(chapter, opts \\ []) do
-    adapter().author(chapter, opts)
+  @spec author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
+  def author(request, opts \\ []) do
+    started = System.monotonic_time(:millisecond)
+
+    case adapter().author(request, opts) do
+      {:ok, result} -> {:ok, timed(result, System.monotonic_time(:millisecond) - started)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -129,54 +134,19 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Grades an Attempt's Bridges and applies experimental arm grading rules.
-
-  A/B variant grading lives behind the Steward seam (CONTEXT.md).
+  Grades an Attempt's Bridges.
   """
   @spec assay(request(), map() | nil, atom() | String.t() | nil) ::
           {:ok, verdict()} | {:error, term()}
-  def assay(request, page, arm) do
-    case assay(request) do
-      {:ok, verdict} ->
-        bridges = request.bridges || []
-
-        graded =
-          MeaningGame.Experiments.apply_arm_closeness(verdict, page, arm || :plain, bridges)
-
-        {:ok, graded}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+  def assay(request, _page, _arm) do
+    assay(request)
   end
 
   @doc """
-  Assigns and records an experiment arm for a Page at Page start.
-
-  Stratified by Chapter so no single arm collects all easy meaning-spaces.
-  A/B assignment lives behind the Steward seam (CONTEXT.md).
+  Assigns experiment arm for a Page. Fixed to :flash until issue 08.
   """
-  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | nil) :: :bait | :plain
-  def assign_arm(_room_id, nil), do: :bait
-
-  def assign_arm(room_id, page) do
-    chapter = page[:chapter] || page["chapter"] || "default"
-    page_id = page[:id] || page["id"] || "unknown"
-
-    past_arms = MeaningGame.Chronicle.chapter_assignments(room_id, chapter, "bait_against_plain")
-    arm = MeaningGame.Experiments.assign_arm(past_arms)
-
-    _ =
-      MeaningGame.Chronicle.record_experiment_assignment(room_id, %{
-        page_identifier: to_string(page_id),
-        experiment_id: "bait_against_plain",
-        arm: to_string(arm),
-        chapter: chapter,
-        assigned_at: DateTime.utc_now()
-      })
-
-    arm
-  end
+  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | nil) :: :flash
+  def assign_arm(_room_id, _page), do: :flash
 
   @doc """
   Rewrites the precedent for these Bridges with the players' ruling.

@@ -56,7 +56,6 @@ defmodule MeaningGame.Steward.Precedent do
 
   @doc false
   def changeset(precedent, attrs) do
-
     precedent
     |> cast(attrs, [
       :key,

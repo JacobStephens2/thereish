@@ -228,11 +228,13 @@ defmodule MeaningGame.GameTest do
       refute inspect(Game.view(state, "seat-Melissa")) =~ "lantern"
     end
 
-    test "a Room with no Page is waiting however full it is" do
-      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+    test "a Room with no Page is giving when full, waiting when not full" do
+      not_full = Game.init(seat_limit: 2, seats: [seat("Melissa")])
+      assert Game.view(not_full, nil).phase == :waiting
 
-      assert Game.view(state, nil).phase == :waiting
-      assert Game.view(state, nil).bookends == nil
+      full = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+      assert Game.view(full, nil).phase == :giving
+      assert Game.view(full, nil).bookends == nil
     end
 
     test "the last player to join starts the Page for everyone" do
@@ -246,6 +248,187 @@ defmodule MeaningGame.GameTest do
         assert view.phase == :bridging
         assert view.bookends == ["lantern", "harbour"]
       end
+    end
+  end
+
+  describe "giving and writing a Page (ticket 02)" do
+    setup do
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+      %{state: state}
+    end
+
+    test "full Room with no Page is in giving phase", %{state: state} do
+      assert Game.view(state, "seat-Melissa").phase == :giving
+      assert Game.view(state, "seat-Jacob").phase == :giving
+      assert Game.view(state, nil).phase == :giving
+    end
+
+    test "validates gives: blank, too long, not seated, already committed", %{state: state} do
+      assert {:error, :give_required} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "   "}})
+
+      long_give = String.duplicate("a", 121)
+
+      assert {:error, :give_too_long} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: long_give}})
+
+      assert {:error, :no_such_seat} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Ada", give: "ocean"}})
+
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "ocean"}})
+
+      assert {:error, :already_committed} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "mountain"}})
+    end
+
+    test "first Give appears only in giver's view; others see gives_in count", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      melissa_view = Game.view(state, "seat-Melissa")
+      jacob_view = Game.view(state, "seat-Jacob")
+      stage_view = Game.view(state, nil)
+
+      assert melissa_view.your_give == "lighthouse"
+      assert melissa_view.gives_in == 1
+      assert melissa_view.phase == :giving
+
+      assert jacob_view.your_give == nil
+      assert jacob_view.gives_in == 1
+      assert jacob_view.phase == :giving
+
+      assert stage_view.your_give == nil
+      assert stage_view.gives_in == 1
+      assert stage_view.phase == :giving
+    end
+
+    test "the last Give owes exactly one Author effect carrying every Give in roster order with names",
+         %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      assert {:ok, state, [author_effect]} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      assert {:author, request} = author_effect
+
+      assert [%{name: "Melissa", give: "lighthouse"}, %{name: "Jacob", give: "candle"}] =
+               request.gives
+
+      assert Game.view(state, nil).phase == :writing
+    end
+
+    test "page_written sets the Page and moves phase to bridging", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      meta = %{
+        model: "gemini-3.8-flash",
+        arm: :flash,
+        prompt_version: "author-3",
+        cost_usd: 0.001,
+        latency_ms: 250,
+        why: "Distant worlds."
+      }
+
+      event = {:page_written, %{bookends: ["cliff", "wax"], meta: meta}}
+
+      assert {:ok, state, []} = Game.apply(state, event)
+
+      view = Game.view(state, "seat-Melissa")
+      assert view.phase == :bridging
+      assert view.bookends == ["cliff", "wax"]
+      assert view.attempt == %{number: 1, of: Game.attempt_cap()}
+
+      # A duplicate page_written is ignored
+      assert {:ok, ^state, []} = Game.apply(state, event)
+    end
+
+    test "author_failed records failure and keeps phase in writing", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      assert {:ok, failed_state, []} =
+               Game.apply(state, {:author_failed, %{reason: "timed out"}})
+
+      assert Game.view(failed_state, nil).phase == :writing
+      assert Game.view(failed_state, nil).author_failure == "timed out"
+
+      # Retrying clears failure and owes author effect again
+      assert {:ok, retried_state, [{:author, _}]} =
+               Game.apply(failed_state, {:author_retried, %{seat_id: "seat-Melissa"}})
+
+      assert Game.view(retried_state, nil).author_failure == nil
+
+      # Resetting gives clears every Give and returns to giving
+      assert {:ok, reset_state, []} =
+               Game.apply(failed_state, {:gives_reset, %{seat_id: "seat-Melissa"}})
+
+      assert Game.view(reset_state, nil).phase == :giving
+      assert Game.view(reset_state, nil).gives_in == 0
+    end
+
+    test "next_page clears Page and returns to giving, remembering last Give for prefill" do
+      # Start with a closed page that had gives
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      meta = %{
+        model: "gemini-3.8-flash",
+        arm: :flash,
+        prompt_version: "author-3",
+        cost_usd: 0.001,
+        latency_ms: 250,
+        why: "why"
+      }
+
+      {:ok, state, _} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: meta}})
+
+      # Commit bridges and grade with a meld (80) to close the page
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      {:ok, state, effects} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "cairo"}})
+
+      [{:assay, _}] = Enum.filter(effects, &match?({:assay, _}, &1))
+
+      {:ok, closed_state, _} =
+        Game.apply(
+          state,
+          {:verdict_received,
+           %{closeness: 80, reasoning: "r", quip: "q", furthest: ["cairn", "cairo"], meta: %{}}}
+        )
+
+      assert Game.view(closed_state, nil).phase == :closed
+
+      assert {:ok, next_state, []} =
+               Game.apply(closed_state, {:next_page, %{seat_id: "seat-Melissa"}})
+
+      view_m = Game.view(next_state, "seat-Melissa")
+      view_j = Game.view(next_state, "seat-Jacob")
+
+      assert view_m.phase == :giving
+      assert view_m.bookends == nil
+      assert view_m.your_give == nil
+      assert view_m.your_last_give == "lighthouse"
+      assert view_m.gives_in == 0
+
+      assert view_j.your_give == nil
+      assert view_j.your_last_give == "candle"
     end
   end
 

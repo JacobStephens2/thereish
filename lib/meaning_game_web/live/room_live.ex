@@ -144,6 +144,16 @@ defmodule MeaningGameWeb.RoomLive do
     end
   end
 
+  def handle_event("retry_author", _params, socket) do
+    Rooms.retry_author(socket.assigns.slug, socket.assigns.seat.id)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("reset_gives", _params, socket) do
+    Rooms.reset_gives(socket.assigns.slug, socket.assigns.seat.id)
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
@@ -229,6 +239,72 @@ defmodule MeaningGameWeb.RoomLive do
         You are <span class="font-semibold">{@seat.name}</span>.
       </p>
 
+      <form
+        :if={@seat && @room.phase == :giving && @room.your_give == nil}
+        id="setting-form"
+        data-role="setting-form"
+        phx-submit="submit_give"
+        class="flex flex-col gap-2"
+      >
+        <.input
+          name="give"
+          value={if(@give_input != "", do: @give_input, else: @room.your_last_give)}
+          label="Your setting"
+          placeholder="e.g. the world St. Thérèse grew up in"
+          autocomplete="off"
+          autofocus
+        />
+        <p :if={@give_error} data-role="give-error" class="text-sm text-error">
+          {@give_error}
+        </p>
+        <.button variant="primary">Give</.button>
+      </form>
+
+      <div
+        :if={@seat && @room.phase == :giving && @room.your_give != nil}
+        data-role="your-give"
+        class="flex flex-col gap-1 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your setting</p>
+        <p class="text-xl font-semibold">{@room.your_give}</p>
+        <p class="text-sm opacity-60">
+          Waiting for {length(@room.seats) - @room.gives_in} more ({@room.gives_in} of {length(
+            @room.seats
+          )} in)
+        </p>
+      </div>
+
+      <div
+        :if={@seat && @room.phase == :writing}
+        data-role="writing-phase"
+        class="flex flex-col items-center justify-center gap-3 text-center"
+      >
+        <div data-role="beat-meter" class="flex flex-col items-center gap-2">
+          <div class="flex items-center gap-2" aria-hidden="true">
+            <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
+            <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
+            <span class="size-2.5 rounded-full bg-primary/40 animate-pulse"></span>
+          </div>
+          <p class="text-xs font-semibold tracking-widest uppercase opacity-60">
+            The Author is writing
+          </p>
+        </div>
+        <p class="text-lg font-medium">The Author is reading your settings...</p>
+      </div>
+
+      <div
+        :if={@seat && @room[:author_failure]}
+        data-role="author-failure"
+        class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+        <p class="text-sm font-medium">The Author had trouble: {@room.author_failure}</p>
+        <div class="flex gap-2 mt-2">
+          <.button phx-click="retry_author" data-role="retry-author" variant="primary">Retry Author</.button>
+          <.button phx-click="reset_gives" data-role="reset-gives">New Settings</.button>
+        </div>
+      </div>
+
       <.attempt :if={@seat} room={@room} />
 
       <.bookends :if={@seat} room={@room} />
@@ -296,54 +372,6 @@ defmodule MeaningGameWeb.RoomLive do
       <section class="flex flex-col gap-2">
         <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>
         <.roster room={@room} />
-      </section>
-
-      <section
-        :if={@seat && @room.phase != :waiting}
-        class="flex flex-col gap-2 border-t border-base-300 pt-6"
-      >
-        <h2 class="text-sm uppercase tracking-wide opacity-60">Give a setting</h2>
-        <form
-          id="give-form"
-          data-role="give-form"
-          phx-submit="submit_give"
-          class="flex flex-col gap-2"
-        >
-          <div class="flex items-center gap-2">
-            <.input
-              name="give"
-              value={@give_input}
-              placeholder="e.g. the world St. Thérèse grew up in"
-              class="flex-1"
-              autocomplete="off"
-            />
-            <.button>Give</.button>
-          </div>
-          <p :if={@give_error} data-role="give-error" class="text-sm text-error">
-            {@give_error}
-          </p>
-          <p
-            :if={@room[:give_status] && @room.give_status[:status] == :in_flight}
-            data-role="give-status"
-            class="text-sm opacity-70"
-          >
-            The Author is writing Pages for "{@room.give_status.give}"...
-          </p>
-          <p
-            :if={@room[:give_status] && @room.give_status[:status] == :landed}
-            data-role="give-status"
-            class="text-sm font-medium text-success"
-          >
-            Pages for "{@room.give_status.give}" have arrived.
-          </p>
-          <p
-            :if={@room[:give_status] && @room.give_status[:status] == :failed}
-            data-role="give-status"
-            class="text-sm font-medium text-warning"
-          >
-            The Author couldn't write for "{@room.give_status.give}": {@room.give_status.reason}. Playing on.
-          </p>
-        </form>
       </section>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResyncOnWake">

@@ -66,16 +66,8 @@ defmodule MeaningGame.ExperimentsTest do
     end
   end
 
-  describe "arm scoring: bait vs plain" do
-    @page %{
-      bookends: ["backyard", "weekend"],
-      bait: "barbecue",
-      deep_bridges: ["lawnmower", "chores"],
-      likely_bridges: ["barbecue", "lawnmower", "chores"],
-      why_these: "Backyard and weekend invite barbecue as the immediate trap."
-    }
-
-    test "plain arm leaves standard Assayer verdict unchanged" do
+  describe "arm scoring" do
+    test "leaves standard Assayer verdict unchanged" do
       verdict = %{
         closeness: 100,
         reasoning: "Exact match on barbecue.",
@@ -83,128 +75,9 @@ defmodule MeaningGame.ExperimentsTest do
         meta: %{}
       }
 
-      scored = Experiments.score_verdict(verdict, @page, :plain, ["barbecue", "barbecue"])
+      scored = Experiments.score_verdict(verdict, %{}, :flash, ["barbecue", "barbecue"])
       assert scored.closeness == 100
       assert scored.reasoning == "Exact match on barbecue."
-    end
-
-    test "bait arm scores convergence on the bait as a Meld on the lowest rung (75) without leaking arm" do
-      # Converging on the obvious trap is still a Meld, but on the lowest rung (ADR-0004).
-      # Blinding: reasoning must NOT leak arm labels or trap notices to players during play.
-      verdict = %{
-        closeness: 100,
-        reasoning: "Exact match on barbecue.",
-        quip: "Two minds at the barbecue.",
-        meta: %{}
-      }
-
-      scored = Experiments.apply_arm_closeness(verdict, @page, :bait, ["barbecue", "barbecue"])
-      assert scored.closeness == 75
-      assert scored.meta[:trap_sprung] == true
-      # Reasoning is preserved without leaking arm or trap
-      assert scored.reasoning == "Exact match on barbecue."
-    end
-
-    test "bait arm scores convergence on deep bridges at the top rung" do
-      verdict = %{
-        closeness: 85,
-        reasoning: "Related suburban chores.",
-        quip: "Two minds at the lawnmower.",
-        meta: %{}
-      }
-
-      scored = Experiments.apply_arm_closeness(verdict, @page, :bait, ["lawnmower", "lawnmower"])
-      assert scored.closeness >= 95
-      assert scored.meta[:deep_convergence] == true
-    end
-
-    test "bait arm leaves non-trap, non-deep verdicts unchanged" do
-      verdict = %{
-        closeness: 45,
-        reasoning: "Different thoughts.",
-        quip: "Far apart.",
-        meta: %{}
-      }
-
-      scored = Experiments.apply_arm_closeness(verdict, @page, :bait, ["fence", "grass"])
-      assert scored.closeness == 45
-    end
-
-    test "bait arm springs the trap only when every Bridge is the bait" do
-      verdict = %{
-        closeness: 70,
-        reasoning: "Three at the grill, one in the shed.",
-        quip: "Somebody went looking for the mower.",
-        meta: %{}
-      }
-
-      # Three of four on the trap is a table that did not all walk into it, and
-      # the Assayer's own number already says how close they came (ADR-0010).
-      scored =
-        Experiments.apply_arm_closeness(verdict, @page, :bait, [
-          "barbecue",
-          "barbecue",
-          "barbecue",
-          "lawnmower"
-        ])
-
-      assert scored.closeness == 70
-      assert scored.meta[:trap_sprung] == nil
-
-      sprung =
-        Experiments.apply_arm_closeness(verdict, @page, :bait, [
-          "barbecue",
-          "barbecue",
-          "barbecue",
-          "barbecue"
-        ])
-
-      assert sprung.closeness == 75
-      assert sprung.meta[:trap_sprung] == true
-    end
-
-    test "bait arm marks deep convergence only when every Bridge is a deep bridge" do
-      verdict = %{
-        closeness: 70,
-        reasoning: "Mostly the mower.",
-        quip: "One of you was still at the grill.",
-        meta: %{}
-      }
-
-      scored =
-        Experiments.apply_arm_closeness(verdict, @page, :bait, [
-          "lawnmower",
-          "chores",
-          "lawnmower",
-          "fence"
-        ])
-
-      assert scored.closeness == 70
-      assert scored.meta[:deep_convergence] == nil
-
-      deep =
-        Experiments.apply_arm_closeness(verdict, @page, :bait, [
-          "lawnmower",
-          "chores",
-          "lawnmower",
-          "chores"
-        ])
-
-      assert deep.closeness >= 95
-      assert deep.meta[:deep_convergence] == true
-    end
-
-    test "does not overwrite joint player overrules" do
-      verdict = %{
-        closeness: 90,
-        reasoning: "Overruled by players.",
-        quip: "House law.",
-        overruled?: true,
-        meta: %{overruled: true}
-      }
-
-      scored = Experiments.apply_arm_closeness(verdict, @page, :bait, ["barbecue", "barbecue"])
-      assert scored.closeness == 90
     end
   end
 
