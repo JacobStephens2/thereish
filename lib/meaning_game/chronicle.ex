@@ -911,6 +911,7 @@ defmodule MeaningGame.Chronicle do
           melded: attempt.melded,
           bridges: bridges,
           verdicts: verdicts,
+          carried: extract_carried(verdicts, bridges),
           overrules: Enum.map(attempt_overrules, &format_overrule/1),
           corrections: Enum.map(attempt_corrections, &format_correction/1),
           fairness_taps: Enum.map(attempt_taps, &format_fairness_tap/1)
@@ -1251,5 +1252,18 @@ defmodule MeaningGame.Chronicle do
       position: position
     })
     |> Repo.insert!()
+  end
+
+  defp extract_carried(verdicts, bridges) do
+    case List.first(verdicts) do
+      %{furthest: [_, _] = furthest} ->
+        furthest
+
+      %{graded: false} ->
+        bridges |> Enum.map(& &1.bridge) |> Enum.take(2)
+
+      _ ->
+        nil
+    end
   end
 end
