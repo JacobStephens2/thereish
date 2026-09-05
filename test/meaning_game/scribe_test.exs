@@ -371,5 +371,18 @@ defmodule MeaningGame.ScribeTest do
       assert role.max_tokens == 8_000
       refute Map.has_key?(role, :jobs)
     end
+
+    test "the Scribe's naming job is configured with Gemini 3.8 Flash, low effort and short timeouts" do
+      role = Steward.role(:scribe, :naming)
+      assayer = Steward.role(:assayer)
+
+      assert role.provider == MeaningGame.Steward.Gemini
+      assert role.model == "gemini-3.8-flash"
+      assert role.effort == "low"
+      assert role.requests == 1
+      assert role.retries == 1
+      assert role.timeout_ms < assayer.timeout_ms
+      assert role.deadline_ms < assayer.deadline_ms
+    end
   end
 end
