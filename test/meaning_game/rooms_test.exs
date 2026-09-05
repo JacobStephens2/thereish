@@ -1098,6 +1098,139 @@ defmodule MeaningGame.RoomsTest do
       assert view.gives_in == 0
       assert view.author_failure == nil
     end
+
+    test "a slow Fake Author reaches still-writing and then failure and recovers on retry", ctx do
+      author_escalation(still_writing: 25, deadline: 80)
+
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 200, author_mode: :ok)
+        )
+      )
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+
+      # Reaches still_writing at first rung
+      still_view =
+        eventually(
+          fn ->
+            v = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            v.author_step == :still_writing && v
+          end,
+          "author never reached still_writing"
+        )
+
+      assert still_view.phase == :writing
+      assert still_view.author_failure == nil
+
+      # Reaches failure at deadline
+      failed_view =
+        eventually(
+          fn ->
+            v = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            v.author_failure && v
+          end,
+          "author failure never arrived"
+        )
+
+      assert failed_view.phase == :writing
+      assert failed_view.author_failure == "timed out"
+
+      # Recovers on retry with fast author
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 0, author_mode: :ok)
+        )
+      )
+
+      assert :ok = Rooms.retry_author(ctx.slug, ctx.mara.id)
+      assert await_phase(ctx.slug, :bridging).phase == :bridging
+    end
+
+    test "an Author task that raises or exits applies author_failed and stays in writing", ctx do
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :raise)
+        )
+      )
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+
+      failed_view =
+        eventually(
+          fn ->
+            v = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            v.author_failure && v
+          end,
+          "author failure never arrived"
+        )
+
+      assert failed_view.phase == :writing
+      assert failed_view.author_failure =~ "this Author is having a moment"
+    end
+
+    test "stale or unmatched author task completion is safely ignored", ctx do
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :unavailable)
+        )
+      )
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+
+      eventually(
+        fn ->
+          v = Rooms.snapshot(ctx.slug, ctx.mara.id)
+          v.author_failure && v
+        end,
+        "author failure never arrived"
+      )
+
+      pid = GenServer.whereis(MeaningGame.Rooms.Server.via(ctx.slug))
+
+      # A late task completion with a stale ref arrives
+      send(
+        pid,
+        {:author_completed, make_ref(), {:ok, %{bookends: ["late1", "late2"], meta: %{}}}}
+      )
+
+      # Room must remain in writing with failure reason intact, not advancing to bridging
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.phase == :writing
+      assert view.author_failure == "unavailable"
+
+      # Similarly, an unmatched error completion changes nothing
+      send(pid, {:author_completed, make_ref(), {:error, :timeout}})
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.phase == :writing
+      assert view.author_failure == "unavailable"
+    end
   end
 
   describe "A/B experiments harness" do

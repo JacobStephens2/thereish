@@ -85,6 +85,7 @@ config :meaning_game, :steward,
 # The escalation ladder, in test time. The shape is what matters — activity,
 # then no verdict — and the shape is the same at a fortieth of the wall clock.
 config :meaning_game, assayer_escalation_ms: [slow: 100, unavailable: 250]
+config :meaning_game, author_escalation_ms: [still_writing: 100, deadline: 250]
 
 # Print only warnings and errors during test
 config :logger, level: :warning

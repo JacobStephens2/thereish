@@ -10,7 +10,7 @@ defmodule MeaningGameWeb.Foley do
   """
   def push_foley_events(socket, old_room, new_room) do
     cond do
-      old_room && Map.get(old_room, :speaker?) && !Map.get(new_room, :speaker?) ->
+      not is_nil(old_room) and Map.get(old_room, :speaker?) and not Map.get(new_room, :speaker?) ->
         push_event(socket, "foley:stop", %{})
 
       Map.get(new_room, :speaker?) ->
@@ -65,7 +65,8 @@ defmodule MeaningGameWeb.Foley do
     closed_now? = new_room.phase == :closed or not is_nil(Map.get(new_room, :closed))
 
     was_closed? =
-      old_room && (old_room.phase == :closed or not is_nil(Map.get(old_room, :closed)))
+      not is_nil(old_room) and
+        (old_room.phase == :closed or not is_nil(Map.get(old_room, :closed)))
 
     if closed_now? and not was_closed? do
       kind =
