@@ -119,6 +119,34 @@ config :meaning_game, :steward,
           deadline_ms: 150_000
         ]
       ]
+    ],
+    foley: [
+      jobs: [
+        effects: [
+          provider: MeaningGame.Steward.ElevenLabs,
+          model: "eleven_text_to_sound_v2",
+          format: "mp3_44100_128",
+          timeout_ms: 30_000,
+          api_key: nil
+        ],
+        music: [
+          provider: MeaningGame.Steward.Mureka,
+          model: "auto",
+          n: 1,
+          deadline_ms: 180_000,
+          poll_interval_ms: 2_000,
+          timeout_ms: 30_000,
+          api_key: nil
+        ],
+        ear: [
+          provider: MeaningGame.Steward.Gemini,
+          model: "gemini-3.8-flash",
+          effort: "low",
+          max_tokens: 1_000,
+          timeout_ms: 30_000,
+          api_key: nil
+        ]
+      ]
     ]
   ],
   # Dollars per million tokens, {input, output}, from each provider's pricing
@@ -126,7 +154,9 @@ config :meaning_game, :steward,
   # $1.50 / $7.50 after that. Fable 5.1 is $10 / $50.
   prices: %{
     "gemini-3.8-flash" => {0.75, 3.75},
-    "claude-fable-5-1" => {10.0, 50.0}
+    "claude-fable-5-1" => {10.0, 50.0},
+    "eleven_text_to_sound_v2" => {:characters, 100.0 / 1.0e6},
+    "auto" => {:track, 0.04}
   },
   # The most Seats a Room may hold, because live grading is N choose 2 requests
   # per attempt and six Seats is already fifteen of them. A limit on what a

@@ -9,7 +9,7 @@ config :meaning_game, MeaningGame.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "meaning_game_test#{System.get_env("MIX_TEST_PARTITION")}",
+  database: "meaning_game_test#{System.get_env("MIX_TEST_PARTITION") || "foley01"}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
@@ -46,6 +46,13 @@ config :meaning_game, :steward,
     scribe: [
       api_key: "recorded-responses-need-no-key",
       jobs: [recap: [timeout_ms: 2_000, deadline_ms: 5_000]]
+    ],
+    foley: [
+      jobs: [
+        effects: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
+        music: [deadline_ms: 2_000, poll_interval_ms: 5, timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
+        ear: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"]
+      ]
     ]
   ],
   http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]

@@ -115,4 +115,27 @@ defmodule MeaningGame.Steward.FakeTest do
                {:error, :no_verdict}
     end
   end
+
+  describe "foley forge and rank" do
+    test "forge returns N candidate effects with fixture MP3 bytes and meta" do
+      assert {:ok, candidates} = Fake.forge("brief for a sound effect", n: 4)
+      assert length(candidates) == 4
+
+      Enum.each(candidates, fn candidate ->
+        assert is_binary(candidate.bytes)
+        assert byte_size(candidate.bytes) > 0
+        assert candidate.meta.model == "fake"
+        assert candidate.meta.cost_usd == 0.0
+      end)
+    end
+
+    test "rank returns a fixed ordering against the candidates" do
+      {:ok, candidates} = Fake.forge("brief", n: 3)
+      assert {:ok, ranking} = Fake.rank(candidates, "brief")
+
+      assert length(ranking) == 3
+      assert Enum.map(ranking, & &1.index) == [1, 2, 3]
+      assert Enum.all?(ranking, &(&1.reason =~ "Candidate"))
+    end
+  end
 end
