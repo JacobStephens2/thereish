@@ -54,18 +54,18 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward.Vale
 
   @impl true
-  def assay(%{bookends: bookends, bridges: bridges}) when length(bridges) >= 2 do
+  def assay(%{bookends: bookends, bridges: bridges} = request) when length(bridges) >= 2 do
     role = Steward.role(:assayer)
     model = role.model
     prompt_version = Map.get(role, :prompt_version, Assay.version())
 
-    case Precedent.get(model, prompt_version, bookends, bridges) do
+    case Precedent.get(model, prompt_version, request) do
       {:ok, verdict} ->
         {:ok, verdict}
 
       :miss ->
         with {:ok, verdict} <- grade_live(role, bookends, bridges, prompt_version) do
-          Precedent.put(model, prompt_version, bookends, bridges, verdict)
+          Precedent.put(model, prompt_version, request, verdict)
           {:ok, verdict}
         end
     end

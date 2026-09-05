@@ -312,5 +312,27 @@ defmodule MeaningGame.Steward.PrecedentTest do
 
       assert verdict.furthest == nil
     end
+
+    test "accepts request maps directly for key, get, put, and overrule" do
+      req = %{bookends: ["ocean", "night"], bridges: ["tide", "moon"]}
+
+      assert Precedent.key("gemini-3.8-flash", "assay-1", req) ==
+               Precedent.key("gemini-3.8-flash", "assay-1", req.bookends, req.bridges)
+
+      assert Precedent.get("gemini-3.8-flash", "assay-1", req) == :miss
+
+      assert {:ok, _} = Precedent.put("gemini-3.8-flash", "assay-1", req, @verdict)
+      assert {:ok, verdict} = Precedent.get("gemini-3.8-flash", "assay-1", req)
+      assert verdict.closeness == @verdict.closeness
+
+      assert {:ok, _} =
+               Precedent.overrule("gemini-3.8-flash", "assay-1", req, %{
+                 closeness: 99,
+                 reasoning: "Overruled via request map."
+               })
+
+      assert {:ok, overruled} = Precedent.get("gemini-3.8-flash", "assay-1", req)
+      assert overruled.closeness == 99
+    end
   end
 end

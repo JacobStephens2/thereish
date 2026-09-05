@@ -462,5 +462,18 @@ defmodule MeaningGame.StewardTest do
       # Did not call the provider again!
       assert Agent.get(counts, &Map.values/1) == [1, 1]
     end
+
+    test "Steward.overrule accepts a request map directly" do
+      couple_ruling = %{
+        closeness: 95,
+        reasoning: "Overruled with request map.",
+        quip: "Map ruling."
+      }
+
+      assert {:ok, _} = MeaningGame.Steward.overrule(@pair, couple_ruling)
+      assert {:ok, verdict} = Live.assay(@pair)
+      assert verdict.closeness == 95
+      assert verdict.reasoning == "Overruled with request map."
+    end
   end
 end
