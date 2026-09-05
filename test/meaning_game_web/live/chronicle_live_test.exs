@@ -47,6 +47,21 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       assert render(element(view, "[data-role=recap-prose]")) =~ "cairn"
     end
 
+    test "reaches back to an earlier Page where the Chronicle has one",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairo")
+      await_recap(slug)
+      :ok = Rooms.next_page(slug, ctx.mara.id)
+      play(ctx, "mirage", "mirages")
+      await_scribe()
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      # The newest Page is first in the book, and it is the one with something
+      # behind it to remember.
+      assert render(element(view, "[data-role=recap-callback]")) =~ "been here before"
+    end
+
     test "is nowhere at all on a Page the Scribe could not write",
          %{conn: conn, slug: slug} = ctx do
       steward(recap_mode: :unavailable)

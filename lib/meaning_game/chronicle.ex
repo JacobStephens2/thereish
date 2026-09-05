@@ -523,8 +523,8 @@ defmodule MeaningGame.Chronicle do
         all_taps,
         all_assignments,
         all_outcomes,
-        unblinded?,
-        all_recaps
+        all_recaps,
+        unblinded?
       )
     )
   end
@@ -547,7 +547,7 @@ defmodule MeaningGame.Chronicle do
   Returns a default message if no Pages have been played yet.
   """
   @spec digest(Ecto.UUID.t() | String.t()) :: String.t()
-  def digest(room_id_or_slug), do: compose_digest(room_id_or_slug, false)
+  def digest(room_id_or_slug), do: compose_digest(page_views(room_id_or_slug, :asc), false, nil)
 
   @doc """
   The same digest, with every recap the Scribe has already written folded in.
@@ -561,15 +561,21 @@ defmodule MeaningGame.Chronicle do
   is the Chronicle and nothing else: tonight's candy cane may turn up in next
   month's recap, and it may not quietly become next month's Anchors.
   """
-  @spec scribe_digest(Ecto.UUID.t() | String.t(), Ecto.UUID.t() | nil) :: String.t()
-  def scribe_digest(room_id_or_slug, except_page_id \\ nil),
-    do: compose_digest(room_id_or_slug, true, except_page_id)
+  @spec scribe_digest(Ecto.UUID.t() | String.t() | [map()], Ecto.UUID.t() | nil) :: String.t()
+  def scribe_digest(views_or_room, except_page_id \\ nil)
 
-  defp compose_digest(room_id_or_slug, with_recaps?, except_page_id \\ nil) do
-    views =
-      room_id_or_slug
-      |> page_views(:asc)
-      |> Enum.reject(&(except_page_id && &1.id == except_page_id))
+  # Composed from Page views the caller already has, for the Scribe — which
+  # reads one Page out of the same list it is about to leave out of the digest,
+  # and should not have to compute the book twice to do it. The views must be
+  # oldest first, because the digest numbers its Pages.
+  def scribe_digest(views, except_page_id) when is_list(views),
+    do: compose_digest(views, true, except_page_id)
+
+  def scribe_digest(room_id_or_slug, except_page_id),
+    do: compose_digest(page_views(room_id_or_slug, :asc), true, except_page_id)
+
+  defp compose_digest(views, with_recaps?, except_page_id) do
+    views = Enum.reject(views, &(except_page_id && &1.id == except_page_id))
 
     if views == [] do
       "Nothing yet; this is the first Page."
@@ -674,8 +680,8 @@ defmodule MeaningGame.Chronicle do
         all_taps \\ [],
         all_assignments \\ [],
         all_outcomes \\ [],
-        unblinded? \\ false,
-        all_recaps \\ []
+        all_recaps \\ [],
+        unblinded? \\ false
       ) do
     page_overrules =
       Enum.filter(all_overrules, fn o ->
@@ -870,59 +876,60 @@ defmodule MeaningGame.Chronicle do
       |> List.last()
 
     cond do
-      correction && written ->
-        %{
-          id: written.id,
-          recap: correction.corrected_value,
-          original_recap: written.recap,
-          corrected?: true,
-          callback: written.callback,
-          model: written.model,
-          prompt_version: written.prompt_version,
-          cost_usd: written.cost_usd,
-          latency_ms: written.latency_ms,
-          attempts: written.attempts,
-          inserted_at: written.inserted_at
-        }
-
-      # A recap the players wrote where the Scribe never managed one. The
-      # Chronicle is theirs (design law 5), so a correction against a paragraph
-      # that does not exist is a paragraph.
-      correction ->
-        %{
-          id: correction.id,
-          recap: correction.corrected_value,
-          original_recap: nil,
-          corrected?: true,
-          callback: nil,
-          model: nil,
-          prompt_version: nil,
-          cost_usd: nil,
-          latency_ms: nil,
-          attempts: nil,
-          inserted_at: correction.inserted_at
-        }
-
-      written ->
-        %{
-          id: written.id,
-          recap: written.recap,
-          original_recap: nil,
-          corrected?: false,
-          callback: written.callback,
-          model: written.model,
-          prompt_version: written.prompt_version,
-          cost_usd: written.cost_usd,
-          latency_ms: written.latency_ms,
-          attempts: written.attempts,
-          inserted_at: written.inserted_at
-        }
-
-      # A Page the Scribe has not got to yet, or could not write. The book says
-      # so rather than showing a paragraph nobody wrote.
-      true ->
+      # A Page the Scribe has not got to yet, or could not write, and that
+      # nobody wrote for it either. The book says so rather than showing a
+      # paragraph nobody wrote.
+      is_nil(written) and is_nil(correction) ->
         nil
+
+      true ->
+        written |> recap_view() |> corrected_by(correction)
     end
+  end
+
+  defp recap_view(nil), do: %{}
+
+  defp recap_view(written) do
+    %{
+      id: written.id,
+      recap: written.recap,
+      original_recap: nil,
+      corrected?: false,
+      callback: written.callback,
+      model: written.model,
+      prompt_version: written.prompt_version,
+      cost_usd: written.cost_usd,
+      latency_ms: written.latency_ms,
+      attempts: written.attempts,
+      inserted_at: written.inserted_at
+    }
+  end
+
+  defp corrected_by(view, nil), do: view
+
+  # The players' words over the Scribe's, with the Scribe's kept underneath so
+  # the book can show what was changed. A correction against a Page the Scribe
+  # never wrote about is itself the paragraph: the Chronicle is theirs (design
+  # law 5), and a recap they wrote from nothing is still a recap.
+  defp corrected_by(view, correction) do
+    Map.merge(
+      %{
+        id: correction.id,
+        callback: nil,
+        model: nil,
+        prompt_version: nil,
+        cost_usd: nil,
+        latency_ms: nil,
+        attempts: nil,
+        inserted_at: correction.inserted_at
+      },
+      view
+    )
+    |> Map.merge(%{
+      recap: correction.corrected_value,
+      original_recap: view[:recap],
+      corrected?: true
+    })
   end
 
   defp format_fairness_tap(t) do

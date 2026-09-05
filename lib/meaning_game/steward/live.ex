@@ -116,11 +116,16 @@ defmodule MeaningGame.Steward.Live do
   # The cheap check runs first: a recap about nobody's words is a rejection a
   # regular expression can write, and there is no sense starting a linter to
   # find it.
+  # The two pieces of prose are linted separately, because `Scribe.Length` caps
+  # the recap at eighty words and a callback sharing that budget would make the
+  # recap shorter for having remembered something.
   defp accept(json, page) do
     with :ok <- Recap.check(json, page) do
       %{recap: recap, callback: callback} = Recap.recap(json)
 
-      Vale.check(Enum.join(Enum.reject([recap, callback], &is_nil/1), "\n\n"))
+      with :ok <- Vale.check(recap) do
+        if callback, do: Vale.check(callback), else: :ok
+      end
     end
   end
 

@@ -267,9 +267,25 @@ defmodule MeaningGame.Rooms do
   @spec snapshot(String.t(), String.t() | nil) :: map()
   def snapshot(slug, viewer), do: call(slug, {:snapshot, viewer})
 
-  @doc "Subscribes the caller to `:room_changed` messages for this Room."
+  @doc """
+  Subscribes the caller to this Room's messages.
+
+  Two of them: `:room_changed`, which every screen showing the Room redraws on,
+  and `:chronicle_changed`, which only the book has anything to do with.
+  """
   @spec subscribe(String.t()) :: :ok | {:error, term()}
   def subscribe(slug), do: Phoenix.PubSub.subscribe(MeaningGame.PubSub, topic(slug))
+
+  @doc """
+  Tells everyone watching this Room that something happened to it.
+
+  For the things that happen to a Room from outside its own process — the
+  Scribe filing a recap, minutes after the Room stopped thinking about that
+  Page.
+  """
+  @spec broadcast(String.t(), atom()) :: :ok | {:error, term()}
+  def broadcast(slug, message),
+    do: Phoenix.PubSub.broadcast(MeaningGame.PubSub, topic(slug), message)
 
   @doc false
   def topic(slug), do: "room:" <> slug
