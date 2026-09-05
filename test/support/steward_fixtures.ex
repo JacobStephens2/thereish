@@ -72,6 +72,16 @@ defmodule MeaningGame.StewardFixtures do
     })
   end
 
+  @doc "A well-formed quip JSON string, as the model writes it on a Precedent hit."
+  def quip_json(quip_text \\ "A fresh joke about tonight's words.") do
+    Jason.encode!(%{"quip" => quip_text})
+  end
+
+  @doc "One whole response containing a quip JSON."
+  def quip_response(quip_text \\ "A fresh joke about tonight's words.") do
+    response(quip_json(quip_text))
+  end
+
   @doc """
   Which of `bridges` this request asked about first, which is what tells the two
   orderings apart.
