@@ -19,7 +19,15 @@ defmodule MeaningGameWeb.RoomLiveTest do
   end
 
   defp give_setting(view, give) do
-    view |> form("[data-role=give-form]", %{"give" => give}) |> render_submit()
+    view |> form("[data-role=setting-form]", %{"give" => give}) |> render_submit()
+  end
+
+  defp play_to_bridging(mara, jacob, slug, give1 \\ "setting one", give2 \\ "setting two") do
+    give_setting(mara, give1)
+    give_setting(jacob, give2)
+    await_phase(slug, :bridging)
+    eventually(fn -> has_element?(mara, "[data-role=bridge-form]") end)
+    eventually(fn -> has_element?(jacob, "[data-role=bridge-form]") end)
   end
 
   defp phone(slug), do: build_conn() |> get(~p"/r/#{slug}")
@@ -86,6 +94,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
     test "a phone with no name typed is told to type one" do
       slug = open_room()
+
       {:ok, mara, _} = live(phone(slug))
 
       assert join(mara, "  ") =~ "Type a name first."
@@ -104,29 +113,33 @@ defmodule MeaningGameWeb.RoomLiveTest do
   end
 
   describe "coming back" do
-    test "reopening the URL lands in the same Seat with no name to retype" do
+    test "a browser that already holds a Seat is back in it without typing" do
       slug = open_room()
       conn = get(build_conn(), ~p"/r/#{slug}")
       {:ok, mara, _} = live(conn)
       join(mara, "Mara")
 
-      # The tab is closed and the URL opened again on the same phone.
-      {:ok, again, html} = live(get(conn, ~p"/r/#{slug}"))
+      # Reload: same cookie, no form, name already up.
+      {:ok, again, _} = live(get(conn, ~p"/r/#{slug}"))
 
-      assert html =~ "You are"
+      assert render(again) =~ "You are <span class=\"font-semibold\">Mara</span>"
       refute has_element?(again, "form")
-      assert has_element?(again, "[data-seat]", "Mara")
     end
 
-    test "a different browser at the same URL is a different player" do
-      slug = open_room(seat_limit: 3)
-      {:ok, mara, _} = live(phone(slug))
-      join(mara, "Mara")
+    test "a device token that belongs to another Room cannot claim a Seat" do
+      room_a = open_room()
+      room_b = open_room()
 
-      {:ok, jacob, html} = live(phone(slug))
+      conn = get(build_conn(), ~p"/r/#{room_a}")
+      {:ok, view, _} = live(conn)
+      join(view, "Mara")
 
-      assert has_element?(jacob, "form")
-      assert html =~ "Mara"
+      # Same browser visits Room B. It does not own a Seat there, so it is
+      # asked for a name like anyone else.
+      {:ok, in_b, _} = live(get(conn, ~p"/r/#{room_b}"))
+
+      assert has_element?(in_b, "form")
+      refute render(in_b) =~ "You are"
     end
 
     test "a phone whose socket dies mid-Room comes back to the identical view" do
@@ -173,6 +186,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       join(mara, "Mara")
       join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
 
       %{slug: slug, mara: mara, mara_conn: mara_conn, jacob: jacob, stage: stage}
     end
@@ -250,7 +264,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
 
     test "a slow Assayer is narrated on every screen rather than left as a hang", ctx do
-      escalation(slow: 50, provisional: 400, unavailable: 700)
+      escalation(slow: 50, unavailable: 700)
       steward(delay_ms: 5_000)
 
       commit(ctx.mara, "cairn")
@@ -260,55 +274,11 @@ defmodule MeaningGameWeb.RoomLiveTest do
         assert eventually(fn -> has_element?(view, "[data-role=phase][data-step=slow]") end)
       end
 
-      assert eventually(fn ->
-               has_element?(ctx.stage, "[data-role=phase][data-step=provisional]")
-             end)
-
       # And when it never answers, the game says so and the call is theirs.
       html = await_reveal_on(ctx.stage)
 
       assert html =~ "No verdict"
       assert html =~ "yours to call"
-    end
-
-    test "tapping next_page when pool is exhausted displays a friendly message", ctx do
-      # Insert 1 page into pool
-      {:ok, _page} =
-        MeaningGame.Pages.insert_page(%{
-          id: "P-LV-POOL",
-          chapter: "pool test",
-          theme: "pool test",
-          give: nil,
-          bookends: ["sun", "sand"],
-          bait: "beach",
-          deep_bridges: ["dune", "tide"],
-          likely_bridges: ["beach", "dune", "tide"],
-          why_these: "Sun and sand invite beach.",
-          band_scripts: %{
-            "miss" => "Away from water.",
-            "adjacent" => "Near the shore.",
-            "close" => "Passable. On the sand.",
-            "meld" => "At the beach.",
-            "deep_meld" => "In the dunes."
-          },
-          meta: %{model: "fake", attempts: 1, cost_usd: 0.0}
-        })
-
-      # Mark this page as already played so pool has pages in table but none unplayed
-      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
-      {:ok, _} = MeaningGame.Pages.draw(room.id)
-
-      commit(ctx.mara, "cairn")
-      commit(ctx.jacob, "cairns")
-      await_reveal_on(ctx.stage)
-
-      # Room is closed because cairn and cairns meld (91)
-      assert has_element?(ctx.mara, "[data-role=one-more]")
-
-      # Tapping "one-more" calls next_page; pool is exhausted
-      render_click(element(ctx.mara, "[data-role=one-more]"))
-
-      assert has_element?(ctx.mara, "[data-role=page-error]", "That's every Page for tonight.")
     end
 
     test "a miss is graded and said out loud, same as a Meld", ctx do
@@ -367,6 +337,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       join(mara, "Mara")
       join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
 
       %{
         slug: slug,
@@ -438,21 +409,30 @@ defmodule MeaningGameWeb.RoomLiveTest do
       end
     end
 
-    test "one more? is one tap, and the next Page is up for both of them", ctx do
+    test "one more? is one tap, and returns to giving for both of them", ctx do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairns")
       await_reveal_on(ctx.stage)
 
       press(ctx.mara, "one-more")
 
+      assert has_element?(ctx.mara, "[data-role=setting-form]")
+      assert has_element?(ctx.jacob, "[data-role=setting-form]")
+      refute has_element?(ctx.stage, "[data-role=reveal]")
+
+      # Prefill shows last give
+      assert render(ctx.mara) =~ "value=\"setting one\""
+      assert render(ctx.jacob) =~ "value=\"setting two\""
+
+      # Submitting new settings begins bridging again
+      play_to_bridging(ctx.mara, ctx.jacob, ctx.slug, "fresh one", "fresh two")
+
       for view <- ctx.screens do
-        assert has_element?(view, "[data-role=bookends]", "desert")
         assert has_element?(view, "[data-role=attempt]", "Attempt 1 of 5")
         refute has_element?(view, "[data-role=ending]")
         refute has_element?(view, "[data-role=reveal]")
       end
 
-      # Same Seats, no name retyped, straight into the next Page.
       assert has_element?(ctx.jacob, "[data-role=bridge-form]")
       assert has_element?(ctx.jacob, "[data-seat]", "Mara")
     end
@@ -500,6 +480,12 @@ defmodule MeaningGameWeb.RoomLiveTest do
           {view, bridge}
         end
 
+      for {view, name} <- Enum.zip(Enum.map(phones, &elem(&1, 0)), ~w(Mara Jacob Ada)) do
+        give_setting(view, "setting #{name}")
+      end
+
+      await_phase(slug, :bridging)
+
       for {view, bridge} <- phones, do: commit(view, bridge)
 
       await_reveal_on(stage)
@@ -537,6 +523,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       join(mara, "Mara")
       join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
 
       # "cairn" and "beacon" share no prefix -> fake assayer grades 0
       commit(mara, "cairn")
@@ -586,10 +573,9 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(mara, "[data-role=one-more]")
       mara |> element("[data-role=one-more]") |> render_click()
 
-      for view <- [mara, jacob, stage] do
-        assert has_element?(view, "[data-role=attempt]", "Attempt 1 of")
-        refute render(view) =~ "Overruled"
-      end
+      assert has_element?(mara, "[data-role=setting-form]")
+      assert has_element?(jacob, "[data-role=setting-form]")
+      refute render(mara) =~ "Overruled"
     end
 
     test "declining an overrule leaves the grade untouched" do
@@ -599,6 +585,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       join(mara, "Mara")
       join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
 
       commit(mara, "cairn")
       commit(jacob, "beacon")
@@ -628,6 +615,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       join(mara, "Mara")
       join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
 
       %{
         slug: slug,
@@ -762,6 +750,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
       join(mara, "Mara")
       join(jacob, "Jacob")
 
+      play_to_bridging(mara, jacob, slug)
+
       commit(mara, "cairn")
       commit(jacob, "cairns")
 
@@ -817,11 +807,12 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.mara, "[data-role=one-more]")
       ctx.mara |> element("[data-role=one-more]") |> render_click()
 
-      assert render(ctx.mara) =~ "The word between them"
+      await_phase(ctx.slug, :giving)
+      eventually(fn -> has_element?(ctx.mara, "[data-role=setting-form]") end)
     end
   end
 
-  describe "naming a setting on the phone (ticket 12)" do
+  describe "giving settings and writing the page (ticket 02)" do
     setup do
       slug = open_room()
 
@@ -838,9 +829,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
       %{slug: slug, mara: mara, jacob: jacob, stage: stage, steward: steward}
     end
 
-    test "a Give can be typed from a phone in free language, announced on stage, and moves the game there",
+    test "each seat gives a setting, stage shows count, second give triggers author writing",
          ctx do
-      # Configure fake author to take 20ms per page
       fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
@@ -849,66 +839,64 @@ defmodule MeaningGameWeb.RoomLiveTest do
         Keyword.put(
           ctx.steward,
           :fake,
-          Keyword.merge(fake_config, author_delay_ms: 20, author_mode: :ok)
+          Keyword.merge(fake_config, author_delay_ms: 30, author_mode: :ok)
         )
       )
 
-      # Give form is visible on phones
-      assert has_element?(ctx.mara, "[data-role=give-form]")
-      assert has_element?(ctx.jacob, "[data-role=give-form]")
+      # Both phones show Give form, stage shows giving count
+      assert has_element?(ctx.mara, "[data-role=setting-form]")
+      assert has_element?(ctx.jacob, "[data-role=setting-form]")
+      assert has_element?(ctx.stage, "[data-role=giving-stage]")
+      assert render(ctx.stage) =~ "0 of 2"
 
-      give = "the world St. Thérèse grew up in"
-      give_setting(ctx.mara, give)
+      # Mara gives a setting
+      give_setting(ctx.mara, "candlelit cathedral")
 
-      # Immediate status feedback on phone
-      assert has_element?(
-               ctx.mara,
-               "[data-role=give-status]",
-               "The Author is writing Pages for"
-             )
+      assert has_element?(ctx.mara, "[data-role=your-give]", "candlelit cathedral")
+      refute has_element?(ctx.mara, "[data-role=setting-form]")
 
-      # Play continues meanwhile!
+      # Jacob still sees setting form and cannot see Mara's give
+      assert has_element?(ctx.jacob, "[data-role=setting-form]")
+      refute render(ctx.jacob) =~ "candlelit cathedral"
+
+      # Stage shows updated count without revealing setting text
+      eventually(fn -> render(ctx.stage) =~ "1 of 2" end)
+      refute render(ctx.stage) =~ "candlelit cathedral"
+
+      # Jacob gives a setting, triggering author writing
+      give_setting(ctx.jacob, "misty harbor")
+
+      # Beat meter pulses during writing phase
+      eventually(fn -> has_element?(ctx.stage, "[data-role=writing-stage]") end)
+      assert has_element?(ctx.mara, "[data-role=writing-phase]")
+
+      # Transitions to bridging with bookends and no setting line
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.stage, "[data-role=bookends]") end)
+
+      refute render(ctx.mara) =~ "Setting:"
+      refute render(ctx.stage) =~ "Setting:"
+    end
+
+    test "next_page returns to giving phase prefilled with the previous give", ctx do
+      play_to_bridging(ctx.mara, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
+
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairns")
       await_reveal_on(ctx.mara)
 
-      # Stage announces when Pages land
-      eventually(
-        fn ->
-          has_element?(ctx.stage, "[data-role=give-announcement]") &&
-            render(ctx.stage) =~ "The Author heard you"
-        end,
-        "the stage never announced the Give arrival"
-      )
-
-      assert has_element?(ctx.stage, "[data-role=give-announcement]", give)
-
-      assert has_element?(
-               ctx.mara,
-               "[data-role=give-status]",
-               "Pages for \"#{give}\" have arrived."
-             )
-
-      # Tap 'One more?' to move to the new setting
       assert has_element?(ctx.mara, "[data-role=one-more]")
       ctx.mara |> element("[data-role=one-more]") |> render_click()
 
-      # Both phones and stage now show the Setting tag!
-      eventually(
-        fn ->
-          has_element?(ctx.mara, "[data-role=page-give]") &&
-            has_element?(ctx.stage, "[data-role=page-give]")
-        end,
-        "the page never showed the Setting tag"
-      )
+      await_phase(ctx.slug, :giving)
+      eventually(fn -> has_element?(ctx.mara, "[data-role=setting-form]") end)
 
-      assert has_element?(ctx.mara, "[data-role=page-give]", "Setting: #{give}")
-      assert has_element?(ctx.stage, "[data-role=page-give]", "Setting: #{give}")
+      assert render(ctx.mara) =~ "value=\"candlelit cathedral\""
+      assert render(ctx.jacob) =~ "value=\"misty harbor\""
     end
 
-    test "a failed or refused Author run is surfaced honestly on stage and phone and leaves play intact",
-         ctx do
-      # Configure fake author to fail/refuse
+    test "a failed or refused Author run surfaces on phone with retry and reset options", ctx do
       fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
@@ -917,29 +905,22 @@ defmodule MeaningGameWeb.RoomLiveTest do
         Keyword.put(
           ctx.steward,
           :fake,
-          Keyword.merge(fake_config, author_delay_ms: 10, author_mode: :refused)
+          Keyword.merge(fake_config, author_mode: :refused)
         )
       )
 
-      give = "forbidden territory"
-      give_setting(ctx.mara, give)
+      give_setting(ctx.mara, "forbidden cathedral")
+      give_setting(ctx.jacob, "forbidden harbour")
 
-      # Stage announces failure honestly
-      eventually(
-        fn ->
-          has_element?(ctx.stage, "[data-role=give-failure]", "The Author couldn't write")
-        end,
-        "the stage never showed the Give failure notice"
-      )
+      eventually(fn -> has_element?(ctx.mara, "[data-role=author-failure]") end)
+      assert has_element?(ctx.mara, "[data-role=retry-author]")
+      assert has_element?(ctx.mara, "[data-role=reset-gives]")
 
-      assert has_element?(ctx.stage, "[data-role=give-failure]", give)
-      assert has_element?(ctx.mara, "[data-role=give-status]", "Playing on.")
+      # Clicking reset-gives returns both players to giving form
+      ctx.mara |> element("[data-role=reset-gives]") |> render_click()
 
-      # The evening remains playable:
-      commit(ctx.mara, "cairn")
-      commit(ctx.jacob, "cairo")
-      await_reveal_on(ctx.mara)
-      assert has_element?(ctx.mara, "[data-role=reveal]")
+      eventually(fn -> has_element?(ctx.mara, "[data-role=setting-form]") end)
+      assert has_element?(ctx.jacob, "[data-role=setting-form]")
     end
 
     test "submitting an empty Give shows an error", ctx do
@@ -958,6 +939,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       join(mara, "Mara")
       join(jacob, "Jacob")
+
+      play_to_bridging(mara, jacob, slug)
 
       %{slug: slug, mara: mara, jacob: jacob, stage: stage}
     end

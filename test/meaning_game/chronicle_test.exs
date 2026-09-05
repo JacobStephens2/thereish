@@ -25,6 +25,12 @@ defmodule MeaningGame.ChronicleTest do
   end
 
   defp play(ctx, mara_bridge, jacob_bridge) do
+    if Rooms.snapshot(ctx.slug, nil).phase == :giving do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+    end
+
     :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, mara_bridge)
     :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, jacob_bridge)
 
@@ -40,9 +46,8 @@ defmodule MeaningGame.ChronicleTest do
       play(ctx, "cairn", "cairns")
 
       assert [page] = chronicled(ctx.slug)
-      assert page.document["id"] == "hand-written-1"
+      assert page.author_meta["model"] == "fake-author"
       assert page.document["bookends"] == ["lantern", "harbour"]
-      assert page.document["bait"] == "lighthouse"
       assert page.closed_because == "meld"
       assert page.melded == true
       assert page.closeness == 91
@@ -165,6 +170,8 @@ defmodule MeaningGame.ChronicleTest do
           {seat, bridge}
         end
 
+      for {seat, _bridge} <- seats, do: :ok = Rooms.give(slug, seat.id, "setting #{seat.name}")
+      await_phase(slug, :bridging)
       for {seat, bridge} <- seats, do: :ok = Rooms.commit_bridge(slug, seat.id, bridge)
       await_reveal(slug)
 
@@ -186,8 +193,8 @@ defmodule MeaningGame.ChronicleTest do
 
       pages = chronicled(ctx.slug)
 
-      assert length(pages) == 2
-      assert Enum.map(pages, & &1.document["id"]) == ["hand-written-1", "hand-written-2"]
+      assert [p1, p2] = pages
+      assert DateTime.compare(p1.closed_at, p2.closed_at) in [:lt, :eq]
     end
 
     test "is empty until a Page has closed", ctx do
@@ -608,37 +615,30 @@ defmodule MeaningGame.ChronicleTest do
       assert markdown =~ "Jacob: too harsh"
     end
 
-    test "pages authored from a Give are tagged with it and appear in the Chronicle that way",
+    test "pages authored from Gives are tagged with them and appear in the Chronicle that way",
          ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      give = "the language of Children's Hospital"
+      give1 = "the language of Children's Hospital"
+      give2 = "cyberpunk nightclub"
 
-      {:ok, page_attrs} =
-        MeaningGame.Pages.insert_page(%{
-          id: "P-GIVE-01",
-          chapter: give,
-          give: give,
-          theme: give,
-          bookends: ["nurse", "clinic"],
-          bait: "hospital",
-          deep_bridges: ["triage", "pager"],
-          likely_bridges: ["hospital", "triage", "pager"],
-          why_these: "Hospital language invites obvious bridges.",
-          band_scripts: %{
-            "miss" => "m",
-            "adjacent" => "a",
-            "close" => "c",
-            "meld" => "meld",
-            "deep_meld" => "dm"
-          },
-          meta: %{model: "fake-author", prompt_version: "v1", attempts: 1, cost_usd: 0.0}
-        })
-
-      # Play the page
       now = DateTime.utc_now()
 
       entry = %{
-        page: page_attrs,
+        page: %{
+          bookends: ["nurse", "clinic"],
+          gives: [
+            %{seat_id: ctx.mara.id, text: give1},
+            %{seat_id: ctx.jacob.id, text: give2}
+          ],
+          author_meta: %{
+            model: "gemini-3.8-flash",
+            arm: :flash,
+            prompt_version: "author-3",
+            cost_usd: 0.0001,
+            latency_ms: 150,
+            why: "Medical care stands far from late night revelry."
+          }
+        },
         closed_because: :meld,
         melded?: true,
         closeness: 85,
@@ -672,20 +672,23 @@ defmodule MeaningGame.ChronicleTest do
 
       # In book view:
       [view] = Chronicle.book(room.id)
-      assert view.give == give
+      assert length(view.gives) == 2
       assert view.bookends == ["nurse", "clinic"]
+      assert view.author_meta["model"] == "gemini-3.8-flash"
 
       # In Markdown rendering:
       markdown = Chronicle.to_markdown(room.id)
-      assert markdown =~ "- Give: #{give}"
+      assert markdown =~ "- Give (Mara): #{give1}"
+      assert markdown =~ "- Give (Jacob): #{give2}"
+      assert markdown =~ "Bookends: nurse · clinic"
 
       # Round-trips in Markdown parsing:
       assert {:ok, [parsed]} = Chronicle.from_markdown(markdown)
-      assert parsed.give == give
+      assert length(parsed.gives) == 2
 
       # Appears in digest:
       digest = Chronicle.digest(room.id)
-      assert digest =~ "[Give: #{give}]"
+      assert digest =~ "[Give (Mara): #{give1}, Give (Jacob): #{give2}]"
     end
 
     test "from_markdown accepts legacy '- Anchors:' lines for backwards compatibility" do
@@ -793,11 +796,7 @@ defmodule MeaningGame.ChronicleTest do
           id: "hand-written-4",
           chapter: "harbour",
           bookends: ["lantern", "harbour"],
-          bait: "lighthouse",
-          deep_bridges: ["cairn"],
-          likely_bridges: ["lighthouse", "beacon", "cairn"],
-          why_these: "A table of four at the shore.",
-          band_scripts: MeaningGame.Steward.Fake.default_band_scripts()
+          why_these: "A table of four at the shore."
         },
         closed_because: :attempts,
         melded?: false,
@@ -848,11 +847,7 @@ defmodule MeaningGame.ChronicleTest do
           id: "hand-written-2",
           chapter: "harbour",
           bookends: ["lantern", "harbour"],
-          bait: "lighthouse",
-          deep_bridges: ["cairn"],
-          likely_bridges: ["lighthouse", "beacon", "cairn"],
-          why_these: "A couch evening.",
-          band_scripts: MeaningGame.Steward.Fake.default_band_scripts()
+          why_these: "A couch evening."
         },
         closed_because: :attempts,
         melded?: false,

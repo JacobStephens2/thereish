@@ -32,21 +32,11 @@ defmodule MeaningGameWeb.RoomComponentsTest do
     test "escalation beyond the beat displays the waiting narration" do
       slow_room = %{
         phase: :assaying,
-        assayer_step: :slow,
-        provisional_band: nil
+        assayer_step: :slow
       }
 
       html = render_component(&assaying/1, room: slow_room)
       assert html =~ "The Assayer is still reading"
-
-      provisional_room = %{
-        phase: :assaying,
-        assayer_step: :provisional,
-        provisional_band: :close
-      }
-
-      html = render_component(&assaying/1, room: provisional_room)
-      assert html =~ "Provisional reading: close"
     end
   end
 

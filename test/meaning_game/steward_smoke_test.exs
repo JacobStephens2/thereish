@@ -104,6 +104,30 @@ defmodule MeaningGame.StewardSmokeTest do
     )
   end
 
+  test "the Author writes Bookends from two real Gives inside the deadline" do
+    gives = [
+      %{name: "Mara", text: "candlelit cathedral"},
+      %{name: "Jacob", text: "cyberpunk nightclub"}
+    ]
+
+    {:ok, answer} = Steward.author(%{gives: gives})
+
+    assert [left, right] = answer.bookends
+    assert is_binary(left) and byte_size(left) > 0
+    assert is_binary(right) and byte_size(right) > 0
+    assert String.trim(answer.why) != ""
+
+    assert answer.meta.model =~ "gemini"
+    assert answer.meta.cost_usd > 0
+    assert answer.meta.latency_ms < 8_000
+
+    IO.puts(
+      "\n  live Author: #{left} / #{right} in #{answer.meta.latency_ms} ms " <>
+        "for $#{Float.round(answer.meta.cost_usd, 5)}" <>
+        "\n  why: #{answer.why}\n"
+    )
+  end
+
   @tag :anthropic
   test "the Scribe writes a real recap, and Vale lets it through" do
     page = %{

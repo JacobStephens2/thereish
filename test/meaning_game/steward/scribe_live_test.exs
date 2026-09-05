@@ -35,11 +35,11 @@ defmodule MeaningGame.Steward.ScribeLiveTest do
   defp answers(replies) do
     asked = MeaningGame.StewardFixtures.counts()
 
-    recorded_author(fn conn, body ->
+    recorded_scribe(fn conn, body ->
       turn = asked(asked, :recap)
       send(self(), {:asked, turn, body})
 
-      Req.Test.json(conn, author_response(Enum.at(replies, turn - 1) || List.last(replies)))
+      Req.Test.json(conn, scribe_response(Enum.at(replies, turn - 1) || List.last(replies)))
     end)
 
     asked
@@ -149,7 +149,7 @@ defmodule MeaningGame.Steward.ScribeLiveTest do
     test "is no recap rather than a crash" do
       live_scribe()
 
-      recorded_author(fn conn, _body -> Req.Test.transport_error(conn, :econnrefused) end)
+      recorded_scribe(fn conn, _body -> Req.Test.transport_error(conn, :econnrefused) end)
 
       assert {:error, _reason} = Steward.recap(page(), "Nothing yet; this is the first Page.")
     end

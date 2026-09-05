@@ -24,6 +24,12 @@ defmodule MeaningGame.ScribeTest do
   end
 
   defp play(ctx, mara_bridge, jacob_bridge) do
+    if Rooms.snapshot(ctx.slug, nil).phase == :giving do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+    end
+
     :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, mara_bridge)
     :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, jacob_bridge)
 
