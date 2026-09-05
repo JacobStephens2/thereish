@@ -4,7 +4,7 @@ defmodule MeaningGameWeb.RoomComponents do
 
   Each of these is one component on purpose: "the stage lists who has joined;
   phones show the same roster" is a rule, and a rule with two implementations is
-  a rule with two answers. The same goes for the Anchors and, most of all, for
+  a rule with two answers. The same goes for the Bookends and, most of all, for
   the reveal — the number the stage shouts and the number the phone shows have
   to be the same number.
 
@@ -42,63 +42,19 @@ defmodule MeaningGameWeb.RoomComponents do
 
   attr :room, :map, required: true
 
-  @doc "Announcements about Gives: when new Pages have arrived, or when an Author run failed."
-  def give_announcement(assigns) do
-    ~H"""
-    <div
-      :if={@room[:give_announcement]}
-      data-role="give-announcement"
-      class="rounded-xl border border-primary/40 bg-primary/10 p-5 text-center transition-all"
-    >
-      <p class="text-xs uppercase tracking-widest font-semibold text-primary">New Setting Arrived</p>
-      <p class="mt-1 text-2xl font-bold">
-        The Author heard you: "{@room.give_announcement.give}"
-      </p>
-      <p class="mt-1 text-sm opacity-75">
-        {@room.give_announcement.count} new Page{if @room.give_announcement.count == 1,
-          do: "",
-          else: "s"} added to tonight's pool.
-      </p>
-    </div>
-
-    <div
-      :if={@room[:give_failure]}
-      data-role="give-failure"
-      class="rounded-xl border border-warning/40 bg-warning/10 p-5 text-center transition-all"
-    >
-      <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
-      <p class="mt-1 text-lg font-medium text-warning-content">
-        The Author couldn't write for "{@room.give_failure.give}": {@room.give_failure.reason}.
-      </p>
-      <p class="mt-1 text-sm opacity-70">
-        Playing on from the existing pool.
-      </p>
-    </div>
-    """
-  end
-
-  attr :room, :map, required: true
-
   @doc "The two words the Page hangs between, shown to everyone at once."
-  def anchors(assigns) do
+  def bookends(assigns) do
     ~H"""
-    <div :if={@room.anchors} class="flex flex-col items-center gap-3">
-      <p
-        :if={@room[:page_give]}
-        data-role="page-give"
-        class="text-xs uppercase tracking-widest font-semibold text-primary"
-      >
-        Setting: {@room.page_give}
-      </p>
+    <div :if={@room.bookends} class="flex flex-col items-center gap-3">
       <div
-        data-role="anchors"
+        data-role="bookends"
         class="flex flex-wrap items-center justify-center gap-4"
       >
         <span
-          :for={anchor <- @room.anchors}
+          :for={bookend <- @room.bookends}
           class="rounded-lg bg-base-200 px-5 py-3 text-3xl font-semibold tracking-tight"
         >
-          {anchor}
+          {bookend}
         </span>
       </div>
     </div>
@@ -126,16 +82,36 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  The Author writing: pulsing beat meter while Gemini writes the Bookends.
+  """
+  def author_writing(assigns) do
+    ~H"""
+    <div data-role="beat-meter" class="flex flex-col items-center gap-2">
+      <div class="flex items-center gap-2" aria-hidden="true">
+        <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
+        <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
+        <span class="size-2.5 rounded-full bg-primary/40 animate-pulse"></span>
+      </div>
+      <p class="text-xs font-semibold tracking-widest uppercase opacity-60">
+        The Author is writing
+      </p>
+    </div>
+    <p class={if @mode == :stage, do: "text-2xl font-semibold", else: "text-lg font-medium"}>
+      The Author is reading your settings...
+    </p>
+    """
+  end
+
   attr :room, :map, required: true
 
   @doc """
-  The beat, said out loud. Every screen says the same thing during it.
+  The pause while the Assayer reads the Bridges.
 
-  And if the Assayer is slow, every screen says so together: activity through
-  four seconds, a provisional reading at eight, and at ten the game says it has
-  no verdict, which is not a line here because by then there is a reveal to draw
-  (design law 10). A wait the game narrates is a wait; a wait it says nothing
-  about is a hang.
+  Shown when the Room has moved into `:assaying` — which means every Bridge has
+  been committed and the beat is running.
   """
   def assaying(assigns) do
     ~H"""
@@ -143,7 +119,6 @@ defmodule MeaningGameWeb.RoomComponents do
       :if={@room.phase == :assaying}
       data-role="phase"
       data-step={@room.assayer_step || :grading}
-      data-provisional-band={@room[:provisional_band]}
       class="flex flex-col items-center justify-center gap-3 text-center"
     >
       <div
@@ -162,7 +137,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p class="text-lg opacity-70">
-        {waiting_line(@room.assayer_step, @room[:provisional_band])}
+        {waiting_line(@room.assayer_step)}
       </p>
     </div>
     """
@@ -174,17 +149,10 @@ defmodule MeaningGameWeb.RoomComponents do
 
   @doc """
   The reveal: the Bridges side by side, then the number climbing into its band,
-  then the punchline quip, then the Assayer's reasoning.
-
-  In that order deliberately — the comparison lands first before the number does.
-  The number arrives with weight, the band name arrives with it, and a Meld lands
-  as a triumphant arrival distinct from a near miss or a deadpan miss.
+  then the punchline quip.
   """
   def reveal(assigns) do
-    presentation =
-      assigns.room.reveal &&
-        closeness_presentation(assigns.room.reveal, length(assigns.room.reveal.bridges))
-
+    presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
     assigns = assign(assigns, :presentation, presentation)
 
     ~H"""
@@ -260,16 +228,6 @@ defmodule MeaningGameWeb.RoomComponents do
           >
             {band(@room.reveal.band)}
           </span>
-
-          <span
-            :if={@presentation.flavour}
-            class={[
-              "text-sm sm:text-base font-medium",
-              if(@room.reveal.melded?, do: "font-semibold text-primary", else: "opacity-70")
-            ]}
-          >
-            {@presentation.flavour}
-          </span>
         </div>
       </div>
 
@@ -289,50 +247,19 @@ defmodule MeaningGameWeb.RoomComponents do
         </p>
       </div>
 
-      <div class="flex w-full max-w-lg flex-col items-center gap-3 text-center">
-        <p
-          :if={@room.reveal.quip}
-          data-role="quip"
-          class={[
-            "font-serif italic font-medium leading-snug max-w-prose text-center",
-            if(@mode == :stage,
-              do: "text-3xl sm:text-4xl text-base-content",
-              else: "text-xl sm:text-2xl text-base-content/90"
-            )
-          ]}
-        >
-          {@room.reveal.quip}
-        </p>
-
-        <div
-          :if={@room.reveal.reasoning}
-          class="flex flex-col items-center gap-1 rounded-xl bg-base-200/40 px-5 py-3 w-full border border-base-300/60"
-        >
-          <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-            The Assayer's reasoning
-          </span>
-          <p
-            data-role="reasoning"
-            class={[
-              "leading-relaxed",
-              if(@mode == :stage,
-                do: "text-xl sm:text-2xl opacity-90",
-                else: "text-sm sm:text-base opacity-85"
-              )
-            ]}
-          >
-            {@room.reveal.reasoning}
-          </p>
-        </div>
-
-        <p
-          :if={two_words?(@room.reveal[:furthest])}
-          data-role="furthest"
-          class="text-sm opacity-70"
-        >
-          Furthest apart: {furthest_line(@room.reveal.furthest)}.
-        </p>
-      </div>
+      <p
+        :if={@room.reveal.quip}
+        data-role="quip"
+        class={[
+          "font-serif italic font-medium leading-snug max-w-prose text-center",
+          if(@mode == :stage,
+            do: "text-3xl sm:text-4xl text-base-content",
+            else: "text-xl sm:text-2xl text-base-content/90"
+          )
+        ]}
+      >
+        {@room.reveal.quip}
+      </p>
 
       <div
         :if={@mode == :phone && @seat && @room.reveal.closeness}
@@ -513,7 +440,7 @@ defmodule MeaningGameWeb.RoomComponents do
 
   @doc """
   What a miss means, said out loud on every screen: the two Bridges that landed
-  furthest apart are the next attempt's Anchors, named.
+  furthest apart are the next attempt's Bookends, named.
 
   One component rather than a line on each view, because "a miss converges" is a
   rule, and a rule said in two wordings is two rules. It names the words because
@@ -522,15 +449,15 @@ defmodule MeaningGameWeb.RoomComponents do
   def carry_forward(assigns) do
     ~H"""
     <p
-      :if={@room.phase == :reveal && @room.next_anchors}
+      :if={@room.phase == :reveal && @room.next_bookends}
       data-role="carry-forward"
       class="text-center text-sm opacity-70"
     >
-      <span :if={@room[:next_anchors_chosen?] == false}>
+      <span :if={@room[:next_bookends_chosen?] == false}>
         No verdict, so nobody chose:
       </span>
-      <span class="font-semibold">{Enum.join(@room.next_anchors, " and ")}</span>
-      become the next anchors.
+      <span class="font-semibold">{Enum.join(@room.next_bookends, " and ")}</span>
+      become the next bookends.
     </p>
     """
   end
@@ -557,7 +484,7 @@ defmodule MeaningGameWeb.RoomComponents do
           data-attempt={attempt.number}
           class="flex flex-wrap items-baseline justify-center gap-2"
         >
-          <span>{Enum.join(attempt.anchors, " + ")}</span>
+          <span>{Enum.join(attempt.bookends, " + ")}</span>
           <span aria-hidden="true">→</span>
           <span class="font-semibold">
             {attempt.bridges |> Enum.map(& &1.bridge) |> Enum.join(" · ")}
@@ -580,7 +507,7 @@ defmodule MeaningGameWeb.RoomComponents do
     do: "That's the Page — #{attempt} attempts, and the words kept their distance."
 
   @doc """
-  Whether the Room is still between the Anchors and the reveal.
+  Whether the Room is still between the Bookends and the reveal.
 
   Once the Bridges are up on the screen, who had already written one and what
   this phone wrote are answered by the reveal itself, and saying it twice makes
@@ -592,19 +519,10 @@ defmodule MeaningGameWeb.RoomComponents do
   defp band(nil), do: ""
   defp band(name), do: name |> to_string() |> String.replace("_", " ")
 
-  # The Assayer has answered and the beat is still running, which is the
-  # ordinary case and reads as the ordinary line.
-  defp waiting_line(step, provisional_band \\ nil)
-  defp waiting_line(nil, _band), do: "Every bridge is in. The Assayer is looking at them."
-  defp waiting_line(:grading, _band), do: waiting_line(nil)
-  defp waiting_line(:slow, _band), do: "The Assayer is still reading. It does this sometimes."
-
-  # The Author's pre-graded table puts a provisional band at eight seconds.
-  defp waiting_line(:provisional, nil), do: "Still nothing. Hold on."
-
-  defp waiting_line(:provisional, band) do
-    "Provisional reading: #{band(band)} (from likely bridges). Still waiting on the Assayer."
-  end
+  defp waiting_line(nil), do: "Every bridge is in. The Assayer is looking at them."
+  defp waiting_line(:grading), do: waiting_line(nil)
+  defp waiting_line(:slow), do: "The Assayer is still reading. It does this sometimes."
+  defp waiting_line(_), do: waiting_line(nil)
 
   defp waiting(%{open_seats: 0, seat_limit: seat_limit}),
     do: "All #{seat_limit} seats taken"
@@ -612,86 +530,57 @@ defmodule MeaningGameWeb.RoomComponents do
   defp waiting(%{open_seats: 1}), do: "Waiting for 1 more"
   defp waiting(%{open_seats: open}), do: "Waiting for #{open} more"
 
-  # A table that all wrote one word has no two ends to name, and "furthest
-  # apart: cairn and cairn" is not a thing to say to people who just melded.
-  defp two_words?([%{bridge: left}, %{bridge: right}]), do: left != right
-  defp two_words?(_furthest), do: false
-
-  # The two words the Assayer sent them to next, each with whoever wrote it.
-  defp furthest_line(furthest) do
-    furthest
-    |> Enum.map(fn %{bridge: bridge, name: name} ->
-      if name, do: "#{bridge} (#{name})", else: bridge
-    end)
-    |> Enum.join(" and ")
-  end
-
   defp reveal_arrival(%{melded?: true}), do: "meld"
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
   defp reveal_arrival(_), do: "no_verdict"
 
-  defp closeness_presentation(%{melded?: true}, heads) do
-    %{
-      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
-      number_class: "text-primary",
-      badge_class: "bg-primary text-primary-content font-bold",
-      flavour: "One mind, #{in_words(heads)} heads."
-    }
-  end
-
-  defp closeness_presentation(%{band: :deep_meld}, heads) do
+  defp closeness_presentation(%{band: :deep_meld}) do
     %{
       container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
       number_class: "text-primary",
-      badge_class: "bg-primary text-primary-content font-bold",
-      flavour: "#{String.capitalize(in_words(heads))} minds, one thought."
+      badge_class: "bg-primary text-primary-content font-bold"
     }
   end
 
-  defp closeness_presentation(%{band: :close}, _heads) do
+  defp closeness_presentation(%{melded?: true}) do
+    %{
+      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
+      number_class: "text-primary",
+      badge_class: "bg-primary text-primary-content font-bold"
+    }
+  end
+
+  defp closeness_presentation(%{band: :close}) do
     %{
       container_class: "border border-info/30 bg-base-200/40",
       number_class: "text-base-content",
-      badge_class: "bg-info/20 text-info font-bold",
-      flavour: "Passable."
+      badge_class: "bg-info/20 text-info font-bold"
     }
   end
 
-  defp closeness_presentation(%{band: :adjacent}, _heads) do
+  defp closeness_presentation(%{band: :adjacent}) do
     %{
       container_class: "border border-base-300 bg-base-200/30",
       number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/80 font-bold",
-      flavour: "Neighbouring ideas, distinct paths."
+      badge_class: "bg-base-300 text-base-content/80 font-bold"
     }
   end
 
-  defp closeness_presentation(%{band: :miss}, _heads) do
+  defp closeness_presentation(%{band: :miss}) do
     %{
       container_class: "border border-base-300 bg-base-200/30",
       number_class: "text-base-content/85",
-      badge_class: "bg-base-300 text-base-content/80 font-bold",
-      flavour: "Different roads entirely."
+      badge_class: "bg-base-300 text-base-content/80 font-bold"
     }
   end
 
-  defp closeness_presentation(_reveal, _heads) do
+  defp closeness_presentation(_reveal) do
     %{
       container_class: "border border-base-300 bg-base-200/30",
       number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/70 font-bold",
-      flavour: nil
+      badge_class: "bg-base-300 text-base-content/70 font-bold"
     }
   end
-
-  # How many of them there are, in the words the reveal says out loud. The Room
-  # holds six at most, so this table is the whole of it.
-  defp in_words(2), do: "two"
-  defp in_words(3), do: "three"
-  defp in_words(4), do: "four"
-  defp in_words(5), do: "five"
-  defp in_words(6), do: "six"
-  defp in_words(count), do: to_string(count)
 
   defp your_fairness_tap(room, seat) do
     room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])

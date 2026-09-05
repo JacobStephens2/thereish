@@ -172,6 +172,10 @@ defmodule MeaningGame.StewardFixtures do
       |> put_in([:roles, :assayer, :api_key], key)
       |> put_in([:roles, :assayer, :timeout_ms], 5_000)
       |> put_in([:roles, :assayer, :deadline_ms], 10_000)
+      |> put_in([:roles, :author, :api_key], key)
+      |> put_in([:roles, :scribe, :jobs, :naming, :api_key], key)
+      |> put_in([:roles, :scribe, :jobs, :naming, :timeout_ms], 5_000)
+      |> put_in([:roles, :scribe, :jobs, :naming, :deadline_ms], 10_000)
 
     Application.put_env(:meaning_game, :steward, live)
   end
@@ -192,7 +196,7 @@ defmodule MeaningGame.StewardFixtures do
       steward
       |> Keyword.put(:adapter, MeaningGame.Steward.Live)
       |> Keyword.put(:http_options, [])
-      |> put_in([:roles, :scribe, :api_key], key)
+      |> put_in([:roles, :scribe, :jobs, :recap, :api_key], key)
       # The suite's Scribe answers in two seconds because it is a recording. A
       # model writing a real paragraph is given the couch's own budget.
       |> put_in([:roles, :scribe, :jobs, :recap, :timeout_ms], 120_000)
@@ -212,8 +216,13 @@ defmodule MeaningGame.StewardFixtures do
 
     live =
       steward
+      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
       |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :foley, :elevenlabs_api_key], key)
       |> put_in([:roles, :foley, :jobs, :effects, :api_key], key)
+      |> put_in([:roles, :foley, :jobs, :voice, :provider], MeaningGame.Steward.ElevenLabs)
+      |> put_in([:roles, :foley, :jobs, :voice, :voice_id], "JBFqnCBsd6RMkjVDRZzb")
+      |> put_in([:roles, :foley, :jobs, :voice, :timeout_ms], 5_000)
 
     Application.put_env(:meaning_game, :steward, live)
   end
@@ -237,6 +246,37 @@ defmodule MeaningGame.StewardFixtures do
 
   @doc "Puts a recorded response behind the Author's provider for this test."
   def recorded_author(answer) when is_function(answer, 2) do
+    Req.Test.stub(MeaningGame.Steward.Gemini, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      answer.(conn, Jason.decode!(body))
+    end)
+  end
+
+  @doc "One whole response in Gemini chat completions shape."
+  def author_response(content, opts \\ []) do
+    finish_reason = Keyword.get(opts, :finish_reason, "stop")
+
+    %{
+      "object" => "chat.completion",
+      "created" => 1_756_000_000,
+      "model" => "gemini-3.8-flash",
+      "choices" => [
+        %{
+          "index" => 0,
+          "finish_reason" => finish_reason,
+          "message" => %{"role" => "assistant", "content" => content}
+        }
+      ],
+      "usage" => %{
+        "prompt_tokens" => Keyword.get(opts, :input_tokens, 200),
+        "completion_tokens" => Keyword.get(opts, :output_tokens, 50),
+        "total_tokens" => Keyword.get(opts, :total_tokens, 250)
+      }
+    }
+  end
+
+  @doc "Puts a recorded response behind the Scribe's provider for this test."
+  def recorded_scribe(answer) when is_function(answer, 2) do
     Req.Test.stub(MeaningGame.Steward.Anthropic, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       answer.(conn, Jason.decode!(body))
@@ -244,11 +284,11 @@ defmodule MeaningGame.StewardFixtures do
   end
 
   @doc "One whole response in Anthropic messages shape."
-  def author_response(content, opts \\ []) do
+  def scribe_response(content, opts \\ []) do
     stop_reason = Keyword.get(opts, :stop_reason, "end_turn")
 
     %{
-      "id" => "msg_test_author",
+      "id" => "msg_test_scribe",
       "type" => "message",
       "role" => "assistant",
       "model" => "claude-fable-5-1",
@@ -278,7 +318,7 @@ defmodule MeaningGame.StewardFixtures do
     live =
       steward
       |> Keyword.put(:adapter, MeaningGame.Steward.Live)
-      |> put_in([:roles, :scribe, :api_key], "recorded-responses-need-no-key")
+      |> put_in([:roles, :scribe, :jobs, :recap, :api_key], "recorded-responses-need-no-key")
       |> put_in([:roles, :scribe, :jobs, :recap], recap)
 
     Application.put_env(:meaning_game, :steward, live)
@@ -298,23 +338,48 @@ defmodule MeaningGame.StewardFixtures do
     })
   end
 
-  @doc "A well-formed authored page JSON."
-  def authored_page_json(opts \\ []) do
+  @doc "A well-formed Author-3 JSON string."
+  def author_json(opts \\ []) do
     Jason.encode!(%{
-      "theme" => Keyword.get(opts, :theme, "suburban family life"),
-      "anchors" => Keyword.get(opts, :anchors, ["backyard", "weekend"]),
-      "bait" => Keyword.get(opts, :bait, "barbecue"),
-      "deep_bridges" => Keyword.get(opts, :deep_bridges, ["lawnmower", "chores"]),
-      "likely_bridges" =>
-        Keyword.get(opts, :likely_bridges, ["barbecue", "lawnmower", "chores", "family", "party"]),
-      "why_these" =>
+      "bookends" => Keyword.get(opts, :bookends, ["harbour", "cairn"]),
+      "why" =>
         Keyword.get(
           opts,
-          :why_these,
-          "Backyard and weekend invite barbecue as the immediate trap."
-        ),
-      "band_scripts" =>
-        Keyword.get(opts, :band_scripts, MeaningGame.Steward.Fake.default_band_scripts())
+          :why,
+          "A coastal shelter stands far apart in meaning from a mountain monument."
+        )
     })
+  end
+
+  @doc "Legacy alias for author_json."
+  def authored_page_json(opts \\ []), do: author_json(opts)
+
+  @doc """
+  Puts the live Hume voice provider behind the seam for a live smoke test.
+  """
+  def let_it_call_hume do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    api_key =
+      System.get_env("HUME_API_KEY") ||
+        flunk("this test calls Hume and needs HUME_API_KEY in the environment")
+
+    secret_key = System.get_env("HUME_SECRET_KEY")
+
+    live =
+      steward
+      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :foley, :hume_api_key], api_key)
+      |> put_in([:roles, :foley, :hume_secret_key], secret_key)
+      |> put_in([:roles, :foley, :jobs, :voice, :provider], MeaningGame.Steward.Hume)
+      |> put_in(
+        [:roles, :foley, :jobs, :voice, :voice_id],
+        "44cb3a51-07b4-4934-83fd-9d9e8d363ce6"
+      )
+      |> put_in([:roles, :foley, :jobs, :voice, :timeout_ms], 5_000)
+
+    Application.put_env(:meaning_game, :steward, live)
   end
 end

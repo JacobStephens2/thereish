@@ -60,14 +60,14 @@ defmodule MeaningGameWeb.RoomLive do
   end
 
   def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
-    anchors = (socket.assigns.room && socket.assigns.room.anchors) || []
+    bookends = (socket.assigns.room && socket.assigns.room.bookends) || []
     trimmed = String.trim(bridge)
 
     error =
       if trimmed == "" do
         nil
       else
-        case MeaningGame.Steward.Legality.check_bridge(trimmed, anchors) do
+        case MeaningGame.Steward.Legality.check_bridge(trimmed, bookends) do
           :ok -> nil
           {:illegal, why} -> why
         end
@@ -144,6 +144,16 @@ defmodule MeaningGameWeb.RoomLive do
     end
   end
 
+  def handle_event("retry_author", _params, socket) do
+    Rooms.retry_author(socket.assigns.slug, socket.assigns.seat.id)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("reset_gives", _params, socket) do
+    Rooms.reset_gives(socket.assigns.slug, socket.assigns.seat.id)
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
@@ -195,18 +205,7 @@ defmodule MeaningGameWeb.RoomLive do
       phx-hook=".ResyncOnWake"
       class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12"
     >
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold">Meaning Game</h1>
-        <.link
-          navigate={chronicle_path(@slug)}
-          class="text-sm font-medium underline opacity-70 hover:opacity-100"
-        >
-          The Chronicle
-        </.link>
-      </div>
-
       <section
-        :if={@room.open_seats > 0}
         data-role="room-code"
         class="flex flex-col items-center gap-1 rounded-lg border border-base-300 px-4 py-6"
       >
@@ -225,13 +224,64 @@ defmodule MeaningGameWeb.RoomLive do
         <.button variant="primary">Join</.button>
       </form>
 
-      <p :if={@seat} data-role="you" class="text-lg">
-        You are <span class="font-semibold">{@seat.name}</span>.
-      </p>
+      <form
+        :if={@seat && @room.phase == :giving && @room.your_give == nil}
+        id="setting-form"
+        data-role="setting-form"
+        phx-submit="submit_give"
+        class="flex flex-col gap-2"
+      >
+        <.input
+          name="give"
+          value={if(@give_input != "", do: @give_input, else: @room.your_last_give)}
+          label="Your setting"
+          placeholder="e.g. the world St. Thérèse grew up in"
+          autocomplete="off"
+          autofocus
+        />
+        <p :if={@give_error} data-role="give-error" class="text-sm text-error">
+          {@give_error}
+        </p>
+        <.button variant="primary">Set</.button>
+      </form>
 
+      <div
+        :if={@seat && @room.phase == :giving && @room.your_give != nil}
+        data-role="your-give"
+        class="flex flex-col gap-1 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your setting</p>
+        <p class="text-xl font-semibold">{@room.your_give}</p>
+        <p class="text-sm opacity-60">
+          Waiting for {length(@room.seats) - @room.gives_in} more ({@room.gives_in} of {length(
+            @room.seats
+          )} in)
+        </p>
+      </div>
+
+      <div
+        :if={@seat && @room.phase == :writing}
+        data-role="writing-phase"
+        class="flex flex-col items-center justify-center gap-3 text-center"
+      >
+        <.author_writing mode={:phone} />
+      </div>
+
+      <div
+        :if={@seat && @room[:author_failure]}
+        data-role="author-failure"
+        class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+        <p class="text-sm font-medium">The Author had trouble: {@room.author_failure}</p>
+        <div class="flex gap-2 mt-2">
+          <.button phx-click="retry_author" data-role="retry-author" variant="primary">Retry Author</.button>
+          <.button phx-click="reset_gives" data-role="reset-gives">New Settings</.button>
+        </div>
+      </div>
       <.attempt :if={@seat} room={@room} />
 
-      <.anchors :if={@seat} room={@room} />
+      <.bookends :if={@seat} room={@room} />
 
       <form
         :if={@seat && @room.phase == :bridging && @room.your_bridge == nil}
@@ -282,7 +332,7 @@ defmodule MeaningGameWeb.RoomLive do
       >
         <.carry_forward room={@room} />
         <.button phx-click="next_attempt" data-role="again" variant="primary">
-          Again — {Enum.join(@room.next_anchors, " and ")}
+          Again — {Enum.join(@room.next_bookends, " and ")}
         </.button>
       </div>
 
@@ -298,54 +348,20 @@ defmodule MeaningGameWeb.RoomLive do
         <.roster room={@room} />
       </section>
 
-      <section
-        :if={@seat && @room.phase != :waiting}
-        class="flex flex-col gap-2 border-t border-base-300 pt-6"
-      >
-        <h2 class="text-sm uppercase tracking-wide opacity-60">Give a setting</h2>
-        <form
-          id="give-form"
-          data-role="give-form"
-          phx-submit="submit_give"
-          class="flex flex-col gap-2"
-        >
-          <div class="flex items-center gap-2">
-            <.input
-              name="give"
-              value={@give_input}
-              placeholder="e.g. the world St. Thérèse grew up in"
-              class="flex-1"
-              autocomplete="off"
-            />
-            <.button>Give</.button>
-          </div>
-          <p :if={@give_error} data-role="give-error" class="text-sm text-error">
-            {@give_error}
-          </p>
-          <p
-            :if={@room[:give_status] && @room.give_status[:status] == :in_flight}
-            data-role="give-status"
-            class="text-sm opacity-70"
+      <footer class="flex flex-col gap-3 border-t border-base-300 pt-6">
+        <p :if={@seat} data-role="you" class="text-center text-sm opacity-80">
+          You are <span class="font-semibold">{@seat.name}</span>.
+        </p>
+        <div class="flex items-center justify-between">
+          <h1 class="text-lg font-semibold">Meaning Game</h1>
+          <.link
+            navigate={chronicle_path(@slug)}
+            class="text-sm font-medium underline opacity-70 hover:opacity-100"
           >
-            The Author is writing Pages for "{@room.give_status.give}"...
-          </p>
-          <p
-            :if={@room[:give_status] && @room.give_status[:status] == :landed}
-            data-role="give-status"
-            class="text-sm font-medium text-success"
-          >
-            Pages for "{@room.give_status.give}" have arrived.
-          </p>
-          <p
-            :if={@room[:give_status] && @room.give_status[:status] == :failed}
-            data-role="give-status"
-            class="text-sm font-medium text-warning"
-          >
-            The Author couldn't write for "{@room.give_status.give}": {@room.give_status.reason}. Playing on.
-          </p>
-        </form>
-      </section>
-
+            The Chronicle
+          </.link>
+        </div>
+      </footer>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResyncOnWake">
         export default {
           mounted() {

@@ -17,6 +17,12 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
   end
 
   defp play(ctx, melissa_bridge, jacob_bridge) do
+    if Rooms.snapshot(ctx.slug, nil).phase == :giving do
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+    end
+
     :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, melissa_bridge)
     :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, jacob_bridge)
 
@@ -68,7 +74,7 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
       MeaningGame.Chronicle.record_fairness_tap(room.id, %{
         seat_id: ctx.melissa.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -85,7 +91,7 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
       assert {:ok, [entry]} = Jason.decode(body)
       assert entry["label"] == "fair"
       assert entry["grade"] == 80
-      assert entry["anchors"] == ["lantern", "harbour"]
+      assert entry["bookends"] == ["lantern", "harbour"]
       assert entry["bridges"] == ["cairn", "cairo"]
     end
 
@@ -96,7 +102,7 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
       MeaningGame.Chronicle.record_fairness_tap(room.id, %{
         seat_id: ctx.melissa.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -129,7 +135,7 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
       MeaningGame.Chronicle.record_fairness_tap(room.id, %{
         seat_id: ctx.melissa.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",

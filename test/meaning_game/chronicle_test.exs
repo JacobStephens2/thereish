@@ -25,6 +25,12 @@ defmodule MeaningGame.ChronicleTest do
   end
 
   defp play(ctx, melissa_bridge, jacob_bridge) do
+    if Rooms.snapshot(ctx.slug, nil).phase == :giving do
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+    end
+
     :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, melissa_bridge)
     :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, jacob_bridge)
 
@@ -40,9 +46,8 @@ defmodule MeaningGame.ChronicleTest do
       play(ctx, "cairn", "cairo")
 
       assert [page] = chronicled(ctx.slug)
-      assert page.document["id"] == "hand-written-1"
-      assert page.document["anchors"] == ["lantern", "harbour"]
-      assert page.document["bait"] == "lighthouse"
+      assert page.author_meta["model"] == "fake-author"
+      assert page.document["bookends"] == ["lantern", "harbour"]
       assert page.closed_because == "meld"
       assert page.melded == true
       assert page.closeness == 80
@@ -80,7 +85,7 @@ defmodule MeaningGame.ChronicleTest do
 
       # The carry-forward is legible from the rows alone: each attempt hangs
       # between the two Bridges that missed on the one before it.
-      assert Enum.map(page.attempts, & &1.anchors) == [
+      assert Enum.map(page.attempts, & &1.bookends) == [
                ["lantern", "harbour"],
                ["cairn", "beacon"],
                ["wharf", "gantry"]
@@ -130,6 +135,11 @@ defmodule MeaningGame.ChronicleTest do
       assert verdict.forward == 80
       assert verdict.reverse == 80
       assert verdict.reasoning_reverse =~ "cairo"
+
+      # Markdown export and digest retain reasoning even though screens do not
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      assert Chronicle.to_markdown(room.id) =~ "- Reasoning: #{verdict.reasoning}"
+      assert Chronicle.digest(room.id) =~ "Verdict: 80 (meld) — #{verdict.reasoning}"
     end
 
     test "records a verdict that never came as a verdict that never came", ctx do
@@ -160,6 +170,8 @@ defmodule MeaningGame.ChronicleTest do
           {seat, bridge}
         end
 
+      for {seat, _bridge} <- seats, do: :ok = Rooms.give(slug, seat.id, "setting #{seat.name}")
+      await_phase(slug, :bridging)
       for {seat, bridge} <- seats, do: :ok = Rooms.commit_bridge(slug, seat.id, bridge)
       await_reveal(slug)
 
@@ -181,8 +193,8 @@ defmodule MeaningGame.ChronicleTest do
 
       pages = chronicled(ctx.slug)
 
-      assert length(pages) == 2
-      assert Enum.map(pages, & &1.document["id"]) == ["hand-written-1", "hand-written-2"]
+      assert [p1, p2] = pages
+      assert DateTime.compare(p1.closed_at, p2.closed_at) in [:lt, :eq]
     end
 
     test "is empty until a Page has closed", ctx do
@@ -208,7 +220,7 @@ defmodule MeaningGame.ChronicleTest do
       overrule_attrs = %{
         attempt_number: 1,
         proposer_seat_id: ctx.melissa.id,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "beacon"],
         machine_closeness: 41,
         machine_reasoning: "Too far apart.",
@@ -290,7 +302,7 @@ defmodule MeaningGame.ChronicleTest do
           page_id: p2.id,
           attempt_number: 1,
           proposer_seat_id: ctx.melissa.id,
-          anchors: p2_attempt1.anchors,
+          bookends: p2_attempt1.bookends,
           bridges: ["mirage", "oasis"],
           machine_closeness: 40,
           machine_reasoning: "Distinct ideas",
@@ -319,7 +331,7 @@ defmodule MeaningGame.ChronicleTest do
       assert latest_page.id != first_page.id
 
       # First page in history (which is second in reverse order)
-      assert first_page.anchors == ["lantern", "harbour"]
+      assert first_page.bookends == ["lantern", "harbour"]
       assert first_page.melded == true
       [first_attempt] = first_page.attempts
       assert Enum.map(first_attempt.bridges, & &1.seat_name) == ["Melissa", "Jacob"]
@@ -358,7 +370,7 @@ defmodule MeaningGame.ChronicleTest do
           page_id: p2.id,
           attempt_number: 1,
           proposer_seat_id: ctx.melissa.id,
-          anchors: p2_attempt1.anchors,
+          bookends: p2_attempt1.bookends,
           bridges: ["mirage", "oasis"],
           machine_closeness: 40,
           machine_reasoning: "Distinct ideas",
@@ -399,7 +411,7 @@ defmodule MeaningGame.ChronicleTest do
       assert length(parsed_evening) == 2
 
       [roundtrip_p1, roundtrip_p2] = parsed_evening
-      assert roundtrip_p1.anchors == ["lantern", "harbour"]
+      assert roundtrip_p1.bookends == ["lantern", "harbour"]
       assert roundtrip_p1.melded == true
       [a1] = roundtrip_p1.attempts
       assert a1.bridges == [{"Melissa", "cairn"}, {"Jacob", "cairn"}]
@@ -446,7 +458,7 @@ defmodule MeaningGame.ChronicleTest do
       attrs = %{
         seat_id: ctx.melissa.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -458,7 +470,7 @@ defmodule MeaningGame.ChronicleTest do
       assert {:ok, tap} = Chronicle.record_fairness_tap(room.id, attrs)
       assert tap.room_id == room.id
       assert tap.seat_id == ctx.melissa.id
-      assert tap.anchors == ["lantern", "harbour"]
+      assert tap.bookends == ["lantern", "harbour"]
       assert tap.bridges == ["cairn", "cairo"]
       assert tap.grade == 80
       assert tap.closeness == 80
@@ -476,7 +488,7 @@ defmodule MeaningGame.ChronicleTest do
         Chronicle.record_fairness_tap(room.id, %{
           seat_id: ctx.melissa.id,
           attempt_number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: ["cairn", "cairo"],
           grade: 80,
           band: "meld",
@@ -489,7 +501,7 @@ defmodule MeaningGame.ChronicleTest do
         Chronicle.record_fairness_tap(room.id, %{
           seat_id: ctx.jacob.id,
           attempt_number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: ["cairn", "cairo"],
           grade: 80,
           band: "meld",
@@ -510,7 +522,7 @@ defmodule MeaningGame.ChronicleTest do
       Chronicle.record_fairness_tap(room.id, %{
         seat_id: ctx.melissa.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -522,7 +534,7 @@ defmodule MeaningGame.ChronicleTest do
       Chronicle.record_fairness_tap(room.id, %{
         seat_id: ctx.jacob.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -536,7 +548,7 @@ defmodule MeaningGame.ChronicleTest do
       assert length(dataset) == 2
       [entry1, _entry2] = dataset
 
-      assert entry1.anchors == ["lantern", "harbour"]
+      assert entry1.bookends == ["lantern", "harbour"]
       assert entry1.bridges == ["cairn", "cairo"]
       assert entry1.grade == 80
       assert entry1.band == "meld"
@@ -550,7 +562,7 @@ defmodule MeaningGame.ChronicleTest do
       assert is_binary(json_export)
       assert {:ok, parsed_json} = Jason.decode(json_export)
       assert length(parsed_json) == 2
-      assert hd(parsed_json)["anchors"] == ["lantern", "harbour"]
+      assert hd(parsed_json)["bookends"] == ["lantern", "harbour"]
       assert hd(parsed_json)["bridges"] == ["cairn", "cairo"]
       assert hd(parsed_json)["grade"] == 80
       assert hd(parsed_json)["model"] == "gemini-3.8-flash"
@@ -566,7 +578,7 @@ defmodule MeaningGame.ChronicleTest do
         page_id: page.id,
         seat_id: ctx.melissa.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -579,7 +591,7 @@ defmodule MeaningGame.ChronicleTest do
         page_id: page.id,
         seat_id: ctx.jacob.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -603,44 +615,37 @@ defmodule MeaningGame.ChronicleTest do
       assert markdown =~ "Jacob: too harsh"
     end
 
-    test "pages authored from a Give are tagged with it and appear in the Chronicle that way",
+    test "pages authored from Gives are tagged with them and appear in the Chronicle that way",
          ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      give = "the language of Children's Hospital"
+      give1 = "the language of Children's Hospital"
+      give2 = "cyberpunk nightclub"
 
-      {:ok, page_attrs} =
-        MeaningGame.Pages.insert_page(%{
-          id: "P-GIVE-01",
-          chapter: give,
-          give: give,
-          theme: give,
-          anchors: ["nurse", "clinic"],
-          bait: "hospital",
-          deep_bridges: ["triage", "pager"],
-          likely_bridges: ["hospital", "triage", "pager"],
-          why_these: "Hospital language invites obvious bridges.",
-          band_scripts: %{
-            "miss" => "m",
-            "adjacent" => "a",
-            "close" => "c",
-            "meld" => "meld",
-            "deep_meld" => "dm"
-          },
-          meta: %{model: "fake-author", prompt_version: "v1", attempts: 1, cost_usd: 0.0}
-        })
-
-      # Play the page
       now = DateTime.utc_now()
 
       entry = %{
-        page: page_attrs,
+        page: %{
+          bookends: ["nurse", "clinic"],
+          gives: [
+            %{seat_id: ctx.melissa.id, text: give1},
+            %{seat_id: ctx.jacob.id, text: give2}
+          ],
+          author_meta: %{
+            model: "gemini-3.8-flash",
+            arm: :flash,
+            prompt_version: "author-3",
+            cost_usd: 0.0001,
+            latency_ms: 150,
+            why: "Medical care stands far from late night revelry."
+          }
+        },
         closed_because: :meld,
         melded?: true,
         closeness: 85,
         attempts: [
           %{
             number: 1,
-            anchors: ["nurse", "clinic"],
+            bookends: ["nurse", "clinic"],
             closeness: 85,
             melded?: true,
             bridges: [
@@ -667,20 +672,47 @@ defmodule MeaningGame.ChronicleTest do
 
       # In book view:
       [view] = Chronicle.book(room.id)
-      assert view.give == give
-      assert view.anchors == ["nurse", "clinic"]
+      assert length(view.gives) == 2
+      assert view.bookends == ["nurse", "clinic"]
+      assert view.author_meta["model"] == "gemini-3.8-flash"
 
       # In Markdown rendering:
       markdown = Chronicle.to_markdown(room.id)
-      assert markdown =~ "- Give: #{give}"
+      assert markdown =~ "- Give (Melissa): #{give1}"
+      assert markdown =~ "- Give (Jacob): #{give2}"
+      assert markdown =~ "Bookends: nurse · clinic"
 
       # Round-trips in Markdown parsing:
       assert {:ok, [parsed]} = Chronicle.from_markdown(markdown)
-      assert parsed.give == give
+      assert length(parsed.gives) == 2
 
       # Appears in digest:
       digest = Chronicle.digest(room.id)
-      assert digest =~ "[Give: #{give}]"
+      assert digest =~ "[Give (Melissa): #{give1}, Give (Jacob): #{give2}]"
+    end
+
+    test "from_markdown accepts legacy '- Anchors:' lines for backwards compatibility" do
+      legacy_markdown = """
+      # The Chronicle
+
+      ## Room: test-room
+
+      ### Page 1: lantern · harbour
+      - Outcome: Melded (meld)
+      - Closeness: 80 / 100
+
+      #### Attempt 1
+      - Anchors: lantern · harbour
+      - Bridges:
+        - Melissa: cairn
+        - Jacob: cairn
+      - Closeness: 80 / 100 (meld)
+      """
+
+      assert {:ok, [page]} = Chronicle.from_markdown(legacy_markdown)
+      assert page.bookends == ["lantern", "harbour"]
+      assert [attempt] = page.attempts
+      assert attempt.bookends == ["lantern", "harbour"]
     end
 
     test "assignment and outcome are Chronicle events, blinded until unblinded", ctx do
@@ -747,7 +779,7 @@ defmodule MeaningGame.ChronicleTest do
   end
 
   describe "the two words that landed furthest apart" do
-    test "are written down beside the Verdict, so the book can say where the next Anchors came from" do
+    test "are written down beside the Verdict, so the book can say where the next Bookends came from" do
       slug = open_room(seat_limit: 4)
       room = Repo.get_by!(Room, slug: slug)
 
@@ -763,12 +795,8 @@ defmodule MeaningGame.ChronicleTest do
         page: %{
           id: "hand-written-4",
           chapter: "harbour",
-          anchors: ["lantern", "harbour"],
-          bait: "lighthouse",
-          deep_bridges: ["cairn"],
-          likely_bridges: ["lighthouse", "beacon", "cairn"],
-          why_these: "A table of four at the shore.",
-          band_scripts: MeaningGame.Steward.Fake.default_band_scripts()
+          bookends: ["lantern", "harbour"],
+          why_these: "A table of four at the shore."
         },
         closed_because: :attempts,
         melded?: false,
@@ -776,7 +804,7 @@ defmodule MeaningGame.ChronicleTest do
         attempts: [
           %{
             number: 1,
-            anchors: ["lantern", "harbour"],
+            bookends: ["lantern", "harbour"],
             closeness: 27,
             melded?: false,
             bridges:
@@ -818,12 +846,8 @@ defmodule MeaningGame.ChronicleTest do
         page: %{
           id: "hand-written-2",
           chapter: "harbour",
-          anchors: ["lantern", "harbour"],
-          bait: "lighthouse",
-          deep_bridges: ["cairn"],
-          likely_bridges: ["lighthouse", "beacon", "cairn"],
-          why_these: "A couch evening.",
-          band_scripts: MeaningGame.Steward.Fake.default_band_scripts()
+          bookends: ["lantern", "harbour"],
+          why_these: "A couch evening."
         },
         closed_because: :attempts,
         melded?: false,
@@ -831,7 +855,7 @@ defmodule MeaningGame.ChronicleTest do
         attempts: [
           %{
             number: 1,
-            anchors: ["lantern", "harbour"],
+            bookends: ["lantern", "harbour"],
             closeness: nil,
             melded?: false,
             bridges: [
@@ -861,6 +885,28 @@ defmodule MeaningGame.ChronicleTest do
       [verdict] = attempt.verdicts
 
       assert verdict.furthest == nil
+    end
+  end
+
+  describe "recent_quips/2" do
+    test "returns recent quips from the database in chronological order", ctx do
+      play(ctx, "cairn", "cairo")
+      quips = Chronicle.recent_quips(ctx.slug, 5)
+
+      assert length(quips) == 1
+      assert hd(quips) =~ "walk into a bar"
+    end
+
+    test "falls back to priv/chronicles/<slug>.md when room is not in DB" do
+      quips = Chronicle.recent_quips("DUST", 5)
+
+      assert length(quips) == 5
+
+      assert List.first(quips) ==
+               "Both of you served up plate, proving great minds dish out the same thoughts."
+
+      assert List.last(quips) ==
+               "One brought the raw ingredient while the other rolled the meat into a tidy meatball."
     end
   end
 end

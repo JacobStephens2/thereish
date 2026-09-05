@@ -33,15 +33,15 @@ defmodule MeaningGame.Steward.Latency do
   @target_ms 4_000
 
   @requests [
-    %{anchors: ["ocean", "night"], bridges: ["moon", "moon"]},
-    %{anchors: ["ocean", "night"], bridges: ["tide", "moon"]},
-    %{anchors: ["coffee", "morning"], bridges: ["cup", "mug"]},
-    %{anchors: ["mirror", "river"], bridges: ["reflection", "reflect"]},
-    %{anchors: ["paper", "scar"], bridges: ["cut", "history"]},
+    %{bookends: ["ocean", "night"], bridges: ["moon", "moon"]},
+    %{bookends: ["ocean", "night"], bridges: ["tide", "moon"]},
+    %{bookends: ["coffee", "morning"], bridges: ["cup", "mug"]},
+    %{bookends: ["mirror", "river"], bridges: ["reflection", "reflect"]},
+    %{bookends: ["paper", "scar"], bridges: ["cut", "history"]},
     # A table of four: three words in one neighbourhood and one wandering off,
     # which is the reading ADR-0010 asks the Assayer to make and the longest
     # prompt it is asked to make it from.
-    %{anchors: ["harbour", "dusk"], bridges: ["lighthouse", "beacon", "lamp", "gull"]}
+    %{bookends: ["harbour", "dusk"], bridges: ["lighthouse", "beacon", "lamp", "gull"]}
   ]
 
   @doc """

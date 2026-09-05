@@ -16,6 +16,10 @@ defmodule Mix.Tasks.Calibration.ExportTest do
     {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
     {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
+    :ok = Rooms.give(slug, melissa.id, "setting one")
+    :ok = Rooms.give(slug, jacob.id, "setting two")
+    await_phase(slug, :bridging)
+
     :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
     :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
     await_reveal(slug)
@@ -26,7 +30,7 @@ defmodule Mix.Tasks.Calibration.ExportTest do
       Chronicle.record_fairness_tap(room.id, %{
         seat_id: melissa.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -47,7 +51,7 @@ defmodule Mix.Tasks.Calibration.ExportTest do
     assert {:ok, parsed} = Jason.decode(output)
     assert length(parsed) == 1
     assert hd(parsed)["label"] == "fair"
-    assert hd(parsed)["anchors"] == ["lantern", "harbour"]
+    assert hd(parsed)["bookends"] == ["lantern", "harbour"]
     assert hd(parsed)["grade"] == 80
   end
 

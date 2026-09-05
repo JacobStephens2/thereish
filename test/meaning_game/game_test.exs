@@ -12,7 +12,7 @@ defmodule MeaningGame.GameTest do
 
   alias MeaningGame.Game
 
-  @page %{id: "test-page", anchors: ["lantern", "harbour"]}
+  @page %{id: "test-page", bookends: ["lantern", "harbour"]}
 
   defp seat(name), do: %{id: "seat-" <> name, name: name}
 
@@ -106,7 +106,7 @@ defmodule MeaningGame.GameTest do
   ]
 
   # Misses `count` times over, carrying forward each time there is an attempt
-  # left to carry into. The Bridges differ every time so that the Anchors do.
+  # left to carry into. The Bridges differ every time so that the Bookends do.
   defp missed_through(count) do
     Enum.reduce(1..count, {bridging(), []}, fn n, {state, _effects} ->
       state = if n == 1, do: state, else: again(state)
@@ -221,18 +221,20 @@ defmodule MeaningGame.GameTest do
       assert {:error, :not_bridging} = commit(state, "Melissa", "cairn")
     end
 
-    test "the player who got there first does not get the Anchors first" do
+    test "the player who got there first does not get the Bookends first" do
       state = Game.init(seat_limit: 2, seats: [seat("Melissa")], page: @page)
 
-      assert Game.view(state, "seat-Melissa").anchors == nil
+      assert Game.view(state, "seat-Melissa").bookends == nil
       refute inspect(Game.view(state, "seat-Melissa")) =~ "lantern"
     end
 
-    test "a Room with no Page is waiting however full it is" do
-      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+    test "a Room with no Page is giving when full, waiting when not full" do
+      not_full = Game.init(seat_limit: 2, seats: [seat("Melissa")])
+      assert Game.view(not_full, nil).phase == :waiting
 
-      assert Game.view(state, nil).phase == :waiting
-      assert Game.view(state, nil).anchors == nil
+      full = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+      assert Game.view(full, nil).phase == :giving
+      assert Game.view(full, nil).bookends == nil
     end
 
     test "the last player to join starts the Page for everyone" do
@@ -244,8 +246,189 @@ defmodule MeaningGame.GameTest do
         view = Game.view(state, viewer)
 
         assert view.phase == :bridging
-        assert view.anchors == ["lantern", "harbour"]
+        assert view.bookends == ["lantern", "harbour"]
       end
+    end
+  end
+
+  describe "giving and writing a Page (ticket 02)" do
+    setup do
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+      %{state: state}
+    end
+
+    test "full Room with no Page is in giving phase", %{state: state} do
+      assert Game.view(state, "seat-Melissa").phase == :giving
+      assert Game.view(state, "seat-Jacob").phase == :giving
+      assert Game.view(state, nil).phase == :giving
+    end
+
+    test "validates gives: blank, too long, not seated, already committed", %{state: state} do
+      assert {:error, :give_required} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "   "}})
+
+      long_give = String.duplicate("a", 121)
+
+      assert {:error, :give_too_long} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: long_give}})
+
+      assert {:error, :no_such_seat} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Ada", give: "ocean"}})
+
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "ocean"}})
+
+      assert {:error, :already_committed} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "mountain"}})
+    end
+
+    test "first Give appears only in giver's view; others see gives_in count", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      melissa_view = Game.view(state, "seat-Melissa")
+      jacob_view = Game.view(state, "seat-Jacob")
+      stage_view = Game.view(state, nil)
+
+      assert melissa_view.your_give == "lighthouse"
+      assert melissa_view.gives_in == 1
+      assert melissa_view.phase == :giving
+
+      assert jacob_view.your_give == nil
+      assert jacob_view.gives_in == 1
+      assert jacob_view.phase == :giving
+
+      assert stage_view.your_give == nil
+      assert stage_view.gives_in == 1
+      assert stage_view.phase == :giving
+    end
+
+    test "the last Give owes exactly one Author effect carrying every Give in roster order with names",
+         %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      assert {:ok, state, [author_effect]} =
+               Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      assert {:author, request} = author_effect
+
+      assert [%{name: "Melissa", give: "lighthouse"}, %{name: "Jacob", give: "candle"}] =
+               request.gives
+
+      assert Game.view(state, nil).phase == :writing
+    end
+
+    test "page_written sets the Page and moves phase to bridging", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      meta = %{
+        model: "gemini-3.8-flash",
+        arm: :flash,
+        prompt_version: "author-3",
+        cost_usd: 0.001,
+        latency_ms: 250,
+        why: "Distant worlds."
+      }
+
+      event = {:page_written, %{bookends: ["cliff", "wax"], meta: meta}}
+
+      assert {:ok, state, []} = Game.apply(state, event)
+
+      view = Game.view(state, "seat-Melissa")
+      assert view.phase == :bridging
+      assert view.bookends == ["cliff", "wax"]
+      assert view.attempt == %{number: 1, of: Game.attempt_cap()}
+
+      # A duplicate page_written is ignored
+      assert {:ok, ^state, []} = Game.apply(state, event)
+    end
+
+    test "author_failed records failure and keeps phase in writing", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      assert {:ok, failed_state, []} =
+               Game.apply(state, {:author_failed, %{reason: "timed out"}})
+
+      assert Game.view(failed_state, nil).phase == :writing
+      assert Game.view(failed_state, nil).author_failure == "timed out"
+
+      # Retrying clears failure and owes author effect again
+      assert {:ok, retried_state, [{:author, _}]} =
+               Game.apply(failed_state, {:author_retried, %{seat_id: "seat-Melissa"}})
+
+      assert Game.view(retried_state, nil).author_failure == nil
+
+      # Resetting gives clears every Give and returns to giving
+      assert {:ok, reset_state, []} =
+               Game.apply(failed_state, {:gives_reset, %{seat_id: "seat-Melissa"}})
+
+      assert Game.view(reset_state, nil).phase == :giving
+      assert Game.view(reset_state, nil).gives_in == 0
+    end
+
+    test "next_page clears Page and returns to giving, remembering last Give for prefill" do
+      # Start with a closed page that had gives
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      meta = %{
+        model: "gemini-3.8-flash",
+        arm: :flash,
+        prompt_version: "author-3",
+        cost_usd: 0.001,
+        latency_ms: 250,
+        why: "why"
+      }
+
+      {:ok, state, _} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: meta}})
+
+      # Commit bridges and grade with a meld (80) to close the page
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      {:ok, state, effects} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "cairo"}})
+
+      [{:assay, _}] = Enum.filter(effects, &match?({:assay, _}, &1))
+
+      {:ok, closed_state, _} =
+        Game.apply(
+          state,
+          {:verdict_received,
+           %{closeness: 80, reasoning: "r", quip: "q", furthest: ["cairn", "cairo"], meta: %{}}}
+        )
+
+      assert Game.view(closed_state, nil).phase == :closed
+
+      assert {:ok, next_state, []} =
+               Game.apply(closed_state, {:next_page, %{seat_id: "seat-Melissa"}})
+
+      view_m = Game.view(next_state, "seat-Melissa")
+      view_j = Game.view(next_state, "seat-Jacob")
+
+      assert view_m.phase == :giving
+      assert view_m.bookends == nil
+      assert view_m.your_give == nil
+      assert view_m.your_last_give == "lighthouse"
+      assert view_m.gives_in == 0
+
+      assert view_j.your_give == nil
+      assert view_j.your_last_give == "candle"
     end
   end
 
@@ -307,7 +490,7 @@ defmodule MeaningGame.GameTest do
 
       assert :beat in effects
       assert [{:assay, request}] = assays(effects)
-      assert request.anchors == ["lantern", "harbour"]
+      assert request.bookends == ["lantern", "harbour"]
 
       # In roster order, the order the reveal shows them in, so that the
       # sentence the Assayer writes and the joke it makes name the words in the
@@ -359,14 +542,14 @@ defmodule MeaningGame.GameTest do
       end
     end
 
-    test "carries the closeness, the band and the Assayer's reasoning" do
+    test "carries the closeness and the band, but no reasoning" do
       view = Game.view(revealed([{"Melissa", "cairn"}, {"Jacob", "beacon"}], 78), nil)
 
       assert view.reveal.closeness == 78
       assert view.reveal.band == :meld
       assert view.reveal.melded? == true
       assert view.reveal.graded? == true
-      assert view.reveal.reasoning == "because"
+      refute Map.has_key?(view.reveal, :reasoning)
     end
 
     test "the meld threshold is where a Meld starts and one under it is not one" do
@@ -428,10 +611,10 @@ defmodule MeaningGame.GameTest do
              ]
     end
 
-    test "one quip and one sentence of reasoning, however many wrote", %{state: state} do
+    test "one quip and no reasoning on the reveal, however many wrote", %{state: state} do
       reveal = Game.view(state, nil).reveal
 
-      assert reveal.reasoning == "because"
+      refute Map.has_key?(reveal, :reasoning)
       assert is_binary(reveal.quip) or is_nil(reveal.quip)
     end
 
@@ -499,10 +682,10 @@ defmodule MeaningGame.GameTest do
   end
 
   describe "a miss carries forward" do
-    test "the two failed Bridges become the next attempt's Anchors" do
+    test "the two failed Bridges become the next attempt's Bookends" do
       {state, _effects} = attempt(bridging(), [{"Melissa", "cairn"}, {"Jacob", "beacon"}], 10)
 
-      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_bookends == ["cairn", "beacon"]
 
       state = again(state)
 
@@ -510,7 +693,7 @@ defmodule MeaningGame.GameTest do
         view = Game.view(state, viewer)
 
         assert view.phase == :bridging
-        assert view.anchors == ["cairn", "beacon"]
+        assert view.bookends == ["cairn", "beacon"]
         assert view.attempt == %{number: 2, of: Game.attempt_cap()}
         assert view.reveal == nil
         assert view.your_bridge == nil
@@ -518,10 +701,10 @@ defmodule MeaningGame.GameTest do
       end
     end
 
-    test "the Page keeps the Anchors it was authored with" do
+    test "the Page keeps the Bookends it was authored with" do
       {state, _effects} = attempt(bridging(), [{"Melissa", "cairn"}, {"Jacob", "beacon"}], 10)
 
-      assert again(state).page.anchors == ["lantern", "harbour"]
+      assert again(state).page.bookends == ["lantern", "harbour"]
     end
 
     test "the attempt that was played is kept, so the arc can be read at the end" do
@@ -529,7 +712,7 @@ defmodule MeaningGame.GameTest do
 
       assert [first] = Game.view(again(state), nil).played
       assert first.number == 1
-      assert first.anchors == ["lantern", "harbour"]
+      assert first.bookends == ["lantern", "harbour"]
       assert Enum.map(first.bridges, & &1.bridge) == ["cairn", "beacon"]
       assert first.closeness == 10
       assert first.band == :miss
@@ -541,18 +724,18 @@ defmodule MeaningGame.GameTest do
 
       # The Assayer read four words together and said these two are the ends of
       # the table. Nothing here recomputes that.
-      assert Game.view(state, nil).next_anchors == ["beacon", "signal"]
-      assert Game.view(state, nil).next_anchors_chosen? == true
-      assert Game.view(again(state), nil).anchors == ["beacon", "signal"]
+      assert Game.view(state, nil).next_bookends == ["beacon", "signal"]
+      assert Game.view(state, nil).next_bookends_chosen? == true
+      assert Game.view(again(state), nil).bookends == ["beacon", "signal"]
     end
 
     test "with no Verdict the first two in roster order carry, and the view says so" do
       {state, _effects} = four_committed()
       {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
 
-      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
-      assert Game.view(state, nil).next_anchors_chosen? == false
-      assert Game.view(again(state), nil).anchors == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_bookends == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_bookends_chosen? == false
+      assert Game.view(again(state), nil).bookends == ["cairn", "beacon"]
     end
 
     test "a word nobody wrote is no choice: the roster carries, and the view says so" do
@@ -560,9 +743,9 @@ defmodule MeaningGame.GameTest do
       state = grade(state, effects, 30, ["beacon", "lighthouse"])
 
       # "lighthouse" is a paraphrase of nobody's Bridge. Sending the table to an
-      # Anchor none of them wrote would be a Page they were never asked to play.
-      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
-      assert Game.view(state, nil).next_anchors_chosen? == false
+      # Bookend none of them wrote would be a Page they were never asked to play.
+      assert Game.view(state, nil).next_bookends == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_bookends_chosen? == false
       assert Game.view(state, nil).reveal.furthest == nil
     end
 
@@ -570,14 +753,14 @@ defmodule MeaningGame.GameTest do
       {state, _effects} = commit_all(bridging(), [{"Melissa", "cairn"}, {"Jacob", "beacon"}])
       {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
 
-      assert Game.view(state, nil).next_anchors == ["cairn", "beacon"]
-      assert Game.view(again(state), nil).anchors == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_bookends == ["cairn", "beacon"]
+      assert Game.view(again(state), nil).bookends == ["cairn", "beacon"]
     end
 
     test "there is nothing to carry forward before the reveal" do
       state = bridging()
 
-      assert Game.view(state, nil).next_anchors == nil
+      assert Game.view(state, nil).next_bookends == nil
 
       assert {:error, :not_revealed} =
                Game.apply(state, {:attempt_advanced, %{seat_id: "seat-Melissa"}})
@@ -609,7 +792,7 @@ defmodule MeaningGame.GameTest do
         # a screen that replaces it.
         assert view.reveal.closeness == 80
         assert view.reveal.melded?
-        assert view.next_anchors == nil
+        assert view.next_bookends == nil
       end
     end
 
@@ -645,7 +828,7 @@ defmodule MeaningGame.GameTest do
 
       assert Enum.map(played, & &1.number) == [1, 2, 3]
 
-      assert Enum.map(played, & &1.anchors) == [
+      assert Enum.map(played, & &1.bookends) == [
                ["lantern", "harbour"],
                ["cairn", "beacon"],
                ["stone", "signal"]
@@ -668,7 +851,7 @@ defmodule MeaningGame.GameTest do
 
       assert [first, second] = entry.attempts
       assert first.number == 1
-      assert first.anchors == ["lantern", "harbour"]
+      assert first.bookends == ["lantern", "harbour"]
 
       assert Enum.map(first.bridges, &{&1.name, &1.bridge}) == [
                {"Melissa", "cairn"},
@@ -678,7 +861,7 @@ defmodule MeaningGame.GameTest do
       assert first.closeness == 10
       assert first.melded? == false
 
-      assert second.anchors == ["cairn", "beacon"]
+      assert second.bookends == ["cairn", "beacon"]
       assert second.melded? == true
 
       assert [verdict] = second.verdicts
@@ -735,7 +918,7 @@ defmodule MeaningGame.GameTest do
     end
 
     test "starts a fresh Page in the same Room, with the same Seats", ctx do
-      next = %{id: "test-page-2", anchors: ["desert", "mirror"]}
+      next = %{id: "test-page-2", bookends: ["desert", "mirror"]}
 
       assert {:ok, state, []} =
                Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Melissa", page: next}})
@@ -743,7 +926,7 @@ defmodule MeaningGame.GameTest do
       view = Game.view(state, "seat-Melissa")
 
       assert view.phase == :bridging
-      assert view.anchors == ["desert", "mirror"]
+      assert view.bookends == ["desert", "mirror"]
       assert view.attempt == %{number: 1, of: Game.attempt_cap()}
       assert view.reveal == nil
       assert view.closed == nil
@@ -753,7 +936,7 @@ defmodule MeaningGame.GameTest do
 
     test "cannot take a Page away from the couple in the middle of one" do
       {state, _effects} = attempt(bridging(), [{"Melissa", "cairn"}, {"Jacob", "beacon"}], 10)
-      next = %{id: "test-page-2", anchors: ["desert", "mirror"]}
+      next = %{id: "test-page-2", bookends: ["desert", "mirror"]}
 
       assert {:error, :page_open} =
                Game.apply(state, {:page_started, %{seat_id: "seat-Melissa", page: next}})
@@ -763,7 +946,7 @@ defmodule MeaningGame.GameTest do
     end
 
     test "is a tap only someone in the Room can make", ctx do
-      next = %{id: "test-page-2", anchors: ["desert", "mirror"]}
+      next = %{id: "test-page-2", bookends: ["desert", "mirror"]}
 
       assert {:error, :no_such_seat} =
                Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Ada", page: next}})
@@ -869,7 +1052,7 @@ defmodule MeaningGame.GameTest do
       assert overrule.proposer_seat_id == "seat-Melissa"
       assert overrule.machine_closeness == 41
       assert overrule.couple_closeness == 100
-      assert overrule.anchors == ["lantern", "harbour"]
+      assert overrule.bookends == ["lantern", "harbour"]
       assert overrule.bridges == ["cairn", "beacon"]
 
       # And because it melded and closed, the Chronicle is owed
@@ -974,7 +1157,7 @@ defmodule MeaningGame.GameTest do
                 %{
                   seat_id: "seat-Melissa",
                   attempt_number: 1,
-                  anchors: ["lantern", "harbour"],
+                  bookends: ["lantern", "harbour"],
                   bridges: ["dock", "wharf"],
                   grade: 62,
                   band: "close",

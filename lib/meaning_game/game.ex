@@ -23,7 +23,7 @@ defmodule MeaningGame.Game do
   ## A Page is a ladder of attempts, not one shot
 
   A miss does not end the Page. The two Bridges the Assayer names as landing
-  furthest apart become the next attempt's Anchors — Medium's carry-forward
+  furthest apart become the next attempt's Bookends — Medium's carry-forward
   rule — so the words the couple reach for narrow towards each other and a
   missed Page converges rather than collapsing. After `attempt_cap/0` tries the Page closes
   unmelded, and a Meld closes it the moment it lands.
@@ -54,8 +54,11 @@ defmodule MeaningGame.Game do
     :seat_limit,
     :seats,
     :page,
-    :anchors,
+    :bookends,
     attempt: 1,
+    gives: %{},
+    last_gives: %{},
+    author_failure: nil,
     bridges: %{},
     verdict: nil,
     played: [],
@@ -65,7 +68,7 @@ defmodule MeaningGame.Game do
   ]
 
   @type seat :: %{id: String.t(), name: String.t()}
-  @type page :: %{id: String.t(), anchors: [String.t()]}
+  @type page :: %{id: String.t(), bookends: [String.t()]}
 
   @typedoc """
   What the Assayer said about one Attempt's Bridges, read together, or that it
@@ -77,7 +80,7 @@ defmodule MeaningGame.Game do
   for itself.
 
   `furthest` is the two of those Bridges that landed furthest apart, as words.
-  The rules do read that one: it is the next Attempt's Anchors.
+  The rules do read that one: it is the next Attempt's Bookends.
 
   `meta` is provenance — which model answered, at what prompt version, how long
   it took, what it cost. The rules carry it to the Chronicle and never read it;
@@ -95,7 +98,7 @@ defmodule MeaningGame.Game do
   @typedoc "One attempt as it was played, kept so the Chronicle can have it."
   @type attempt :: %{
           number: pos_integer(),
-          anchors: [String.t()],
+          bookends: [String.t()],
           bridges: %{String.t() => String.t()},
           verdict: verdict() | nil
         }
@@ -104,8 +107,11 @@ defmodule MeaningGame.Game do
           seat_limit: pos_integer(),
           seats: [seat()],
           page: page() | nil,
-          anchors: [String.t()] | nil,
+          bookends: [String.t()] | nil,
           attempt: pos_integer(),
+          gives: %{String.t() => String.t()},
+          last_gives: %{String.t() => String.t()},
+          author_failure: term(),
           bridges: %{String.t() => String.t()},
           verdict: verdict() | nil,
           played: [attempt()],
@@ -118,6 +124,19 @@ defmodule MeaningGame.Game do
 
   @type event ::
           {:seat_joined, seat()}
+          | {:give_committed,
+             %{
+               required(:seat_id) => String.t(),
+               required(:give) => String.t()
+             }}
+          | {:page_written,
+             %{
+               required(:bookends) => [String.t()],
+               optional(:meta) => map()
+             }}
+          | {:author_failed, %{required(:reason) => term()}}
+          | {:author_retried, %{required(:seat_id) => String.t()}}
+          | {:gives_reset, %{required(:seat_id) => String.t()}}
           | {:bridge_committed, %{seat_id: String.t(), bridge: String.t()}}
           | {:verdict_received,
              %{
@@ -130,6 +149,7 @@ defmodule MeaningGame.Game do
           | {:verdict_unavailable, %{optional(:meta) => map()}}
           | {:attempt_advanced, %{seat_id: String.t()}}
           | {:page_started, %{seat_id: String.t(), page: page()}}
+          | {:next_page, %{seat_id: String.t()}}
           | {:overrule_proposed,
              %{
                required(:seat_id) => String.t(),
@@ -152,13 +172,19 @@ defmodule MeaningGame.Game do
   """
   @type effect ::
           :beat
-          | {:assay, %{anchors: [String.t()], bridges: [String.t()]}}
+          | {:author, %{gives: [map()]}}
+          | {:assay, %{bookends: [String.t()], bridges: [String.t()]}}
           | {:chronicle, map()}
           | {:overrule, map()}
           | {:fairness_tap, map()}
 
   @type error ::
           :room_full
+          | :not_giving
+          | :not_writing
+          | :give_required
+          | :give_too_long
+          | :not_failed
           | :not_bridging
           | :no_such_seat
           | :already_committed
@@ -189,7 +215,10 @@ defmodule MeaningGame.Game do
       seat_limit: Keyword.fetch!(opts, :seat_limit),
       seats: opts |> Keyword.get(:seats, []) |> Enum.map(&seat/1),
       page: page,
-      anchors: page && page.anchors
+      bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
+      gives: %{},
+      last_gives: %{},
+      author_failure: nil
     }
   end
 
@@ -224,6 +253,113 @@ defmodule MeaningGame.Game do
     end
   end
 
+  def apply(%__MODULE__{} = state, {:give_committed, %{seat_id: seat_id} = attrs}) do
+    give = attrs[:give] || attrs[:text] || ""
+    trimmed = String.trim(give)
+
+    cond do
+      phase(state) != :giving ->
+        {:error, :not_giving}
+
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      Map.has_key?(state.gives, seat_id) ->
+        {:error, :already_committed}
+
+      trimmed == "" ->
+        {:error, :give_required}
+
+      String.length(trimmed) > 120 ->
+        {:error, :give_too_long}
+
+      true ->
+        gives = Map.put(state.gives, seat_id, trimmed)
+        last_gives = Map.put(state.last_gives, seat_id, trimmed)
+        state = %{state | gives: gives, last_gives: last_gives}
+
+        if map_size(gives) >= length(state.seats) do
+          {:ok, state, [{:author, author_request(state, gives)}]}
+        else
+          {:ok, state, []}
+        end
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:page_written, bookends, meta}) when is_list(bookends) do
+    __MODULE__.apply(state, {:page_written, %{bookends: bookends, meta: meta}})
+  end
+
+  def apply(%__MODULE__{} = state, {:page_written, %{bookends: bookends} = attrs}) do
+    meta = attrs[:meta] || %{}
+
+    cond do
+      state.page != nil ->
+        {:ok, state, []}
+
+      phase(state) != :writing ->
+        {:error, :not_writing}
+
+      true ->
+        page = %{
+          bookends: bookends,
+          gives: state.gives,
+          meta: meta
+        }
+
+        {:ok,
+         %{
+           state
+           | page: page,
+             bookends: bookends,
+             attempt: 1,
+             bridges: %{},
+             verdict: nil,
+             played: [],
+             overrule: nil,
+             overrules: [],
+             fairness_taps: %{},
+             author_failure: nil
+         }, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:author_failed, %{reason: reason}}) do
+    cond do
+      phase(state) != :writing ->
+        {:error, :not_writing}
+
+      true ->
+        {:ok, %{state | author_failure: reason}, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:author_retried, %{seat_id: seat_id}}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) != :writing or is_nil(state.author_failure) ->
+        {:error, :not_failed}
+
+      true ->
+        {:ok, %{state | author_failure: nil}, [{:author, author_request(state)}]}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:gives_reset, %{seat_id: seat_id}}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) != :writing ->
+        {:error, :not_writing}
+
+      true ->
+        {:ok, %{state | gives: %{}, author_failure: nil}, []}
+    end
+  end
+
   def apply(%__MODULE__{} = state, {:bridge_committed, %{seat_id: seat_id, bridge: bridge}}) do
     bridge = normalize(bridge)
 
@@ -241,7 +377,7 @@ defmodule MeaningGame.Game do
         {:error, :bridge_required}
 
       true ->
-        case MeaningGame.Steward.Legality.check_bridge(bridge, state.anchors) do
+        case MeaningGame.Steward.Legality.check_bridge(bridge, state.bookends) do
           :ok -> committed(%{state | bridges: Map.put(state.bridges, seat_id, bridge)})
           {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
         end
@@ -253,7 +389,7 @@ defmodule MeaningGame.Game do
       graded?: true,
       closeness: verdict.closeness,
       reasoning: verdict.reasoning,
-      quip: Map.get(verdict, :quip) || fallback_quip(state),
+      quip: Map.get(verdict, :quip),
       furthest: Map.get(verdict, :furthest),
       meta: Map.get(verdict, :meta, %{})
     })
@@ -264,7 +400,7 @@ defmodule MeaningGame.Game do
       graded?: false,
       closeness: nil,
       reasoning: nil,
-      quip: Map.get(event, :quip) || fallback_quip(state),
+      quip: Map.get(event, :quip),
       furthest: nil,
       meta: Map.get(event, :meta, %{})
     })
@@ -353,7 +489,7 @@ defmodule MeaningGame.Game do
         tap_effect_data = %{
           seat_id: seat_id,
           attempt_number: state.attempt,
-          anchors: state.anchors,
+          bookends: state.bookends,
           bridges: written_bridges(state),
           grade: grade,
           closeness: grade,
@@ -376,7 +512,7 @@ defmodule MeaningGame.Game do
       {:ok,
        %{
          state
-         | anchors: carried_anchors(state),
+         | bookends: carried_bookends(state),
            attempt: state.attempt + 1,
            bridges: %{},
            verdict: nil,
@@ -394,7 +530,7 @@ defmodule MeaningGame.Game do
        %{
          state
          | page: page,
-           anchors: page.anchors,
+           bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
            attempt: 1,
            bridges: %{},
            verdict: nil,
@@ -406,11 +542,35 @@ defmodule MeaningGame.Game do
     end
   end
 
+  def apply(%__MODULE__{} = state, {:next_page, %{seat_id: seat_id}}) do
+    with :ok <- taken_by_a_seat(state, seat_id),
+         :ok <- closed_page(state) do
+      last_gives = Map.merge(state.last_gives || %{}, state.gives || %{})
+
+      {:ok,
+       %{
+         state
+         | page: nil,
+           bookends: nil,
+           attempt: 1,
+           gives: %{},
+           last_gives: last_gives,
+           bridges: %{},
+           verdict: nil,
+           played: [],
+           overrule: nil,
+           overrules: [],
+           fairness_taps: %{},
+           author_failure: nil
+       }, []}
+    end
+  end
+
   @doc """
   Projects what one viewer may see: a Seat by its id, or `nil` for a viewer that
   holds no Seat — the stage on the laptop, or a phone still at the name form.
 
-  Everyone gets the same roster, the same Anchors and the same reveal — the
+  Everyone gets the same roster, the same Bookends and the same reveal — the
   stage and the phones must never disagree about the Page they are playing. The
   only things that differ are which Seat is the viewer's own and which Bridge it
   wrote, and an uncommitted Bridge is in nobody's view but its author's until
@@ -427,21 +587,25 @@ defmodule MeaningGame.Game do
       you: find_seat(state, viewer),
       seat_limit: state.seat_limit,
       open_seats: state.seat_limit - length(state.seats),
-      anchors: anchors(state, phase),
+      bookends: bookends(state, phase),
       page_give: state.page && (state.page[:give] || state.page["give"]),
       page_chapter: state.page && (state.page[:chapter] || state.page["chapter"]),
       page_theme: state.page && (state.page[:theme] || state.page["theme"]),
+      your_give: Map.get(state.gives, viewer),
+      your_last_give: Map.get(state.last_gives, viewer),
+      gives_in: map_size(state.gives),
+      author_failure: state.author_failure,
       your_bridge: Map.get(state.bridges, viewer),
       attempt: %{number: state.attempt, of: attempt_cap()},
       reveal: reveal(state, phase),
       # What the next attempt will hang between, so the tap that starts it can
       # say so. The carry-forward is the point of a miss; a button that named
       # neither word would hide it.
-      next_anchors: if(phase == :reveal, do: carried_anchors(state)),
+      next_bookends: if(phase == :reveal, do: carried_bookends(state)),
       # Whether the Assayer picked those two words or the game fell back to the
       # first two Bridges in roster order. The couple are about to spend an
       # attempt on them, so which of the two happened is theirs to know.
-      next_anchors_chosen?: if(phase == :reveal, do: chosen_furthest(state) != nil),
+      next_bookends_chosen?: if(phase == :reveal, do: chosen_furthest(state) != nil),
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
@@ -454,6 +618,17 @@ defmodule MeaningGame.Game do
   # through them, including in tests — a rule that can only be seen by asking a
   # question no player can ask is not being tested where it lives.
 
+  defp author_request(state, gives \\ nil) do
+    gives_map = gives || state.gives
+
+    %{
+      gives:
+        Enum.map(state.seats, fn s ->
+          %{seat_id: s.id, name: s.name, text: gives_map[s.id], give: gives_map[s.id]}
+        end)
+    }
+  end
+
   # The last Bridge in is the moment the Page turns: the Assayer is asked once,
   # about every Bridge together, and the beat starts alongside rather than
   # after, so the theatre and the grading run in parallel.
@@ -465,34 +640,19 @@ defmodule MeaningGame.Game do
     end
   end
 
-  # Nobody sees the Anchors until everybody can: a player alone in the Room with
+  # Nobody sees the Bookends until everybody can: a player alone in the Room with
   # the two words on screen is a player with a head start on the one still
   # typing their name.
-  defp anchors(_state, :waiting), do: nil
-  defp anchors(state, _phase), do: state.anchors
+  defp bookends(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
+  defp bookends(state, _phase), do: state.bookends
 
   # The Bridges go in roster order, the order the reveal puts them in, so that
   # the sentence the Assayer writes, the joke it makes and the two words it
   # names as furthest apart all read in the order they are on the screen.
-  defp assay(state), do: {:assay, %{anchors: state.anchors, bridges: written_bridges(state)}}
+  defp assay(state), do: {:assay, %{bookends: state.bookends, bridges: written_bridges(state)}}
 
   # Every Bridge of this attempt, in roster order.
   defp written_bridges(state), do: Enum.map(state.seats, &state.bridges[&1.id])
-
-  defp fallback_quip(%{page: %{} = page} = state) do
-    scripts = Map.get(page, :band_scripts) || Map.get(page, "band_scripts")
-
-    if is_map(scripts) do
-      bridges = written_bridges(state)
-
-      if Enum.all?(bridges, &is_binary/1) do
-        band = MeaningGame.Steward.Author.provisional_reading(page, bridges)
-        Map.get(scripts, to_string(band)) || Map.get(scripts, band)
-      end
-    end
-  end
-
-  defp fallback_quip(_state), do: nil
 
   # An Attempt is graded once. The Room can deliver the same verdict twice — a
   # retry, a message that outlived the attempt it was about — and the second one
@@ -519,7 +679,9 @@ defmodule MeaningGame.Game do
   # Bridges, grade them together, show it, and end.
   defp phase(state) do
     cond do
-      state.page == nil or not full?(state) -> :waiting
+      not full?(state) -> :waiting
+      state.page == nil and map_size(state.gives) < length(state.seats) -> :giving
+      state.page == nil -> :writing
       map_size(state.bridges) < length(state.seats) -> :bridging
       state.verdict == nil -> :assaying
       over?(state) -> :closed
@@ -541,13 +703,21 @@ defmodule MeaningGame.Game do
   defp closed(state, _phase), do: %{because: closed_because(state), attempt: state.attempt}
 
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
-  # one sentence of reasoning, and the two words that landed furthest apart.
+  # and the two words that landed furthest apart. Reasoning is kept in the
+  # Chronicle and kept off the screen.
   defp reveal(state, phase) when phase in [:reveal, :closed] do
+    gives =
+      Enum.map(state.seats, fn seat ->
+        %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
+      end)
+
     state.verdict
     |> verdict_view()
+    |> Map.delete(:reasoning)
     |> Map.merge(%{
       bridges: bridges_view(state, state.bridges),
-      furthest: furthest_view(state, chosen_furthest(state))
+      furthest: furthest_view(state, chosen_furthest(state)),
+      gives: gives
     })
   end
 
@@ -560,22 +730,22 @@ defmodule MeaningGame.Game do
 
   # Medium's carry-forward rule, written for a list of Seats: the two Bridges
   # the Assayer named as landing furthest apart become the next attempt's
-  # Anchors. At two Seats that is simply the two Bridges, which is the rule as
+  # Bookends. At two Seats that is simply the two Bridges, which is the rule as
   # the design states it.
   #
   # With no Verdict there is nobody to have chosen, and the game says so rather
   # than inventing a choice: the first two Bridges in roster order carry, and
-  # `next_anchors_chosen?` tells the screens that this is what happened.
+  # `next_bookends_chosen?` tells the screens that this is what happened.
   #
   # Nothing here defends against the two carried words being the same word: that
   # needs an Assayer that names a word twice, and if one ever does, the next
   # attempt is a Page with one word twice rather than a crash.
-  defp carried_anchors(state) do
+  defp carried_bookends(state) do
     chosen_furthest(state) || state |> written_bridges() |> Enum.take(2)
   end
 
   # The two words the Assayer named, but only if the roster can account for both
-  # of them: they are about to be Anchors, and an Anchor nobody wrote is a Page
+  # of them: they are about to be Bookends, and a Bookend nobody wrote is a Page
   # the table was never asked to play. A paraphrase is no choice at all, so the
   # game falls back and says it fell back.
   defp chosen_furthest(%{verdict: %{graded?: true, furthest: [_, _] = furthest}} = state) do
@@ -626,7 +796,7 @@ defmodule MeaningGame.Game do
   defp attempt_view(state, attempt) do
     Map.merge(Ladder.read(attempt_closeness(attempt)), %{
       number: attempt.number,
-      anchors: attempt.anchors,
+      bookends: attempt.bookends,
       bridges: bridges_view(state, attempt.bridges)
     })
   end
@@ -637,7 +807,7 @@ defmodule MeaningGame.Game do
   defp this_attempt(state) do
     %{
       number: state.attempt,
-      anchors: state.anchors,
+      bookends: state.bookends,
       bridges: state.bridges,
       verdict: state.verdict
     }
@@ -651,6 +821,12 @@ defmodule MeaningGame.Game do
 
     %{
       page: state.page,
+      bookends: state.bookends,
+      gives:
+        Enum.map(state.seats, fn seat ->
+          %{seat_id: seat.id, seat_name: seat.name, text: state.gives[seat.id] || ""}
+        end),
+      author_meta: state.page && (state.page[:meta] || state.page["meta"]),
       closed_because: closed_because(state),
       melded?: melded?(state),
       closeness: headline(state),
@@ -711,7 +887,7 @@ defmodule MeaningGame.Game do
     overrule_effect_data = %{
       attempt_number: state.attempt,
       proposer_seat_id: proposer_id,
-      anchors: state.anchors,
+      bookends: state.bookends,
       bridges: written_bridges(state),
       machine_closeness: original_verdict.closeness,
       machine_reasoning: original_verdict.reasoning,
