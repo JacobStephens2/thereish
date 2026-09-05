@@ -44,6 +44,9 @@ defmodule MeaningGameWeb.Router do
       assigns: %{format: :jsonl}
 
     live "/check", CheckLive, :show
+
+    # Operator spend page across all Rooms by role and model (ticket 09)
+    live "/spend", SpendLive, :index
   end
 
   # Other scopes may use custom stacks.

@@ -5,8 +5,8 @@ behind Apache, from the first evening — so every session measures the real VPS
 round-trips the reveal beat has to absorb (design brief, "Couch-night hosting").
 
 The apex `stephens.page` is a static site with its own proxies, so the game took
-a subdomain. `meld` names the Mind-Meld mechanic, not the game, which is still
-unnamed.
+a subdomain. `meld` named the working-title mechanic (Mind-Meld); the game is
+now called Thereish (ADR-0008), and the move to `thereish.app` is naming issue 07.
 
 ## Continuous deployment (push to master)
 

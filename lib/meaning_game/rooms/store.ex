@@ -122,4 +122,12 @@ defmodule MeaningGame.Rooms.Store do
     |> Seat.remember_device_changeset(device_token)
     |> Repo.update()
   end
+
+  @doc "Updates Room facts (speaker, voice, house_loop_only)."
+  @spec update_room(Room.t(), map()) :: {:ok, Room.t()} | {:error, Ecto.Changeset.t()}
+  def update_room(%Room{} = room, attrs) do
+    room
+    |> Room.facts_changeset(attrs)
+    |> Repo.update()
+  end
 end

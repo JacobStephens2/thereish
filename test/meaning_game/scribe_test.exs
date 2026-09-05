@@ -369,6 +369,11 @@ defmodule MeaningGame.ScribeTest do
                Steward.role(:scribe, :recap)
     end
 
+    test "the Scribe's recap job is configured at xhigh effort" do
+      role = Steward.role(:scribe, :recap)
+      assert role.effort == "xhigh"
+    end
+
     test "a job inherits what the role says and overrides what it names" do
       role = Steward.role(:scribe, :recap)
 

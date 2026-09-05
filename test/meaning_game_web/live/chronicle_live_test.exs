@@ -323,5 +323,51 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       refute readout_text =~ ~r/p\s*<\s*0\.05/i
       refute readout_text =~ "p-value"
     end
+
+    test "book view displays gives, every bridge, the verdict with reasoning, and the carried words",
+         %{conn: conn, slug: slug} = ctx do
+      # Play attempt 1 which misses and carries furthest words
+      play(ctx, "cairn", "beacon")
+      # Advance and play attempt 2 which melds
+      :ok = Rooms.next_attempt(slug, ctx.mara.id)
+      play(ctx, "wharf", "wharf")
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=chronicle-page]")
+      assert has_element?(view, "[data-role=give-tag]", "Give (Mara): setting one")
+      assert has_element?(view, "[data-role=give-tag]", "Give (Jacob): setting two")
+
+      # Attempt 1 shows carried words
+      assert has_element?(
+               view,
+               ~s([data-role=attempt][data-attempt-number="1"] [data-role=carried-words])
+             )
+
+      carried_text =
+        element(view, ~s([data-role=attempt][data-attempt-number="1"] [data-role=carried-words]))
+        |> render()
+
+      assert carried_text =~ "Carried:"
+      assert carried_text =~ "cairn"
+      assert carried_text =~ "beacon"
+    end
+  end
+
+  describe "spend foot line (ticket 09)" do
+    test "renders the spend line at the foot of the Chronicle book view",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairns")
+      await_recap(slug)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=chronicle-spend]")
+      spend_text = render(element(view, "[data-role=spend-line]"))
+      assert spend_text =~ "Spend:"
+      assert spend_text =~ "Author"
+      assert spend_text =~ "Assayer"
+      assert spend_text =~ "Scribe"
+    end
   end
 end

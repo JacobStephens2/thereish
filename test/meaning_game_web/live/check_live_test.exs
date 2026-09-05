@@ -9,6 +9,7 @@ defmodule MeaningGameWeb.CheckLiveTest do
 
     assert html =~ "Socket not connected"
     refute html =~ "Socket connected"
+    assert html =~ "Thereish"
   end
 
   test "the live render says the socket is connected", %{conn: conn} do
