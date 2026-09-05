@@ -55,7 +55,7 @@ defmodule MeaningGame.ScribeTest do
 
   describe "a closed Page gets a recap" do
     test "written into the Chronicle as its own event", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       recap = await_recap(ctx.slug)
 
@@ -66,7 +66,7 @@ defmodule MeaningGame.ScribeTest do
     end
 
     test "attached to the Page it is about", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       recap = await_recap(ctx.slug)
       [page] = Chronicle.pages(room_id(ctx.slug))
@@ -75,13 +75,13 @@ defmodule MeaningGame.ScribeTest do
     end
 
     test "with nothing to reach back to on the Room's first Page", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       assert await_recap(ctx.slug).callback == nil
     end
 
     test "and a callback once the Room has a Chronicle behind it", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(ctx.slug)
 
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
@@ -105,7 +105,7 @@ defmodule MeaningGame.ScribeTest do
     test "leaves the Page without a recap rather than taking the Room down", ctx do
       steward(recap_mode: :unavailable)
 
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_scribe()
 
       assert [_page] = Chronicle.pages(room_id(ctx.slug))
@@ -116,7 +116,7 @@ defmodule MeaningGame.ScribeTest do
     test "falling over is not a Page lost either", ctx do
       steward(recap_mode: :raise)
 
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_scribe()
 
       assert [_page] = Chronicle.pages(room_id(ctx.slug))
@@ -144,7 +144,7 @@ defmodule MeaningGame.ScribeTest do
       # regardless, which is what running it in a task buys.
       steward(recap_delay_ms: 400)
 
-      view = play(ctx, "cairn", "cairo")
+      view = play(ctx, "cairn", "cairns")
 
       assert view.reveal != nil
       assert Chronicle.recaps(room_id(ctx.slug)) == []
@@ -159,7 +159,7 @@ defmodule MeaningGame.ScribeTest do
 
     log =
       capture_log(fn ->
-        play(ctx, "cairn", "cairo")
+        play(ctx, "cairn", "cairns")
         await_scribe()
       end)
 
@@ -177,7 +177,7 @@ defmodule MeaningGame.ScribeTest do
   describe "syncing missing recaps" do
     test "writes recaps for closed Pages that have none in order, accepting any case Code", ctx do
       steward(recap_mode: :unavailable)
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_scribe()
 
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
@@ -204,7 +204,7 @@ defmodule MeaningGame.ScribeTest do
 
   describe "the book" do
     test "shows the recap on the Page it was written about", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(ctx.slug)
 
       assert [page] = Chronicle.book(ctx.slug)
@@ -214,7 +214,7 @@ defmodule MeaningGame.ScribeTest do
 
     test "says nothing where the Scribe wrote nothing", ctx do
       steward(recap_mode: :unavailable)
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_scribe()
 
       assert [page] = Chronicle.book(ctx.slug)
@@ -222,7 +222,7 @@ defmodule MeaningGame.ScribeTest do
     end
 
     test "reads the players' correction over the Scribe's paragraph", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       recap = await_recap(ctx.slug)
       [stored] = Chronicle.pages(room_id(ctx.slug))
 
@@ -242,7 +242,7 @@ defmodule MeaningGame.ScribeTest do
     end
 
     test "keeps the paragraph the couple were shown when the Scribe runs again", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       first = await_recap(ctx.slug)
       [stored] = Chronicle.pages(room_id(ctx.slug))
 
@@ -261,14 +261,14 @@ defmodule MeaningGame.ScribeTest do
 
   describe "what the Scribe reads and what the Author does not" do
     test "the Scribe's digest carries the recaps it has already written", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       recap = await_recap(ctx.slug)
 
       assert Chronicle.scribe_digest(room_id(ctx.slug)) =~ recap.recap
     end
 
     test "the Author's digest does not", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       recap = await_recap(ctx.slug)
 
       refute Chronicle.digest(room_id(ctx.slug)) =~ recap.recap
@@ -277,7 +277,7 @@ defmodule MeaningGame.ScribeTest do
 
   describe "the Markdown export" do
     test "carries the recap and round-trips it", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       recap = await_recap(ctx.slug)
 
       markdown = Chronicle.to_markdown(ctx.slug)
@@ -288,7 +288,7 @@ defmodule MeaningGame.ScribeTest do
     end
 
     test "carries the callback beside it", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(ctx.slug)
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       play(ctx, "mirage", "mirages")
@@ -301,7 +301,7 @@ defmodule MeaningGame.ScribeTest do
     end
 
     test "a recap that wrapped over several lines comes back whole", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(ctx.slug)
       [stored] = Chronicle.pages(room_id(ctx.slug))
 
@@ -319,7 +319,7 @@ defmodule MeaningGame.ScribeTest do
 
     test "a Page with no recap exports without one", ctx do
       steward(recap_mode: :unavailable)
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_scribe()
 
       assert {:ok, [page]} = Chronicle.from_markdown(Chronicle.to_markdown(ctx.slug))

@@ -60,14 +60,18 @@ defmodule MeaningGameWeb.RoomLive do
   end
 
   def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
-    bookends = (socket.assigns.room && socket.assigns.room.bookends) || []
+    barred =
+      (socket.assigns.room &&
+         (Map.get(socket.assigns.room, :barred_words) ||
+            Map.get(socket.assigns.room, :bookends))) || []
+
     trimmed = String.trim(bridge)
 
     error =
       if trimmed == "" do
         nil
       else
-        case MeaningGame.Steward.Legality.check_bridge(trimmed, bookends) do
+        case MeaningGame.Steward.Legality.check_bridge(bridge, barred) do
           :ok -> nil
           {:illegal, why} -> why
         end

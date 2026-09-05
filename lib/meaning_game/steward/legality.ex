@@ -42,24 +42,70 @@ defmodule MeaningGame.Steward.Legality do
 
   def profane?(_), do: false
 
-  @doc """
-  Validates a player or author bridge against the bookend words.
+  @doc "Extracts the bridge text from a string, map, or struct."
+  @spec bridge_text(term()) :: String.t()
+  def bridge_text(%{bridge: b}) when is_binary(b), do: b
+  def bridge_text(%{"bridge" => b}) when is_binary(b), do: b
+  def bridge_text(%{text: t}) when is_binary(t), do: t
+  def bridge_text(%{"text" => t}) when is_binary(t), do: t
+  def bridge_text({_, b}) when is_binary(b), do: b
+  def bridge_text(b) when is_binary(b), do: b
+  def bridge_text(_), do: ""
 
-  Returns `:ok` or `{:illegal, reason}`.
+  @doc "Trims, collapses internal whitespace, and downcases a bridge or phrase."
+  @spec normalize_bridge(term()) :: String.t()
+  def normalize_bridge(bridge) when is_binary(bridge) do
+    bridge
+    |> String.trim()
+    |> String.replace(~r/\s+/, " ")
+    |> String.downcase()
+  end
+
+  def normalize_bridge(nil), do: ""
+  def normalize_bridge(other), do: other |> to_string() |> normalize_bridge()
+
+  @doc """
+  Validates a player bridge against barred words and phrases (the bookends of
+  every Attempt so far and every bridge committed in earlier attempts of this Page).
+
+  Player bridges may be words or short phrases up to 40 characters containing
+  letters, digits, spaces, hyphens, and apostrophes. Dictionary, single-word,
+  and profanity checks are not applied to player bridges.
   """
-  @spec check_bridge(String.t(), [String.t()]) :: :ok | {:illegal, String.t()}
-  def check_bridge(bridge, bookends) do
-    w = bridge |> to_string() |> String.trim() |> String.downcase()
+  @spec check_bridge(term(), [term()]) :: :ok | {:illegal, String.t()}
+  def check_bridge(bridge, barred_words \\ []) do
+    clean = normalize_bridge(bridge)
+    candidate = bridge |> to_string() |> String.trim()
+
+    cond do
+      clean == "" or String.match?(clean, ~r/^[^a-z0-9]+$/) ->
+        {:illegal, "Write a word first."}
+
+      !Regex.match?(~r/^[a-z0-9 '\-]+$/, clean) ->
+        {:illegal, "Letters, digits, spaces, hyphens and apostrophes only (\"#{candidate}\")."}
+
+      String.length(clean) > 40 ->
+        {:illegal, "Too long to fit on a card."}
+
+      true ->
+        check_against_barred(clean, barred_words)
+    end
+  end
+
+  @doc """
+  Validates an Author bridge or bookend against single-word, dictionary,
+  profanity, and barred-word constraints.
+  """
+  @spec check_author_bridge(term(), [term()]) :: :ok | {:illegal, String.t()}
+  def check_author_bridge(word, bookends) do
+    w = word |> to_string() |> String.trim() |> String.downcase()
 
     cond do
       w == "" ->
         {:illegal, "Write a word first."}
 
-      !Regex.match?(~r/^[a-z]+$/, w) ->
+      !single_word?(w) ->
         {:illegal, "One word, letters only (\"#{w}\")."}
-
-      String.length(w) > 30 ->
-        {:illegal, "Too long to fit on a card."}
 
       profane?(w) ->
         {:illegal, "Not in this Room."}
@@ -68,8 +114,43 @@ defmodule MeaningGame.Steward.Legality do
         {:illegal, "\"#{w}\" is not in the dictionary."}
 
       true ->
-        check_against_bookends(w, bookends)
+        check_bridge(w, bookends)
     end
+  end
+
+  @doc "Splits a phrase into component words, stripping punctuation boundaries."
+  @spec extract_words(String.t()) :: [String.t()]
+  def extract_words(text) when is_binary(text) do
+    text
+    |> String.split(~r/[\s\-]+/, trim: true)
+    |> Enum.map(fn token -> String.replace(token, ~r/^'+|'+$/, "") end)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  def extract_words(_), do: []
+
+  defp check_against_barred(w, barred) do
+    bridge_words = extract_words(w)
+
+    Enum.find_value(barred, :ok, fn barred_item ->
+      item_str = to_string(barred_item)
+      item_norm = normalize_bridge(item_str)
+      barred_words = extract_words(item_norm)
+
+      cond do
+        w == item_norm ->
+          {:illegal, "\"#{w}\" shares a root with \"#{item_str}\"."}
+
+        true ->
+          Enum.find_value(bridge_words, fn bw ->
+            Enum.find_value(barred_words, fn barred_word ->
+              if shared_root?(bw, barred_word) do
+                {:illegal, "\"#{w}\" shares a root with \"#{barred_word}\"."}
+              end
+            end)
+          end)
+      end
+    end)
   end
 
   @doc """
@@ -77,17 +158,20 @@ defmodule MeaningGame.Steward.Legality do
   """
   @spec shared_root?(String.t(), String.t()) :: boolean()
   def shared_root?(w1, w2) do
-    a = w1 |> String.trim() |> String.downcase()
-    b = w2 |> String.trim() |> String.downcase()
+    a = w1 |> to_string() |> String.trim() |> String.downcase()
+    b = w2 |> to_string() |> String.trim() |> String.downcase()
+
+    stem_a = stem_word(a)
+    stem_b = stem_word(b)
 
     cond do
       a == b ->
         true
 
-      Stemmer.stem(a) == Stemmer.stem(b) ->
+      stem_a == stem_b ->
         true
 
-      prefix_overlap?(a, b) ->
+      prefix_overlap?(a, b, stem_a, stem_b) ->
         true
 
       inflection_match?(a, b) ->
@@ -98,12 +182,17 @@ defmodule MeaningGame.Steward.Legality do
     end
   end
 
-  defp prefix_overlap?(a, b) do
-    sa = Stemmer.stem(a)
-    sb = Stemmer.stem(b)
+  defp stem_word(w) when is_binary(w) do
+    case Stemmer.stem(w) do
+      stem when is_binary(stem) -> stem
+      [stem | _] when is_binary(stem) -> stem
+      _ -> w
+    end
+  end
 
-    (String.length(sa) >= 3 and String.starts_with?(b, sa)) or
-      (String.length(sb) >= 3 and String.starts_with?(a, sb))
+  defp prefix_overlap?(a, b, stem_a, stem_b) do
+    (String.length(stem_a) >= 3 and String.starts_with?(b, stem_a)) or
+      (String.length(stem_b) >= 3 and String.starts_with?(a, stem_b))
   end
 
   defp inflection_match?(a, b) do
@@ -114,25 +203,8 @@ defmodule MeaningGame.Steward.Legality do
     root_a == root_b or
       root_a == b or
       root_b == a or
-      Stemmer.stem(root_a) == Stemmer.stem(b) or
-      Stemmer.stem(root_b) == Stemmer.stem(a)
-  end
-
-  defp check_against_bookends(w, bookends) do
-    Enum.find_value(bookends, :ok, fn bookend ->
-      a = bookend |> to_string() |> String.trim() |> String.downcase()
-
-      cond do
-        w == a ->
-          {:illegal, "That is the bookend itself (\"#{bookend}\")."}
-
-        shared_root?(w, a) ->
-          {:illegal, "\"#{w}\" shares a root with \"#{bookend}\"."}
-
-        true ->
-          nil
-      end
-    end)
+      stem_word(root_a) == stem_word(b) or
+      stem_word(root_b) == stem_word(a)
   end
 
   @doc """

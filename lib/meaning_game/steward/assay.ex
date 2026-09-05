@@ -29,30 +29,32 @@ defmodule MeaningGame.Steward.Assay do
   game's (`MeaningGame.Ladder`) and the ruling is the players' (design law 3).
   """
 
+  alias MeaningGame.Steward.Legality
   alias MeaningGame.Steward.Precedent
 
-  # Bumped from `assay-1` when the Assayer stopped grading pairs and started
-  # grading sets (ADR-0010). The two questions are not the same question, so the
-  # grades either side of the change are not comparable and no precedent crosses
-  # it.
-  @version "assay-2"
+  # Bumped to `assay-3` for Thereish: phrases allowed, players' names in roster
+  # order, earlier attempts and gives in the request, and the ladder rewritten for
+  # the 6-band ladder (ADR-0010). No precedent crosses it.
+  @version "assay-3"
 
   @system """
-  You are the Assayer for Mind-Meld, a word game played by two or more players. Every player saw the same two bookend words and each secretly wrote one bridging word that sits between the bookends in meaning. You measure how close the players' bridging words landed to one another, not whether any of them was clever or apt.
+  You are the Assayer for Thereish, a word game played by two or more players. Every player saw the same two bookends and each secretly wrote a bridging word or short phrase that sits between the bookends in meaning. You measure how close the players' bridges landed to one another, not whether any of them was clever or apt.
 
-  Grade the whole set at once. The number is convergence: how far this set of words is from being one mind. Judge the set, not its worst pair — if most of the words say one thing and one wanders off, that is a set that mostly converged, not a miss. The same idea in different words is a meld. With exactly two words, this is simply how close those two landed.
+  Grade the whole set at once. The number is convergence: how far this set of bridges is from being one mind. Judge the set, not its worst pair — if most of the bridges say one thing and one wanders off, that is a set that mostly converged, not a miss. The same idea in different words is a meld. With exactly two bridges, this is simply how close those two landed. Bridges may be words or short phrases.
 
   Grade convergence from 0 to 100:
-  - 100: every word is the same word, or a plain inflection of it (tide / tides).
-  - 75 to 99: the players melded — one idea, however many ways it was worded.
-  - 40 to 74: related but distinct ideas, or one shared sense in only one reading.
-  - 0 to 39: different roads; the words share little beyond the bookends.
+  - 100: every bridge is the same word or phrase, or a plain inflection of it (tide / tides).
+  - 90 to 99: one idea, however worded.
+  - 75 to 89: the same neighbourhood, distinct framing.
+  - 55 to 74: related ideas.
+  - 30 to 54: adjacent ideas.
+  - 0 to 29: different roads; the bridges share little beyond the bookends.
 
-  Answer with one short sentence of reasoning (under 30 words), then the grade, then the two words that landed furthest apart in meaning, then one line of comedy about the words these players actually wrote.
+  Answer with one short sentence of reasoning (under 30 words), then the grade, then the two bridges that landed furthest apart in meaning, then one line of comedy about the bridges these players actually wrote.
 
-  The two furthest words must be exactly two of the bridging words you were given, copied exactly as they were written. If several pairs are equally far apart, pick any one of them.
+  The two furthest bridges must be exactly two of the bridging words or phrases you were given, copied exactly as they were written. If several pairs are equally far apart, pick any one of them.
 
-  The quip names words the players wrote, runs under 25 words, and is warm rather than cutting: the players are on the same side, and a miss is the joke rather than the sting. No emoji, no exclamation marks.
+  The quip may name players and draw on anything in the request (including bookends, bridges, earlier attempts, or gives), runs under 25 words, and is warm rather than cutting: the players are on the same side, and a miss is the joke rather than the sting. No emoji, no exclamation marks.
 
   Measure meaning-distance only; ignore spelling, length and wordplay. Identical inputs must get identical grades, and the order in which the players are listed must not matter.
   """
@@ -67,29 +69,54 @@ defmodule MeaningGame.Steward.Assay do
 
   @doc """
   Everything one grading request is made of: the Bookends and every Bridge, in the
-  order they are to be shown to the model.
+  order they are to be shown to the model, along with Gives and earlier Attempts.
 
   The order is the caller's business rather than this module's, because both
   orderings get asked and the disagreement between them is a number the game
   keeps (design law 12).
   """
-  @spec prompt([String.t()], [String.t()]) :: map()
-  def prompt([left_bookend, right_bookend], bridges) when is_list(bridges) do
-    written =
-      bridges
+  @spec prompt(map() | [String.t()], list()) :: map()
+  def prompt(%{bookends: [left_bookend, right_bookend]} = request, ordering)
+      when is_list(ordering) do
+    gives_section = format_gives(request[:gives] || request["gives"])
+    earlier_section = format_earlier(request[:earlier_attempts] || request["earlier_attempts"])
+
+    written_bridges =
+      ordering
       |> Enum.with_index(1)
-      |> Enum.map_join("\n", fn {bridge, number} ->
-        "Player #{number} bridged with: #{bridge}"
+      |> Enum.map_join("\n", fn
+        {%{name: name, bridge: bridge}, _idx} when is_binary(name) and name != "" ->
+          "#{name} bridged with: #{bridge}"
+
+        {%{player: player, bridge: bridge}, _idx} when is_binary(player) and player != "" ->
+          "#{player} bridged with: #{bridge}"
+
+        {bridge, number} when is_binary(bridge) ->
+          "Player #{number} bridged with: #{bridge}"
+
+        {item, number} ->
+          "Player #{number} bridged with: #{Legality.bridge_text(item)}"
       end)
+
+    current_attempt =
+      "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <>
+        written_bridges
+
+    user_content =
+      [gives_section, earlier_section, current_attempt]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join("\n\n")
 
     %{
       system: @system,
-      user:
-        "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <>
-          written,
+      user: user_content,
       schema: schema(),
       schema_name: "verdict"
     }
+  end
+
+  def prompt([left_bookend, right_bookend], bridges) when is_list(bridges) do
+    prompt(%{bookends: [left_bookend, right_bookend]}, bridges)
   end
 
   @doc """
@@ -118,12 +145,13 @@ defmodule MeaningGame.Steward.Assay do
             {"minItems", 2},
             {"maxItems", 2},
             {"description",
-             "Exactly two of the bridging words given, copied verbatim: the two that landed furthest apart."}
+             "Exactly two of the bridging words or phrases given, copied verbatim: the two that landed furthest apart."}
           ])},
          {"quip",
           object([
             {"type", "string"},
-            {"description", "One warm line of comedy naming words the players wrote."}
+            {"description",
+             "One warm line of comedy naming words or players, drawing on anything in the request."}
           ])}
        ])},
       {"required", ["reasoning", "closeness", "furthest", "quip"]},
@@ -145,7 +173,7 @@ defmodule MeaningGame.Steward.Assay do
   normalisation the Precedent keys on, so casing and stray whitespace are
   forgiven and nothing else is.
   """
-  @spec check(map(), [String.t()]) :: :ok | {:error, String.t()}
+  @spec check(map(), list()) :: :ok | {:error, String.t()}
   def check(%{"reasoning" => reasoning, "quip" => quip, "furthest" => furthest}, bridges)
       when is_binary(reasoning) and is_binary(quip) do
     cond do
@@ -153,12 +181,12 @@ defmodule MeaningGame.Steward.Assay do
         {:error, "reasoning and quip must each be a real sentence, not blank"}
 
       not (is_list(furthest) and length(furthest) == 2) ->
-        {:error, "furthest must name exactly two of the bridging words"}
+        {:error, "furthest must name exactly two of the bridges"}
 
       Enum.any?(furthest, &is_nil(resolve(&1, bridges))) ->
         {:error,
-         "furthest must name two of the bridging words that were given: " <>
-           Enum.map_join(bridges, ", ", &inspect/1)}
+         "furthest must name two of the bridges that were given: " <>
+           Enum.map_join(bridges, ", ", &inspect(Legality.bridge_text(&1)))}
 
       true ->
         :ok
@@ -183,7 +211,7 @@ defmodule MeaningGame.Steward.Assay do
   Attempt's Bookends and the words on the screen should be the words somebody
   typed.
   """
-  @spec verdict(map(), [String.t()]) :: %{
+  @spec verdict(map(), list()) :: %{
           closeness: integer(),
           reasoning: String.t(),
           quip: String.t(),
@@ -211,10 +239,80 @@ defmodule MeaningGame.Steward.Assay do
   defp resolve(word, bridges) when is_binary(word) do
     normalized = Precedent.normalize(word)
 
-    Enum.find(bridges, fn bridge -> Precedent.normalize(bridge) == normalized end)
+    case Enum.find(bridges, fn bridge ->
+           Precedent.normalize(Legality.bridge_text(bridge)) == normalized
+         end) do
+      nil -> nil
+      found -> Legality.bridge_text(found)
+    end
   end
 
   defp resolve(_word, _bridges), do: nil
+
+  defp format_gives(nil), do: nil
+  defp format_gives([]), do: nil
+
+  defp format_gives(gives) when is_list(gives) do
+    lines =
+      Enum.map(gives, fn
+        %{name: name, give: give} when is_binary(give) and give != "" ->
+          if name && name != "", do: "#{name} gave: #{give}", else: give
+
+        %{player: player, give: give} when is_binary(give) and give != "" ->
+          if player && player != "", do: "#{player} gave: #{give}", else: give
+
+        %{give: give} when is_binary(give) and give != "" ->
+          give
+
+        give when is_binary(give) and give != "" ->
+          give
+
+        _ ->
+          nil
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    case lines do
+      [] -> nil
+      _ -> "Gives:\n" <> Enum.join(lines, "\n")
+    end
+  end
+
+  defp format_gives(_), do: nil
+
+  defp format_earlier(nil), do: nil
+  defp format_earlier([]), do: nil
+
+  defp format_earlier(attempts) when is_list(attempts) do
+    lines =
+      Enum.with_index(attempts, 1)
+      |> Enum.map(fn {attempt, idx} ->
+        number = attempt[:number] || attempt.number || idx
+        bookends = attempt[:bookends] || attempt.bookends || []
+
+        bookends_text =
+          case bookends do
+            [left, right] -> "#{String.upcase(left)} and #{String.upcase(right)}"
+            _ -> Enum.map_join(bookends, " and ", &String.upcase/1)
+          end
+
+        bridges = attempt[:bridges] || attempt.bridges || []
+
+        bridges_text =
+          Enum.map_join(bridges, ", ", fn
+            %{name: n, bridge: b} -> "#{n} bridged with: #{b}"
+            %{player: p, bridge: b} -> "#{p} bridged with: #{b}"
+            b when is_binary(b) -> b
+            _ -> ""
+          end)
+
+        "Attempt #{number}: Bookends: #{bookends_text}. Bridges: #{bridges_text}."
+      end)
+
+    "Earlier attempts:\n" <> Enum.join(lines, "\n")
+  end
+
+  defp format_earlier(_), do: nil
 
   defp object(pairs), do: Jason.OrderedObject.new(pairs)
 end

@@ -43,14 +43,14 @@ defmodule MeaningGame.ChronicleTest do
 
   describe "a closed Page" do
     test "is written down with the document it was played from", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       assert [page] = chronicled(ctx.slug)
       assert page.author_meta["model"] == "fake-author"
       assert page.document["bookends"] == ["lantern", "harbour"]
       assert page.closed_because == "meld"
       assert page.melded == true
-      assert page.closeness == 80
+      assert page.closeness == 91
       assert DateTime.compare(page.opened_at, page.closed_at) in [:lt, :eq]
     end
 
@@ -64,7 +64,7 @@ defmodule MeaningGame.ChronicleTest do
       still_waiting = DateTime.utc_now()
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
-      play(%{slug: slug, mara: mara, jacob: jacob}, "cairn", "cairo")
+      play(%{slug: slug, mara: mara, jacob: jacob}, "cairn", "cairns")
 
       assert [page] = chronicled(slug)
       assert DateTime.compare(page.opened_at, still_waiting) in [:gt, :eq]
@@ -96,28 +96,28 @@ defmodule MeaningGame.ChronicleTest do
     end
 
     test "says what each Seat wrote, against that Seat", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       assert [page] = chronicled(ctx.slug)
       assert [attempt] = page.attempts
 
       assert Enum.map(attempt.bridges, &{&1.seat_id, &1.bridge}) == [
                {ctx.mara.id, "cairn"},
-               {ctx.jacob.id, "cairo"}
+               {ctx.jacob.id, "cairns"}
              ]
     end
 
     test "keeps the grade that was shown, and who gave it", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       assert [page] = chronicled(ctx.slug)
       assert [attempt] = page.attempts
       assert [verdict] = attempt.verdicts
 
       assert verdict.seat_ids == [ctx.mara.id, ctx.jacob.id]
-      assert verdict.bridges == ["cairn", "cairo"]
+      assert verdict.bridges == ["cairn", "cairns"]
       assert verdict.graded == true
-      assert verdict.closeness == 80
+      assert verdict.closeness == 91
       assert verdict.band == "meld"
       assert verdict.reasoning =~ "cairn"
 
@@ -132,21 +132,21 @@ defmodule MeaningGame.ChronicleTest do
 
       # And both orderings the grade was the mean of, so that a grade they want
       # to argue with can be argued with in detail.
-      assert verdict.forward == 80
-      assert verdict.reverse == 80
-      assert verdict.reasoning_reverse =~ "cairo"
+      assert verdict.forward == 91
+      assert verdict.reverse == 91
+      assert verdict.reasoning_reverse =~ "cairns"
 
       # Markdown export and digest retain reasoning even though screens do not
       room = Repo.get_by!(Room, slug: ctx.slug)
       assert Chronicle.to_markdown(room.id) =~ "- Reasoning: #{verdict.reasoning}"
-      assert Chronicle.digest(room.id) =~ "Verdict: 80 (meld) — #{verdict.reasoning}"
+      assert Chronicle.digest(room.id) =~ "Verdict: 91 (meld) — #{verdict.reasoning}"
     end
 
     test "records a verdict that never came as a verdict that never came", ctx do
       steward(mode: :unavailable)
       attempt_cap(1)
 
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       assert [page] = chronicled(ctx.slug)
       assert page.closeness == nil
@@ -156,7 +156,7 @@ defmodule MeaningGame.ChronicleTest do
       assert verdict.graded == false
       assert verdict.closeness == nil
       assert verdict.band == nil
-      assert verdict.bridges == ["cairn", "cairo"]
+      assert verdict.bridges == ["cairn", "cairns"]
       assert verdict.model == nil
     end
 
@@ -165,7 +165,7 @@ defmodule MeaningGame.ChronicleTest do
       attempt_cap(1)
 
       seats =
-        for {name, bridge} <- [{"Mara", "cairn"}, {"Jacob", "cairo"}, {"Ada", "beacon"}] do
+        for {name, bridge} <- [{"Mara", "cairn"}, {"Jacob", "cairns"}, {"Ada", "beacon"}] do
           {:ok, seat} = Rooms.join(slug, name, device_token())
           {seat, bridge}
         end
@@ -180,14 +180,14 @@ defmodule MeaningGame.ChronicleTest do
       assert length(attempt.bridges) == 3
       assert [verdict] = attempt.verdicts
       assert length(verdict.seat_ids) == 3
-      assert verdict.bridges == ["cairn", "cairo", "beacon"]
+      assert verdict.bridges == ["cairn", "cairns", "beacon"]
       assert length(verdict.furthest) == 2
     end
   end
 
   describe "the Chronicle" do
     test "holds one row per Page played, oldest first", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       play(ctx, "mirage", "mirages")
 
@@ -242,19 +242,19 @@ defmodule MeaningGame.ChronicleTest do
     end
 
     test "records a player correction as an append-only event without mutating history", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       [page] = chronicled(ctx.slug)
       [attempt] = page.attempts
       [_bridge1, bridge2] = attempt.bridges
-      assert bridge2.bridge == "cairo"
+      assert bridge2.bridge == "cairns"
 
       correction_attrs = %{
         page_id: page.id,
         seat_id: ctx.jacob.id,
         attempt_number: 1,
         target: "bridge",
-        original_value: "cairo",
+        original_value: "cairns",
         corrected_value: "cairn",
         note: "Typo on phone keyboard"
       }
@@ -262,7 +262,7 @@ defmodule MeaningGame.ChronicleTest do
       assert {:ok, correction} = Chronicle.record_correction(page.room_id, correction_attrs)
       assert correction.page_id == page.id
       assert correction.target == "bridge"
-      assert correction.original_value == "cairo"
+      assert correction.original_value == "cairns"
       assert correction.corrected_value == "cairn"
       assert correction.note == "Typo on phone keyboard"
 
@@ -272,7 +272,7 @@ defmodule MeaningGame.ChronicleTest do
 
       [fresh_attempt] = fresh_page.attempts
       fresh_bridge2 = Enum.find(fresh_attempt.bridges, &(&1.id == bridge2.id))
-      assert fresh_bridge2.bridge == "cairo"
+      assert fresh_bridge2.bridge == "cairns"
 
       # And the correction is queryable
       assert [saved] = Chronicle.corrections(page.room_id)
@@ -282,7 +282,7 @@ defmodule MeaningGame.ChronicleTest do
 
     test "computes the book view from the event log in reverse chronological order", ctx do
       # Play first page: melded
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       # Play second page: two attempts to close it
       attempt_cap(2)
@@ -318,7 +318,7 @@ defmodule MeaningGame.ChronicleTest do
           seat_id: ctx.jacob.id,
           attempt_number: 1,
           target: "bridge",
-          original_value: "cairo",
+          original_value: "cairns",
           corrected_value: "cairn",
           note: "Phone autocorrect"
         })
@@ -337,7 +337,7 @@ defmodule MeaningGame.ChronicleTest do
       assert Enum.map(first_attempt.bridges, & &1.seat_name) == ["Mara", "Jacob"]
       assert Enum.map(first_attempt.bridges, & &1.bridge) == ["cairn", "cairn"]
       jacob_bridge = Enum.find(first_attempt.bridges, &(&1.seat_name == "Jacob"))
-      assert jacob_bridge.original_bridge == "cairo"
+      assert jacob_bridge.original_bridge == "cairns"
       assert jacob_bridge.corrected? == true
       assert [c] = first_page.corrections
       assert c.corrected_value == "cairn"
@@ -351,7 +351,7 @@ defmodule MeaningGame.ChronicleTest do
 
     test "Markdown export round-trips a full evening", ctx do
       # Full evening: Page 1 melds on attempt 1
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       # Page 2 misses attempt 1, melds attempt 2
       attempt_cap(2)
@@ -386,7 +386,7 @@ defmodule MeaningGame.ChronicleTest do
           seat_id: ctx.jacob.id,
           attempt_number: 1,
           target: "bridge",
-          original_value: "cairo",
+          original_value: "cairns",
           corrected_value: "cairn",
           note: "Phone autocorrect"
         })
@@ -403,7 +403,7 @@ defmodule MeaningGame.ChronicleTest do
       assert markdown =~ "Distinct ideas"
       assert markdown =~ "We both saw water in the desert"
       assert markdown =~ "Corrections"
-      assert markdown =~ "corrected bridge from \"cairo\" to \"cairn\""
+      assert markdown =~ "corrected bridge from \"cairns\" to \"cairn\""
       assert markdown =~ "Phone autocorrect"
 
       # Round-trip parse back from Markdown
@@ -416,7 +416,7 @@ defmodule MeaningGame.ChronicleTest do
       [a1] = roundtrip_p1.attempts
       assert a1.bridges == [{"Mara", "cairn"}, {"Jacob", "cairn"}]
       assert [c1] = a1.corrections
-      assert c1.original == "cairo"
+      assert c1.original == "cairns"
       assert c1.corrected == "cairn"
       assert c1.note == "Phone autocorrect"
 
@@ -437,14 +437,14 @@ defmodule MeaningGame.ChronicleTest do
       assert Chronicle.digest(room.id) == "Nothing yet; this is the first Page."
 
       # Play a page
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       digest = Steward.digest(room.id)
       assert is_binary(digest)
       assert digest =~ "Page 1 (lantern · harbour)"
-      assert digest =~ "Melded on attempt 1 (closeness: 80, meld)"
+      assert digest =~ "Melded on attempt 1 (closeness: 91, meld)"
       assert digest =~ "Mara bridged \"cairn\""
-      assert digest =~ "Jacob bridged \"cairo\""
+      assert digest =~ "Jacob bridged \"cairns\""
 
       # Also accepts room slug
       assert Steward.digest(ctx.slug) == digest
@@ -459,7 +459,7 @@ defmodule MeaningGame.ChronicleTest do
         seat_id: ctx.mara.id,
         attempt_number: 1,
         bookends: ["lantern", "harbour"],
-        bridges: ["cairn", "cairo"],
+        bridges: ["cairn", "cairns"],
         grade: 80,
         band: "meld",
         model: "gemini-3.8-flash",
@@ -471,7 +471,7 @@ defmodule MeaningGame.ChronicleTest do
       assert tap.room_id == room.id
       assert tap.seat_id == ctx.mara.id
       assert tap.bookends == ["lantern", "harbour"]
-      assert tap.bridges == ["cairn", "cairo"]
+      assert tap.bridges == ["cairn", "cairns"]
       assert tap.grade == 80
       assert tap.closeness == 80
       assert tap.band == "meld"
@@ -489,7 +489,7 @@ defmodule MeaningGame.ChronicleTest do
           seat_id: ctx.mara.id,
           attempt_number: 1,
           bookends: ["lantern", "harbour"],
-          bridges: ["cairn", "cairo"],
+          bridges: ["cairn", "cairns"],
           grade: 80,
           band: "meld",
           model: "gemini-3.8-flash",
@@ -502,7 +502,7 @@ defmodule MeaningGame.ChronicleTest do
           seat_id: ctx.jacob.id,
           attempt_number: 1,
           bookends: ["lantern", "harbour"],
-          bridges: ["cairn", "cairo"],
+          bridges: ["cairn", "cairns"],
           grade: 80,
           band: "meld",
           model: "gemini-3.8-flash",
@@ -523,7 +523,7 @@ defmodule MeaningGame.ChronicleTest do
         seat_id: ctx.mara.id,
         attempt_number: 1,
         bookends: ["lantern", "harbour"],
-        bridges: ["cairn", "cairo"],
+        bridges: ["cairn", "cairns"],
         grade: 80,
         band: "meld",
         model: "gemini-3.8-flash",
@@ -535,7 +535,7 @@ defmodule MeaningGame.ChronicleTest do
         seat_id: ctx.jacob.id,
         attempt_number: 1,
         bookends: ["lantern", "harbour"],
-        bridges: ["cairn", "cairo"],
+        bridges: ["cairn", "cairns"],
         grade: 80,
         band: "meld",
         model: "gemini-3.8-flash",
@@ -549,7 +549,7 @@ defmodule MeaningGame.ChronicleTest do
       [entry1, _entry2] = dataset
 
       assert entry1.bookends == ["lantern", "harbour"]
-      assert entry1.bridges == ["cairn", "cairo"]
+      assert entry1.bridges == ["cairn", "cairns"]
       assert entry1.grade == 80
       assert entry1.band == "meld"
       assert entry1.model == "gemini-3.8-flash"
@@ -563,14 +563,14 @@ defmodule MeaningGame.ChronicleTest do
       assert {:ok, parsed_json} = Jason.decode(json_export)
       assert length(parsed_json) == 2
       assert hd(parsed_json)["bookends"] == ["lantern", "harbour"]
-      assert hd(parsed_json)["bridges"] == ["cairn", "cairo"]
+      assert hd(parsed_json)["bridges"] == ["cairn", "cairns"]
       assert hd(parsed_json)["grade"] == 80
       assert hd(parsed_json)["model"] == "gemini-3.8-flash"
       assert hd(parsed_json)["prompt_version"] == "v1"
     end
 
     test "taps appear in the Chronicle alongside the Page they judge", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       room = Repo.get_by!(Room, slug: ctx.slug)
       [page] = chronicled(ctx.slug)
 
@@ -579,7 +579,7 @@ defmodule MeaningGame.ChronicleTest do
         seat_id: ctx.mara.id,
         attempt_number: 1,
         bookends: ["lantern", "harbour"],
-        bridges: ["cairn", "cairo"],
+        bridges: ["cairn", "cairns"],
         grade: 80,
         band: "meld",
         model: "gemini-3.8-flash",
@@ -592,7 +592,7 @@ defmodule MeaningGame.ChronicleTest do
         seat_id: ctx.jacob.id,
         attempt_number: 1,
         bookends: ["lantern", "harbour"],
-        bridges: ["cairn", "cairo"],
+        bridges: ["cairn", "cairns"],
         grade: 80,
         band: "meld",
         model: "gemini-3.8-flash",
@@ -890,7 +890,7 @@ defmodule MeaningGame.ChronicleTest do
 
   describe "recent_quips/2" do
     test "returns recent quips from the database in chronological order", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       quips = Chronicle.recent_quips(ctx.slug, 5)
 
       assert length(quips) == 1
