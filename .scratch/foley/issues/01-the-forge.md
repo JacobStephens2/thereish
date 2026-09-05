@@ -6,10 +6,13 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Steward behaviour gains `forge` (N candidate effects for a brief) and `rank` (an ordering of clips against a brief); the Fake answers fixture MP3s and a fixed ordering
-- [ ] The `foley` role exists in configuration with `effects` (ElevenLabs sound generation, `eleven_text_to_sound_v2`, MP3 44.1 kHz, `loop` for the house loop if made there), `music` (Mureka instrumental, `n: 1`, model `auto`, a three-minute deadline) and `ear` (Gemini 3.8 Flash, audio in, JSON out) jobs; keys from `MUREKA_API_KEY` and `ELEVENLABS_API_KEY` through runtime configuration; the price table gains both
-- [ ] An ElevenLabs provider builds a sound-generation request and parses a recorded answer, a recorded error and the character-cost header
-- [ ] A Mureka provider starts a job, polls until succeeded, failed or the deadline, and downloads the chosen URL — driven in tests from recorded `preparing → running → succeeded` and `→ failed` sequences and an expired deadline
-- [ ] The Gemini provider sends N clips as inline audio parts with a brief and parses a ranking, rejecting an ordering that names an index it was not given
-- [ ] `mix foley.forge` renders four candidates per brief, ranks them, prints ranking, reasons and paths; given a manifest it copies winners to fixed names in the static audio directory; tested with the Fake
-- [ ] Run under `va bash`; Jacob has chosen every asset; the ten files are committed; the spend printed is recorded here
+- [x] The Steward behaviour gains `forge` (N candidate effects for a brief) and `rank` (an ordering of clips against a brief); the Fake answers fixture MP3s and a fixed ordering
+- [x] The `foley` role exists in configuration with `effects` (ElevenLabs sound generation, `eleven_text_to_sound_v2`, MP3 44.1 kHz, `loop` for the house loop if made there), `music` (Mureka instrumental, `n: 1`, model `auto`, a three-minute deadline) and `ear` (Gemini 3.8 Flash, audio in, JSON out) jobs; keys from `MUREKA_API_KEY` and `ELEVENLABS_API_KEY` through runtime configuration; the price table gains both
+- [x] An ElevenLabs provider builds a sound-generation request and parses a recorded answer, a recorded error and the character-cost header
+- [x] A Mureka provider starts a job, polls until succeeded, failed or the deadline, and downloads the chosen URL — driven in tests from recorded `preparing → running → succeeded` and `→ failed` sequences and an expired deadline
+- [x] The Gemini provider sends N clips as inline audio parts with a brief and parses a ranking, rejecting an ordering that names an index it was not given
+- [x] `mix foley.forge` renders four candidates per brief, ranks them, prints ranking, reasons and paths; given a manifest it copies winners to fixed names in the static audio directory; tested with the Fake
+- [x] Run under `va bash`; Jacob has chosen every asset; the ten files are committed; the spend printed is recorded here
+  - Effects (ElevenLabs + Gemini ear): $0.1974
+  - House loop (Mureka + Gemini ear): $0.2384
+  - Total spend: $0.4358
