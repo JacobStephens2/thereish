@@ -542,14 +542,14 @@ defmodule MeaningGame.GameTest do
       end
     end
 
-    test "carries the closeness, the band and the Assayer's reasoning" do
+    test "carries the closeness and the band, but no reasoning" do
       view = Game.view(revealed([{"Melissa", "cairn"}, {"Jacob", "beacon"}], 78), nil)
 
       assert view.reveal.closeness == 78
       assert view.reveal.band == :meld
       assert view.reveal.melded? == true
       assert view.reveal.graded? == true
-      assert view.reveal.reasoning == "because"
+      refute Map.has_key?(view.reveal, :reasoning)
     end
 
     test "the meld threshold is where a Meld starts and one under it is not one" do
@@ -611,10 +611,10 @@ defmodule MeaningGame.GameTest do
              ]
     end
 
-    test "one quip and one sentence of reasoning, however many wrote", %{state: state} do
+    test "one quip and no reasoning on the reveal, however many wrote", %{state: state} do
       reveal = Game.view(state, nil).reveal
 
-      assert reveal.reasoning == "because"
+      refute Map.has_key?(reveal, :reasoning)
       assert is_binary(reveal.quip) or is_nil(reveal.quip)
     end
 

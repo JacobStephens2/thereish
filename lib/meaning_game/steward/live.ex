@@ -49,6 +49,7 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward
   alias MeaningGame.Steward.Assay
   alias MeaningGame.Steward.Gate
+  alias MeaningGame.Steward.Naming
   alias MeaningGame.Steward.Precedent
   alias MeaningGame.Steward.Recap
   alias MeaningGame.Steward.Vale
@@ -136,6 +137,20 @@ defmodule MeaningGame.Steward.Live do
            latency_ms: answer.latency_ms,
            attempts: answer.attempts
          })}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl true
+  def name_room(digests, taken_codes) do
+    role = Steward.role(:scribe, :naming)
+    prompt = Naming.prompt(digests, taken_codes)
+
+    case Gate.answer(role, prompt, &Naming.check(&1, taken_codes)) do
+      {:ok, answer} ->
+        {:ok, Naming.word(answer.json)}
 
       {:error, reason} ->
         {:error, reason}

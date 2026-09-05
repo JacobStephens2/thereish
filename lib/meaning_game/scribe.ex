@@ -44,16 +44,22 @@ defmodule MeaningGame.Scribe do
   Runs where it is called, which in the game is inside `write_about/2`'s task
   and in a test is wherever the test wants it.
   """
-  @spec recap(MeaningGame.Rooms.Room.t(), MeaningGame.Chronicle.Page.t()) :: :ok
+  @spec recap(MeaningGame.Rooms.Room.t(), MeaningGame.Chronicle.Page.t()) ::
+          :ok | {:error, term()}
   def recap(room, page) do
     # Both of these are read back out of the log rather than passed down from
     # the Room, so that the Page the Scribe writes about and the Chronicle it
-    # reaches into cannot disagree. The digest holds every Page but this one,
+    # reaches into cannot disagree. The digest holds every Page before this one,
     # because this one is in the question already and what a callback reaches
     # back for is everything before tonight.
     views = Chronicle.page_views(room.id, :asc)
     view = Enum.find(views, &(&1.id == page.id))
-    digest = Chronicle.scribe_digest(views, page.id)
+
+    # In live play, this Page is already the last in the log. During a replay or
+    # catch-up sync, later Pages already exist in the log; taking only the views
+    # before this Page ensures later play never leaks into this Page's callback.
+    prior_views = Enum.take_while(views, &(&1.id != page.id))
+    digest = Chronicle.scribe_digest(prior_views, nil)
 
     case Steward.recap(view, digest) do
       {:ok, recap} ->
@@ -64,17 +70,53 @@ defmodule MeaningGame.Scribe do
         # nothing to redraw, and a phone reading the book has a new paragraph.
         MeaningGame.Rooms.broadcast(room.slug, :chronicle_changed)
 
+        :ok
+
       {:error, reason} ->
         # A Page with no recap is a Page with no recap. The book says so, and
         # the couple can write their own (design law 5).
-        Logger.warning("the Scribe wrote no recap for #{room.slug}: #{inspect(reason)}")
+        Logger.error(
+          "the Scribe wrote no recap for #{room.slug} page #{page.id}: #{inspect(reason)}"
+        )
+
+        {:error, reason}
+    end
+  rescue
+    error ->
+      Logger.error(
+        "the Scribe fell over for #{room.slug} page #{page.id}: #{Exception.message(error)}"
+      )
+
+      {:error, error}
+  end
+
+  @doc """
+  Finds all closed Pages without recaps, in chronological order, and writes
+  recaps for them.
+
+  If a Room Code is provided, only Pages in that Room are processed.
+  """
+  @spec sync(String.t() | nil) :: :ok
+  def sync(code \\ nil) do
+    rooms = rooms_for_sync(code)
+
+    for room <- rooms do
+      pages = Chronicle.unrecapped_pages(room.id)
+
+      for page <- pages do
+        recap(room, page)
+      end
     end
 
     :ok
-  rescue
-    error ->
-      Logger.error("the Scribe fell over: #{Exception.message(error)}")
+  end
 
-      :ok
+  defp rooms_for_sync(nil), do: MeaningGame.Rooms.list_rooms()
+
+  defp rooms_for_sync(code) when is_binary(code) do
+    case MeaningGame.Rooms.get_room(code) do
+      nil -> []
+      room -> [room]
+    end
   end
 end

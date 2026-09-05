@@ -136,6 +136,22 @@ defmodule MeaningGame.Chronicle do
   end
 
   @doc """
+  Closed Pages in one Room that have no recap yet, oldest first.
+  """
+  @spec unrecapped_pages(Ecto.UUID.t() | String.t()) :: [Page.t()]
+  def unrecapped_pages(room_id_or_code) do
+    room_id = resolve_room_id(room_id_or_code)
+
+    from(p in Page,
+      left_join: r in Recap,
+      on: r.page_id == p.id,
+      where: p.room_id == ^room_id and is_nil(r.id),
+      order_by: [asc: p.closed_at, asc: p.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Records one player fairness tap into the Chronicle as an append-only event.
   """
   @spec record_fairness_tap(Ecto.UUID.t(), map()) ::

@@ -149,17 +149,10 @@ defmodule MeaningGameWeb.RoomComponents do
 
   @doc """
   The reveal: the Bridges side by side, then the number climbing into its band,
-  then the punchline quip, then the Assayer's reasoning.
-
-  In that order deliberately — the comparison lands first before the number does.
-  The number arrives with weight, the band name arrives with it, and a Meld lands
-  as a triumphant arrival distinct from a near miss or a deadpan miss.
+  then the punchline quip.
   """
   def reveal(assigns) do
-    presentation =
-      assigns.room.reveal &&
-        closeness_presentation(assigns.room.reveal, length(assigns.room.reveal.bridges))
-
+    presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
     assigns = assign(assigns, :presentation, presentation)
 
     ~H"""
@@ -235,16 +228,6 @@ defmodule MeaningGameWeb.RoomComponents do
           >
             {band(@room.reveal.band)}
           </span>
-
-          <span
-            :if={@presentation.flavour}
-            class={[
-              "text-sm sm:text-base font-medium",
-              if(@room.reveal.melded?, do: "font-semibold text-primary", else: "opacity-70")
-            ]}
-          >
-            {@presentation.flavour}
-          </span>
         </div>
       </div>
 
@@ -264,50 +247,19 @@ defmodule MeaningGameWeb.RoomComponents do
         </p>
       </div>
 
-      <div class="flex w-full max-w-lg flex-col items-center gap-3 text-center">
-        <p
-          :if={@room.reveal.quip}
-          data-role="quip"
-          class={[
-            "font-serif italic font-medium leading-snug max-w-prose text-center",
-            if(@mode == :stage,
-              do: "text-3xl sm:text-4xl text-base-content",
-              else: "text-xl sm:text-2xl text-base-content/90"
-            )
-          ]}
-        >
-          {@room.reveal.quip}
-        </p>
-
-        <div
-          :if={@room.reveal.reasoning}
-          class="flex flex-col items-center gap-1 rounded-xl bg-base-200/40 px-5 py-3 w-full border border-base-300/60"
-        >
-          <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-            The Assayer's reasoning
-          </span>
-          <p
-            data-role="reasoning"
-            class={[
-              "leading-relaxed",
-              if(@mode == :stage,
-                do: "text-xl sm:text-2xl opacity-90",
-                else: "text-sm sm:text-base opacity-85"
-              )
-            ]}
-          >
-            {@room.reveal.reasoning}
-          </p>
-        </div>
-
-        <p
-          :if={two_words?(@room.reveal[:furthest])}
-          data-role="furthest"
-          class="text-sm opacity-70"
-        >
-          Furthest apart: {furthest_line(@room.reveal.furthest)}.
-        </p>
-      </div>
+      <p
+        :if={@room.reveal.quip}
+        data-role="quip"
+        class={[
+          "font-serif italic font-medium leading-snug max-w-prose text-center",
+          if(@mode == :stage,
+            do: "text-3xl sm:text-4xl text-base-content",
+            else: "text-xl sm:text-2xl text-base-content/90"
+          )
+        ]}
+      >
+        {@room.reveal.quip}
+      </p>
 
       <div
         :if={@mode == :phone && @seat && @room.reveal.closeness}
@@ -578,86 +530,57 @@ defmodule MeaningGameWeb.RoomComponents do
   defp waiting(%{open_seats: 1}), do: "Waiting for 1 more"
   defp waiting(%{open_seats: open}), do: "Waiting for #{open} more"
 
-  # A table that all wrote one word has no two ends to name, and "furthest
-  # apart: cairn and cairn" is not a thing to say to people who just melded.
-  defp two_words?([%{bridge: left}, %{bridge: right}]), do: left != right
-  defp two_words?(_furthest), do: false
-
-  # The two words the Assayer sent them to next, each with whoever wrote it.
-  defp furthest_line(furthest) do
-    furthest
-    |> Enum.map(fn %{bridge: bridge, name: name} ->
-      if name, do: "#{bridge} (#{name})", else: bridge
-    end)
-    |> Enum.join(" and ")
-  end
-
   defp reveal_arrival(%{melded?: true}), do: "meld"
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
   defp reveal_arrival(_), do: "no_verdict"
 
-  defp closeness_presentation(%{melded?: true}, heads) do
-    %{
-      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
-      number_class: "text-primary",
-      badge_class: "bg-primary text-primary-content font-bold",
-      flavour: "One mind, #{in_words(heads)} heads."
-    }
-  end
-
-  defp closeness_presentation(%{band: :deep_meld}, heads) do
+  defp closeness_presentation(%{band: :deep_meld}) do
     %{
       container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
       number_class: "text-primary",
-      badge_class: "bg-primary text-primary-content font-bold",
-      flavour: "#{String.capitalize(in_words(heads))} minds, one thought."
+      badge_class: "bg-primary text-primary-content font-bold"
     }
   end
 
-  defp closeness_presentation(%{band: :close}, _heads) do
+  defp closeness_presentation(%{melded?: true}) do
+    %{
+      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
+      number_class: "text-primary",
+      badge_class: "bg-primary text-primary-content font-bold"
+    }
+  end
+
+  defp closeness_presentation(%{band: :close}) do
     %{
       container_class: "border border-info/30 bg-base-200/40",
       number_class: "text-base-content",
-      badge_class: "bg-info/20 text-info font-bold",
-      flavour: "Passable."
+      badge_class: "bg-info/20 text-info font-bold"
     }
   end
 
-  defp closeness_presentation(%{band: :adjacent}, _heads) do
+  defp closeness_presentation(%{band: :adjacent}) do
     %{
       container_class: "border border-base-300 bg-base-200/30",
       number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/80 font-bold",
-      flavour: "Neighbouring ideas, distinct paths."
+      badge_class: "bg-base-300 text-base-content/80 font-bold"
     }
   end
 
-  defp closeness_presentation(%{band: :miss}, _heads) do
+  defp closeness_presentation(%{band: :miss}) do
     %{
       container_class: "border border-base-300 bg-base-200/30",
       number_class: "text-base-content/85",
-      badge_class: "bg-base-300 text-base-content/80 font-bold",
-      flavour: "Different roads entirely."
+      badge_class: "bg-base-300 text-base-content/80 font-bold"
     }
   end
 
-  defp closeness_presentation(_reveal, _heads) do
+  defp closeness_presentation(_reveal) do
     %{
       container_class: "border border-base-300 bg-base-200/30",
       number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/70 font-bold",
-      flavour: nil
+      badge_class: "bg-base-300 text-base-content/70 font-bold"
     }
   end
-
-  # How many of them there are, in the words the reveal says out loud. The Room
-  # holds six at most, so this table is the whole of it.
-  defp in_words(2), do: "two"
-  defp in_words(3), do: "three"
-  defp in_words(4), do: "four"
-  defp in_words(5), do: "five"
-  defp in_words(6), do: "six"
-  defp in_words(count), do: to_string(count)
 
   defp your_fairness_tap(room, seat) do
     room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])
