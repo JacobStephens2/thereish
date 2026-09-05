@@ -147,6 +147,42 @@ defmodule MeaningGame.Steward.Fake do
     end
   end
 
+  @mp3_fixture <<255, 251, 144, 100>> <> :binary.copy(<<0>>, 413)
+
+  @doc "Fixture MP3 bytes used by the Fake voice and test fixtures."
+  def mp3_fixture, do: @mp3_fixture
+
+  @impl true
+  def speak(line, opts \\ []) do
+    delay = voice_delay_ms()
+    if delay > 0, do: Process.sleep(delay)
+
+    case voice_mode() do
+      :ok ->
+        {:ok,
+         %{
+           audio: mp3_fixture(),
+           format: :mp3,
+           meta: %{
+             provider: "fake",
+             voice_id: Keyword.get(opts, :voice_id, "fake-voice"),
+             cost_usd: 0.0,
+             latency_ms: delay,
+             characters: String.length(line)
+           }
+         }}
+
+      :unavailable ->
+        {:error, :voice_unavailable}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :raise ->
+        raise "this Voice is having a moment"
+    end
+  end
+
   # The Scribe with no model behind it writes the one true sentence about a
   # Page: who wrote what, first and last. It is a dial like the grade is — a
   # test that wants a recap naming a word writes that word as a Bridge — and it
@@ -202,6 +238,8 @@ defmodule MeaningGame.Steward.Fake do
 
   defp author_delay_ms, do: config_get(:author_delay_ms, 0)
   defp author_mode, do: config_get(:author_mode, :ok)
+  defp voice_delay_ms, do: config_get(:voice_delay_ms, 0)
+  defp voice_mode, do: config_get(:voice_mode, :ok)
 
   defp config_get(key, default) do
     :meaning_game
