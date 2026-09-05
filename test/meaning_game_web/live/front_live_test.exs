@@ -162,7 +162,7 @@ defmodule MeaningGameWeb.FrontLiveTest do
 
       for view <- phones do
         assert has_element?(view, "[data-role=open-seats]", "All 4 seats taken")
-        refute has_element?(view, "[data-role=room-code]")
+        assert has_element?(view, "[data-role=room-code]")
       end
 
       {:ok, fifth, _} = live(phone_at(slug))

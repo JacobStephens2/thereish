@@ -19,12 +19,14 @@ defmodule MeaningGame.Rooms do
   # How many times a Code is drawn before creation gives up.
   @code_draws 20
 
+  alias MeaningGame.Chronicle
   alias MeaningGame.Rooms.Code
   alias MeaningGame.Rooms.NoSuchRoomError
   alias MeaningGame.Rooms.Room
   alias MeaningGame.Rooms.Seat
   alias MeaningGame.Rooms.Server
   alias MeaningGame.Rooms.Store
+  alias MeaningGame.Steward
 
   @doc """
   The Room the exports and the mix tasks mean when nobody names one.
@@ -33,6 +35,18 @@ defmodule MeaningGame.Rooms do
   this is only the answer to "which Room did you mean" on the command line.
   """
   def default_slug, do: Application.fetch_env!(:meaning_game, :default_room_slug)
+
+  @doc "The Room with this Code, or nil."
+  @spec get_room(String.t()) :: Room.t() | nil
+  def get_room(code) do
+    with normalised when is_binary(normalised) <- Code.normalise(code) do
+      Store.get_room(normalised)
+    end
+  end
+
+  @doc "Every Room in the database."
+  @spec list_rooms() :: [Room.t()]
+  def list_rooms, do: Store.list_rooms()
 
   @doc """
   How many Seats the New Room form offers by default.
@@ -58,21 +72,55 @@ defmodule MeaningGame.Rooms do
   why a mistyped Code is a 404 rather than an empty Room nobody meant.
 
   `device_token` is the creating phone's, which is what the Scribe will read to
-  name the Room after the Rooms that phone has played in. Until then the Code is
-  drawn at random.
+  name the Room after the Rooms that phone has played in. A phone with no
+  history draws a random word.
   """
-  @spec create(pos_integer(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
   def create(player_count, device_token)
 
-  def create(player_count, _device_token) when is_integer(player_count) do
+  def create(player_count, device_token) when is_integer(player_count) do
     if player_count in seat_counts() do
-      insert_with_a_free_code(player_count, @code_draws)
+      case digests_for_device(device_token) do
+        [] ->
+          # No history: makes no model call and draws a random word
+          insert_with_a_free_code(player_count, @code_draws)
+
+        digests ->
+          name_with_scribe_or_fallback(player_count, digests)
+      end
     else
       {:error, :bad_player_count}
     end
   end
 
   def create(_player_count, _device_token), do: {:error, :bad_player_count}
+
+  defp digests_for_device(nil), do: []
+
+  defp digests_for_device(device_token) do
+    device_token
+    |> Store.rooms_for_device()
+    |> Enum.map(fn %{room: room} -> Chronicle.digest(room.id) end)
+    |> Enum.reject(&String.starts_with?(&1, "Nothing yet"))
+  end
+
+  defp name_with_scribe_or_fallback(player_count, digests) do
+    taken = Store.taken_codes()
+
+    case Steward.name_room(digests, taken) do
+      {:ok, code} when is_binary(code) ->
+        case Store.insert_room(code, player_count) do
+          {:ok, room} ->
+            with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
+
+          {:error, _changeset} ->
+            insert_with_a_free_code(player_count, @code_draws)
+        end
+
+      _ ->
+        insert_with_a_free_code(player_count, @code_draws)
+    end
+  end
 
   # A drawn word that somebody else already took is drawn again, and nothing
   # else is. There are thousands of four-letter words and a household will never
@@ -239,11 +287,23 @@ defmodule MeaningGame.Rooms do
   def next_page(slug, seat_id), do: call(slug, {:next_page, seat_id})
 
   @doc """
-  Names a setting on the spot (a Give) and begins authoring Pages for it in the background.
+  Commits a setting (Give) for the upcoming Page.
   """
   @spec give(String.t(), String.t(), String.t()) ::
           :ok | {:error, :give_required | :no_such_seat | term()}
   def give(slug, seat_id, give), do: call(slug, {:give, seat_id, give})
+
+  @doc """
+  Retries writing the Page through the Author after a failure.
+  """
+  @spec retry_author(String.t(), String.t()) :: :ok | {:error, term()}
+  def retry_author(slug, seat_id), do: call(slug, {:retry_author, seat_id})
+
+  @doc """
+  Resets Gives so players can enter new settings after an Author failure.
+  """
+  @spec reset_gives(String.t(), String.t()) :: :ok | {:error, term()}
+  def reset_gives(slug, seat_id), do: call(slug, {:reset_gives, seat_id})
 
   @doc """
   Deliberately unblinds an experiment in the Room (ticket 13).

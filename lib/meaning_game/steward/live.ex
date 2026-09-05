@@ -49,38 +49,73 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward
   alias MeaningGame.Steward.Assay
   alias MeaningGame.Steward.Gate
+  alias MeaningGame.Steward.Naming
   alias MeaningGame.Steward.Precedent
   alias MeaningGame.Steward.Recap
   alias MeaningGame.Steward.Vale
 
   @impl true
-  def assay(%{anchors: anchors, bridges: bridges}) when length(bridges) >= 2 do
+  def assay(%{bookends: bookends, bridges: bridges} = request) when length(bridges) >= 2 do
     role = Steward.role(:assayer)
     model = role.model
     prompt_version = Map.get(role, :prompt_version, Assay.version())
 
-    case Precedent.get(model, prompt_version, anchors, bridges) do
+    case Precedent.get(model, prompt_version, request) do
       {:ok, verdict} ->
         {:ok, verdict}
 
       :miss ->
-        with {:ok, verdict} <- grade_live(role, anchors, bridges, prompt_version) do
-          Precedent.put(model, prompt_version, anchors, bridges, verdict)
+        with {:ok, verdict} <- grade_live(role, bookends, bridges, prompt_version) do
+          Precedent.put(model, prompt_version, request, verdict)
           {:ok, verdict}
         end
     end
   end
 
   @impl true
-  def author(chapter, opts \\ []) do
-    role = Steward.role(:author)
-    give = Keyword.get(opts, :give)
-    digest = Keyword.get(opts, :digest)
-    prompt = MeaningGame.Steward.Author.prompt(chapter, give, digest)
+  def author(request, opts \\ []) do
+    job = Keyword.get(opts, :job, :flash)
 
-    case Gate.answer(role, prompt, &MeaningGame.Steward.Author.check/1) do
+    role =
+      try do
+        Steward.role(:author, job)
+      rescue
+        _ -> Steward.role(:author)
+      end
+
+    gives =
+      cond do
+        is_map(request) and is_list(request[:gives]) -> request[:gives]
+        is_map(request) and is_list(request["gives"]) -> request["gives"]
+        is_list(request) -> request
+        true -> []
+      end
+
+    digest =
+      Keyword.get(opts, :digest) ||
+        (is_map(request) && (request[:digest] || request["digest"]))
+
+    prompt = MeaningGame.Steward.Author.prompt(gives, digest)
+
+    case Gate.answer(role, prompt, &MeaningGame.Steward.Author.check(&1, gives)) do
       {:ok, answer} ->
-        {:ok, MeaningGame.Steward.Author.page(answer.json, chapter, give, answer)}
+        bookends = answer.json["bookends"]
+        why = answer.json["why"]
+
+        {:ok,
+         %{
+           bookends: bookends,
+           why: why,
+           meta: %{
+             model: answer.model,
+             arm: :flash,
+             prompt_version: Map.get(role, :prompt_version, MeaningGame.Steward.Author.version()),
+             cost_usd: answer.cost_usd,
+             latency_ms: answer.latency_ms,
+             attempts: answer.attempts,
+             why: why
+           }
+         }}
 
       {:error, reason} ->
         {:error, reason}
@@ -195,6 +230,43 @@ defmodule MeaningGame.Steward.Live do
     MeaningGame.Steward.Gemini.rank(candidates, brief, role)
   end
 
+  @impl true
+  def speak(line, opts \\ []) do
+    role =
+      try do
+        Steward.role(:foley, :voice)
+      rescue
+        _ -> %{}
+      end
+
+    provider =
+      Keyword.get(opts, :provider) ||
+        role[:provider] ||
+        MeaningGame.Steward.Hume
+
+    merged_opts =
+      role
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Keyword.merge(opts)
+      |> Keyword.put(:provider, provider)
+
+    provider.speak(line, merged_opts)
+  end
+
+  @impl true
+  def name_room(digests, taken_codes) do
+    role = Steward.role(:scribe, :naming)
+    prompt = Naming.prompt(digests, taken_codes)
+
+    case Gate.answer(role, prompt, &Naming.check(&1, taken_codes)) do
+      {:ok, answer} ->
+        {:ok, Naming.word(answer.json)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   # The Scribe's gate, both halves of it, run as the Gate's own last word — so
   # the repair pass is the retry the seam already knows how to do and the model
   # is handed the rule that fired rather than a shrug (design law 14). The
@@ -216,11 +288,11 @@ defmodule MeaningGame.Steward.Live do
     end
   end
 
-  defp grade_live(role, anchors, bridges, prompt_version) do
+  defp grade_live(role, bookends, bridges, prompt_version) do
     [forward, reverse] =
       [bridges, Enum.reverse(bridges)]
       |> Enum.map(fn ordering ->
-        Task.async(fn -> graded(role, anchors, ordering) end)
+        Task.async(fn -> graded(role, bookends, ordering) end)
       end)
       # The grading's whole budget: one request's timeout is `timeout_ms`, and
       # this is what all of them together, retries included, may spend before
@@ -244,8 +316,8 @@ defmodule MeaningGame.Steward.Live do
       [{:error, :timeout}, {:error, :timeout}]
   end
 
-  defp graded(role, anchors, ordering) do
-    prompt = Assay.prompt(anchors, ordering)
+  defp graded(role, bookends, ordering) do
+    prompt = Assay.prompt(bookends, ordering)
     check = &Assay.check(&1, ordering)
 
     case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
@@ -300,7 +372,7 @@ defmodule MeaningGame.Steward.Live do
   # The grade is the mean of the two orderings and the words are the forward
   # one's, because one reveal shows one sentence, one joke and one carry-forward.
   # The furthest pair is the forward ordering's for the same reason the reasoning
-  # is: the two orderings can name different pairs, and the next Attempt's Anchors
+  # is: the two orderings can name different pairs, and the next Attempt's Bookends
   # have to be one pair rather than an average of two. The reverse ordering's own
   # reasoning is kept beside them rather than thrown away: when the players argue
   # with a grade, the two arguments the model made are the evidence.

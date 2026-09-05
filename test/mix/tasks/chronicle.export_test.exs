@@ -13,6 +13,10 @@ defmodule Mix.Tasks.Chronicle.ExportTest do
     {:ok, mara} = Rooms.join(slug, "Mara", device_token())
     {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
+    :ok = Rooms.give(slug, mara.id, "setting one")
+    :ok = Rooms.give(slug, jacob.id, "setting two")
+    await_phase(slug, :bridging)
+
     :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
     :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
     await_reveal(slug)

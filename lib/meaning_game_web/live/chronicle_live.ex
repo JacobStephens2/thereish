@@ -287,10 +287,17 @@ defmodule MeaningGameWeb.ChronicleLive do
             <div>
               <div class="flex flex-wrap items-center gap-2">
                 <h2 class="text-2xl font-bold tracking-tight">
-                  {Enum.join(page.anchors, " · ")}
+                  {Enum.join(page.bookends, " · ")}
                 </h2>
                 <span
-                  :if={page[:give]}
+                  :for={g <- page[:gives] || []}
+                  data-role="give-tag"
+                  class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+                >
+                  Give ({g.seat_name}): {g.text}
+                </span>
+                <span
+                  :if={(page[:gives] == nil or page[:gives] == []) and page[:give]}
                   data-role="give-tag"
                   class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
@@ -348,8 +355,8 @@ defmodule MeaningGameWeb.ChronicleLive do
             >
               <div class="flex items-center justify-between text-xs uppercase tracking-wider opacity-60">
                 <span>Attempt {attempt.number}</span>
-                <span :if={attempt.anchors != page.anchors}>
-                  Anchors: {Enum.join(attempt.anchors, " · ")}
+                <span :if={attempt.bookends != page.bookends}>
+                  Bookends: {Enum.join(attempt.bookends, " · ")}
                 </span>
               </div>
 

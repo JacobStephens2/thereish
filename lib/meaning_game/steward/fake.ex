@@ -41,7 +41,7 @@ defmodule MeaningGame.Steward.Fake do
   @behaviour MeaningGame.Steward
 
   @impl true
-  def assay(%{anchors: [_, _], bridges: bridges}) when length(bridges) >= 2 do
+  def assay(%{bookends: [_, _], bridges: bridges}) when length(bridges) >= 2 do
     delay_ms() |> Process.sleep()
 
     case mode() do
@@ -52,33 +52,36 @@ defmodule MeaningGame.Steward.Fake do
   end
 
   @impl true
-  def author(chapter, opts \\ []) do
+  def author(_request, opts \\ []) do
     delay = author_delay_ms()
     if delay > 0, do: Process.sleep(delay)
 
     case author_mode() do
       :ok ->
-        give = Keyword.get(opts, :give)
-        %{anchors: anchors, bait: bait, deep_bridges: deep_bridges} = authored_bridges(give)
-        likely_bridges = [bait | deep_bridges] ++ ["prayer", "faith"]
+        bookends =
+          Keyword.get(opts, :bookends) || config_get(:author_bookends, ["lantern", "harbour"])
 
-        json = %{
-          "theme" => give || chapter,
-          "anchors" => anchors,
-          "bait" => bait,
-          "deep_bridges" => deep_bridges,
-          "likely_bridges" => likely_bridges,
-          "why_these" => "The anchors invite #{bait} as the immediate trap.",
-          "band_scripts" => default_band_scripts()
-        }
+        why =
+          Keyword.get(opts, :why) ||
+            config_get(
+              :author_why,
+              "A light to see by stands opposite a shelter by the water."
+            )
 
         {:ok,
-         MeaningGame.Steward.Author.page(json, chapter, give, %{
-           model: "fake-author",
-           attempts: 1,
-           cost_usd: 0.0,
-           latency_ms: delay
-         })}
+         %{
+           bookends: bookends,
+           why: why,
+           meta: %{
+             model: "fake-author",
+             arm: :flash,
+             prompt_version: MeaningGame.Steward.Author.version(),
+             cost_usd: 0.0,
+             latency_ms: delay,
+             attempts: 1,
+             why: why
+           }
+         }}
 
       :refused ->
         {:error, :refused}
@@ -113,6 +116,12 @@ defmodule MeaningGame.Steward.Fake do
 
       :unavailable ->
         {:error, :no_recap}
+
+      :timeout ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        {:error, reason}
 
       :raise ->
         raise "this Scribe is having a moment"
@@ -180,6 +189,64 @@ defmodule MeaningGame.Steward.Fake do
     end
   end
 
+  @impl true
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
+  def name_room(_digests, _taken_codes) do
+    delay = config_get(:name_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:name_mode, :ok) do
+      :ok ->
+        case config_get(:name_word, "cane") do
+          nil -> {:error, :no_name}
+          word -> {:ok, word}
+        end
+
+      :unavailable ->
+        {:error, :no_name}
+
+      :raise ->
+        raise "this Scribe is having a moment"
+    end
+  end
+
+  @mp3_fixture <<255, 251, 144, 100>> <> :binary.copy(<<0>>, 413)
+
+  @doc "Fixture MP3 bytes used by the Fake voice and test fixtures."
+  def mp3_fixture, do: @mp3_fixture
+
+  @impl true
+  def speak(line, opts \\ []) do
+    delay = voice_delay_ms()
+    if delay > 0, do: Process.sleep(delay)
+
+    case voice_mode() do
+      :ok ->
+        {:ok,
+         %{
+           audio: mp3_fixture(),
+           format: :mp3,
+           meta: %{
+             provider: "fake",
+             voice_id: Keyword.get(opts, :voice_id, "fake-voice"),
+             cost_usd: 0.0,
+             latency_ms: delay,
+             characters: String.length(line)
+           }
+         }}
+
+      :unavailable ->
+        {:error, :voice_unavailable}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :raise ->
+        raise "this Voice is having a moment"
+    end
+  end
+
   # The Scribe with no model behind it writes the one true sentence about a
   # Page: who wrote what, first and last. It is a dial like the grade is — a
   # test that wants a recap naming a word writes that word as a Bridge — and it
@@ -203,38 +270,10 @@ defmodule MeaningGame.Steward.Fake do
   defp remembered("Nothing yet" <> _rest), do: nil
   defp remembered(_digest), do: "They have been here before."
 
-  @default_band_scripts %{
-    "miss" => "Different neighbourhoods entirely.",
-    "adjacent" => "On the same block, across the street.",
-    "close" => "Passable.",
-    "meld" => "You both saw the grill.",
-    "deep_meld" => "Two minds at the mower."
-  }
-
-  @doc "Default band scripts used by the Fake author and test fixtures."
-  def default_band_scripts, do: @default_band_scripts
-
-  defp authored_bridges(nil) do
-    %{
-      anchors: ["backyard", "weekend"],
-      bait: "barbecue",
-      deep_bridges: ["lawnmower", "chores"]
-    }
-  end
-
-  defp authored_bridges(give) do
-    %{
-      anchors: give_anchors(give),
-      bait: "altar",
-      deep_bridges: ["saint", "church"]
-    }
-  end
-
-  defp give_anchors("hospital" <> _), do: ["nurse", "clinic"]
-  defp give_anchors(_give), do: ["candle", "chapel"]
-
   defp author_delay_ms, do: config_get(:author_delay_ms, 0)
   defp author_mode, do: config_get(:author_mode, :ok)
+  defp voice_delay_ms, do: config_get(:voice_delay_ms, 0)
+  defp voice_mode, do: config_get(:voice_mode, :ok)
 
   defp config_get(key, default) do
     :meaning_game

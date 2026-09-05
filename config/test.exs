@@ -22,9 +22,15 @@ config :meaning_game, MeaningGame.Repo,
 # partition that already names the database names the port too, so parallel
 # tickets each get their own; with no partition it is 4002 as before.
 test_port =
-  case System.get_env("MIX_TEST_PARTITION") do
-    nil -> 4002
-    partition -> 4010 + :erlang.phash2(partition, 990)
+  case System.get_env("TEST_PORT") || System.get_env("MIX_TEST_PARTITION") do
+    nil ->
+      4002
+
+    port when is_binary(port) ->
+      case Integer.parse(port) do
+        {p, ""} -> p
+        _ -> 4010 + :erlang.phash2(port, 990)
+      end
   end
 
 config :meaning_game, MeaningGameWeb.Endpoint,
@@ -39,15 +45,7 @@ config :meaning_game, reveal_beat_ms: 5
 
 # No test grades against a provider. The suite must never spend money and never
 # depend on somebody's uptime, so the fake is the Assayer here and the handful
-# of tests that exercise the live adapter put a recorded response behind it.
-# Everything else about the Assayer — its provider, model, effort, hedging and
-# prices — is deliberately the couch's own configuration, so that the tests
-# which do exercise the live adapter exercise the settings that will be live.
-#
-# `http_options` fences the suite off from the network entirely: every request a
-# provider adapter makes goes to a recorded response instead. A test that means
-# to call somebody has to say so out loud
-# (`MeaningGame.StewardFixtures.let_it_call_the_provider/0`), and is tagged
+# of tests that actually call somebody (the live smoke test) are tagged
 # `:live` and excluded from the default run.
 config :meaning_game, :steward,
   adapter: MeaningGame.Steward.Fake,
@@ -56,9 +54,15 @@ config :meaning_game, :steward,
     author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"],
     scribe: [
       api_key: "recorded-responses-need-no-key",
-      jobs: [recap: [timeout_ms: 2_000, deadline_ms: 5_000]]
+      jobs: [
+        recap: [timeout_ms: 2_000, deadline_ms: 5_000],
+        naming: [timeout_ms: 500, deadline_ms: 1_000]
+      ]
     ],
     foley: [
+      elevenlabs_api_key: "recorded-responses-need-no-key",
+      hume_api_key: "recorded-responses-need-no-key",
+      hume_secret_key: "recorded-responses-need-no-key",
       jobs: [
         effects: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
         music: [
@@ -67,16 +71,20 @@ config :meaning_game, :steward,
           timeout_ms: 1_000,
           api_key: "recorded-responses-need-no-key"
         ],
-        ear: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"]
+        ear: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
+        voice: [
+          provider: MeaningGame.Steward.Hume,
+          voice_id: "44cb3a51-07b4-4934-83fd-9d9e8d363ce6",
+          timeout_ms: 3_000
+        ]
       ]
     ]
   ],
   http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]
 
 # The escalation ladder, in test time. The shape is what matters — activity,
-# then a provisional reading, then no verdict — and the shape is the same at a
-# fortieth of the wall clock.
-config :meaning_game, assayer_escalation_ms: [slow: 100, provisional: 200, unavailable: 250]
+# then no verdict — and the shape is the same at a fortieth of the wall clock.
+config :meaning_game, assayer_escalation_ms: [slow: 100, unavailable: 250]
 
 # Print only warnings and errors during test
 config :logger, level: :warning

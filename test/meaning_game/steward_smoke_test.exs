@@ -19,7 +19,7 @@ defmodule MeaningGame.StewardSmokeTest do
   same judgement, and the reveal beat is the same beat at four Seats as at two
   (ADR-0010).
   """
-  use ExUnit.Case, async: false
+  use MeaningGame.DataCase, async: false
 
   @moduletag :live
 
@@ -29,12 +29,17 @@ defmodule MeaningGame.StewardSmokeTest do
   alias MeaningGame.Steward
 
   setup context do
-    if context[:anthropic], do: let_it_call_anthropic(), else: let_it_call_the_provider()
+    cond do
+      context[:eleven_labs] -> let_it_call_eleven_labs()
+      context[:hume] -> let_it_call_hume()
+      context[:anthropic] -> let_it_call_anthropic()
+      true -> let_it_call_the_provider()
+    end
   end
 
   test "the Assayer grades a real pair, in both orderings, inside the beat" do
     {:ok, verdict} =
-      Steward.assay(%{anchors: ["ocean", "night"], bridges: ["tide", "moon"]})
+      Steward.assay(%{bookends: ["ocean", "night"], bridges: ["tide", "moon"]})
 
     assert verdict.closeness in 0..100
     assert Ladder.read(verdict.closeness).band != nil
@@ -66,7 +71,7 @@ defmodule MeaningGame.StewardSmokeTest do
     bridges = ["lighthouse", "beacon", "lamp", "gull"]
 
     {:ok, verdict} =
-      Steward.assay(%{anchors: ["harbour", "dusk"], bridges: bridges})
+      Steward.assay(%{bookends: ["harbour", "dusk"], bridges: bridges})
 
     assert verdict.closeness in 0..100
     assert Ladder.read(verdict.closeness).band != nil
@@ -80,7 +85,7 @@ defmodule MeaningGame.StewardSmokeTest do
     assert String.trim(verdict.quip) != ""
 
     # The carry-forward is two words somebody actually wrote, because those two
-    # are about to be the next Attempt's Anchors. That they are two *different*
+    # are about to be the next Attempt's Bookends. That they are two *different*
     # words is not asserted and not enforced: a table that all wrote "moon" has
     # "moon" and "moon" as its furthest pair, and nothing defends against the two
     # carried words being the same word.
@@ -99,15 +104,39 @@ defmodule MeaningGame.StewardSmokeTest do
     )
   end
 
+  test "the Author writes Bookends from two real Gives inside the deadline" do
+    gives = [
+      %{name: "Mara", text: "candlelit cathedral"},
+      %{name: "Jacob", text: "cyberpunk nightclub"}
+    ]
+
+    {:ok, answer} = Steward.author(%{gives: gives})
+
+    assert [left, right] = answer.bookends
+    assert is_binary(left) and byte_size(left) > 0
+    assert is_binary(right) and byte_size(right) > 0
+    assert String.trim(answer.why) != ""
+
+    assert answer.meta.model =~ "gemini"
+    assert answer.meta.cost_usd > 0
+    assert answer.meta.latency_ms < 8_000
+
+    IO.puts(
+      "\n  live Author: #{left} / #{right} in #{answer.meta.latency_ms} ms " <>
+        "for $#{Float.round(answer.meta.cost_usd, 5)}" <>
+        "\n  why: #{answer.why}\n"
+    )
+  end
+
   @tag :anthropic
   test "the Scribe writes a real recap, and Vale lets it through" do
     page = %{
-      anchors: ["lantern", "harbour"],
+      bookends: ["lantern", "harbour"],
       melded: true,
       attempts: [
         %{
           number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: [
             %{seat_name: "Jacob", bridge: "keeper"},
             %{seat_name: "Mara", bridge: "guide"}
@@ -118,7 +147,7 @@ defmodule MeaningGame.StewardSmokeTest do
         },
         %{
           number: 2,
-          anchors: ["keeper", "guide"],
+          bookends: ["keeper", "guide"],
           bridges: [
             %{seat_name: "Jacob", bridge: "watch"},
             %{seat_name: "Mara", bridge: "watch"}
@@ -150,5 +179,53 @@ defmodule MeaningGame.StewardSmokeTest do
         "\n  #{recap.recap}" <>
         "\n  callback: #{recap.callback || "(none)"}\n"
     )
+  end
+
+  @tag :eleven_labs
+  test "ElevenLabs v3 Conversational speaks a real line" do
+    line = "Miss. A quiet night at the harbour."
+    {:ok, result} = Steward.speak(line, provider: MeaningGame.Steward.ElevenLabs)
+
+    assert result.format == :mp3
+    assert is_binary(result.audio)
+    assert byte_size(result.audio) > 1000
+    assert result.meta.provider == MeaningGame.Steward.ElevenLabs
+    assert result.meta.characters > 0
+    assert result.meta.cost_usd > 0
+  end
+
+  @tag :hume
+  test "Hume Octave 2 speaks a real line" do
+    line = "Meld. Two minds at once."
+    {:ok, result} = Steward.speak(line, provider: MeaningGame.Steward.Hume)
+
+    assert result.format == :mp3
+    assert is_binary(result.audio)
+    assert byte_size(result.audio) > 1000
+    assert result.meta.provider == MeaningGame.Steward.Hume
+    assert result.meta.characters > 0
+    assert result.meta.cost_usd > 0
+  end
+
+  test "the Scribe names a Room from a real digest once by hand" do
+    alias MeaningGame.Steward.Legality
+
+    digest = """
+    Page 1 (candy · cane) [Give: Christmas] — Melded on attempt 2 (closeness: 88, meld)
+      Attempt 2: Jacob bridged "hook", Mara bridged "hook". Verdict: 88 (meld)
+      Recap: Both of them wrote hook, and neither would say why.
+    """
+
+    taken = ["couch", "flak"]
+
+    {:ok, code} = Steward.name_room([digest], taken)
+
+    assert is_binary(code)
+    assert String.length(code) == 4
+    assert Legality.in_dictionary?(code)
+    refute Legality.profane?(code)
+    refute code in taken
+
+    IO.puts("\n  live Scribe named Room: #{String.upcase(code)}\n")
   end
 end

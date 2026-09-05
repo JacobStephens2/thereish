@@ -22,14 +22,14 @@ defmodule MeaningGame.Steward do
       config :meaning_game, :steward,
         roles: [assayer: [provider: ..., model: ..., effort: ...]]
 
-  An assay is asked for one Attempt at a time: the Anchors, and every Bridge
+  An assay is asked for one Attempt at a time: the Bookends, and every Bridge
   written between them, read together and answered once (ADR-0010). A table of
   four is one request rather than six, and the reveal it feeds is one number
   rather than six.
   """
 
-  @typedoc "The Anchors, and every Bridge written between them, in roster order."
-  @type request :: %{anchors: [String.t()], bridges: [String.t()]}
+  @typedoc "The Bookends, and every Bridge written between them, in roster order."
+  @type request :: %{bookends: [String.t()], bridges: [String.t()]}
 
   @typedoc """
   Which model answered, at what prompt version, how long it took and what it
@@ -52,7 +52,7 @@ defmodule MeaningGame.Steward do
   A grade on the ladder's scale, the sentence the players argue with, the line
   the reveal is funny with — written about the words they actually wrote
   (ADR-0005) — and the two of those words that landed furthest apart, which are
-  the next Attempt's Anchors.
+  the next Attempt's Bookends.
   """
   @type verdict :: %{
           closeness: integer(),
@@ -80,10 +80,12 @@ defmodule MeaningGame.Steward do
         }
 
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
-  @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
   @callback forge(map() | String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   @callback rank([binary() | map()], map() | String.t()) :: {:ok, [map()]} | {:error, term()}
+  @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
 
   @doc """
   Generates N candidate sound effects or music tracks for a brief.
@@ -106,6 +108,53 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
+  Speaks one line as audio bytes with format and meta.
+
+  Rendered from the configured voice job. Measured here so latency provenance is
+  kept by the seam.
+  """
+  @spec speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def speak(line, opts \\ []) do
+    started = System.monotonic_time(:millisecond)
+
+    case adapter().speak(line, opts) do
+      {:ok, %{meta: meta} = answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, %{answer | meta: Map.put_new(meta, :latency_ms, latency)}}
+
+      {:ok, answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, Map.put(answer, :meta, %{latency_ms: latency})}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Asks the Scribe to name a Room with one four-letter word that nods to the
+  history in `digests` and avoids `taken_codes`.
+  """
+  @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
+  def name_room(digests, taken_codes) do
+    role = role(:scribe, :naming)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        adapter().name_room(digests, taken_codes)
+      end)
+
+    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
+      {:ok, other} -> other
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
+    end
+  end
+
+  @doc """
   Writes one closed Page back into the Chronicle as prose.
 
 
@@ -123,11 +172,16 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Pre-generates a Page ahead of play against a named Chapter.
+  Writes two Bookends live from player settings (Gives).
   """
-  @spec author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
-  def author(chapter, opts \\ []) do
-    adapter().author(chapter, opts)
+  @spec author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
+  def author(request, opts \\ []) do
+    started = System.monotonic_time(:millisecond)
+
+    case adapter().author(request, opts) do
+      {:ok, result} -> {:ok, timed(result, System.monotonic_time(:millisecond) - started)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -152,54 +206,19 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Grades an Attempt's Bridges and applies experimental arm grading rules.
-
-  A/B variant grading lives behind the Steward seam (CONTEXT.md).
+  Grades an Attempt's Bridges.
   """
   @spec assay(request(), map() | nil, atom() | String.t() | nil) ::
           {:ok, verdict()} | {:error, term()}
-  def assay(request, page, arm) do
-    case assay(request) do
-      {:ok, verdict} ->
-        bridges = request.bridges || []
-
-        graded =
-          MeaningGame.Experiments.apply_arm_closeness(verdict, page, arm || :plain, bridges)
-
-        {:ok, graded}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+  def assay(request, _page, _arm) do
+    assay(request)
   end
 
   @doc """
-  Assigns and records an experiment arm for a Page at Page start.
-
-  Stratified by Chapter so no single arm collects all easy meaning-spaces.
-  A/B assignment lives behind the Steward seam (CONTEXT.md).
+  Assigns experiment arm for a Page. Fixed to :flash until issue 08.
   """
-  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | nil) :: :bait | :plain
-  def assign_arm(_room_id, nil), do: :bait
-
-  def assign_arm(room_id, page) do
-    chapter = page[:chapter] || page["chapter"] || "default"
-    page_id = page[:id] || page["id"] || "unknown"
-
-    past_arms = MeaningGame.Chronicle.chapter_assignments(room_id, chapter, "bait_against_plain")
-    arm = MeaningGame.Experiments.assign_arm(past_arms)
-
-    _ =
-      MeaningGame.Chronicle.record_experiment_assignment(room_id, %{
-        page_identifier: to_string(page_id),
-        experiment_id: "bait_against_plain",
-        arm: to_string(arm),
-        chapter: chapter,
-        assigned_at: DateTime.utc_now()
-      })
-
-    arm
-  end
+  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | nil) :: :flash
+  def assign_arm(_room_id, _page), do: :flash
 
   @doc """
   Rewrites the precedent for these Bridges with the players' ruling.
@@ -207,13 +226,17 @@ defmodule MeaningGame.Steward do
   A joint player overrule is the only thing in the system that rewrites
   precedent (ADR-0006, design law 3).
   """
-  @spec overrule([String.t()], [String.t()], map()) ::
-          {:ok, term()} | {:error, term()}
-  def overrule(anchors, bridges, ruling) do
+  @spec overrule(request(), map()) :: {:ok, term()} | {:error, term()}
+  @spec overrule([String.t()], [String.t()], map()) :: {:ok, term()} | {:error, term()}
+  def overrule(%{bookends: bookends, bridges: bridges}, ruling) do
+    overrule(bookends, bridges, ruling)
+  end
+
+  def overrule(bookends, bridges, ruling) when is_list(bookends) and is_list(bridges) do
     role = role(:assayer)
     prompt_version = Map.get(role, :prompt_version, MeaningGame.Steward.Assay.version())
 
-    MeaningGame.Steward.Precedent.overrule(role.model, prompt_version, anchors, bridges, ruling)
+    MeaningGame.Steward.Precedent.overrule(role.model, prompt_version, bookends, bridges, ruling)
   end
 
   @doc """

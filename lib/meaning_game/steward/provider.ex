@@ -63,10 +63,16 @@ defmodule MeaningGame.Steward.Provider do
   What a call cost, in dollars, from characters consumed (ElevenLabs sound effects / voice).
   """
   @spec character_cost(String.t(), non_neg_integer()) :: float()
-  def character_cost(model, characters) when is_number(characters) do
+  def character_cost(model, characters) when is_number(characters) and characters >= 0 do
     case Map.get(prices(), model) do
-      {:characters, per_char} -> characters * per_char
-      _ -> 0.0
+      {:characters, per_char} ->
+        characters * per_char
+
+      per_char when is_number(per_char) ->
+        characters * per_char * 1.0
+
+      _ ->
+        0.0
     end
   end
 

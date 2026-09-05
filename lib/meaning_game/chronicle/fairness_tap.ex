@@ -18,7 +18,7 @@ defmodule MeaningGame.Chronicle.FairnessTap do
 
   schema "chronicle_fairness_taps" do
     field :attempt_number, :integer
-    field :anchors, {:array, :string}
+    field :bookends, {:array, :string}
     field :bridges, {:array, :string}
     field :closeness, :integer
     field :grade, :integer, virtual: true
@@ -63,7 +63,7 @@ defmodule MeaningGame.Chronicle.FairnessTap do
       :page_id,
       :seat_id,
       :attempt_number,
-      :anchors,
+      :bookends,
       :bridges,
       :closeness,
       :band,
@@ -75,7 +75,7 @@ defmodule MeaningGame.Chronicle.FairnessTap do
       :room_id,
       :seat_id,
       :attempt_number,
-      :anchors,
+      :bookends,
       :bridges,
       :label
     ])

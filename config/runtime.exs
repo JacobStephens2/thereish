@@ -36,16 +36,35 @@ if key = System.get_env("GEMINI_API_KEY") do
   config :meaning_game, :steward,
     roles: [
       assayer: [api_key: key],
+      author: [api_key: key],
+      scribe: [jobs: [naming: [api_key: key]]],
       foley: [jobs: [ear: [api_key: key]]]
     ]
 end
 
 if key = System.get_env("ANTHROPIC_API_KEY") do
-  config :meaning_game, :steward, roles: [author: [api_key: key], scribe: [api_key: key]]
+  config :meaning_game, :steward,
+    roles: [
+      scribe: [jobs: [recap: [api_key: key]]]
+    ]
 end
 
 if key = System.get_env("ELEVENLABS_API_KEY") do
-  config :meaning_game, :steward, roles: [foley: [jobs: [effects: [api_key: key]]]]
+  config :meaning_game, :steward,
+    roles: [
+      foley: [
+        elevenlabs_api_key: key,
+        jobs: [effects: [api_key: key]]
+      ]
+    ]
+end
+
+if key = System.get_env("HUME_API_KEY") do
+  config :meaning_game, :steward, roles: [foley: [hume_api_key: key]]
+end
+
+if key = System.get_env("HUME_SECRET_KEY") do
+  config :meaning_game, :steward, roles: [foley: [hume_secret_key: key]]
 end
 
 if key = System.get_env("MUREKA_API_KEY") do

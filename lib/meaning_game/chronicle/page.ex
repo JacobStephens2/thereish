@@ -4,7 +4,7 @@ defmodule MeaningGame.Chronicle.Page do
   number the players were shown when it did.
 
   Written once, when the Page closes, and never touched again. `document` is the
-  Page as the Author wrote it — Anchors today, more once there is an Author —
+  Page as the Author wrote it — Bookends today, more once there is an Author —
   kept as JSONB so that a contract which is still growing does not need a
   migration every time it does (ADR-0003).
   """
@@ -17,6 +17,7 @@ defmodule MeaningGame.Chronicle.Page do
 
   schema "chronicle_pages" do
     field :document, :map
+    field :author_meta, :map
     field :closed_because, :string
     field :melded, :boolean
     field :closeness, :integer
@@ -24,6 +25,7 @@ defmodule MeaningGame.Chronicle.Page do
     field :closed_at, :utc_datetime_usec
 
     belongs_to :room, MeaningGame.Rooms.Room
+    has_many :gives, MeaningGame.Chronicle.Give, preload_order: [asc: :order]
     has_many :attempts, MeaningGame.Chronicle.Attempt, preload_order: [asc: :number]
     has_many :overrules, MeaningGame.Chronicle.Overrule, preload_order: [asc: :inserted_at]
     has_many :corrections, MeaningGame.Chronicle.Correction, preload_order: [asc: :inserted_at]
@@ -38,6 +40,7 @@ defmodule MeaningGame.Chronicle.Page do
     |> cast(attrs, [
       :room_id,
       :document,
+      :author_meta,
       :closed_because,
       :melded,
       :closeness,

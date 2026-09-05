@@ -17,6 +17,16 @@ defmodule MeaningGame.Rooms.Store do
   @spec get_room(String.t()) :: Room.t() | nil
   def get_room(code), do: Repo.get_by(Room, slug: code)
 
+  @doc "Every Code currently taken by a Room."
+  @spec taken_codes() :: [String.t()]
+  def taken_codes do
+    Repo.all(from r in Room, select: r.slug)
+  end
+
+  @doc "Every Room in the database."
+  @spec list_rooms() :: [Room.t()]
+  def list_rooms, do: Repo.all(Room)
+
   @doc """
   Writes a new Room down.
 

@@ -27,6 +27,7 @@ defmodule MeaningGame.Chronicle do
   alias MeaningGame.Chronicle.ExperimentOutcome
   alias MeaningGame.Chronicle.ExperimentUnblinding
   alias MeaningGame.Chronicle.FairnessTap
+  alias MeaningGame.Chronicle.Give
   alias MeaningGame.Chronicle.Overrule
   alias MeaningGame.Chronicle.Page
   alias MeaningGame.Chronicle.Recap
@@ -131,6 +132,22 @@ defmodule MeaningGame.Chronicle do
     room_id = resolve_room_id(room_id_or_slug)
 
     from(r in Recap, where: r.room_id == ^room_id, order_by: [asc: r.inserted_at, asc: r.id])
+    |> Repo.all()
+  end
+
+  @doc """
+  Closed Pages in one Room that have no recap yet, oldest first.
+  """
+  @spec unrecapped_pages(Ecto.UUID.t() | String.t()) :: [Page.t()]
+  def unrecapped_pages(room_id_or_code) do
+    room_id = resolve_room_id(room_id_or_code)
+
+    from(p in Page,
+      left_join: r in Recap,
+      on: r.page_id == p.id,
+      where: p.room_id == ^room_id and is_nil(r.id),
+      order_by: [asc: p.closed_at, asc: p.id]
+    )
     |> Repo.all()
   end
 
@@ -501,6 +518,7 @@ defmodule MeaningGame.Chronicle do
       )
       |> Repo.all()
       |> Repo.preload(
+        gives: :seat,
         attempts: [:verdicts, bridges: :seat],
         overrules: :proposer,
         corrections: :seat
@@ -542,6 +560,88 @@ defmodule MeaningGame.Chronicle do
   def from_markdown(markdown), do: MeaningGame.Chronicle.Markdown.parse(markdown)
 
   @doc """
+  Returns the last `count` quips recorded in a Room's Chronicle, in chronological order.
+
+  Looks first in the database for a Room with the given Code or UUID. If not found in
+  the database, looks for a Chronicle Markdown file at `priv/chronicles/<code>.md`.
+  """
+  @spec recent_quips(Ecto.UUID.t() | String.t(), pos_integer()) :: [String.t()]
+  def recent_quips(room_code_or_id, count \\ 5) do
+    quips =
+      case safe_resolve_room_id(room_code_or_id) do
+        {:ok, room_id} ->
+          views = page_views(room_id, :asc)
+
+          for page <- views,
+              attempt <- page.attempts,
+              quip <- quips_from_attempt(attempt) do
+            quip
+          end
+
+        :error ->
+          chronicle_path =
+            if is_binary(room_code_or_id) do
+              code = String.downcase(room_code_or_id)
+
+              candidates = [
+                try do
+                  Application.app_dir(
+                    :meaning_game,
+                    Path.join(["priv", "chronicles", "#{code}.md"])
+                  )
+                rescue
+                  _ -> nil
+                end,
+                Path.join(["priv", "chronicles", "#{code}.md"])
+              ]
+
+              Enum.find(candidates, &(&1 && File.exists?(&1)))
+            end
+
+          if chronicle_path do
+            {:ok, pages} = File.read!(chronicle_path) |> from_markdown()
+
+            for page <- pages,
+                attempt <- page.attempts,
+                quip <- quips_from_attempt(attempt) do
+              quip
+            end
+          else
+            []
+          end
+      end
+
+    Enum.take(quips, -count)
+  end
+
+  defp quips_from_attempt(attempt) do
+    cond do
+      is_binary(attempt[:quip]) and attempt[:quip] != "" ->
+        [attempt[:quip]]
+
+      is_list(attempt[:verdicts]) ->
+        for v <- attempt.verdicts, is_binary(v[:quip]) and v[:quip] != "", do: v[:quip]
+
+      true ->
+        []
+    end
+  end
+
+  defp safe_resolve_room_id(room_code_or_id) do
+    {:ok, resolve_room_id(room_code_or_id)}
+  rescue
+    _ ->
+      if is_binary(room_code_or_id) do
+        case Repo.get_by(MeaningGame.Rooms.Room, slug: String.downcase(room_code_or_id)) do
+          nil -> :error
+          room -> {:ok, room.id}
+        end
+      else
+        :error
+      end
+  end
+
+  @doc """
   Composes a concise digest of the Chronicle for feeding to models.
 
   Returns a default message if no Pages have been played yet.
@@ -559,7 +659,7 @@ defmodule MeaningGame.Chronicle do
 
   The Author reads `digest/1` and not this. What a callback is allowed to touch
   is the Chronicle and nothing else: tonight's candy cane may turn up in next
-  month's recap, and it may not quietly become next month's Anchors.
+  month's recap, and it may not quietly become next month's Bookends.
   """
   @spec scribe_digest(Ecto.UUID.t() | String.t() | [map()], Ecto.UUID.t() | nil) :: String.t()
   def scribe_digest(views_or_room, except_page_id \\ nil)
@@ -588,7 +688,7 @@ defmodule MeaningGame.Chronicle do
   end
 
   defp digest_page({page, index}, with_recaps?) do
-    anchors_str = Enum.join(page.anchors, " · ")
+    bookends_str = Enum.join(page.bookends, " · ")
 
     last_attempt = List.last(page.attempts)
     last_verdict = last_attempt && List.first(last_attempt.verdicts)
@@ -601,10 +701,25 @@ defmodule MeaningGame.Chronicle do
         "Unmelded after #{length(page.attempts)} attempts"
       end
 
-    give_str = if page[:give], do: " [Give: #{page.give}]", else: ""
+    give_str =
+      cond do
+        page[:gives] && page[:gives] != [] ->
+          " [" <>
+            Enum.map_join(
+              page.gives,
+              ", ",
+              &"Give (#{Map.get(&1, :seat_name, "Player")}): #{Map.get(&1, :text, "")}"
+            ) <> "]"
+
+        page[:give] ->
+          " [Give: #{page.give}]"
+
+        true ->
+          ""
+      end
 
     lines = [
-      "Page #{index} (#{anchors_str})#{give_str} — #{outcome_str}"
+      "Page #{index} (#{bookends_str})#{give_str} — #{outcome_str}"
     ]
 
     attempt_lines =
@@ -689,7 +804,7 @@ defmodule MeaningGame.Chronicle do
           (o.room_id == page.room_id and
              Enum.any?(
                page.attempts,
-               &(&1.number == o.attempt_number and &1.anchors == o.anchors)
+               &(&1.number == o.attempt_number and &1.bookends == o.bookends)
              ))
       end)
 
@@ -706,7 +821,7 @@ defmodule MeaningGame.Chronicle do
           (t.room_id == page.room_id and
              Enum.any?(
                page.attempts,
-               &(&1.number == t.attempt_number and &1.anchors == t.anchors)
+               &(&1.number == t.attempt_number and &1.bookends == t.bookends)
              ))
       end)
 
@@ -715,7 +830,7 @@ defmodule MeaningGame.Chronicle do
         attempt_overrules =
           Enum.filter(page_overrules, fn o ->
             o.attempt_number == attempt.number and
-              (o.anchors == attempt.anchors or o.page_id == page.id)
+              (o.bookends == attempt.bookends or o.page_id == page.id)
           end)
 
         attempt_corrections =
@@ -726,7 +841,7 @@ defmodule MeaningGame.Chronicle do
         attempt_taps =
           Enum.filter(page_taps, fn t ->
             t.attempt_number == attempt.number and
-              (t.anchors == attempt.anchors or t.page_id == page.id)
+              (t.bookends == attempt.bookends or t.page_id == page.id)
           end)
 
         bridges =
@@ -791,7 +906,7 @@ defmodule MeaningGame.Chronicle do
         %{
           id: attempt.id,
           number: attempt.number,
-          anchors: attempt.anchors,
+          bookends: attempt.bookends,
           closeness: attempt.closeness,
           melded: attempt.melded,
           bridges: bridges,
@@ -802,10 +917,31 @@ defmodule MeaningGame.Chronicle do
         }
       end)
 
-    opening_anchors =
-      page.document["anchors"] ||
+    formatted_gives =
+      case page.gives do
+        %Ecto.Association.NotLoaded{} ->
+          []
+
+        nil ->
+          []
+
+        list when is_list(list) ->
+          Enum.map(list, fn g ->
+            %{
+              id: g.id,
+              seat_id: g.seat_id,
+              seat_name: (g.seat && g.seat.name) || "Seat",
+              text: g.text,
+              order: g.order
+            }
+          end)
+      end
+
+    opening_bookends =
+      page.document["bookends"] ||
+        page.document[:bookends] ||
         case page.attempts do
-          [first | _] -> first.anchors
+          [first | _] -> first.bookends
           [] -> []
         end
 
@@ -836,10 +972,12 @@ defmodule MeaningGame.Chronicle do
       id: page.id,
       room_id: page.room_id,
       document: page.document,
+      gives: formatted_gives,
+      author_meta: page.author_meta,
       give: page.document["give"] || page.document[:give],
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
-      anchors: opening_anchors,
+      bookends: opening_bookends,
       closed_because: page.closed_because,
       melded: page.melded,
       closeness: page.closeness,
@@ -940,7 +1078,7 @@ defmodule MeaningGame.Chronicle do
       attempt_number: t.attempt_number,
       seat_id: t.seat_id,
       seat_name: (t.seat && t.seat.name) || "Player",
-      anchors: t.anchors,
+      bookends: t.bookends,
       bridges: t.bridges,
       grade: closeness,
       closeness: closeness,
@@ -958,7 +1096,7 @@ defmodule MeaningGame.Chronicle do
       attempt_number: o.attempt_number,
       proposer_seat_id: o.proposer_seat_id,
       proposer_name: (o.proposer && o.proposer.name) || "Player",
-      anchors: o.anchors,
+      bookends: o.bookends,
       bridges: o.bridges,
       machine_closeness: o.machine_closeness,
       machine_reasoning: o.machine_reasoning,
@@ -997,17 +1135,65 @@ defmodule MeaningGame.Chronicle do
   end
 
   defp insert_page(room_id, entry, opened_at) do
-    %Page{}
-    |> Page.changeset(%{
-      room_id: room_id,
-      document: entry.page,
-      closed_because: to_string(entry.closed_because),
-      melded: entry.melded?,
-      closeness: entry.closeness,
-      opened_at: opened_at,
-      closed_at: DateTime.utc_now()
-    })
-    |> Repo.insert!()
+    page_data = entry[:page] || %{}
+
+    author_meta =
+      Map.get(page_data, :author_meta) ||
+        Map.get(page_data, "author_meta") ||
+        Map.get(entry, :author_meta) ||
+        Map.get(entry, "author_meta")
+
+    page =
+      %Page{}
+      |> Page.changeset(%{
+        room_id: room_id,
+        document: page_data,
+        author_meta: author_meta,
+        closed_because: to_string(entry.closed_because),
+        melded: entry.melded?,
+        closeness: entry.closeness,
+        opened_at: opened_at,
+        closed_at: DateTime.utc_now()
+      })
+      |> Repo.insert!()
+
+    raw_gives =
+      entry[:gives] || entry["gives"] ||
+        (is_map(page_data) && (page_data[:gives] || page_data["gives"]))
+
+    gives =
+      cond do
+        is_list(raw_gives) ->
+          raw_gives
+
+        is_map(raw_gives) ->
+          Enum.map(raw_gives, fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
+
+        true ->
+          []
+      end
+
+    gives
+    |> Enum.with_index(1)
+    |> Enum.each(fn {give, idx} -> insert_give(page, give, idx) end)
+
+    page
+  end
+
+  defp insert_give(page, give, position) do
+    seat_id = give[:seat_id] || give["seat_id"]
+    text = give[:text] || give[:give] || give["text"] || give["give"] || ""
+
+    if seat_id do
+      %Give{}
+      |> Give.changeset(%{
+        page_id: page.id,
+        seat_id: seat_id,
+        text: text,
+        order: position
+      })
+      |> Repo.insert!()
+    end
   end
 
   defp insert_attempt(page, attempt) do
@@ -1016,7 +1202,7 @@ defmodule MeaningGame.Chronicle do
       |> Attempt.changeset(%{
         page_id: page.id,
         number: attempt.number,
-        anchors: attempt.anchors,
+        bookends: attempt.bookends,
         closeness: attempt.closeness,
         melded: attempt.melded?
       })
