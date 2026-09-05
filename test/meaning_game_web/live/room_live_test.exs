@@ -689,11 +689,11 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert reveal_idx < footer_idx
       assert has_element?(ctx.melissa, "footer [data-role=you]", "Melissa")
       assert has_element?(ctx.melissa, "footer h1", "Thereish")
-      assert has_element?(ctx.stage, "header h1", "Thereish")
       assert has_element?(ctx.melissa, "footer a", "The Chronicle")
 
       # Stage has public stage mode and no private (you) attribution
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+      assert has_element?(stage, "header h1", "Thereish")
       assert has_element?(stage, "[data-mode=stage]")
       refute has_element?(stage, "[data-bridge][data-you=true]")
     end
@@ -1246,6 +1246,102 @@ defmodule MeaningGameWeb.RoomLiveTest do
       eventually(fn -> has_element?(jacob, "[data-role=closeness]", "80") end)
       assert has_element?(melissa, "[data-role=band]", "almost")
       assert has_element?(melissa, "[data-role=quip]")
+    end
+  end
+
+  describe "Foley speaker and audio pushes" do
+    setup do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage}
+    end
+
+    test "stage claims speaker on mount; phone claims take it from stage and silence it", ctx do
+      assert has_element?(ctx.stage, "[data-role=tap-for-sound]")
+      assert has_element?(ctx.melissa, "[data-role=speaker-toggle][data-speaker=other]")
+      assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
+
+      assert has_element?(ctx.stage, "[data-role=voice-switch]")
+      assert has_element?(ctx.stage, "[data-role=house-loop-switch]")
+      refute has_element?(ctx.melissa, "[data-role=voice-switch]")
+      refute has_element?(ctx.melissa, "[data-role=house-loop-switch]")
+
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:stop", %{})
+      refute has_element?(ctx.stage, "[data-role=tap-for-sound]")
+      refute has_element?(ctx.stage, "[data-role=voice-switch]")
+
+      assert has_element?(ctx.melissa, "[data-role=speaker-toggle][data-speaker=self]")
+      assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
+
+      assert has_element?(ctx.melissa, "[data-role=voice-switch]")
+      assert has_element?(ctx.melissa, "[data-role=house-loop-switch]")
+
+      ctx.melissa |> element("[data-role=voice-switch]") |> render_click()
+      assert Rooms.get_room(ctx.slug).voice == true
+
+      ctx.melissa |> element("[data-role=house-loop-switch]") |> render_click()
+      assert Rooms.get_room(ctx.slug).house_loop_only == true
+    end
+
+    test "foley events push to the speaking view alone across a Page arc", ctx do
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      assert_push_event(ctx.stage, "foley:beat", %{})
+      refute_push_event(ctx.melissa, "foley:beat", %{})
+      refute_push_event(ctx.jacob, "foley:beat", %{})
+
+      await_reveal_on(ctx.stage)
+      assert_push_event(ctx.stage, "foley:sting", %{band: _})
+      refute_push_event(ctx.melissa, "foley:sting", %{})
+      refute_push_event(ctx.jacob, "foley:sting", %{})
+
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+      assert_push_event(ctx.stage, "foley:stop", %{})
+      assert_push_event(ctx.melissa, "foley:page", %{path: "/audio/house-loop.mp3"})
+
+      ctx.melissa |> element("[data-role=again]") |> render_click()
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.melissa, "stone")
+      commit(ctx.jacob, "stone")
+
+      assert_push_event(ctx.melissa, "foley:beat", %{})
+      refute_push_event(ctx.stage, "foley:beat", %{})
+
+      await_reveal_on(ctx.melissa)
+      assert_push_event(ctx.melissa, "foley:sting", %{band: _})
+      assert_push_event(ctx.melissa, "foley:ending", %{kind: _})
+      refute_push_event(ctx.stage, "foley:sting", %{})
+      refute_push_event(ctx.stage, "foley:ending", %{})
+    end
+
+    test "leaving stage releases speaker", ctx do
+      assert Rooms.get_room(ctx.slug).speaker != nil
+
+      GenServer.stop(ctx.stage.pid)
+
+      eventually(fn ->
+        is_nil(Rooms.get_room(ctx.slug).speaker)
+      end)
     end
   end
 end
