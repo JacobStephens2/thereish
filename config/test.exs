@@ -16,9 +16,11 @@ config :meaning_game, MeaningGame.Repo,
 # The server runs during test so `MeaningGameWeb.EndpointTest` can prove the
 # endpoint actually boots and serves over a real socket, not just through
 # `Plug.Test`. Every other test still goes through `Phoenix.ConnTest`.
+test_port = String.to_integer(System.get_env("TEST_PORT") || "4002")
+
 config :meaning_game, MeaningGameWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
-  url: [host: "localhost", port: 4002],
+  http: [ip: {127, 0, 0, 1}, port: test_port],
+  url: [host: "localhost", port: test_port],
   secret_key_base: "GGMqZggnqg1t8Q+zsg6ClM7aAnFwYXJk0/zQFqiGudcO7XNGYHZaGz9qrpv/LDYt",
   server: true
 
@@ -46,6 +48,18 @@ config :meaning_game, :steward,
     scribe: [
       api_key: "recorded-responses-need-no-key",
       jobs: [recap: [timeout_ms: 2_000, deadline_ms: 5_000]]
+    ],
+    foley: [
+      elevenlabs_api_key: "recorded-responses-need-no-key",
+      hume_api_key: "recorded-responses-need-no-key",
+      hume_secret_key: "recorded-responses-need-no-key",
+      jobs: [
+        voice: [
+          provider: MeaningGame.Steward.Hume,
+          voice_id: "44cb3a51-07b4-4934-83fd-9d9e8d363ce6",
+          timeout_ms: 3_000
+        ]
+      ]
     ]
   ],
   http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]
