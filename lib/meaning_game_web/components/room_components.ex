@@ -656,13 +656,15 @@ defmodule MeaningGameWeb.RoomComponents do
 
   def foley_hook(assigns) do
     ~H"""
-    <div :if={@speaker} id="foley-container" phx-hook=".Foley" class="hidden"></div>
+    <div id="foley-container" phx-hook=".Foley" data-speaker={to_string(@speaker)} class="hidden">
+    </div>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Foley">
       export default {
         mounted() {
           this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
           if (this.reducedMotion) return
 
+          this.speaker = this.el.dataset.speaker === "true"
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -750,7 +752,9 @@ defmodule MeaningGameWeb.RoomComponents do
             const source = this.ctx.createBufferSource()
             source.buffer = buf
             source.connect(bus)
-            this.duckMusic(duckDuration)
+            if (duckDuration > 0) {
+              this.duckMusic(duckDuration)
+            }
             source.start(0)
           }
 
@@ -773,17 +777,24 @@ defmodule MeaningGameWeb.RoomComponents do
           })
 
           this.handleEvent("foley:beat", async () => {
-            this.playEffect("/audio/beat.mp3", this.stingsBus, 2.8)
+            this.playEffect("/audio/beat.mp3", this.stingsBus, 2.5)
           })
 
           this.handleEvent("foley:sting", async ({band}) => {
-            const slug = (band || "miss").toString().replace("_", "-")
-            this.playEffect(`/audio/sting-${slug}.mp3`, this.stingsBus, 2.0)
+            const bandName = (band || "miss").toString().replace("_", "-")
+            this.playEffect(`/audio/sting-${bandName}.mp3`, this.stingsBus, 2.0)
           })
 
           this.handleEvent("foley:ending", async ({kind}) => {
             const endingKind = (kind === "meld") ? "meld" : "unmelded"
-            this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 3.0)
+            const delayMs = (kind === "meld") ? 1800 : 0
+            setTimeout(() => {
+              this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 0)
+              if (this.musicSource) {
+                try { this.musicSource.stop() } catch (_) {}
+                this.musicSource = null
+              }
+            }, delayMs)
           })
 
           this.handleEvent("foley:stop", () => {
@@ -794,6 +805,15 @@ defmodule MeaningGameWeb.RoomComponents do
           })
 
           this.updateTapForSound()
+        },
+
+        updated() {
+          this.speaker = this.el.dataset.speaker === "true"
+          this.updateTapForSound()
+          if (!this.speaker && this.musicSource) {
+            try { this.musicSource.stop() } catch (_) {}
+            this.musicSource = null
+          }
         },
 
         destroyed() {
