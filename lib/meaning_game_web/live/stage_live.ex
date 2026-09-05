@@ -94,12 +94,9 @@ defmodule MeaningGameWeb.StageLive do
         data-role="author-failure"
         class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
       >
-        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Settings Notice</p>
+        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
         <p class="text-2xl font-semibold">
           The Author couldn't write from these settings: {@room.author_failure}
-        </p>
-        <p class="text-sm opacity-60">
-          Waiting for players to choose Try again or New settings on their phones.
         </p>
       </section>
 

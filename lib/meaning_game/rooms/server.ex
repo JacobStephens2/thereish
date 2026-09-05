@@ -256,8 +256,8 @@ defmodule MeaningGame.Rooms.Server do
   # message. Nothing to escalate.
   def handle_info({:escalate, _step}, state), do: {:noreply, state}
 
-  def handle_info({:escalate_author, step}, %{author: author} = state)
-      when author != nil and step in [:still_writing, :slow] do
+  def handle_info({:escalate_author, :still_writing}, %{author: author} = state)
+      when author != nil do
     state = %{
       state
       | author: %{author | step: :still_writing, timer: escalate_author_after(:still_writing)}
@@ -267,8 +267,8 @@ defmodule MeaningGame.Rooms.Server do
     {:noreply, state}
   end
 
-  def handle_info({:escalate_author, step}, %{author: author} = state)
-      when author != nil and step in [:deadline, :unavailable] do
+  def handle_info({:escalate_author, :deadline}, %{author: author} = state)
+      when author != nil do
     state = author_answered(state)
     event = {:author_failed, %{reason: "timed out"}}
     {:noreply, apply_events(state, [event])}
@@ -284,43 +284,26 @@ defmodule MeaningGame.Rooms.Server do
 
   def handle_info({:author_completed, ref, {:error, reason}}, %{author: %{ref: ref}} = state) do
     state = author_answered(state)
-    friendly_reason = format_give_error(reason)
+    friendly_reason = format_author_error(reason)
     event = {:author_failed, %{reason: friendly_reason}}
     {:noreply, apply_events(state, [event])}
   end
 
-  def handle_info({:author_completed, {:ok, result}}, state) do
-    state = author_answered(state)
-    event = {:page_written, %{bookends: result.bookends, meta: result.meta}}
-    {:noreply, apply_events(state, [event])}
-  end
-
-  def handle_info({:author_completed, {:error, reason}}, state) do
-    state = author_answered(state)
-    friendly_reason = format_give_error(reason)
-    event = {:author_failed, %{reason: friendly_reason}}
-    {:noreply, apply_events(state, [event])}
-  end
-
-  def handle_info({:author_completed, _ref, {:ok, result}}, state) do
-    event = {:page_written, %{bookends: result.bookends, meta: result.meta}}
-    {:noreply, apply_events(state, [event])}
-  end
-
+  # Stale, duplicate, or superseded author tasks change nothing
   def handle_info({:author_completed, _ref, _result}, state), do: {:noreply, state}
 
-  defp format_give_error({:max_tokens, _}), do: "too broad or complex"
-  defp format_give_error(:refused), do: "content declined"
-  defp format_give_error({:refusal, msg}), do: "declined: #{msg}"
-  defp format_give_error(%Req.TransportError{reason: :timeout}), do: "timed out"
-  defp format_give_error(%{reason: :timeout}), do: "timed out"
-  defp format_give_error(:timeout), do: "timed out"
-  defp format_give_error(:unavailable), do: "timed out"
-  defp format_give_error({:exit, _}), do: "process exited"
-  defp format_give_error(%RuntimeError{message: msg}), do: msg
-  defp format_give_error(reason) when is_binary(reason), do: reason
-  defp format_give_error(reason) when is_atom(reason), do: to_string(reason)
-  defp format_give_error(reason), do: inspect(reason)
+  defp format_author_error({:max_tokens, _}), do: "too broad or complex"
+  defp format_author_error(:refused), do: "content declined"
+  defp format_author_error({:refusal, msg}), do: "declined: #{msg}"
+  defp format_author_error(%Req.TransportError{reason: :timeout}), do: "timed out"
+  defp format_author_error(%{reason: :timeout}), do: "timed out"
+  defp format_author_error(:timeout), do: "timed out"
+  defp format_author_error(:unavailable), do: "unavailable"
+  defp format_author_error({:exit, _}), do: "process exited"
+  defp format_author_error(%RuntimeError{message: msg}), do: msg
+  defp format_author_error(reason) when is_binary(reason), do: reason
+  defp format_author_error(reason) when is_atom(reason), do: to_string(reason)
+  defp format_author_error(reason), do: inspect(reason)
 
   # The browser's own Seat wins over the name it typed, so typing someone else's
   # name on a phone that is already seated cannot take their Seat.
@@ -514,19 +497,11 @@ defmodule MeaningGame.Rooms.Server do
 
   defp next_author_step(:writing), do: :still_writing
   defp next_author_step(:still_writing), do: :deadline
-  defp next_author_step(:slow), do: :deadline
 
   defp author_escalation_ms(:writing), do: 0
 
   defp author_escalation_ms(step) do
-    config = Application.fetch_env!(:meaning_game, :author_escalation_ms)
-
-    case step do
-      :still_writing -> Keyword.get(config, :still_writing) || Keyword.fetch!(config, :slow)
-      :slow -> Keyword.get(config, :slow) || Keyword.fetch!(config, :still_writing)
-      :deadline -> Keyword.get(config, :deadline) || Keyword.fetch!(config, :unavailable)
-      :unavailable -> Keyword.get(config, :unavailable) || Keyword.fetch!(config, :deadline)
-    end
+    :meaning_game |> Application.fetch_env!(:author_escalation_ms) |> Keyword.fetch!(step)
   end
 
   defp author_step(%{author: nil}), do: nil
