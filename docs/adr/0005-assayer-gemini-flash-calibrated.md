@@ -17,4 +17,4 @@ Jacob also chose that the Assayer **quips live**, incorporating the players' act
 
 ## Consequences
 
-Hedging is two identical requests for the fast tier only. The Author's role in Mind-Meld is anchors, bait, deep bridges, the trap's narration, and Chapter walks — not the live joke.
+Hedging is two identical requests for the fast tier only. The Author's role in Thereish is anchors, bait, deep bridges, the trap's narration, and Chapter walks — not the live joke.

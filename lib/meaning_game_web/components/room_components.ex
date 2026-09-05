@@ -82,6 +82,7 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  attr :room, :map, default: %{}
   attr :mode, :atom, default: :phone
 
   @doc """
@@ -89,7 +90,11 @@ defmodule MeaningGameWeb.RoomComponents do
   """
   def author_writing(assigns) do
     ~H"""
-    <div data-role="beat-meter" class="flex flex-col items-center gap-2">
+    <div
+      data-role="beat-meter"
+      data-step={@room[:author_step] || :writing}
+      class="flex flex-col items-center gap-2"
+    >
       <div class="flex items-center gap-2" aria-hidden="true">
         <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
         <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
@@ -100,7 +105,9 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
     </div>
     <p class={if @mode == :stage, do: "text-2xl font-semibold", else: "text-lg font-medium"}>
-      The Author is reading your settings...
+      {if @room[:author_step] == :still_writing,
+        do: "The Author is still writing...",
+        else: "The Author is reading your settings..."}
     </p>
     """
   end
@@ -195,7 +202,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <div
-        :if={@room.reveal.closeness}
+        :if={@mode != :quiet && @room.reveal.closeness}
         data-role="closeness-display"
         style="animation: reveal-closeness 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;"
         class={[
@@ -232,7 +239,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <div
-        :if={@room.reveal.closeness == nil}
+        :if={@mode != :quiet && @room.reveal.closeness == nil}
         data-role="no-verdict"
         class="flex flex-col items-center gap-3 rounded-2xl border border-primary/30 bg-base-200/60 p-6 sm:p-8 text-center max-w-md shadow-sm"
       >
@@ -248,7 +255,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p
-        :if={@room.reveal.quip}
+        :if={@mode != :quiet && @room.reveal.quip}
         data-role="quip"
         class={[
           "font-serif italic font-medium leading-snug max-w-prose text-center",
@@ -262,7 +269,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
 
       <div
-        :if={@mode == :phone && @seat && @room.reveal.closeness}
+        :if={@mode in [:phone, :quiet] && @seat && @room.reveal.closeness}
         data-role="fairness-controls"
         class="flex flex-col items-center gap-2 pt-2"
       >

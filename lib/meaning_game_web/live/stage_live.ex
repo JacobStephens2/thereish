@@ -21,7 +21,10 @@ defmodule MeaningGameWeb.StageLive do
   def mount(params, _session, socket) do
     slug = Rooms.open!(params["slug"])
 
-    if connected?(socket), do: Rooms.subscribe(slug)
+    if connected?(socket) do
+      Rooms.subscribe(slug)
+      MeaningGameWeb.Presence.track_stage(socket, slug)
+    end
 
     {:ok,
      socket
@@ -38,6 +41,9 @@ defmodule MeaningGameWeb.StageLive do
   # ignored here on purpose rather than by a catch-all: a message this screen
   # does not know about should still be a crash.
   def handle_info(:chronicle_changed, socket), do: {:noreply, socket}
+
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket),
+    do: {:noreply, socket}
 
   # The stage holds no Seat, so it sees the Room the way anyone standing behind
   # the couch sees it.
@@ -57,7 +63,7 @@ defmodule MeaningGameWeb.StageLive do
     >
       <header class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
-          <h1 class="text-4xl font-semibold">Meaning Game</h1>
+          <h1 class="text-4xl font-semibold">Thereish</h1>
           <.link
             navigate={chronicle_path(@slug)}
             class="text-base font-medium underline opacity-70 hover:opacity-100"
@@ -82,11 +88,22 @@ defmodule MeaningGameWeb.StageLive do
       </section>
 
       <section
-        :if={@room.phase == :writing}
+        :if={@room.phase == :writing && is_nil(@room[:author_failure])}
         data-role="writing-stage"
         class="flex flex-col items-center justify-center gap-3 text-center"
       >
-        <.author_writing mode={:stage} />
+        <.author_writing room={@room} mode={:stage} />
+      </section>
+
+      <section
+        :if={@room.phase == :writing && @room[:author_failure]}
+        data-role="author-failure"
+        class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+        <p class="text-2xl font-semibold">
+          The Author couldn't write from these settings: {@room.author_failure}
+        </p>
       </section>
 
       <.attempt room={@room} />
