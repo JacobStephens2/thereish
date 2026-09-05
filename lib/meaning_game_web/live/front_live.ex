@@ -56,7 +56,7 @@ defmodule MeaningGameWeb.FrontLive do
   def render(assigns) do
     ~H"""
     <main class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-10 px-6 py-12">
-      <h1 class="text-3xl font-semibold">Meaning Game</h1>
+      <h1 class="text-3xl font-semibold">Thereish</h1>
 
       <form phx-submit="open" class="flex flex-col gap-2">
         <.input

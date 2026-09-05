@@ -90,6 +90,16 @@ defmodule MeaningGame.RoomFixtures do
     Application.put_env(:meaning_game, :assayer_escalation_ms, Keyword.merge(steps, opts))
   end
 
+  @doc """
+  Where the Author escalation ladder's rungs sit for one test, in milliseconds from the
+  moment the Author was asked.
+  """
+  def author_escalation(opts) do
+    steps = restore(:author_escalation_ms)
+
+    Application.put_env(:meaning_game, :author_escalation_ms, Keyword.merge(steps, opts))
+  end
+
   @doc "How many Seats a newly opened Room holds, for one test."
   def seats_per_room(seats) do
     restore(:seats_per_room)

@@ -182,17 +182,18 @@ defmodule MeaningGameWeb.RoomLiveTest do
       mara_conn = get(build_conn(), ~p"/r/#{slug}")
       {:ok, mara, _} = live(mara_conn)
       {:ok, jacob, _} = live(phone(slug))
-      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
       join(mara, "Mara")
       join(jacob, "Jacob")
       play_to_bridging(mara, jacob, slug)
 
-      %{slug: slug, mara: mara, mara_conn: mara_conn, jacob: jacob, stage: stage}
+      %{slug: slug, mara: mara, mara_conn: mara_conn, jacob: jacob}
     end
 
     test "the Bookends are up on both phones and the stage", ctx do
-      for view <- [ctx.mara, ctx.jacob, ctx.stage] do
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+
+      for view <- [ctx.mara, ctx.jacob, stage] do
         assert has_element?(view, "[data-role=bookends]", "lantern")
         assert has_element?(view, "[data-role=bookends]", "harbour")
       end
@@ -226,17 +227,19 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
 
     test "a Bridge is written on one phone and seen on none of the others", ctx do
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+
       commit(ctx.mara, "cairn")
 
       assert has_element?(ctx.mara, "[data-role=your-bridge]", "cairn")
       refute has_element?(ctx.mara, "[data-role=bridge-form]")
 
       refute render(ctx.jacob) =~ "cairn"
-      refute render(ctx.stage) =~ "cairn"
+      refute render(stage) =~ "cairn"
 
       # What the other phone and the stage are told is that she is done, and
       # nothing else.
-      for view <- [ctx.jacob, ctx.stage] do
+      for view <- [ctx.jacob, stage] do
         assert has_element?(view, "[data-seat][data-committed=true]", "Mara")
         assert has_element?(view, "[data-seat][data-committed=false]", "Jacob")
       end
@@ -244,11 +247,11 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=bridge-form]")
     end
 
-    test "the last commit reveals both Bridges, graded, on all three screens", ctx do
+    test "the last commit reveals both Bridges, graded, on both phones", ctx do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
-      for view <- [ctx.mara, ctx.jacob, ctx.stage] do
+      for view <- [ctx.mara, ctx.jacob] do
         html = await_reveal_on(view)
 
         assert html =~ "cairn"
@@ -264,18 +267,19 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
 
     test "a slow Assayer is narrated on every screen rather than left as a hang", ctx do
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
       escalation(slow: 50, unavailable: 700)
       steward(delay_ms: 5_000)
 
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
-      for view <- [ctx.mara, ctx.jacob, ctx.stage] do
+      for view <- [ctx.mara, ctx.jacob, stage] do
         assert eventually(fn -> has_element?(view, "[data-role=phase][data-step=slow]") end)
       end
 
       # And when it never answers, the game says so and the call is theirs.
-      html = await_reveal_on(ctx.stage)
+      html = await_reveal_on(stage)
 
       assert html =~ "No verdict"
       assert html =~ "yours to call"
@@ -285,18 +289,18 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "beacon")
 
-      html = await_reveal_on(ctx.stage)
+      html = await_reveal_on(ctx.mara)
 
       assert html =~ "cairn"
       assert html =~ "beacon"
-      assert has_element?(ctx.stage, "[data-role=closeness]", "0")
-      assert has_element?(ctx.stage, "[data-role=band]", "miss")
+      assert has_element?(ctx.mara, "[data-role=closeness]", "0")
+      assert has_element?(ctx.mara, "[data-role=band]", "miss")
     end
 
     test "a phone that locked through the reveal wakes into it", ctx do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
-      await_reveal_on(ctx.stage)
+      await_reveal_on(ctx.jacob)
 
       Process.flag(:trap_exit, true)
       ref = Process.monitor(ctx.mara.pid)
@@ -320,11 +324,11 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
-      html = await_reveal_on(ctx.stage)
+      html = await_reveal_on(ctx.mara)
 
       assert html =~ "cairn"
       assert html =~ "No verdict"
-      refute has_element?(ctx.stage, "[data-role=closeness]")
+      refute has_element?(ctx.mara, "[data-role=closeness]")
     end
   end
 
@@ -333,7 +337,6 @@ defmodule MeaningGameWeb.RoomLiveTest do
       slug = open_room()
       {:ok, mara, _} = live(phone(slug))
       {:ok, jacob, _} = live(phone(slug))
-      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
       join(mara, "Mara")
       join(jacob, "Jacob")
@@ -343,8 +346,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
         slug: slug,
         mara: mara,
         jacob: jacob,
-        stage: stage,
-        screens: [mara, jacob, stage]
+        screens: [mara, jacob]
       }
     end
 
@@ -354,20 +356,22 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.mara, mara_bridge)
       commit(ctx.jacob, jacob_bridge)
 
-      await_reveal_on(ctx.stage)
+      await_reveal_on(ctx.mara)
     end
 
     test "the failed Bridges become the next attempt's Bookends, on every screen", ctx do
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+
       miss(ctx)
 
       # The tap says what it is going to do before it does it.
       assert has_element?(ctx.mara, "[data-role=again]", "cairn and beacon")
-      assert has_element?(ctx.stage, "[data-role=carry-forward]")
-      refute has_element?(ctx.stage, "[data-role=again]")
+      assert has_element?(stage, "[data-role=carry-forward]")
+      refute has_element?(stage, "[data-role=again]")
 
       press(ctx.mara, "again")
 
-      for view <- ctx.screens do
+      for view <- [ctx.mara, ctx.jacob, stage] do
         assert has_element?(view, "[data-role=bookends]", "cairn")
         assert has_element?(view, "[data-role=bookends]", "beacon")
         assert has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
@@ -380,7 +384,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
     test "a Meld is the end of the Page and says so", ctx do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairns")
-      await_reveal_on(ctx.stage)
+      await_reveal_on(ctx.mara)
 
       for view <- ctx.screens do
         assert has_element?(view, "[data-role=ending-line]", "melded first try")
@@ -391,7 +395,6 @@ defmodule MeaningGameWeb.RoomLiveTest do
       end
 
       assert has_element?(ctx.mara, "[data-role=one-more]")
-      refute has_element?(ctx.stage, "[data-role=one-more]")
     end
 
     test "the last attempt ends it unmelded, with the arc of how it got there", ctx do
@@ -412,13 +415,12 @@ defmodule MeaningGameWeb.RoomLiveTest do
     test "one more? is one tap, and returns to giving for both of them", ctx do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairns")
-      await_reveal_on(ctx.stage)
+      await_reveal_on(ctx.mara)
 
       press(ctx.mara, "one-more")
 
       assert has_element?(ctx.mara, "[data-role=setting-form]")
       assert has_element?(ctx.jacob, "[data-role=setting-form]")
-      refute has_element?(ctx.stage, "[data-role=reveal]")
 
       # Prefill shows last give
       assert render(ctx.mara) =~ "value=\"setting one\""
@@ -533,7 +535,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       await_reveal_on(jacob)
       await_reveal_on(stage)
 
-      assert has_element?(mara, "[data-role=closeness]", "0")
+      refute has_element?(mara, "[data-role=closeness]")
       assert has_element?(stage, "[data-role=closeness]", "0")
 
       # Mara proposes an overrule
@@ -552,19 +554,24 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(jacob, "[data-role=agree-overrule]")
       assert has_element?(jacob, "[data-role=decline-overrule]")
 
-      # Grade remains 0 while pending
-      assert has_element?(mara, "[data-role=closeness]", "0")
-      assert has_element?(jacob, "[data-role=closeness]", "0")
+      # Grade remains 0 on stage; phones remain quiet
+      refute has_element?(mara, "[data-role=closeness]")
+      refute has_element?(jacob, "[data-role=closeness]")
+      assert has_element?(stage, "[data-role=closeness]", "0")
 
       # Jacob agrees
       jacob |> element("[data-role=agree-overrule]") |> render_click()
 
-      # Overrule takes effect on all three views: grade 90 (meld floor), melded!
+      # Overrule takes effect: stage shows 90 (meld floor), all three show banner, phones quiet
+      assert has_element?(stage, "[data-role=closeness]", "90")
+      assert has_element?(stage, "[data-role=band]", "meld")
+
       for view <- [mara, jacob, stage] do
-        assert has_element?(view, "[data-role=closeness]", "90")
-        assert has_element?(view, "[data-role=band]", "meld")
         assert render(view) =~ "Overruled jointly"
       end
+
+      refute has_element?(mara, "[data-role=closeness]")
+      refute has_element?(jacob, "[data-role=closeness]")
 
       # Ending shows it melded
       assert has_element?(stage, "[data-role=ending-line]", "melded first try")
@@ -611,7 +618,6 @@ defmodule MeaningGameWeb.RoomLiveTest do
       mara_conn = get(build_conn(), ~p"/r/#{slug}")
       {:ok, mara, _} = live(mara_conn)
       {:ok, jacob, _} = live(phone(slug))
-      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
       join(mara, "Mara")
       join(jacob, "Jacob")
@@ -621,24 +627,24 @@ defmodule MeaningGameWeb.RoomLiveTest do
         slug: slug,
         mara: mara,
         jacob: jacob,
-        stage: stage,
-        screens: [mara, jacob, stage]
+        screens: [mara, jacob]
       }
     end
 
     test "the 2.5s beat is visibly a beat, not a spinner, on both phones and the stage", ctx do
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
       beat(500)
 
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
-      for view <- ctx.screens do
+      for view <- [ctx.mara, ctx.jacob, stage] do
         assert has_element?(view, "[data-role=beat-meter]")
         refute render(view) =~ "loading-spinner"
         refute render(view) =~ "spinner"
       end
 
-      await_reveal_on(ctx.stage)
+      await_reveal_on(stage)
     end
 
     test "reveal lands: side-by-side comparison first, climbing number, quip punchline, and phone vs stage split",
@@ -682,12 +688,14 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {footer_idx, _} = :binary.match(phone_html, "<footer")
       assert reveal_idx < footer_idx
       assert has_element?(ctx.mara, "footer [data-role=you]", "Mara")
-      assert has_element?(ctx.mara, "footer h1", "Meaning Game")
+      assert has_element?(ctx.mara, "footer h1", "Thereish")
       assert has_element?(ctx.mara, "footer a", "The Chronicle")
 
       # Stage has public stage mode and no private (you) attribution
-      assert has_element?(ctx.stage, "[data-mode=stage]")
-      refute has_element?(ctx.stage, "[data-bridge][data-you=true]")
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+      assert has_element?(stage, "header h1", "Thereish")
+      assert has_element?(stage, "[data-mode=stage]")
+      refute has_element?(stage, "[data-bridge][data-you=true]")
     end
 
     test "an almost grade lands in the almost band and next attempt is offered", ctx do
@@ -706,8 +714,6 @@ defmodule MeaningGameWeb.RoomLiveTest do
       for phone <- [ctx.mara, ctx.jacob] do
         assert has_element?(phone, "[data-role=again]")
       end
-
-      refute has_element?(ctx.stage, "[data-role=again]")
     end
 
     test "a miss is staged as a shared comedy deadpan joke, not an error sting", ctx do
@@ -726,16 +732,17 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
     test "the 10-second no-verdict path is staged as deliberate handover rather than broken",
          ctx do
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
       steward(mode: :unavailable)
 
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
-      await_reveal_on(ctx.stage)
+      await_reveal_on(stage)
 
-      assert has_element?(ctx.stage, "[data-role=no-verdict]")
-      assert render(ctx.stage) =~ "The Assayer steps aside"
-      assert render(ctx.stage) =~ "No verdict. This one is yours to call."
+      assert has_element?(stage, "[data-role=no-verdict]")
+      assert render(stage) =~ "The Assayer steps aside"
+      assert render(stage) =~ "No verdict. This one is yours to call."
       assert has_element?(ctx.mara, "[data-role=propose-overrule]")
     end
   end
@@ -896,7 +903,123 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert render(ctx.jacob) =~ "value=\"misty harbor\""
     end
 
-    test "a failed or refused Author run surfaces on phone with retry and reset options", ctx do
+    test "stage shows waiting count with no give text, then writing animation, then still writing, then failure state",
+         ctx do
+      author_escalation(still_writing: 30, deadline: 100)
+
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 250, author_mode: :ok)
+        )
+      )
+
+      # 1. Stage shows waiting count with no give text
+      give_setting(ctx.mara, "secret cathedral")
+      eventually(fn -> render(ctx.stage) =~ "Waiting for settings: 1 of 2" end)
+      refute render(ctx.stage) =~ "secret cathedral"
+
+      # 2. Last give in: writing animation on stage and phones
+      give_setting(ctx.jacob, "secret harbour")
+      eventually(fn -> has_element?(ctx.stage, "[data-role=writing-stage]") end)
+      assert has_element?(ctx.mara, "[data-role=writing-phase]")
+      assert has_element?(ctx.jacob, "[data-role=writing-phase]")
+      assert render(ctx.stage) =~ "The Author is reading your settings..."
+      assert render(ctx.mara) =~ "The Author is reading your settings..."
+
+      # 3. At five seconds (30ms test time): every screen says the Author is still writing
+      eventually(fn -> render(ctx.stage) =~ "The Author is still writing..." end)
+      assert render(ctx.mara) =~ "The Author is still writing..."
+      assert render(ctx.jacob) =~ "The Author is still writing..."
+
+      # 4. At deadline: stage and phones show failure state, writing animation gone
+      eventually(fn -> has_element?(ctx.stage, "[data-role=author-failure]") end)
+      assert has_element?(ctx.mara, "[data-role=author-failure]")
+      assert has_element?(ctx.jacob, "[data-role=author-failure]")
+
+      refute has_element?(ctx.stage, "[data-role=writing-stage]")
+      refute has_element?(ctx.mara, "[data-role=writing-phase]")
+      refute has_element?(ctx.jacob, "[data-role=writing-phase]")
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=author-failure]",
+               "The Author couldn't write from these settings: timed out"
+             )
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=author-failure]",
+               "The Author couldn't write from these settings: timed out"
+             )
+
+      assert has_element?(
+               ctx.jacob,
+               "[data-role=author-failure]",
+               "The Author couldn't write from these settings: timed out"
+             )
+    end
+
+    test "an Author failure shows Try again and New settings on both phones, and either may retry",
+         ctx do
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :unavailable)
+        )
+      )
+
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=author-failure]") end)
+      assert has_element?(ctx.jacob, "[data-role=author-failure]")
+
+      # Both phones see Try again and New settings
+      for phone <- [ctx.mara, ctx.jacob] do
+        assert has_element?(phone, "[data-role=retry-author]", "Try again")
+        assert has_element?(phone, "[data-role=reset-gives]", "New settings")
+
+        assert has_element?(
+                 phone,
+                 "[data-role=author-failure]",
+                 "The Author couldn't write from these settings"
+               )
+      end
+
+      # Configure author to succeed on retry
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :ok)
+        )
+      )
+
+      # Either Seat may tap Try again (e.g. Jacob taps)
+      ctx.jacob |> element("[data-role=retry-author]", "Try again") |> render_click()
+
+      # Both phones and stage transition to bridging
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.stage, "[data-role=bookends]") end)
+    end
+
+    test "New settings clears every Give and returns both phones to giving prefilled with last give",
+         ctx do
       fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
@@ -909,18 +1032,25 @@ defmodule MeaningGameWeb.RoomLiveTest do
         )
       )
 
-      give_setting(ctx.mara, "forbidden cathedral")
-      give_setting(ctx.jacob, "forbidden harbour")
+      give_setting(ctx.mara, "setting mara")
+      give_setting(ctx.jacob, "setting jacob")
 
       eventually(fn -> has_element?(ctx.mara, "[data-role=author-failure]") end)
-      assert has_element?(ctx.mara, "[data-role=retry-author]")
-      assert has_element?(ctx.mara, "[data-role=reset-gives]")
+      assert has_element?(ctx.jacob, "[data-role=author-failure]")
 
-      # Clicking reset-gives returns both players to giving form
-      ctx.mara |> element("[data-role=reset-gives]") |> render_click()
+      # Mara clicks New settings
+      ctx.mara |> element("[data-role=reset-gives]", "New settings") |> render_click()
 
+      # Both phones return to giving form
       eventually(fn -> has_element?(ctx.mara, "[data-role=setting-form]") end)
       assert has_element?(ctx.jacob, "[data-role=setting-form]")
+
+      # Each phone is prefilled with its own last give
+      assert render(ctx.mara) =~ "value=\"setting mara\""
+      assert render(ctx.jacob) =~ "value=\"setting jacob\""
+
+      # Stage returns to giving count 0 of 2
+      eventually(fn -> render(ctx.stage) =~ "Waiting for settings: 0 of 2" end)
     end
 
     test "submitting an empty Give shows an error", ctx do
@@ -975,6 +1105,147 @@ defmodule MeaningGameWeb.RoomLiveTest do
         refute html =~ "bait-scored"
         refute html =~ "plain-scored"
       end
+    end
+  end
+
+  describe "the stage door and the quiet phones (ticket 07)" do
+    test "Room page shows 'Make this device the Stage' button whether or not the device holds a Seat" do
+      slug = open_room()
+
+      # Before joining: no seat held
+      {:ok, visitor, _} = live(phone(slug))
+      assert has_element?(visitor, "[data-role=make-stage]", "Make this device the Stage")
+      assert render(element(visitor, "[data-role=make-stage]")) =~ ~p"/r/#{slug}/stage"
+
+      # Clicking button navigates to stage route
+      assert {:error, {:live_redirect, %{to: to}}} =
+               visitor |> element("[data-role=make-stage]") |> render_click()
+
+      assert to == ~p"/r/#{slug}/stage"
+
+      # After joining: holds a seat
+      {:ok, player, _} = live(phone(slug))
+      join(player, "Mara")
+      assert has_element?(player, "[data-role=make-stage]", "Make this device the Stage")
+
+      assert {:error, {:live_redirect, %{to: to}}} =
+               player |> element("[data-role=make-stage]") |> render_click()
+
+      assert to == ~p"/r/#{slug}/stage"
+    end
+
+    test "two phones and a stage: giving state and bookends on stage, quiet reveal on both phones, full reveal on stage, and return when stage exits" do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      # Stage giving state while phones give
+      assert has_element?(stage, "[data-role=giving-stage]")
+      assert render(stage) =~ "Waiting for settings: 0 of 2"
+
+      give_setting(mara, "lanterns on the quay")
+      eventually(fn -> render(stage) =~ "Waiting for settings: 1 of 2" end)
+
+      give_setting(jacob, "fog over the harbour")
+      await_phase(slug, :bridging)
+
+      # Stage renders Bookends while phones bridge
+      eventually(fn -> has_element?(stage, "[data-role=bookends]") end)
+      assert has_element?(stage, "[data-role=bookends]", "lantern")
+      assert has_element?(stage, "[data-role=bookends]", "harbour")
+      assert has_element?(mara, "[data-role=bookends]", "lantern")
+      assert has_element?(jacob, "[data-role=bookends]", "lantern")
+
+      # Both phones commit bridges
+      commit(mara, "cairn")
+      commit(jacob, "cairo")
+
+      await_reveal_on(stage)
+      await_reveal_on(mara)
+      await_reveal_on(jacob)
+
+      # Stage renders full reveal
+      assert has_element?(stage, "[data-role=comparison]")
+      assert has_element?(stage, "[data-role=closeness]", "80")
+      assert has_element?(stage, "[data-role=band]", "almost")
+      assert has_element?(stage, "[data-role=quip]")
+      refute has_element?(stage, "[data-role=fairness-controls]")
+
+      # Both phones render quiet reveal: comparison, controls only; NO closeness, band, or quip
+      for phone <- [mara, jacob] do
+        assert has_element?(phone, "[data-role=reveal][data-mode=quiet]")
+        assert has_element?(phone, "[data-role=comparison]")
+        assert has_element?(phone, "[data-role=fairness-controls]")
+        assert has_element?(phone, "[data-role=propose-overrule]")
+        assert has_element?(phone, "[data-role=again]")
+        refute has_element?(phone, "[data-role=closeness]")
+        refute has_element?(phone, "[data-role=closeness-display]")
+        refute has_element?(phone, "[data-role=band]")
+        refute has_element?(phone, "[data-role=quip]")
+      end
+
+      # Stage view exits
+      Process.flag(:trap_exit, true)
+      ref = Process.monitor(stage.pid)
+      Process.exit(stage.pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, _pid, :killed}
+
+      # Both phones return to full reveal
+      eventually(fn -> has_element?(mara, "[data-role=closeness]", "80") end)
+      eventually(fn -> has_element?(jacob, "[data-role=closeness]", "80") end)
+
+      assert has_element?(mara, "[data-role=band]", "almost")
+      assert has_element?(mara, "[data-role=quip]")
+      assert has_element?(jacob, "[data-role=band]", "almost")
+      assert has_element?(jacob, "[data-role=quip]")
+    end
+
+    test "a stage connecting mid-reveal makes phones go quiet, and disconnecting returns them to full reveal" do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
+
+      commit(mara, "cairn")
+      commit(jacob, "cairo")
+
+      await_reveal_on(mara)
+      await_reveal_on(jacob)
+
+      # Initially no stage: both phones show full reveal
+      assert has_element?(mara, "[data-role=closeness]", "80")
+      assert has_element?(jacob, "[data-role=closeness]", "80")
+
+      # Stage connects
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      await_reveal_on(stage)
+
+      # Both phones go quiet
+      eventually(fn -> !has_element?(mara, "[data-role=closeness]") end)
+      eventually(fn -> !has_element?(jacob, "[data-role=closeness]") end)
+
+      refute has_element?(mara, "[data-role=band]")
+      refute has_element?(mara, "[data-role=quip]")
+      assert has_element?(mara, "[data-role=fairness-controls]")
+
+      # Stage exits
+      Process.flag(:trap_exit, true)
+      ref = Process.monitor(stage.pid)
+      Process.exit(stage.pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, _pid, :killed}
+
+      # Both phones return to full reveal
+      eventually(fn -> has_element?(mara, "[data-role=closeness]", "80") end)
+      eventually(fn -> has_element?(jacob, "[data-role=closeness]", "80") end)
+      assert has_element?(mara, "[data-role=band]", "almost")
+      assert has_element?(mara, "[data-role=quip]")
     end
   end
 end

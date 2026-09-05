@@ -86,6 +86,12 @@ defmodule MeaningGame.Steward.Fake do
       :refused ->
         {:error, :refused}
 
+      :unavailable ->
+        {:error, :unavailable}
+
+      :timeout ->
+        {:error, :timeout}
+
       {:error, reason} ->
         {:error, reason}
 

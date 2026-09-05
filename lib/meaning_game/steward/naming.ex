@@ -13,7 +13,7 @@ defmodule MeaningGame.Steward.Naming do
   @version "naming-1"
 
   @system """
-  You are the Scribe for Mind-Meld, naming a new Room.
+  You are the Scribe for Thereish, naming a new Room.
 
   When players who have played before create a Room, its Code nods to that history — a couple that melded on candy cane might be handed CANE tonight.
 
