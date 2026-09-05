@@ -154,6 +154,13 @@ defmodule MeaningGame.Chronicle.Markdown do
 
           lines = if single.quip, do: lines ++ ["- Quip: #{single.quip}"], else: lines
 
+          lines =
+            if single.furthest && length(single.furthest) == 2 do
+              lines ++ ["- Carried: #{Enum.join(single.furthest, " · ")}"]
+            else
+              lines
+            end
+
           if single.model do
             cost_str = if single.cost_usd, do: "$#{single.cost_usd}", else: "$0.0"
 
@@ -416,7 +423,8 @@ defmodule MeaningGame.Chronicle.Markdown do
                  "Proposed by",
                  "Original",
                  "Overruled",
-                 "Fairness"
+                 "Fairness",
+                 "Carried"
                ] ->
             if String.starts_with?(name, "By ") do
               []
@@ -445,6 +453,20 @@ defmodule MeaningGame.Chronicle.Markdown do
         line -> line |> String.replace_prefix("- Quip:", "") |> String.trim()
       end
 
+    carried =
+      case Enum.find(lines, &String.starts_with?(String.trim(&1), "- Carried:")) do
+        nil ->
+          nil
+
+        line ->
+          line
+          |> String.trim()
+          |> String.replace_prefix("- Carried:", "")
+          |> String.trim()
+          |> String.split(" · ")
+          |> Enum.map(&String.trim/1)
+      end
+
     fairness_line = Enum.find(lines, &String.starts_with?(String.trim(&1), "- Fairness:"))
     fairness_taps = parse_fairness_line(fairness_line)
     overrule = parse_overrule_section(chunk)
@@ -458,6 +480,7 @@ defmodule MeaningGame.Chronicle.Markdown do
       band: band,
       reasoning: reasoning,
       quip: quip,
+      carried: carried,
       fairness_taps: fairness_taps,
       overrule: overrule,
       corrections: corrections
