@@ -82,6 +82,55 @@ defmodule MeaningGame.Steward do
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
   @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
+  @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
+  Speaks one line as audio bytes with format and meta.
+
+  Rendered from the configured voice job. Measured here so latency provenance is
+  kept by the seam.
+  """
+  @spec speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def speak(line, opts \\ []) do
+    started = System.monotonic_time(:millisecond)
+
+    case adapter().speak(line, opts) do
+      {:ok, %{meta: meta} = answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, %{answer | meta: Map.put_new(meta, :latency_ms, latency)}}
+
+      {:ok, answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, Map.put(answer, :meta, %{latency_ms: latency})}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Asks the Scribe to name a Room with one four-letter word that nods to the
+  history in `digests` and avoids `taken_codes`.
+  """
+  @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
+  def name_room(digests, taken_codes) do
+    role = role(:scribe, :naming)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        adapter().name_room(digests, taken_codes)
+      end)
+
+    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
+      {:ok, other} -> other
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
+    end
+  end
 
   @doc """
   Writes one closed Page back into the Chronicle as prose.

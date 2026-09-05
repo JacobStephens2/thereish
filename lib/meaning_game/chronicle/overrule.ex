@@ -30,7 +30,6 @@ defmodule MeaningGame.Chronicle.Overrule do
 
   @doc false
   def changeset(overrule, attrs) do
-
     overrule
     |> cast(attrs, [
       :room_id,

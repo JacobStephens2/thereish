@@ -56,6 +56,23 @@ defmodule MeaningGame.Steward.Provider do
   end
 
   @doc """
+  What a call cost, in dollars, from the characters the voice provider reported.
+  """
+  @spec character_cost(String.t(), non_neg_integer()) :: float()
+  def character_cost(model, characters) when is_integer(characters) and characters >= 0 do
+    case Map.get(prices(), model) do
+      per_char when is_float(per_char) ->
+        characters * per_char
+
+      per_char when is_integer(per_char) ->
+        characters * per_char * 1.0
+
+      _ ->
+        0.0
+    end
+  end
+
+  @doc """
   Options handed to every HTTP request the providers make.
 
   Empty in the ordinary case. It is how the tests put a recorded response where

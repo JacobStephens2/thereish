@@ -114,8 +114,72 @@ defmodule MeaningGame.Steward.Fake do
       :unavailable ->
         {:error, :no_recap}
 
+      :timeout ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        {:error, reason}
+
       :raise ->
         raise "this Scribe is having a moment"
+    end
+  end
+
+  @impl true
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
+  def name_room(_digests, _taken_codes) do
+    delay = config_get(:name_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:name_mode, :ok) do
+      :ok ->
+        case config_get(:name_word, "cane") do
+          nil -> {:error, :no_name}
+          word -> {:ok, word}
+        end
+
+      :unavailable ->
+        {:error, :no_name}
+
+      :raise ->
+        raise "this Scribe is having a moment"
+    end
+  end
+
+  @mp3_fixture <<255, 251, 144, 100>> <> :binary.copy(<<0>>, 413)
+
+  @doc "Fixture MP3 bytes used by the Fake voice and test fixtures."
+  def mp3_fixture, do: @mp3_fixture
+
+  @impl true
+  def speak(line, opts \\ []) do
+    delay = voice_delay_ms()
+    if delay > 0, do: Process.sleep(delay)
+
+    case voice_mode() do
+      :ok ->
+        {:ok,
+         %{
+           audio: mp3_fixture(),
+           format: :mp3,
+           meta: %{
+             provider: "fake",
+             voice_id: Keyword.get(opts, :voice_id, "fake-voice"),
+             cost_usd: 0.0,
+             latency_ms: delay,
+             characters: String.length(line)
+           }
+         }}
+
+      :unavailable ->
+        {:error, :voice_unavailable}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :raise ->
+        raise "this Voice is having a moment"
     end
   end
 
@@ -175,6 +239,8 @@ defmodule MeaningGame.Steward.Fake do
 
   defp author_delay_ms, do: config_get(:author_delay_ms, 0)
   defp author_mode, do: config_get(:author_mode, :ok)
+  defp voice_delay_ms, do: config_get(:voice_delay_ms, 0)
+  defp voice_mode, do: config_get(:voice_mode, :ok)
 
   defp config_get(key, default) do
     :meaning_game
