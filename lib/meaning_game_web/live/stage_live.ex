@@ -21,7 +21,10 @@ defmodule MeaningGameWeb.StageLive do
   def mount(params, _session, socket) do
     slug = Rooms.open!(params["slug"])
 
-    if connected?(socket), do: Rooms.subscribe(slug)
+    if connected?(socket) do
+      Rooms.subscribe(slug)
+      MeaningGameWeb.Presence.track_stage(socket, slug)
+    end
 
     {:ok,
      socket
@@ -38,6 +41,9 @@ defmodule MeaningGameWeb.StageLive do
   # ignored here on purpose rather than by a catch-all: a message this screen
   # does not know about should still be a crash.
   def handle_info(:chronicle_changed, socket), do: {:noreply, socket}
+
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket),
+    do: {:noreply, socket}
 
   # The stage holds no Seat, so it sees the Room the way anyone standing behind
   # the couch sees it.
