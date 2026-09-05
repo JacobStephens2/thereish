@@ -13,10 +13,10 @@ defmodule MeaningGame.Steward.FakeTest do
 
   alias MeaningGame.Steward.Fake
 
-  @anchors ["lantern", "harbour"]
+  @bookends ["lantern", "harbour"]
 
   defp graded(bridges) do
-    {:ok, verdict} = Fake.assay(%{anchors: @anchors, bridges: bridges})
+    {:ok, verdict} = Fake.assay(%{bookends: @bookends, bridges: bridges})
 
     verdict
   end
@@ -108,10 +108,10 @@ defmodule MeaningGame.Steward.FakeTest do
     test "an Assayer that cannot answer says so at four words as at two" do
       fake(mode: :unavailable)
 
-      assert Fake.assay(%{anchors: @anchors, bridges: ["cairn", "cairo"]}) ==
+      assert Fake.assay(%{bookends: @bookends, bridges: ["cairn", "cairo"]}) ==
                {:error, :no_verdict}
 
-      assert Fake.assay(%{anchors: @anchors, bridges: ["cairn", "cairo", "cable", "beacon"]}) ==
+      assert Fake.assay(%{bookends: @bookends, bridges: ["cairn", "cairo", "cable", "beacon"]}) ==
                {:error, :no_verdict}
     end
 

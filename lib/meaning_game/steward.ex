@@ -22,14 +22,14 @@ defmodule MeaningGame.Steward do
       config :meaning_game, :steward,
         roles: [assayer: [provider: ..., model: ..., effort: ...]]
 
-  An assay is asked for one Attempt at a time: the Anchors, and every Bridge
+  An assay is asked for one Attempt at a time: the Bookends, and every Bridge
   written between them, read together and answered once (ADR-0010). A table of
   four is one request rather than six, and the reveal it feeds is one number
   rather than six.
   """
 
-  @typedoc "The Anchors, and every Bridge written between them, in roster order."
-  @type request :: %{anchors: [String.t()], bridges: [String.t()]}
+  @typedoc "The Bookends, and every Bridge written between them, in roster order."
+  @type request :: %{bookends: [String.t()], bridges: [String.t()]}
 
   @typedoc """
   Which model answered, at what prompt version, how long it took and what it
@@ -52,7 +52,7 @@ defmodule MeaningGame.Steward do
   A grade on the ladder's scale, the sentence the players argue with, the line
   the reveal is funny with — written about the words they actually wrote
   (ADR-0005) — and the two of those words that landed furthest apart, which are
-  the next Attempt's Anchors.
+  the next Attempt's Bookends.
   """
   @type verdict :: %{
           closeness: integer(),
@@ -194,13 +194,17 @@ defmodule MeaningGame.Steward do
   A joint player overrule is the only thing in the system that rewrites
   precedent (ADR-0006, design law 3).
   """
-  @spec overrule([String.t()], [String.t()], map()) ::
-          {:ok, term()} | {:error, term()}
-  def overrule(anchors, bridges, ruling) do
+  @spec overrule(request(), map()) :: {:ok, term()} | {:error, term()}
+  @spec overrule([String.t()], [String.t()], map()) :: {:ok, term()} | {:error, term()}
+  def overrule(%{bookends: bookends, bridges: bridges}, ruling) do
+    overrule(bookends, bridges, ruling)
+  end
+
+  def overrule(bookends, bridges, ruling) when is_list(bookends) and is_list(bridges) do
     role = role(:assayer)
     prompt_version = Map.get(role, :prompt_version, MeaningGame.Steward.Assay.version())
 
-    MeaningGame.Steward.Precedent.overrule(role.model, prompt_version, anchors, bridges, ruling)
+    MeaningGame.Steward.Precedent.overrule(role.model, prompt_version, bookends, bridges, ruling)
   end
 
   @doc """

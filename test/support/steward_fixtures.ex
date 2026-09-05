@@ -271,7 +271,7 @@ defmodule MeaningGame.StewardFixtures do
   def authored_page_json(opts \\ []) do
     Jason.encode!(%{
       "theme" => Keyword.get(opts, :theme, "suburban family life"),
-      "anchors" => Keyword.get(opts, :anchors, ["backyard", "weekend"]),
+      "bookends" => Keyword.get(opts, :bookends, ["backyard", "weekend"]),
       "bait" => Keyword.get(opts, :bait, "barbecue"),
       "deep_bridges" => Keyword.get(opts, :deep_bridges, ["lawnmower", "chores"]),
       "likely_bridges" =>

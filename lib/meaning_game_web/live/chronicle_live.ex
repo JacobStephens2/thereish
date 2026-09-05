@@ -287,7 +287,7 @@ defmodule MeaningGameWeb.ChronicleLive do
             <div>
               <div class="flex flex-wrap items-center gap-2">
                 <h2 class="text-2xl font-bold tracking-tight">
-                  {Enum.join(page.anchors, " · ")}
+                  {Enum.join(page.bookends, " · ")}
                 </h2>
                 <span
                   :if={page[:give]}
@@ -348,8 +348,8 @@ defmodule MeaningGameWeb.ChronicleLive do
             >
               <div class="flex items-center justify-between text-xs uppercase tracking-wider opacity-60">
                 <span>Attempt {attempt.number}</span>
-                <span :if={attempt.anchors != page.anchors}>
-                  Anchors: {Enum.join(attempt.anchors, " · ")}
+                <span :if={attempt.bookends != page.bookends}>
+                  Bookends: {Enum.join(attempt.bookends, " · ")}
                 </span>
               </div>
 
