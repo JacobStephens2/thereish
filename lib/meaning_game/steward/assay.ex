@@ -59,6 +59,12 @@ defmodule MeaningGame.Steward.Assay do
   Measure meaning-distance only; ignore spelling, length and wordplay. Identical inputs must get identical grades, and the order in which the players are listed must not matter.
   """
 
+  @quip_system """
+  You are the Assayer for Thereish, a word game played by two or more players. Every player saw the same two bookends and each secretly wrote a bridging word or short phrase that sits between the bookends in meaning.
+
+  Write one warm line of comedy about the bridges these players actually wrote. The quip may name players and draw on anything in the request (including bookends, bridges, earlier attempts, or gives), runs under 25 words, and is warm rather than cutting: the players are on the same side, and a miss is the joke rather than the sting. No emoji, no exclamation marks.
+  """
+
   @doc """
   The version of the question, carried on every verdict.
 
@@ -78,6 +84,34 @@ defmodule MeaningGame.Steward.Assay do
   @spec prompt(map() | [String.t()], list()) :: map()
   def prompt(%{bookends: [left_bookend, right_bookend]} = request, ordering)
       when is_list(ordering) do
+    %{
+      system: @system,
+      user: format_user_content(request, [left_bookend, right_bookend], ordering),
+      schema: schema(),
+      schema_name: "verdict"
+    }
+  end
+
+  def prompt([left_bookend, right_bookend], bridges) when is_list(bridges) do
+    prompt(%{bookends: [left_bookend, right_bookend]}, bridges)
+  end
+
+  @doc """
+  Prompt for asking the Assayer's model for one new quip on a Precedent hit.
+  Carries the Bookends, Bridges, names, earlier Attempts, and Gives.
+  """
+  @spec quip_prompt(map() | [String.t()], list()) :: map()
+  def quip_prompt(%{bookends: [left_bookend, right_bookend]} = request, ordering)
+      when is_list(ordering) do
+    %{
+      system: @quip_system,
+      user: format_user_content(request, [left_bookend, right_bookend], ordering),
+      schema: quip_schema(),
+      schema_name: "quip"
+    }
+  end
+
+  defp format_user_content(request, [left_bookend, right_bookend], ordering) do
     gives_section = format_gives(request[:gives] || request["gives"])
     earlier_section = format_earlier(request[:earlier_attempts] || request["earlier_attempts"])
 
@@ -102,21 +136,9 @@ defmodule MeaningGame.Steward.Assay do
       "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <>
         written_bridges
 
-    user_content =
-      [gives_section, earlier_section, current_attempt]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.join("\n\n")
-
-    %{
-      system: @system,
-      user: user_content,
-      schema: schema(),
-      schema_name: "verdict"
-    }
-  end
-
-  def prompt([left_bookend, right_bookend], bridges) when is_list(bridges) do
-    prompt(%{bookends: [left_bookend, right_bookend]}, bridges)
+    [gives_section, earlier_section, current_attempt]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
   end
 
   @doc """
@@ -160,6 +182,27 @@ defmodule MeaningGame.Steward.Assay do
   end
 
   @doc """
+  The shape of a quip answer, as the provider is asked for it on a Precedent hit.
+  """
+  @spec quip_schema() :: Jason.OrderedObject.t()
+  def quip_schema do
+    object([
+      {"type", "object"},
+      {"properties",
+       object([
+         {"quip",
+          object([
+            {"type", "string"},
+            {"description",
+             "One warm line of comedy naming words or players, drawing on anything in the request."}
+          ])}
+       ])},
+      {"required", ["quip"]},
+      {"additionalProperties", false}
+    ])
+  end
+
+  @doc """
   Whether a decoded answer is one the game may be shown.
 
   The schema has already had the last word on shape (design law 14); this is
@@ -198,6 +241,28 @@ defmodule MeaningGame.Steward.Assay do
   # inside a grading and a Page must never be lost to a shape nobody expected.
   def check(_answer, _bridges),
     do: {:error, "the answer was missing a reasoning, a quip or a furthest pair"}
+
+  @doc """
+  Whether a decoded quip answer is valid.
+  """
+  @spec check_quip(map()) :: :ok | {:error, String.t()}
+  def check_quip(%{"quip" => quip}) when is_binary(quip) do
+    if String.trim(quip) != "" do
+      :ok
+    else
+      {:error, "quip must be a real sentence, not blank"}
+    end
+  end
+
+  def check_quip(_answer), do: {:error, "the answer was missing a quip"}
+
+  @doc """
+  Extracts the quip string from a decoded quip answer.
+  """
+  @spec quip(map()) :: String.t()
+  def quip(%{"quip" => quip}) when is_binary(quip) do
+    String.trim(quip)
+  end
 
   @doc """
   A verdict as the Room's rules take it, built from one graded ordering.
