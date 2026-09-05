@@ -67,7 +67,10 @@ defmodule Mix.Tasks.Foley.Forge do
         Briefs.all()
       end
 
-    Mix.shell().info("=== Foley Forge: Generating #{n} candidates for #{length(briefs)} briefs ===")
+    Mix.shell().info(
+      "=== Foley Forge: Generating #{n} candidates for #{length(briefs)} briefs ==="
+    )
+
     Mix.shell().info("Output directory: #{dir}\n")
 
     {total_spend, _results} =
@@ -76,8 +79,11 @@ defmodule Mix.Tasks.Foley.Forge do
 
         candidates =
           case Steward.forge(brief, n: n, kind: brief.kind) do
-            {:ok, res} -> res
-            {:error, reason} -> Mix.raise("Failed generating candidates for #{brief.key}: #{inspect(reason)}")
+            {:ok, res} ->
+              res
+
+            {:error, reason} ->
+              Mix.raise("Failed generating candidates for #{brief.key}: #{inspect(reason)}")
           end
 
         paths_with_indices =
@@ -89,8 +95,11 @@ defmodule Mix.Tasks.Foley.Forge do
 
         ranking =
           case Steward.rank(candidates, brief) do
-            {:ok, res} -> res
-            {:error, reason} -> Mix.raise("Failed ranking candidates for #{brief.key}: #{inspect(reason)}")
+            {:ok, res} ->
+              res
+
+            {:error, reason} ->
+              Mix.raise("Failed ranking candidates for #{brief.key}: #{inspect(reason)}")
           end
 
         gen_spend = Enum.sum(Enum.map(candidates, &(&1.meta[:cost_usd] || 0.0)))
@@ -104,33 +113,39 @@ defmodule Mix.Tasks.Foley.Forge do
         brief_spend = gen_spend + ear_spend
 
         Mix.shell().info("    Candidates written:")
+
         Enum.each(paths_with_indices, fn {idx, path, _} ->
           Mix.shell().info("      [#{idx}] #{path}")
         end)
 
         Mix.shell().info("    Ear Ranking:")
+
         Enum.each(Enum.with_index(ranking, 1), fn {item, rank_pos} ->
           Mix.shell().info("      #{rank_pos}. [Candidate #{item.index}] #{item.reason}")
         end)
-        Mix.shell().info("    Brief spend: $#{:erlang.float_to_binary(brief_spend, decimals: 4)}\n")
+
+        Mix.shell().info(
+          "    Brief spend: $#{:erlang.float_to_binary(brief_spend, decimals: 4)}\n"
+        )
 
         {acc_spend + brief_spend, [{brief, paths_with_indices, ranking} | acc_results]}
       end)
 
     Mix.shell().info("=== Generation Complete ===")
     Mix.shell().info("Total spend: $#{:erlang.float_to_binary(total_spend, decimals: 4)}")
+
     Mix.shell().info("""
 
-To select winners:
-1. Listen to the candidates in #{dir}.
-2. Create a manifest JSON (e.g. manifest.json) mapping brief keys to chosen candidate index:
-   {
-     "beat": 1,
-     "sting_miss": 2,
-     ...
-   }
-3. Run: mix foley.forge --manifest manifest.json
-""")
+    To select winners:
+    1. Listen to the candidates in #{dir}.
+    2. Create a manifest JSON (e.g. manifest.json) mapping brief keys to chosen candidate index:
+       {
+         "beat": 1,
+         "sting_miss": 2,
+         ...
+       }
+    3. Run: mix foley.forge --manifest manifest.json
+    """)
   end
 
   defp copy_manifest(manifest_path, dir, dest) do
@@ -151,7 +166,9 @@ To select winners:
       src_file = Path.join(dir, "#{brief.key}-#{chosen_idx}.mp3")
 
       unless File.exists?(src_file) do
-        Mix.raise("Candidate file not found: #{src_file}. Run mix foley.forge first to generate candidates.")
+        Mix.raise(
+          "Candidate file not found: #{src_file}. Run mix foley.forge first to generate candidates."
+        )
       end
 
       dest_file = Path.join(dest, brief.target_filename)

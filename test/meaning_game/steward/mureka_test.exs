@@ -89,7 +89,10 @@ defmodule MeaningGame.Steward.MurekaTest do
           {"GET", "/v1/instrumental/query/task_failed"} ->
             conn
             |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_failed", "status" => "failed"}))
+            |> Plug.Conn.send_resp(
+              200,
+              Jason.encode!(%{"id" => "task_failed", "status" => "failed"})
+            )
         end
       end)
 
@@ -114,7 +117,10 @@ defmodule MeaningGame.Steward.MurekaTest do
           {"GET", "/v1/instrumental/query/task_stuck"} ->
             conn
             |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_stuck", "status" => "running"}))
+            |> Plug.Conn.send_resp(
+              200,
+              Jason.encode!(%{"id" => "task_stuck", "status" => "running"})
+            )
         end
       end)
 

@@ -38,11 +38,13 @@ defmodule MeaningGame.Steward.ElevenLabs do
   def generate(request) when is_map(request) do
     with {:ok, key} <- api_key(request) do
       model = Map.get(request, :model) || Map.get(request, "model", "eleven_text_to_sound_v2")
+
       output_format =
         Map.get(request, :output_format) ||
           Map.get(request, :format) ||
           Map.get(request, "output_format") ||
           Map.get(request, "format", "mp3_44100_128")
+
       timeout_ms = Map.get(request, :timeout_ms) || Map.get(request, "timeout_ms", 30_000)
 
       params = if output_format, do: [output_format: output_format], else: []
@@ -63,7 +65,9 @@ defmodule MeaningGame.Steward.ElevenLabs do
 
   defp api_key(request) do
     case Map.get(request, :api_key) || Map.get(request, "api_key") do
-      key when is_binary(key) and key != "" -> {:ok, key}
+      key when is_binary(key) and key != "" ->
+        {:ok, key}
+
       _ ->
         Logger.error("ELEVENLABS_API_KEY is not set; Foley cannot generate sound effects")
         {:error, :no_api_key}
@@ -74,8 +78,14 @@ defmodule MeaningGame.Steward.ElevenLabs do
     text = Map.get(request, :text) || Map.get(request, "text")
 
     %{text: text}
-    |> maybe_put(:duration_seconds, Map.get(request, :duration_seconds) || Map.get(request, "duration_seconds"))
-    |> maybe_put(:prompt_influence, Map.get(request, :prompt_influence) || Map.get(request, "prompt_influence"))
+    |> maybe_put(
+      :duration_seconds,
+      Map.get(request, :duration_seconds) || Map.get(request, "duration_seconds")
+    )
+    |> maybe_put(
+      :prompt_influence,
+      Map.get(request, :prompt_influence) || Map.get(request, "prompt_influence")
+    )
     |> maybe_put_loop(Map.get(request, :loop) || Map.get(request, "loop"))
   end
 

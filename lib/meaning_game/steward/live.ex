@@ -195,7 +195,6 @@ defmodule MeaningGame.Steward.Live do
     MeaningGame.Steward.Gemini.rank(candidates, brief, role)
   end
 
-
   # The Scribe's gate, both halves of it, run as the Gate's own last word — so
   # the repair pass is the retry the seam already knows how to do and the model
   # is handed the rule that fired rather than a shrug (design law 14). The

@@ -15,7 +15,10 @@ defmodule MeaningGame.Steward.ElevenLabsTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
-        send(test_pid, {:request, conn.method, conn.request_path, conn.query_string, conn.req_headers, decoded})
+        send(
+          test_pid,
+          {:request, conn.method, conn.request_path, conn.query_string, conn.req_headers, decoded}
+        )
 
         conn
         |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
@@ -76,11 +79,16 @@ defmodule MeaningGame.Steward.ElevenLabsTest do
       Req.Test.stub(ElevenLabs, fn conn ->
         conn
         |> Plug.Conn.put_resp_header("content-type", "application/json")
-        |> Plug.Conn.send_resp(400, Jason.encode!(%{"detail" => %{"message" => "Quota exceeded"}}))
+        |> Plug.Conn.send_resp(
+          400,
+          Jason.encode!(%{"detail" => %{"message" => "Quota exceeded"}})
+        )
       end)
 
       request = %{text: "fail", api_key: "test-key"}
-      assert {:error, {:http, 400, %{"detail" => %{"message" => "Quota exceeded"}}}} = ElevenLabs.generate(request)
+
+      assert {:error, {:http, 400, %{"detail" => %{"message" => "Quota exceeded"}}}} =
+               ElevenLabs.generate(request)
     end
 
     test "returns error when API key is missing" do

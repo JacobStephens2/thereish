@@ -10,8 +10,10 @@ defmodule Mix.Tasks.Foley.ForgeTest do
     output =
       capture_io(fn ->
         Mix.Tasks.Foley.Forge.run([
-          "--candidates", "2",
-          "--dir", tmp_dir
+          "--candidates",
+          "2",
+          "--dir",
+          tmp_dir
         ])
       end)
 
@@ -54,9 +56,12 @@ defmodule Mix.Tasks.Foley.ForgeTest do
     output =
       capture_io(fn ->
         Mix.Tasks.Foley.Forge.run([
-          "--manifest", manifest_path,
-          "--dir", candidates_dir,
-          "--dest", dest_dir
+          "--manifest",
+          manifest_path,
+          "--dir",
+          candidates_dir,
+          "--dest",
+          dest_dir
         ])
       end)
 

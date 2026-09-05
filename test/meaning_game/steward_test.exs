@@ -489,11 +489,14 @@ defmodule MeaningGame.StewardTest do
           {"GET", "/v1/instrumental/query/task_mureka_live"} ->
             conn
             |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{
-              "id" => "task_mureka_live",
-              "status" => "succeeded",
-              "choices" => [%{"url" => "https://cdn.mureka.ai/track.mp3"}]
-            }))
+            |> Plug.Conn.send_resp(
+              200,
+              Jason.encode!(%{
+                "id" => "task_mureka_live",
+                "status" => "succeeded",
+                "choices" => [%{"url" => "https://cdn.mureka.ai/track.mp3"}]
+              })
+            )
 
           {"GET", "/track.mp3"} ->
             conn
@@ -521,11 +524,14 @@ defmodule MeaningGame.StewardTest do
 
         conn
         |> Plug.Conn.put_resp_header("content-type", "application/json")
-        |> Plug.Conn.send_resp(200, Jason.encode!(%{
-          "model" => "gemini-3.8-flash",
-          "choices" => [%{"message" => %{"content" => content}}],
-          "usage" => %{"prompt_tokens" => 50, "total_tokens" => 80}
-        }))
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "model" => "gemini-3.8-flash",
+            "choices" => [%{"message" => %{"content" => content}}],
+            "usage" => %{"prompt_tokens" => 50, "total_tokens" => 80}
+          })
+        )
       end)
 
       assert {:ok, ranking} = Live.rank(clips, "brief")

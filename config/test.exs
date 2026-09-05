@@ -61,7 +61,12 @@ config :meaning_game, :steward,
     foley: [
       jobs: [
         effects: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
-        music: [deadline_ms: 2_000, poll_interval_ms: 5, timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
+        music: [
+          deadline_ms: 2_000,
+          poll_interval_ms: 5,
+          timeout_ms: 1_000,
+          api_key: "recorded-responses-need-no-key"
+        ],
         ear: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"]
       ]
     ]

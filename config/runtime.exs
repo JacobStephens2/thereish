@@ -52,7 +52,6 @@ if key = System.get_env("MUREKA_API_KEY") do
   config :meaning_game, :steward, roles: [foley: [jobs: [music: [api_key: key]]]]
 end
 
-
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :meaning_game, MeaningGameWeb.Endpoint,
