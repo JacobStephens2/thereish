@@ -220,7 +220,7 @@ defmodule MeaningGame.RoomsTest do
       assert view.reveal.band == :meld
       assert view.reveal.melded?
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
-      assert view.reveal.reasoning =~ "cairn"
+      refute Map.has_key?(view.reveal, :reasoning)
     end
 
     test "the reveal is held for the beat rather than shown the moment it is graded", ctx do

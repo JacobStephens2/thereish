@@ -139,7 +139,8 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       html = render_component(&reveal/1, room: room)
 
       assert html =~ ~s(data-arrival="meld")
-      assert html =~ "One mind, two heads"
+      assert html =~ "meld"
+      refute html =~ "One mind"
     end
 
     test "a harsh grade is staged as a shared joke, not a personal sting", %{miss_room: room} do
@@ -153,7 +154,7 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       refute html =~ "text-error"
     end
 
-    test "close band presents with passable fallback flavour" do
+    test "close band presents without flavour line" do
       close_room = %{
         phase: :reveal,
         reveal: %{
@@ -179,17 +180,28 @@ defmodule MeaningGameWeb.RoomComponentsTest do
 
       assert html =~ ~s(data-arrival="close")
       assert html =~ "close"
-      assert html =~ "Passable."
       assert html =~ "Different enough."
+      refute html =~ "Passable"
+      refute html =~ "Close enough."
     end
 
-    test "the quip reads as a punchline and reasoning is framed for argument", %{meld_room: room} do
+    test "the reveal renders Bridges, then the number and band, then the quip with no reasoning on screen",
+         %{meld_room: room} do
       html = render_component(&reveal/1, room: room)
 
+      # Order: Bridges -> Closeness/Band -> Quip
+      {comp_idx, _} = :binary.match(html, ~s(data-role="comparison"))
+      {close_idx, _} = :binary.match(html, ~s(data-role="closeness-display"))
+      {quip_idx, _} = :binary.match(html, ~s(data-role="quip"))
+
+      assert comp_idx < close_idx
+      assert close_idx < quip_idx
+
       assert html =~ ~s(data-role="quip")
-      assert html =~ ~s(data-role="reasoning")
-      assert html =~ "The Assayer's reasoning" or html =~ "The Assayer's case"
-      assert html =~ "They share 4 letters."
+      assert html =~ "walk into a bar."
+      refute html =~ ~s(data-role="reasoning")
+      refute html =~ "The Assayer's reasoning"
+      refute html =~ "They share 4 letters."
     end
 
     test "the 10 second no-verdict path is staged as deliberate handover rather than broken", %{
@@ -203,35 +215,24 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ "steps aside" or html =~ "handing over" or html =~ "yields"
     end
 
-    test "the two furthest words are named, with whoever wrote them", %{miss_room: room} do
-      html = render_component(&reveal/1, room: room)
+    test "the furthest apart line is removed on phone and stage", %{miss_room: room} do
+      phone_html = render_component(&reveal/1, room: room, mode: :phone)
+      stage_html = render_component(&reveal/1, room: room, mode: :stage)
 
-      assert html =~ ~s(data-role="furthest")
-      assert html =~ "cairn (Mara)"
-      assert html =~ "beacon (Jacob)"
+      refute phone_html =~ ~s(data-role="furthest")
+      refute phone_html =~ "Furthest apart"
+      refute stage_html =~ ~s(data-role="furthest")
+      refute stage_html =~ "Furthest apart"
     end
 
-    test "a table that wrote one word has no two ends to name", %{meld_room: room} do
-      agreed =
-        put_in(room.reveal.furthest, [
-          %{seat_id: "s1", name: "Mara", bridge: "cairn"},
-          %{seat_id: "s2", name: "Jacob", bridge: "cairn"}
-        ])
+    test "the flavour line is removed on phone and stage", %{meld_room: room} do
+      phone_html = render_component(&reveal/1, room: room, mode: :phone)
+      stage_html = render_component(&reveal/1, room: room, mode: :stage)
 
-      refute render_component(&reveal/1, room: agreed) =~ ~s(data-role="furthest")
-    end
-
-    test "the flavour counts the heads at the table", %{meld_room: room} do
-      four =
-        put_in(room.reveal.bridges, [
-          %{seat_id: "s1", name: "Mara", bridge: "cairn"},
-          %{seat_id: "s2", name: "Jacob", bridge: "cairo"},
-          %{seat_id: "s3", name: "Ada", bridge: "cairns"},
-          %{seat_id: "s4", name: "Ida", bridge: "cairo"}
-        ])
-
-      assert render_component(&reveal/1, room: four) =~ "One mind, four heads"
-      assert render_component(&reveal/1, room: room) =~ "One mind, two heads"
+      refute phone_html =~ "One mind"
+      refute phone_html =~ "heads"
+      refute stage_html =~ "One mind"
+      refute stage_html =~ "heads"
     end
 
     test "stage and phone show complementary perspectives", %{meld_room: room} do
