@@ -114,6 +114,8 @@ defmodule MeaningGame.Steward.Live do
     n = Keyword.get(opts, :n, 4)
     kind = Map.get(brief_map, :kind) || Keyword.get(opts, :kind, :effects)
 
+    start_time = System.monotonic_time(:millisecond)
+
     case kind do
       :music ->
         role = Steward.role(:foley, :music)
@@ -132,21 +134,7 @@ defmodule MeaningGame.Steward.Live do
             MeaningGame.Steward.Mureka.generate(params)
           end)
 
-        with :ok <- check_all_ok(results) do
-          candidates =
-            Enum.map(results, fn {:ok, result} ->
-              %{
-                bytes: result.bytes,
-                meta: %{
-                  model: result.model,
-                  cost_usd: result.cost_usd,
-                  latency_ms: 0
-                }
-              }
-            end)
-
-          {:ok, candidates}
-        end
+        wrap_candidates(results, start_time)
 
       _effects ->
         role = Steward.role(:foley, :effects)
@@ -167,22 +155,27 @@ defmodule MeaningGame.Steward.Live do
           end
 
         results = Task.await_many(tasks, timeout_ms * n)
+        wrap_candidates(results, start_time)
+    end
+  end
 
-        with :ok <- check_all_ok(results) do
-          candidates =
-            Enum.map(results, fn {:ok, result} ->
-              %{
-                bytes: result.bytes,
-                meta: %{
-                  model: result.model,
-                  cost_usd: result.cost_usd,
-                  latency_ms: 0
-                }
-              }
-            end)
+  defp wrap_candidates(results, start_time) do
+    latency_ms = System.monotonic_time(:millisecond) - start_time
 
-          {:ok, candidates}
-        end
+    with :ok <- check_all_ok(results) do
+      candidates =
+        Enum.map(results, fn {:ok, result} ->
+          %{
+            bytes: result.bytes,
+            meta: %{
+              model: result.model,
+              cost_usd: result.cost_usd,
+              latency_ms: latency_ms
+            }
+          }
+        end)
+
+      {:ok, candidates}
     end
   end
 

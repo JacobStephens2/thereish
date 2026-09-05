@@ -132,5 +132,22 @@ defmodule MeaningGame.Steward.MurekaTest do
       assert {:error, :no_api_key} = Mureka.generate(%{prompt: "music", api_key: nil})
       assert {:error, :no_api_key} = Mureka.generate(%{prompt: "music", api_key: ""})
     end
+
+    @tag :live
+    test "live music generation smoke test" do
+      MeaningGame.StewardFixtures.let_it_call_mureka()
+      key = System.fetch_env!("MUREKA_API_KEY")
+
+      assert {:ok, res} =
+               Mureka.generate(%{
+                 prompt: "Warm acoustic guitar loop",
+                 n: 1,
+                 api_key: key,
+                 deadline_ms: 180_000
+               })
+
+      assert byte_size(res.bytes) > 0
+      assert res.cost_usd > 0
+    end
   end
 end

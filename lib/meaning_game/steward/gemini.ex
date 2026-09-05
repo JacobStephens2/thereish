@@ -61,7 +61,7 @@ defmodule MeaningGame.Steward.Gemini do
       brief_text = extract_brief_text(brief)
       n_clips = length(clips)
 
-      request_body = rank_body(model, brief_text, clips)
+      request_body = rank_body(model, brief_text, clips, opts_map)
 
       [
         json: request_body,
@@ -144,7 +144,7 @@ defmodule MeaningGame.Steward.Gemini do
     Provider.cost(model, input, total - input)
   end
 
-  defp rank_body(model, brief_text, clips) do
+  defp rank_body(model, brief_text, clips, opts_map) do
     user_parts = [
       %{type: "text", text: "Brief:\n#{brief_text}\n\nListen to the following #{length(clips)} candidate clips and rank them from best to worst based on how well they fit the brief."}
     ] ++ Enum.flat_map(Enum.with_index(clips, 1), fn {clip, index} ->
@@ -191,7 +191,12 @@ defmodule MeaningGame.Steward.Gemini do
         json_schema: %{name: "foley_ranking", strict: true, schema: schema}
       }
     }
+    |> maybe_put(:reasoning_effort, Map.get(opts_map, :effort))
+    |> maybe_put(:max_tokens, Map.get(opts_map, :max_tokens))
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, val), do: Map.put(map, key, val)
 
   defp answer_rank({:ok, %Req.Response{status: 200, body: body}}, model, n_clips) do
     choice = body |> Map.get("choices", []) |> List.first(%{})

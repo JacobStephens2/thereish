@@ -87,5 +87,21 @@ defmodule MeaningGame.Steward.ElevenLabsTest do
       assert {:error, :no_api_key} = ElevenLabs.generate(%{text: "no key", api_key: nil})
       assert {:error, :no_api_key} = ElevenLabs.generate(%{text: "empty key", api_key: ""})
     end
+
+    @tag :live
+    test "live sound generation smoke test" do
+      MeaningGame.StewardFixtures.let_it_call_eleven_labs()
+      key = System.fetch_env!("ELEVENLABS_API_KEY")
+
+      assert {:ok, res} =
+               ElevenLabs.generate(%{
+                 text: "A soft bell chime",
+                 duration_seconds: 1.0,
+                 api_key: key
+               })
+
+      assert byte_size(res.bytes) > 0
+      assert res.cost_usd > 0
+    end
   end
 end
