@@ -666,6 +666,71 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, :bad_player_count} = Rooms.create(0, device_token())
       assert {:error, :bad_player_count} = Rooms.create("four", device_token())
     end
+
+    test "a phone with history asks the Scribe, and the configured word becomes the Code" do
+      token = device_token()
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_reveal(slug)
+
+      steward(name_word: "fork")
+
+      assert {:ok, "fork"} = Rooms.create(2, token)
+      stop_room("fork")
+      stop_room(slug)
+    end
+
+    test "a phone with no history makes no model call and draws a random word" do
+      token = device_token()
+      # Even if the Scribe would raise, a phone with no history makes no call
+      steward(name_mode: :raise)
+
+      assert {:ok, code} = Rooms.create(2, token)
+      assert String.length(code) == 4
+      stop_room(code)
+    end
+
+    test "a Scribe that raises or answers nothing valid falls back to a random word" do
+      token = device_token()
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_reveal(slug)
+
+      steward(name_mode: :raise)
+      assert {:ok, code1} = Rooms.create(2, token)
+      assert String.length(code1) == 4
+      stop_room(code1)
+
+      steward(name_mode: :unavailable)
+      assert {:ok, code2} = Rooms.create(2, token)
+      assert String.length(code2) == 4
+      stop_room(code2)
+
+      stop_room(slug)
+    end
+
+    test "a Scribe that is slow past its deadline falls back to a random word" do
+      token = device_token()
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_reveal(slug)
+
+      # 1500ms delay exceeds the test deadline of 1000ms
+      steward(name_delay_ms: 1_500)
+      assert {:ok, code} = Rooms.create(2, token)
+      assert String.length(code) == 4
+      stop_room(code)
+      stop_room(slug)
+    end
   end
 
   describe "opening a Room" do

@@ -142,7 +142,8 @@ defmodule MeaningGame.Chronicle do
     room_id = resolve_room_id(room_id_or_code)
 
     from(p in Page,
-      left_join: r in Recap, on: r.page_id == p.id,
+      left_join: r in Recap,
+      on: r.page_id == p.id,
       where: p.room_id == ^room_id and is_nil(r.id),
       order_by: [asc: p.closed_at, asc: p.id]
     )
