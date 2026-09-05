@@ -130,6 +130,11 @@ defmodule MeaningGame.ChronicleTest do
       assert verdict.forward == 80
       assert verdict.reverse == 80
       assert verdict.reasoning_reverse =~ "cairo"
+
+      # Markdown export and digest retain reasoning even though screens do not
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      assert Chronicle.to_markdown(room.id) =~ "- Reasoning: #{verdict.reasoning}"
+      assert Chronicle.digest(room.id) =~ "Verdict: 80 (meld) — #{verdict.reasoning}"
     end
 
     test "records a verdict that never came as a verdict that never came", ctx do
