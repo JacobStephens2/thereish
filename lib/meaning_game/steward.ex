@@ -39,6 +39,7 @@ defmodule MeaningGame.Steward do
   can be argued with in detail.
   """
   @type meta :: %{
+          optional(:precedent_hit) => boolean(),
           model: String.t(),
           prompt_version: String.t(),
           cost_usd: float() | nil,
