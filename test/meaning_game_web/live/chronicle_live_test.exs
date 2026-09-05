@@ -21,6 +21,12 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
   end
 
   defp play(ctx, melissa_bridge, jacob_bridge) do
+    if Rooms.snapshot(ctx.slug, nil).phase == :giving do
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+    end
+
     :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, melissa_bridge)
     :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, jacob_bridge)
 
@@ -134,12 +140,13 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       # Play first page: melded
       play(ctx, "cairn", "cairns")
 
-      # Play second page: two attempts
+      # Play second page with different bookends: two attempts
       attempt_cap(2)
+      steward(author_bookends: ["cactus", "dune"])
       :ok = Rooms.next_page(slug, ctx.melissa.id)
       play(ctx, "mirage", "oasis")
       :ok = Rooms.next_attempt(slug, ctx.melissa.id)
-      play(ctx, "sand", "dune")
+      play(ctx, "sand", "dust")
 
       {:ok, view, html} = live(conn, ~p"/r/#{slug}/chronicle")
 
@@ -148,7 +155,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       # Both pages rendered
       assert has_element?(view, "[data-role=chronicle-page]", "lantern")
 
-      assert has_element?(view, "[data-role=chronicle-page]", "sand") or
+      assert has_element?(view, "[data-role=chronicle-page]", "dune") or
                has_element?(view, "[data-role=chronicle-page]", "mirage")
 
       # Reverse chronological order: newest page (second page) appears before first page in HTML
@@ -161,7 +168,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       assert rendered_html =~ "cairns"
       assert rendered_html =~ "80"
 
-      {p2_pos, _} = :binary.match(rendered_html, "sand")
+      {p2_pos, _} = :binary.match(rendered_html, "cactus")
       {p1_pos, _} = :binary.match(rendered_html, "lantern")
       assert p2_pos < p1_pos
 
@@ -257,6 +264,32 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
     test "experiment is blinded until deliberately unblinded, then reveals qualitative readout",
          %{conn: conn, slug: slug} = ctx do
       play(ctx, "cairn", "cairns")
+
+      room = Repo.get_by!(Room, slug: slug)
+      [page] = Chronicle.pages(room.id)
+
+      {:ok, _} =
+        Chronicle.record_experiment_assignment(room.id, %{
+          page_id: page.id,
+          page_identifier: page.id,
+          experiment_id: "bait_against_plain",
+          arm: "bait",
+          chapter: "harbour",
+          assigned_at: DateTime.utc_now()
+        })
+
+      {:ok, _} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_id: page.id,
+          page_identifier: page.id,
+          experiment_id: "bait_against_plain",
+          arm: "bait",
+          melded: true,
+          closeness: 80,
+          attempts_count: 1,
+          closed_because: "meld",
+          trap_converged: false
+        })
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
 

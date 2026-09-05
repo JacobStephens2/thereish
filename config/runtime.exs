@@ -36,6 +36,7 @@ if key = System.get_env("GEMINI_API_KEY") do
   config :meaning_game, :steward,
     roles: [
       assayer: [api_key: key],
+      author: [api_key: key],
       scribe: [jobs: [naming: [api_key: key]]]
     ]
 end
@@ -43,7 +44,6 @@ end
 if key = System.get_env("ANTHROPIC_API_KEY") do
   config :meaning_game, :steward,
     roles: [
-      author: [api_key: key],
       scribe: [jobs: [recap: [api_key: key]]]
     ]
 end
