@@ -290,7 +290,7 @@ defmodule MeaningGame.Chronicle.Markdown do
 
           nil ->
             text = line |> String.replace_prefix("- Give:", "") |> String.trim()
-            %{seat_name: "Player", text: text}
+            %{seat_name: "Seat", text: text}
         end
       end)
 

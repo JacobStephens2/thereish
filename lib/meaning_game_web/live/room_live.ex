@@ -257,7 +257,7 @@ defmodule MeaningGameWeb.RoomLive do
         <p :if={@give_error} data-role="give-error" class="text-sm text-error">
           {@give_error}
         </p>
-        <.button variant="primary">Give</.button>
+        <.button variant="primary">Set</.button>
       </form>
 
       <div
@@ -279,17 +279,7 @@ defmodule MeaningGameWeb.RoomLive do
         data-role="writing-phase"
         class="flex flex-col items-center justify-center gap-3 text-center"
       >
-        <div data-role="beat-meter" class="flex flex-col items-center gap-2">
-          <div class="flex items-center gap-2" aria-hidden="true">
-            <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
-            <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
-            <span class="size-2.5 rounded-full bg-primary/40 animate-pulse"></span>
-          </div>
-          <p class="text-xs font-semibold tracking-widest uppercase opacity-60">
-            The Author is writing
-          </p>
-        </div>
-        <p class="text-lg font-medium">The Author is reading your settings...</p>
+        <.author_writing mode={:phone} />
       </div>
 
       <div

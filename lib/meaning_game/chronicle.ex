@@ -832,7 +832,7 @@ defmodule MeaningGame.Chronicle do
             %{
               id: g.id,
               seat_id: g.seat_id,
-              seat_name: (g.seat && g.seat.name) || "Player",
+              seat_name: (g.seat && g.seat.name) || "Seat",
               text: g.text,
               order: g.order
             }
@@ -1059,31 +1059,17 @@ defmodule MeaningGame.Chronicle do
       })
       |> Repo.insert!()
 
+    raw_gives =
+      entry[:gives] || entry["gives"] ||
+        (is_map(page_data) && (page_data[:gives] || page_data["gives"]))
+
     gives =
       cond do
-        is_list(entry[:gives]) ->
-          entry[:gives]
+        is_list(raw_gives) ->
+          raw_gives
 
-        is_list(entry["gives"]) ->
-          entry["gives"]
-
-        is_map(entry[:gives]) ->
-          Enum.map(entry[:gives], fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
-
-        is_map(entry["gives"]) ->
-          Enum.map(entry["gives"], fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
-
-        is_map(page_data) && is_list(page_data[:gives]) ->
-          page_data[:gives]
-
-        is_map(page_data) && is_list(page_data["gives"]) ->
-          page_data["gives"]
-
-        is_map(page_data) && is_map(page_data[:gives]) ->
-          Enum.map(page_data[:gives], fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
-
-        is_map(page_data) && is_map(page_data["gives"]) ->
-          Enum.map(page_data["gives"], fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
+        is_map(raw_gives) ->
+          Enum.map(raw_gives, fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
 
         true ->
           []

@@ -279,14 +279,7 @@ defmodule MeaningGame.Game do
         state = %{state | gives: gives, last_gives: last_gives}
 
         if map_size(gives) >= length(state.seats) do
-          request = %{
-            gives:
-              Enum.map(state.seats, fn s ->
-                %{seat_id: s.id, name: s.name, text: gives[s.id], give: gives[s.id]}
-              end)
-          }
-
-          {:ok, state, [{:author, request}]}
+          {:ok, state, [{:author, author_request(state, gives)}]}
         else
           {:ok, state, []}
         end
@@ -350,14 +343,7 @@ defmodule MeaningGame.Game do
         {:error, :not_failed}
 
       true ->
-        request = %{
-          gives:
-            Enum.map(state.seats, fn s ->
-              %{seat_id: s.id, name: s.name, text: state.gives[s.id], give: state.gives[s.id]}
-            end)
-        }
-
-        {:ok, %{state | author_failure: nil}, [{:author, request}]}
+        {:ok, %{state | author_failure: nil}, [{:author, author_request(state)}]}
     end
   end
 
@@ -631,6 +617,17 @@ defmodule MeaningGame.Game do
   # `init`, `apply` and `view` are the whole surface. Everything below is reached
   # through them, including in tests — a rule that can only be seen by asking a
   # question no player can ask is not being tested where it lives.
+
+  defp author_request(state, gives \\ nil) do
+    gives_map = gives || state.gives
+
+    %{
+      gives:
+        Enum.map(state.seats, fn s ->
+          %{seat_id: s.id, name: s.name, text: gives_map[s.id], give: gives_map[s.id]}
+        end)
+    }
+  end
 
   # The last Bridge in is the moment the Page turns: the Assayer is asked once,
   # about every Bridge together, and the beat starts alongside rather than

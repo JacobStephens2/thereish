@@ -19,65 +19,11 @@ defmodule MeaningGame.ExperimentsTest do
     end
   end
 
-  describe "stratified assignment" do
-    test "balances assignment within each chapter stratum" do
-      # If a chapter currently has more plain than bait, next must be bait
-      past_in_chapter = [:plain, :plain, :bait]
-      assert Experiments.assign_arm(past_in_chapter) == :bait
-
-      # If a chapter currently has more bait than plain, next must be plain
-      past_in_chapter = [:bait, :bait, :plain]
-      assert Experiments.assign_arm(past_in_chapter) == :plain
-
-      # If counts are equal, assigns either randomly
-      past_in_chapter = [:bait, :plain]
-      assert Experiments.assign_arm(past_in_chapter) in [:bait, :plain]
-    end
-
-    test "assignment is stratified by chapter and roughly balanced over many pages" do
-      # Simulate 100 pages across 4 chapters
-      chapters = ["harbour", "desert", "kitchen", "attic"]
-
-      {assignments_by_chapter, all_assignments} =
-        Enum.reduce(1..100, {%{}, []}, fn _i, {by_ch, all} ->
-          chapter = Enum.random(chapters)
-          chapter_history = Map.get(by_ch, chapter, [])
-          arm = Experiments.assign_arm(chapter_history)
-
-          {
-            Map.put(by_ch, chapter, chapter_history ++ [arm]),
-            all ++ [arm]
-          }
-        end)
-
-      # In every chapter, the difference between arms is at most 1
-      for {ch, arms} <- assignments_by_chapter do
-        bait_count = Enum.count(arms, &(&1 == :bait))
-        plain_count = Enum.count(arms, &(&1 == :plain))
-
-        assert abs(bait_count - plain_count) <= 1,
-               "Chapter #{ch} was not balanced: #{bait_count} bait vs #{plain_count} plain"
-      end
-
-      # Across all 100 pages, the total is roughly balanced
-      total_bait = Enum.count(all_assignments, &(&1 == :bait))
-      total_plain = Enum.count(all_assignments, &(&1 == :plain))
-      assert abs(total_bait - total_plain) <= 4
-    end
-  end
-
-  describe "arm scoring" do
-    test "leaves standard Assayer verdict unchanged" do
-      verdict = %{
-        closeness: 100,
-        reasoning: "Exact match on barbecue.",
-        quip: "Two minds at the barbecue.",
-        meta: %{}
-      }
-
-      scored = Experiments.score_verdict(verdict, %{}, :flash, ["barbecue", "barbecue"])
-      assert scored.closeness == 100
-      assert scored.reasoning == "Exact match on barbecue."
+  describe "arm assignment" do
+    test "is fixed to :flash until Issue 08" do
+      assert Experiments.assign_arm([]) == :flash
+      assert Experiments.assign_arm([:bait]) == :flash
+      assert Experiments.assign_arm([:plain]) == :flash
     end
   end
 
