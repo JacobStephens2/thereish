@@ -1,24 +1,53 @@
 defmodule Mix.Tasks.Scribe.Sync do
   @moduledoc """
-  Re-downloads the Vale packages the Scribe's prose gate is built on.
+  Synchronises the Scribe: refreshes vendored Vale packages, and writes recaps
+  for any closed Pages that have none.
 
-  The packages under `priv/vale/styles` are vendored rather than fetched at
-  runtime, so that the gate works on a laptop with no network and inside a
-  release image that never had one. This is how they are refreshed, and the diff
-  it leaves is the change of opinion — a package that decided something new
-  about prose since the last sync will start refusing recaps that used to pass,
-  and that is worth reading before it is committed.
-
-  The `Scribe` style itself is this repo's own and is never touched by a sync.
-
+      # Refresh styles (if vale is present) and write recaps for all rooms
       $ mix scribe.sync
+
+      # Write recaps for a specific room only
+      $ mix scribe.sync dust
+
+      # Only refresh Vale packages
+      $ mix scribe.sync --styles
+
+      # Only write recaps
+      $ mix scribe.sync --recaps [ROOM_SLUG]
   """
   use Mix.Task
 
-  @shortdoc "Re-downloads the Vale packages behind the Scribe's prose gate"
+  @shortdoc "Refreshes Vale packages and syncs missing recaps for closed Pages"
 
   @impl Mix.Task
-  def run(_args) do
+  def run(args) do
+    {opts, rest, _} =
+      OptionParser.parse(args,
+        switches: [styles: :boolean, recaps: :boolean],
+        aliases: [s: :styles, r: :recaps]
+      )
+
+    styles_only? = Keyword.get(opts, :styles, false)
+    recaps_only? = Keyword.get(opts, :recaps, false)
+    room_slug = List.first(rest)
+
+    cond do
+      styles_only? ->
+        sync_styles()
+
+      recaps_only? or room_slug != nil ->
+        sync_recaps(room_slug)
+
+      true ->
+        if System.find_executable("vale") do
+          sync_styles()
+        end
+
+        sync_recaps(nil)
+    end
+  end
+
+  defp sync_styles do
     config = Path.join(File.cwd!(), "priv/vale/.vale.ini")
 
     bin =
@@ -32,5 +61,10 @@ defmodule Mix.Tasks.Scribe.Sync do
     if status != 0 do
       Mix.raise("`vale sync` failed (exit #{status})")
     end
+  end
+
+  defp sync_recaps(room_slug) do
+    Mix.Task.run("app.start")
+    MeaningGame.Scribe.sync(room_slug)
   end
 end
