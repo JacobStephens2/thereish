@@ -51,10 +51,16 @@ defmodule MeaningGame.Chronicle.Markdown do
           []
       end
 
+    experiment_name =
+      case page[:experiment_id] do
+        "author_model" -> "Author model: Flash against Astra"
+        _ -> "Bait against plain"
+      end
+
     experiment_lines =
       cond do
         page[:experiment_unblinded] && page[:arm] ->
-          ["- Experiment: Bait against plain", "- Arm: #{page.arm}"]
+          ["- Experiment: #{experiment_name}", "- Arm: #{page.arm}"]
 
         page[:experiment_id] ->
           ["- Experiment: Blinded (#{page.experiment_id})"]

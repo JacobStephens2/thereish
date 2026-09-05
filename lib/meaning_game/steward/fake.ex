@@ -68,13 +68,16 @@ defmodule MeaningGame.Steward.Fake do
               "A light to see by stands opposite a shelter by the water."
             )
 
+        job = Keyword.get(opts, :job, :flash)
+        arm = Keyword.get(opts, :arm, job)
+
         {:ok,
          %{
            bookends: bookends,
            why: why,
            meta: %{
              model: "fake-author",
-             arm: :flash,
+             arm: arm,
              prompt_version: MeaningGame.Steward.Author.version(),
              cost_usd: 0.0,
              latency_ms: delay,

@@ -812,6 +812,75 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "tapping bookends at closed (ticket 08)" do
+    setup do
+      slug = open_room()
+
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      play_to_bridging(mara, jacob, slug)
+
+      commit(mara, "cairn")
+      commit(jacob, "cairn")
+      await_reveal_on(mara)
+      await_reveal_on(jacob)
+      await_phase(slug, :closed)
+
+      %{slug: slug, mara: mara, jacob: jacob, stage: stage}
+    end
+
+    test "each seat can tap flat, fine, or great on phone at closed, and it is replaceable",
+         ctx do
+      # Stage does NOT show bookends tap controls
+      refute has_element?(ctx.stage, "[data-role=bookends-controls]")
+
+      # Phones show bookends tap controls at closed
+      assert has_element?(ctx.mara, "[data-role=bookends-controls]")
+      assert has_element?(ctx.mara, "[data-role=tap-flat]")
+      assert has_element?(ctx.mara, "[data-role=tap-fine]")
+      assert has_element?(ctx.mara, "[data-role=tap-great]")
+
+      # Mara taps great
+      ctx.mara |> element("[data-role=tap-great]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=tap-great].btn-success")
+      assert has_element?(ctx.mara, "[data-role=your-bookends-tap]")
+      assert has_element?(ctx.mara, "[data-role=seat-bookends-tap]", "great")
+      refute has_element?(ctx.jacob, "[data-role=your-bookends-tap]")
+
+      # Mara replaces tap with fine
+      ctx.mara |> element("[data-role=tap-fine]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=tap-fine].btn-primary")
+      assert has_element?(ctx.mara, "[data-role=seat-bookends-tap]", "fine")
+
+      # Jacob taps flat
+      ctx.jacob |> element("[data-role=tap-flat]") |> render_click()
+
+      assert has_element?(ctx.jacob, "[data-role=tap-flat].btn-warning")
+      assert has_element?(ctx.jacob, "[data-role=seat-bookends-tap]", "flat")
+
+      # Both taps recorded in Chronicle
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      taps = MeaningGame.Chronicle.bookends_taps(room.id)
+      assert length(taps) == 3
+
+      [outcome] = MeaningGame.Chronicle.experiment_outcomes(room.id, "author_model")
+      assert Map.values(outcome.taps) |> Enum.sort() == ["fine", "flat"]
+
+      seats = MeaningGame.Repo.preload(room, :seats).seats
+      mara_seat = Enum.find(seats, &(&1.name == "Mara"))
+      jacob_seat = Enum.find(seats, &(&1.name == "Jacob"))
+      assert outcome.taps[mara_seat.id] == "fine"
+      assert outcome.taps[jacob_seat.id] == "flat"
+    end
+  end
+
   describe "giving settings and writing the page (ticket 02)" do
     setup do
       slug = open_room()

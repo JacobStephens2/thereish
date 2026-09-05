@@ -471,6 +471,9 @@ defmodule MeaningGameWeb.RoomComponents do
   difference between an ending and an error message: the players spent five
   tries on two words and did not converge, which is the game working.
   """
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :stage
+
   def ending(assigns) do
     ~H"""
     <section :if={@room.closed} data-role="ending" class="flex flex-col items-center gap-4">
@@ -492,6 +495,77 @@ defmodule MeaningGameWeb.RoomComponents do
           <span>{attempt.closeness || "no verdict"}</span>
         </li>
       </ol>
+
+      <div
+        :if={@mode == :phone && @seat}
+        data-role="bookends-controls"
+        class="flex flex-col items-center gap-2 pt-2"
+      >
+        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+          How were these Bookends?
+        </span>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="flat"
+            data-role="tap-flat"
+            data-tap="flat"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "flat",
+                do: "btn-warning text-warning-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Flat
+          </button>
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="fine"
+            data-role="tap-fine"
+            data-tap="fine"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "fine",
+                do: "btn-primary font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Fine
+          </button>
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="great"
+            data-role="tap-great"
+            data-tap="great"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "great",
+                do: "btn-success text-success-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Great
+          </button>
+        </div>
+        <%= if tap = your_bookends_tap(@room, @seat) do %>
+          <div
+            data-role="your-bookends-tap"
+            class="flex items-center gap-1.5 text-xs text-primary font-medium"
+          >
+            <span data-role="seat-bookends-tap" class="font-semibold capitalize">
+              {tap}
+            </span>
+            recorded
+          </div>
+        <% end %>
+      </div>
     </section>
     """
   end
@@ -592,6 +666,11 @@ defmodule MeaningGameWeb.RoomComponents do
 
   defp your_fairness_tap(room, seat) do
     room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])
+  end
+
+  defp your_bookends_tap(room, seat) do
+    room[:your_bookends_tap] ||
+      (room[:bookends_taps] && seat && room.bookends_taps[seat.id])
   end
 
   defp you?(seat, bridge), do: seat != nil and seat.id == bridge.seat_id

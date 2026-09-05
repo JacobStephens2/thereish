@@ -98,6 +98,14 @@ config :meaning_game, :steward,
           max_tokens: 400,
           timeout_ms: 5_000,
           deadline_ms: 8_000
+        ],
+        astra: [
+          provider: MeaningGame.Steward.OpenAI,
+          model: "gpt-6-astra",
+          effort: "low",
+          max_tokens: 400,
+          timeout_ms: 5_000,
+          deadline_ms: 8_000
         ]
       ]
     ],
@@ -188,6 +196,7 @@ config :meaning_game, :steward,
   # for Hume Octave 2).
   prices: %{
     "gemini-3.8-flash" => {0.75, 3.75},
+    "gpt-6-astra" => {1.0, 4.0},
     "claude-fable-5-1" => {10.0, 50.0},
     # ElevenLabs sound generation ($0.10 / 1k characters)
     "eleven_text_to_sound_v2" => 0.00010,
