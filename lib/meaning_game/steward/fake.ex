@@ -114,6 +114,12 @@ defmodule MeaningGame.Steward.Fake do
       :unavailable ->
         {:error, :no_recap}
 
+      :timeout ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        {:error, reason}
+
       :raise ->
         raise "this Scribe is having a moment"
     end

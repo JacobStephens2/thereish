@@ -34,6 +34,18 @@ defmodule MeaningGame.Rooms do
   """
   def default_slug, do: Application.fetch_env!(:meaning_game, :default_room_slug)
 
+  @doc "The Room with this Code, or nil."
+  @spec get_room(String.t()) :: Room.t() | nil
+  def get_room(code) do
+    with normalised when is_binary(normalised) <- Code.normalise(code) do
+      Store.get_room(normalised)
+    end
+  end
+
+  @doc "Every Room in the database."
+  @spec list_rooms() :: [Room.t()]
+  def list_rooms, do: Store.list_rooms()
+
   @doc """
   How many Seats the New Room form offers by default.
 
