@@ -18,11 +18,13 @@ defmodule MeaningGameWeb.StageLive do
   alias MeaningGame.Rooms
 
   @impl true
-  def mount(params, _session, socket) do
+  def mount(params, session, socket) do
     slug = Rooms.open!(params["slug"])
+    device_token = MeaningGameWeb.DeviceToken.from_session(session)
 
     if connected?(socket) do
       Rooms.subscribe(slug)
+      Rooms.claim_speaker(slug, device_token)
       MeaningGameWeb.Presence.track_stage(socket, slug)
     end
 
@@ -30,7 +32,29 @@ defmodule MeaningGameWeb.StageLive do
      socket
      |> assign(:slug, slug)
      |> assign(:join_url, join_url(slug))
+     |> assign(:device_token, device_token)
+     |> assign(:room, nil)
      |> resync()}
+  end
+
+  @impl true
+  def terminate(_reason, socket) do
+    if socket.assigns[:device_token] do
+      Rooms.release_speaker(socket.assigns.slug, socket.assigns.device_token)
+    end
+
+    :ok
+  end
+
+  @impl true
+  def handle_event("toggle_voice", _params, socket) do
+    Rooms.set_voice(socket.assigns.slug, !socket.assigns.room.voice)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("toggle_house_loop_only", _params, socket) do
+    Rooms.set_house_loop_only(socket.assigns.slug, !socket.assigns.room.house_loop_only)
+    {:noreply, resync(socket)}
   end
 
   @impl true
@@ -47,7 +71,14 @@ defmodule MeaningGameWeb.StageLive do
 
   # The stage holds no Seat, so it sees the Room the way anyone standing behind
   # the couch sees it.
-  defp resync(socket), do: assign(socket, :room, Rooms.snapshot(socket.assigns.slug, nil))
+  defp resync(socket) do
+    old_room = socket.assigns[:room]
+    new_room = Rooms.snapshot(socket.assigns.slug, nil, socket.assigns[:device_token])
+
+    socket
+    |> assign(:room, new_room)
+    |> MeaningGameWeb.Foley.push_foley_events(old_room, new_room)
+  end
 
   defp join_url(slug), do: url(~p"/r/#{slug}")
 
@@ -64,12 +95,24 @@ defmodule MeaningGameWeb.StageLive do
       <header class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
           <h1 class="text-4xl font-semibold">Thereish</h1>
-          <.link
-            navigate={chronicle_path(@slug)}
-            class="text-base font-medium underline opacity-70 hover:opacity-100"
-          >
-            The Chronicle
-          </.link>
+          <div class="flex items-center gap-4">
+            <button
+              :if={@room && @room.speaker?}
+              type="button"
+              id="tap-for-sound"
+              data-role="tap-for-sound"
+              class="btn btn-outline btn-sm animate-pulse"
+            >
+              Tap for sound
+            </button>
+            <.foley_switches :if={@room} room={@room} />
+            <.link
+              navigate={chronicle_path(@slug)}
+              class="text-base font-medium underline opacity-70 hover:opacity-100"
+            >
+              The Chronicle
+            </.link>
+          </div>
         </div>
         <p class="text-xl opacity-70">
           Join at <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
@@ -152,6 +195,8 @@ defmodule MeaningGameWeb.StageLive do
           }
         }
       </script>
+
+      <.foley_hook speaker={@room && @room.speaker?} />
     </main>
     """
   end

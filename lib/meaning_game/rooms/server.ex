@@ -205,15 +205,89 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
-  # The one thing a snapshot says that the rules did not: how long the Assayer
-  # has been thinking. It is the Room's to answer because it is made of time,
-  # and the Game keeps no clock.
-  def handle_call({:snapshot, viewer}, _from, state) do
+  def handle_call({:claim_speaker, device_token}, _from, state) do
+    if state.room.speaker == device_token do
+      {:reply, :ok, state}
+    else
+      case Store.update_room(state.room, %{speaker: device_token}) do
+        {:ok, room} ->
+          state = %{state | room: room}
+          broadcast(state.room.slug)
+          {:reply, :ok, state}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    end
+  end
+
+  def handle_call({:release_speaker, device_token}, _from, state) do
+    if is_nil(device_token) or state.room.speaker == device_token do
+      if is_nil(state.room.speaker) do
+        {:reply, :ok, state}
+      else
+        case Store.update_room(state.room, %{speaker: nil}) do
+          {:ok, room} ->
+            state = %{state | room: room}
+            broadcast(state.room.slug)
+            {:reply, :ok, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+      end
+    else
+      {:reply, :ok, state}
+    end
+  end
+
+  def handle_call({:set_voice, enabled}, _from, state) do
+    case Store.update_room(state.room, %{voice: enabled}) do
+      {:ok, room} ->
+        state = %{state | room: room}
+        broadcast(state.room.slug)
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:set_house_loop_only, enabled}, _from, state) do
+    case Store.update_room(state.room, %{house_loop_only: enabled}) do
+      {:ok, room} ->
+        state = %{state | room: room}
+        broadcast(state.room.slug)
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  # The snapshot answers how long the Assayer has been thinking, plus the
+  # Room facts (speaker?, speaker_claimed?, voice, house_loop_only) for the
+  # requesting viewer's device token. Device tokens never leave the Room.
+  def handle_call({:snapshot, viewer}, from, state) do
+    handle_call({:snapshot, viewer, nil}, from, state)
+  end
+
+  def handle_call({:snapshot, viewer, device_token}, _from, state) do
+    speaker? =
+      not is_nil(state.room.speaker) and not is_nil(device_token) and
+        state.room.speaker == device_token
+
+    speaker_claimed? = not is_nil(state.room.speaker)
+
     view =
       state.game
       |> Game.view(viewer)
       |> Map.put(:assayer_step, step(state))
       |> Map.put(:author_step, author_step(state))
+      |> Map.put(:speaker?, speaker?)
+      |> Map.put(:speaker_claimed?, speaker_claimed?)
+      |> Map.put(:voice, state.room.voice)
+      |> Map.put(:house_loop_only, state.room.house_loop_only)
 
     {:reply, view, state}
   end
