@@ -72,6 +72,9 @@ config :meaning_game, :steward,
       # short enough that a rejected answer can be asked for again inside the
       # budget below, which is what makes the retries real (design law 14).
       timeout_ms: 4_000,
+      # A quip request on a Precedent hit runs inside the beat (2,500 ms), so
+      # its timeout is shorter than the full grading timeout.
+      quip_timeout_ms: 2_000,
       # The whole grading's budget, retries and all. Under the ten seconds at
       # which the reveal stops waiting, so that the Steward has already said it
       # has nothing by the time the game does.
