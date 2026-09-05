@@ -115,6 +115,9 @@ defmodule MeaningGameWeb.ChronicleLive do
   def handle_info(:room_changed, socket), do: {:noreply, load_pages(socket)}
   def handle_info(:chronicle_changed, socket), do: {:noreply, load_pages(socket)}
 
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket),
+    do: {:noreply, socket}
+
   defp load_pages(socket) do
     room_id = socket.assigns.room.id
     pages = Chronicle.book(room_id)

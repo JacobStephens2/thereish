@@ -195,7 +195,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <div
-        :if={@room.reveal.closeness}
+        :if={@mode != :quiet && @room.reveal.closeness}
         data-role="closeness-display"
         style="animation: reveal-closeness 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;"
         class={[
@@ -232,7 +232,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <div
-        :if={@room.reveal.closeness == nil}
+        :if={@mode != :quiet && @room.reveal.closeness == nil}
         data-role="no-verdict"
         class="flex flex-col items-center gap-3 rounded-2xl border border-primary/30 bg-base-200/60 p-6 sm:p-8 text-center max-w-md shadow-sm"
       >
@@ -248,7 +248,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p
-        :if={@room.reveal.quip}
+        :if={@mode != :quiet && @room.reveal.quip}
         data-role="quip"
         class={[
           "font-serif italic font-medium leading-snug max-w-prose text-center",
@@ -262,7 +262,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
 
       <div
-        :if={@mode == :phone && @seat && @room.reveal.closeness}
+        :if={@mode in [:phone, :quiet] && @seat && @room.reveal.closeness}
         data-role="fairness-controls"
         class="flex flex-col items-center gap-2 pt-2"
       >
