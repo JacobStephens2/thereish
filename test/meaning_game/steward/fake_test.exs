@@ -13,10 +13,10 @@ defmodule MeaningGame.Steward.FakeTest do
 
   alias MeaningGame.Steward.Fake
 
-  @anchors ["lantern", "harbour"]
+  @bookends ["lantern", "harbour"]
 
   defp graded(bridges) do
-    {:ok, verdict} = Fake.assay(%{anchors: @anchors, bridges: bridges})
+    {:ok, verdict} = Fake.assay(%{bookends: @bookends, bridges: bridges})
 
     verdict
   end
@@ -108,10 +108,10 @@ defmodule MeaningGame.Steward.FakeTest do
     test "an Assayer that cannot answer says so at four words as at two" do
       fake(mode: :unavailable)
 
-      assert Fake.assay(%{anchors: @anchors, bridges: ["cairn", "cairo"]}) ==
+      assert Fake.assay(%{bookends: @bookends, bridges: ["cairn", "cairo"]}) ==
                {:error, :no_verdict}
 
-      assert Fake.assay(%{anchors: @anchors, bridges: ["cairn", "cairo", "cable", "beacon"]}) ==
+      assert Fake.assay(%{bookends: @bookends, bridges: ["cairn", "cairo", "cable", "beacon"]}) ==
                {:error, :no_verdict}
     end
 
@@ -146,6 +146,33 @@ defmodule MeaningGame.Steward.FakeTest do
       assert {:ok, result} = MeaningGame.Steward.speak("Meld.", voice_id: "custom-voice")
       assert result.meta.voice_id == "custom-voice"
       assert result.meta.latency_ms >= 5
+    end
+
+    test "the fake Scribe answers a configured word, or a default word" do
+      assert Fake.name_room(["some digest"], ["take"]) == {:ok, "cane"}
+
+      fake(name_word: "fork")
+      assert Fake.name_room(["some digest"], ["take"]) == {:ok, "fork"}
+    end
+
+    test "the fake Scribe answers nothing when configured to" do
+      fake(name_word: nil)
+      assert Fake.name_room(["some digest"], ["take"]) == {:error, :no_name}
+
+      fake(name_mode: :unavailable)
+      assert Fake.name_room(["some digest"], ["take"]) == {:error, :no_name}
+    end
+
+    test "the fake Scribe raises when configured to" do
+      fake(name_mode: :raise)
+
+      assert_raise RuntimeError, ~r/this Scribe is having a moment/, fn ->
+        Fake.name_room(["some digest"], ["take"])
+      end
+    end
+
+    test "the fake Scribe with no history returns :no_history" do
+      assert Fake.name_room([], ["take"]) == {:error, :no_history}
     end
   end
 end

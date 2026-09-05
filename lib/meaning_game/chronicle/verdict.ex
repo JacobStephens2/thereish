@@ -8,7 +8,7 @@ defmodule MeaningGame.Chronicle.Verdict do
   verdict is a thing that happened and belongs in the record.
 
   `furthest` is the two Bridges the Assayer named as landing furthest apart, and
-  it is in the book because those two words became the next Attempt's Anchors
+  it is in the book because those two words became the next Attempt's Bookends
   (ADR-0010). Without it a reader could see an Attempt converge and not see why
   it converged there. It is null on a Verdict that never arrived, and on every
   row written before the Assayer was asked the question.

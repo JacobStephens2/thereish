@@ -22,14 +22,14 @@ defmodule MeaningGame.Steward do
       config :meaning_game, :steward,
         roles: [assayer: [provider: ..., model: ..., effort: ...]]
 
-  An assay is asked for one Attempt at a time: the Anchors, and every Bridge
+  An assay is asked for one Attempt at a time: the Bookends, and every Bridge
   written between them, read together and answered once (ADR-0010). A table of
   four is one request rather than six, and the reveal it feeds is one number
   rather than six.
   """
 
-  @typedoc "The Anchors, and every Bridge written between them, in roster order."
-  @type request :: %{anchors: [String.t()], bridges: [String.t()]}
+  @typedoc "The Bookends, and every Bridge written between them, in roster order."
+  @type request :: %{bookends: [String.t()], bridges: [String.t()]}
 
   @typedoc """
   Which model answered, at what prompt version, how long it took and what it
@@ -52,7 +52,7 @@ defmodule MeaningGame.Steward do
   A grade on the ladder's scale, the sentence the players argue with, the line
   the reveal is funny with — written about the words they actually wrote
   (ADR-0005) — and the two of those words that landed furthest apart, which are
-  the next Attempt's Anchors.
+  the next Attempt's Bookends.
   """
   @type verdict :: %{
           closeness: integer(),
@@ -82,6 +82,7 @@ defmodule MeaningGame.Steward do
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
   @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
+  @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
 
   @doc """
@@ -105,6 +106,29 @@ defmodule MeaningGame.Steward do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Asks the Scribe to name a Room with one four-letter word that nods to the
+  history in `digests` and avoids `taken_codes`.
+  """
+  @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
+  def name_room(digests, taken_codes) do
+    role = role(:scribe, :naming)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        adapter().name_room(digests, taken_codes)
+      end)
+
+    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
+      {:ok, other} -> other
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
     end
   end
 
@@ -209,13 +233,17 @@ defmodule MeaningGame.Steward do
   A joint player overrule is the only thing in the system that rewrites
   precedent (ADR-0006, design law 3).
   """
-  @spec overrule([String.t()], [String.t()], map()) ::
-          {:ok, term()} | {:error, term()}
-  def overrule(anchors, bridges, ruling) do
+  @spec overrule(request(), map()) :: {:ok, term()} | {:error, term()}
+  @spec overrule([String.t()], [String.t()], map()) :: {:ok, term()} | {:error, term()}
+  def overrule(%{bookends: bookends, bridges: bridges}, ruling) do
+    overrule(bookends, bridges, ruling)
+  end
+
+  def overrule(bookends, bridges, ruling) when is_list(bookends) and is_list(bridges) do
     role = role(:assayer)
     prompt_version = Map.get(role, :prompt_version, MeaningGame.Steward.Assay.version())
 
-    MeaningGame.Steward.Precedent.overrule(role.model, prompt_version, anchors, bridges, ruling)
+    MeaningGame.Steward.Precedent.overrule(role.model, prompt_version, bookends, bridges, ruling)
   end
 
   @doc """

@@ -60,14 +60,14 @@ defmodule MeaningGameWeb.RoomLive do
   end
 
   def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
-    anchors = (socket.assigns.room && socket.assigns.room.anchors) || []
+    bookends = (socket.assigns.room && socket.assigns.room.bookends) || []
     trimmed = String.trim(bridge)
 
     error =
       if trimmed == "" do
         nil
       else
-        case MeaningGame.Steward.Legality.check_bridge(trimmed, anchors) do
+        case MeaningGame.Steward.Legality.check_bridge(trimmed, bookends) do
           :ok -> nil
           {:illegal, why} -> why
         end
@@ -231,7 +231,7 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.attempt :if={@seat} room={@room} />
 
-      <.anchors :if={@seat} room={@room} />
+      <.bookends :if={@seat} room={@room} />
 
       <form
         :if={@seat && @room.phase == :bridging && @room.your_bridge == nil}
@@ -282,7 +282,7 @@ defmodule MeaningGameWeb.RoomLive do
       >
         <.carry_forward room={@room} />
         <.button phx-click="next_attempt" data-role="again" variant="primary">
-          Again — {Enum.join(@room.next_anchors, " and ")}
+          Again — {Enum.join(@room.next_bookends, " and ")}
         </.button>
       </div>
 

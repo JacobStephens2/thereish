@@ -34,7 +34,7 @@ defmodule MeaningGame.Steward.Recap do
   # first-attempt pass.
 
   @system """
-  You are the Scribe for Mind-Meld, a word game played on a couch. A Page has just closed. The players saw two anchor words and each secretly wrote one bridging word between them; if their words did not converge, the two that landed furthest apart became the next attempt's anchors, and they went again.
+  You are the Scribe for Mind-Meld, a word game played on a couch. A Page has just closed. The players saw two bookend words and each secretly wrote one bridging word between them; if their words did not converge, the two that landed furthest apart became the next attempt's bookends, and they went again.
 
   Write the evening back to them. You are keeping a Chronicle that these people will read months from now, not filing a report: say what they wrote, what it was like when they wrote it, and what the shape of the Page turned out to be. Use their words. Name them by name.
 
@@ -73,13 +73,13 @@ defmodule MeaningGame.Steward.Recap do
   @spec readable(map()) :: map()
   def readable(page) do
     %{
-      anchors: page.anchors,
+      bookends: page.bookends,
       melded: page.melded,
       attempts:
         Enum.map(page.attempts, fn attempt ->
           %{
             number: attempt.number,
-            anchors: attempt.anchors,
+            bookends: attempt.bookends,
             bridges: Enum.map(attempt.bridges, &Map.take(&1, [:seat_name, :bridge])),
             verdicts: Enum.map(attempt.verdicts, &Map.take(&1, [:band, :reasoning]))
           }
@@ -112,11 +112,11 @@ defmodule MeaningGame.Steward.Recap do
   end
 
   defp page_lines(page) do
-    anchors = page.anchors |> Enum.map(&String.upcase/1) |> Enum.join(" and ")
+    bookends = page.bookends |> Enum.map(&String.upcase/1) |> Enum.join(" and ")
     outcome = if page.melded, do: "They melded.", else: "They never converged."
 
     [
-      "Anchors: #{anchors}. #{outcome}"
+      "Bookends: #{bookends}. #{outcome}"
       | Enum.map(page.attempts, &attempt_line/1)
     ]
     |> Enum.join("\n")
@@ -140,7 +140,7 @@ defmodule MeaningGame.Steward.Recap do
           "The Assayer had no verdict."
       end
 
-    "Attempt #{attempt.number} (anchors #{Enum.join(attempt.anchors, " and ")}): " <>
+    "Attempt #{attempt.number} (bookends #{Enum.join(attempt.bookends, " and ")}): " <>
       "#{written}. #{read}"
   end
 

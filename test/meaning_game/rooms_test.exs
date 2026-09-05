@@ -198,12 +198,12 @@ defmodule MeaningGame.RoomsTest do
       %{slug: slug, melissa: melissa, jacob: jacob}
     end
 
-    test "the Anchors are up for both phones and the stage", ctx do
+    test "the Bookends are up for both phones and the stage", ctx do
       for viewer <- [ctx.melissa.id, ctx.jacob.id, nil] do
         view = Rooms.snapshot(ctx.slug, viewer)
 
         assert view.phase == :bridging
-        assert [_lantern, _harbour] = view.anchors
+        assert [_lantern, _harbour] = view.bookends
       end
     end
 
@@ -384,7 +384,7 @@ defmodule MeaningGame.RoomsTest do
       assert is_integer(view.reveal.closeness)
       assert view.reveal.quip != nil
       assert length(view.reveal.furthest) == 2
-      assert view.next_anchors == Enum.map(view.reveal.furthest, & &1.bridge)
+      assert view.next_bookends == Enum.map(view.reveal.furthest, & &1.bridge)
     end
 
     test "a phone that slept through it snapshots back into the same reveal", ctx do
@@ -511,7 +511,7 @@ defmodule MeaningGame.RoomsTest do
       view = play(ctx, "cairn", "beacon")
 
       assert view.phase == :reveal
-      assert view.next_anchors == ["cairn", "beacon"]
+      assert view.next_bookends == ["cairn", "beacon"]
 
       assert :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
 
@@ -519,7 +519,7 @@ defmodule MeaningGame.RoomsTest do
         view = Rooms.snapshot(ctx.slug, viewer)
 
         assert view.phase == :bridging
-        assert view.anchors == ["cairn", "beacon"]
+        assert view.bookends == ["cairn", "beacon"]
         assert view.attempt.number == 2
         assert view.your_bridge == nil
       end
@@ -561,7 +561,7 @@ defmodule MeaningGame.RoomsTest do
       assert view.phase == :closed
       assert view.closed == %{because: :attempts_spent, attempt: 2}
       refute view.reveal.melded?
-      assert Enum.map(view.played, & &1.anchors) == [["lantern", "harbour"]]
+      assert Enum.map(view.played, & &1.bookends) == [["lantern", "harbour"]]
     end
 
     test "one more? is a fresh Page with the same Seats", ctx do
@@ -574,7 +574,7 @@ defmodule MeaningGame.RoomsTest do
 
         assert view.phase == :bridging
         assert view.attempt.number == 1
-        assert view.anchors != ["lantern", "harbour"]
+        assert view.bookends != ["lantern", "harbour"]
         assert view.reveal == nil
         assert view.played == []
         assert Enum.map(view.seats, & &1.name) == ["Melissa", "Jacob"]
@@ -606,7 +606,7 @@ defmodule MeaningGame.RoomsTest do
       assert Rooms.rejoin(slug, token) == {:ok, melissa}
     end
 
-    test "a crashed Room comes back at the Anchors, and the Page in progress is gone" do
+    test "a crashed Room comes back at the Bookends, and the Page in progress is gone" do
       slug = open_room()
       {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
@@ -665,6 +665,71 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, :bad_player_count} = Rooms.create(1, device_token())
       assert {:error, :bad_player_count} = Rooms.create(0, device_token())
       assert {:error, :bad_player_count} = Rooms.create("four", device_token())
+    end
+
+    test "a phone with history asks the Scribe, and the configured word becomes the Code" do
+      token = device_token()
+      slug = open_room()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_reveal(slug)
+
+      steward(name_word: "fork")
+
+      assert {:ok, "fork"} = Rooms.create(2, token)
+      stop_room("fork")
+      stop_room(slug)
+    end
+
+    test "a phone with no history makes no model call and draws a random word" do
+      token = device_token()
+      # Even if the Scribe would raise, a phone with no history makes no call
+      steward(name_mode: :raise)
+
+      assert {:ok, code} = Rooms.create(2, token)
+      assert String.length(code) == 4
+      stop_room(code)
+    end
+
+    test "a Scribe that raises or answers nothing valid falls back to a random word" do
+      token = device_token()
+      slug = open_room()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_reveal(slug)
+
+      steward(name_mode: :raise)
+      assert {:ok, code1} = Rooms.create(2, token)
+      assert String.length(code1) == 4
+      stop_room(code1)
+
+      steward(name_mode: :unavailable)
+      assert {:ok, code2} = Rooms.create(2, token)
+      assert String.length(code2) == 4
+      stop_room(code2)
+
+      stop_room(slug)
+    end
+
+    test "a Scribe that is slow past its deadline falls back to a random word" do
+      token = device_token()
+      slug = open_room()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      await_reveal(slug)
+
+      # 1500ms delay exceeds the test deadline of 1000ms
+      steward(name_delay_ms: 1_500)
+      assert {:ok, code} = Rooms.create(2, token)
+      assert String.length(code) == 4
+      stop_room(code)
+      stop_room(slug)
     end
   end
 
@@ -837,7 +902,7 @@ defmodule MeaningGame.RoomsTest do
           chapter: "room pool chapter",
           theme: "room pool chapter",
           give: nil,
-          anchors: ["candle", "shadow"],
+          bookends: ["candle", "shadow"],
           bait: "flame",
           deep_bridges: ["glow", "darkness"],
           likely_bridges: ["flame", "glow", "darkness", "wax"],
@@ -858,7 +923,7 @@ defmodule MeaningGame.RoomsTest do
 
       # First page of room was drawn from pool
       snapshot = Rooms.snapshot(slug, melissa.id)
-      assert snapshot.anchors == ["candle", "shadow"]
+      assert snapshot.bookends == ["candle", "shadow"]
 
       # Play through to meld it
       :ok = Rooms.commit_bridge(slug, melissa.id, "flame")
@@ -930,11 +995,11 @@ defmodule MeaningGame.RoomsTest do
           chapter: "the harbour",
           theme: "the harbour",
           give: nil,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bait: "lighthouse",
           deep_bridges: ["beacon", "buoy"],
           likely_bridges: ["lighthouse", "beacon", "buoy"],
-          why_these: "Harbour anchors",
+          why_these: "Harbour bookends",
           band_scripts: %{
             "miss" => "m",
             "adjacent" => "a",
@@ -1014,7 +1079,7 @@ defmodule MeaningGame.RoomsTest do
       assert :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
       view_next = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert view_next.page_give == give
-      assert view_next.anchors != nil
+      assert view_next.bookends != nil
     end
 
     test "a failed or refused Author run degrades cleanly and leaves the evening playable", ctx do
@@ -1123,7 +1188,7 @@ defmodule MeaningGame.RoomsTest do
           id: "P-DETERMINISTIC-01",
           chapter: chapter,
           theme: chapter,
-          anchors: ["beacon", "shore"],
+          bookends: ["beacon", "shore"],
           bait: "light",
           deep_bridges: ["reef"],
           likely_bridges: ["light", "reef"],

@@ -117,6 +117,18 @@ config :meaning_game, :steward,
           # couple will read next month.
           timeout_ms: 60_000,
           deadline_ms: 150_000
+        ],
+        naming: [
+          # Gemini 3.8 Flash at low effort, because a table is waiting (spec,
+          # "The Scribe's first job"). One request, no hedging, a short timeout
+          # and a deadline shorter than the Assayer's.
+          provider: MeaningGame.Steward.Gemini,
+          model: "gemini-3.8-flash",
+          effort: "low",
+          max_tokens: 400,
+          requests: 1,
+          timeout_ms: 2_500,
+          deadline_ms: 5_000
         ]
       ]
     ],

@@ -129,7 +129,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       assert html =~ "empty" or has_element?(view, "[data-role=empty-chronicle]")
     end
 
-    test "reads pages in reverse chronological order with anchors, attempts, bridges, and verdicts",
+    test "reads pages in reverse chronological order with bookends, attempts, bridges, and verdicts",
          %{conn: conn, slug: slug} = ctx do
       # Play first page: melded
       play(ctx, "cairn", "cairo")
@@ -183,7 +183,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
           page_id: page.id,
           attempt_number: 1,
           proposer_seat_id: ctx.melissa.id,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: ["cairn", "cairo"],
           machine_closeness: 80,
           machine_reasoning: "Share 4 letters",

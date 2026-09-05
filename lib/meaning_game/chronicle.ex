@@ -135,6 +135,22 @@ defmodule MeaningGame.Chronicle do
   end
 
   @doc """
+  Closed Pages in one Room that have no recap yet, oldest first.
+  """
+  @spec unrecapped_pages(Ecto.UUID.t() | String.t()) :: [Page.t()]
+  def unrecapped_pages(room_id_or_code) do
+    room_id = resolve_room_id(room_id_or_code)
+
+    from(p in Page,
+      left_join: r in Recap,
+      on: r.page_id == p.id,
+      where: p.room_id == ^room_id and is_nil(r.id),
+      order_by: [asc: p.closed_at, asc: p.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Records one player fairness tap into the Chronicle as an append-only event.
   """
   @spec record_fairness_tap(Ecto.UUID.t(), map()) ::
@@ -641,7 +657,7 @@ defmodule MeaningGame.Chronicle do
 
   The Author reads `digest/1` and not this. What a callback is allowed to touch
   is the Chronicle and nothing else: tonight's candy cane may turn up in next
-  month's recap, and it may not quietly become next month's Anchors.
+  month's recap, and it may not quietly become next month's Bookends.
   """
   @spec scribe_digest(Ecto.UUID.t() | String.t() | [map()], Ecto.UUID.t() | nil) :: String.t()
   def scribe_digest(views_or_room, except_page_id \\ nil)
@@ -670,7 +686,7 @@ defmodule MeaningGame.Chronicle do
   end
 
   defp digest_page({page, index}, with_recaps?) do
-    anchors_str = Enum.join(page.anchors, " · ")
+    bookends_str = Enum.join(page.bookends, " · ")
 
     last_attempt = List.last(page.attempts)
     last_verdict = last_attempt && List.first(last_attempt.verdicts)
@@ -686,7 +702,7 @@ defmodule MeaningGame.Chronicle do
     give_str = if page[:give], do: " [Give: #{page.give}]", else: ""
 
     lines = [
-      "Page #{index} (#{anchors_str})#{give_str} — #{outcome_str}"
+      "Page #{index} (#{bookends_str})#{give_str} — #{outcome_str}"
     ]
 
     attempt_lines =
@@ -771,7 +787,7 @@ defmodule MeaningGame.Chronicle do
           (o.room_id == page.room_id and
              Enum.any?(
                page.attempts,
-               &(&1.number == o.attempt_number and &1.anchors == o.anchors)
+               &(&1.number == o.attempt_number and &1.bookends == o.bookends)
              ))
       end)
 
@@ -788,7 +804,7 @@ defmodule MeaningGame.Chronicle do
           (t.room_id == page.room_id and
              Enum.any?(
                page.attempts,
-               &(&1.number == t.attempt_number and &1.anchors == t.anchors)
+               &(&1.number == t.attempt_number and &1.bookends == t.bookends)
              ))
       end)
 
@@ -797,7 +813,7 @@ defmodule MeaningGame.Chronicle do
         attempt_overrules =
           Enum.filter(page_overrules, fn o ->
             o.attempt_number == attempt.number and
-              (o.anchors == attempt.anchors or o.page_id == page.id)
+              (o.bookends == attempt.bookends or o.page_id == page.id)
           end)
 
         attempt_corrections =
@@ -808,7 +824,7 @@ defmodule MeaningGame.Chronicle do
         attempt_taps =
           Enum.filter(page_taps, fn t ->
             t.attempt_number == attempt.number and
-              (t.anchors == attempt.anchors or t.page_id == page.id)
+              (t.bookends == attempt.bookends or t.page_id == page.id)
           end)
 
         bridges =
@@ -873,7 +889,7 @@ defmodule MeaningGame.Chronicle do
         %{
           id: attempt.id,
           number: attempt.number,
-          anchors: attempt.anchors,
+          bookends: attempt.bookends,
           closeness: attempt.closeness,
           melded: attempt.melded,
           bridges: bridges,
@@ -884,10 +900,10 @@ defmodule MeaningGame.Chronicle do
         }
       end)
 
-    opening_anchors =
-      page.document["anchors"] ||
+    opening_bookends =
+      page.document["bookends"] ||
         case page.attempts do
-          [first | _] -> first.anchors
+          [first | _] -> first.bookends
           [] -> []
         end
 
@@ -921,7 +937,7 @@ defmodule MeaningGame.Chronicle do
       give: page.document["give"] || page.document[:give],
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
-      anchors: opening_anchors,
+      bookends: opening_bookends,
       closed_because: page.closed_because,
       melded: page.melded,
       closeness: page.closeness,
@@ -1022,7 +1038,7 @@ defmodule MeaningGame.Chronicle do
       attempt_number: t.attempt_number,
       seat_id: t.seat_id,
       seat_name: (t.seat && t.seat.name) || "Player",
-      anchors: t.anchors,
+      bookends: t.bookends,
       bridges: t.bridges,
       grade: closeness,
       closeness: closeness,
@@ -1040,7 +1056,7 @@ defmodule MeaningGame.Chronicle do
       attempt_number: o.attempt_number,
       proposer_seat_id: o.proposer_seat_id,
       proposer_name: (o.proposer && o.proposer.name) || "Player",
-      anchors: o.anchors,
+      bookends: o.bookends,
       bridges: o.bridges,
       machine_closeness: o.machine_closeness,
       machine_reasoning: o.machine_reasoning,
@@ -1098,7 +1114,7 @@ defmodule MeaningGame.Chronicle do
       |> Attempt.changeset(%{
         page_id: page.id,
         number: attempt.number,
-        anchors: attempt.anchors,
+        bookends: attempt.bookends,
         closeness: attempt.closeness,
         melded: attempt.melded?
       })
