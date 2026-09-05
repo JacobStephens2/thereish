@@ -4,7 +4,7 @@ defmodule MeaningGame.Steward.Legality do
 
   Runs in pure Elixir: checks that every clue or bridge is a single word of
   letters only, present in the ENABLE dictionary, free of profanity, and
-  does not share a stem, prefix, or inflection root with either anchor.
+  does not share a stem, prefix, or inflection root with either bookend.
 
   Used on the phone before commit and on commit, and on the Author's output
   before any Page enters the pool.
@@ -43,12 +43,12 @@ defmodule MeaningGame.Steward.Legality do
   def profane?(_), do: false
 
   @doc """
-  Validates a player or author bridge against the anchor words.
+  Validates a player or author bridge against the bookend words.
 
   Returns `:ok` or `{:illegal, reason}`.
   """
   @spec check_bridge(String.t(), [String.t()]) :: :ok | {:illegal, String.t()}
-  def check_bridge(bridge, anchors) do
+  def check_bridge(bridge, bookends) do
     w = bridge |> to_string() |> String.trim() |> String.downcase()
 
     cond do
@@ -68,7 +68,7 @@ defmodule MeaningGame.Steward.Legality do
         {:illegal, "\"#{w}\" is not in the dictionary."}
 
       true ->
-        check_against_anchors(w, anchors)
+        check_against_bookends(w, bookends)
     end
   end
 
@@ -118,16 +118,16 @@ defmodule MeaningGame.Steward.Legality do
       Stemmer.stem(root_b) == Stemmer.stem(a)
   end
 
-  defp check_against_anchors(w, anchors) do
-    Enum.find_value(anchors, :ok, fn anchor ->
-      a = anchor |> to_string() |> String.trim() |> String.downcase()
+  defp check_against_bookends(w, bookends) do
+    Enum.find_value(bookends, :ok, fn bookend ->
+      a = bookend |> to_string() |> String.trim() |> String.downcase()
 
       cond do
         w == a ->
-          {:illegal, "That is the anchor itself (\"#{anchor}\")."}
+          {:illegal, "That is the bookend itself (\"#{bookend}\")."}
 
         shared_root?(w, a) ->
-          {:illegal, "\"#{w}\" shares a root with \"#{anchor}\"."}
+          {:illegal, "\"#{w}\" shares a root with \"#{bookend}\"."}
 
         true ->
           nil

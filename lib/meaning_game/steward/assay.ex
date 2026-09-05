@@ -15,7 +15,7 @@ defmodule MeaningGame.Steward.Assay do
   report. At two Bridges that is the question the couch has always been asked.
 
   It is also asked which two Bridges landed furthest apart, because those two
-  become the next Attempt's Anchors and the carry-forward should be something the
+  become the next Attempt's Bookends and the carry-forward should be something the
   players were told rather than something the game worked out behind them.
 
   The schema's properties are in a deliberate order, and `reasoning` is first. A
@@ -38,7 +38,7 @@ defmodule MeaningGame.Steward.Assay do
   @version "assay-2"
 
   @system """
-  You are the Assayer for Mind-Meld, a word game played by two or more players. Every player saw the same two anchor words and each secretly wrote one bridging word that sits between the anchors in meaning. You measure how close the players' bridging words landed to one another, not whether any of them was clever or apt.
+  You are the Assayer for Mind-Meld, a word game played by two or more players. Every player saw the same two bookend words and each secretly wrote one bridging word that sits between the bookends in meaning. You measure how close the players' bridging words landed to one another, not whether any of them was clever or apt.
 
   Grade the whole set at once. The number is convergence: how far this set of words is from being one mind. Judge the set, not its worst pair — if most of the words say one thing and one wanders off, that is a set that mostly converged, not a miss. The same idea in different words is a meld. With exactly two words, this is simply how close those two landed.
 
@@ -46,7 +46,7 @@ defmodule MeaningGame.Steward.Assay do
   - 100: every word is the same word, or a plain inflection of it (tide / tides).
   - 75 to 99: the players melded — one idea, however many ways it was worded.
   - 40 to 74: related but distinct ideas, or one shared sense in only one reading.
-  - 0 to 39: different roads; the words share little beyond the anchors.
+  - 0 to 39: different roads; the words share little beyond the bookends.
 
   Answer with one short sentence of reasoning (under 30 words), then the grade, then the two words that landed furthest apart in meaning, then one line of comedy about the words these players actually wrote.
 
@@ -66,7 +66,7 @@ defmodule MeaningGame.Steward.Assay do
   def version, do: @version
 
   @doc """
-  Everything one grading request is made of: the Anchors and every Bridge, in the
+  Everything one grading request is made of: the Bookends and every Bridge, in the
   order they are to be shown to the model.
 
   The order is the caller's business rather than this module's, because both
@@ -74,7 +74,7 @@ defmodule MeaningGame.Steward.Assay do
   keeps (design law 12).
   """
   @spec prompt([String.t()], [String.t()]) :: map()
-  def prompt([left_anchor, right_anchor], bridges) when is_list(bridges) do
+  def prompt([left_bookend, right_bookend], bridges) when is_list(bridges) do
     written =
       bridges
       |> Enum.with_index(1)
@@ -85,7 +85,7 @@ defmodule MeaningGame.Steward.Assay do
     %{
       system: @system,
       user:
-        "Anchors: #{String.upcase(left_anchor)} and #{String.upcase(right_anchor)}.\n" <> written,
+        "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <> written,
       schema: schema(),
       schema_name: "verdict"
     }
@@ -139,7 +139,7 @@ defmodule MeaningGame.Steward.Assay do
   were actually asked about.
 
   The second one matters more than it looks. Those two words become the next
-  Attempt's Anchors, so a model that paraphrased a Bridge, or invented one, would
+  Attempt's Bookends, so a model that paraphrased a Bridge, or invented one, would
   send the table somewhere nobody wrote. They are compared after the same
   normalisation the Precedent keys on, so casing and stray whitespace are
   forgiven and nothing else is.
@@ -179,7 +179,7 @@ defmodule MeaningGame.Steward.Assay do
 
   The furthest pair is returned as the players wrote it rather than as the model
   echoed it back, because those two words are about to be shown as the next
-  Attempt's Anchors and the words on the screen should be the words somebody
+  Attempt's Bookends and the words on the screen should be the words somebody
   typed.
   """
   @spec verdict(map(), [String.t()]) :: %{

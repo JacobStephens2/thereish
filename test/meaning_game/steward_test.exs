@@ -25,7 +25,7 @@ defmodule MeaningGame.StewardTest do
 
   alias MeaningGame.Steward.Live
 
-  @pair %{anchors: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
+  @pair %{bookends: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
 
   # Which way round this request asked, named by the Bridge it put first.
   defp ordering(body), do: first_bridge(body, @pair.bridges)
@@ -193,7 +193,7 @@ defmodule MeaningGame.StewardTest do
     # Four players, one grading. Which of them the request lists first is what
     # tells the two orderings apart, exactly as it does at two.
     @table %{
-      anchors: ["lantern", "harbour"],
+      bookends: ["lantern", "harbour"],
       bridges: ["beacon", "cairn", "lamp", "seagull"]
     }
 
@@ -247,7 +247,7 @@ defmodule MeaningGame.StewardTest do
       {:ok, verdict} = Live.assay(@table)
 
       # The two orderings can name different pairs, and the next Attempt's
-      # Anchors have to be one pair rather than an average of two.
+      # Bookends have to be one pair rather than an average of two.
       assert verdict.furthest == ["beacon", "seagull"]
     end
 
@@ -259,7 +259,7 @@ defmodule MeaningGame.StewardTest do
       {:ok, verdict} = Live.assay(@table)
 
       # A model that shouted a Bridge back has still named that Bridge, and the
-      # words about to be shown as the next Anchors are the words somebody typed.
+      # words about to be shown as the next Bookends are the words somebody typed.
       assert verdict.furthest == ["beacon", "seagull"]
     end
 
@@ -269,7 +269,7 @@ defmodule MeaningGame.StewardTest do
       recorded(fn conn, body ->
         case asked(counts, table_ordering(body)) do
           # "gull" is not one of the four Bridges. Taking it would send the next
-          # Attempt to Anchors nobody at the table chose.
+          # Attempt to Bookends nobody at the table chose.
           1 -> Req.Test.json(conn, response(verdict(furthest: ["beacon", "gull"])))
           _ -> Req.Test.json(conn, response(verdict(furthest: ["beacon", "seagull"])))
         end
@@ -342,7 +342,7 @@ defmodule MeaningGame.StewardTest do
       assert {:ok, cached} = Live.assay(@table)
 
       # A cache hit that lost the furthest pair would replay the grade but not
-      # the game: those two words are the next Attempt's Anchors.
+      # the game: those two words are the next Attempt's Bookends.
       assert cached.furthest == ["beacon", "seagull"]
     end
   end
@@ -450,7 +450,7 @@ defmodule MeaningGame.StewardTest do
 
       assert {:ok, _} =
                MeaningGame.Steward.overrule(
-                 @pair.anchors,
+                 @pair.bookends,
                  @pair.bridges,
                  couple_ruling
                )

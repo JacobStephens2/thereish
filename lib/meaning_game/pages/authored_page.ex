@@ -2,7 +2,7 @@ defmodule MeaningGame.Pages.AuthoredPage do
   @moduledoc """
   An authored Page stored in the pre-generated pool.
 
-  Carries Anchors, the Bait, at least two deep Bridges, likely Bridges with
+  Carries Bookends, the Bait, at least two deep Bridges, likely Bridges with
   `why_these` as the pre-graded table, fallback band scripts, and provenance meta.
   """
   use Ecto.Schema
@@ -16,7 +16,7 @@ defmodule MeaningGame.Pages.AuthoredPage do
     field :chapter, :string
     field :give, :string
     field :theme, :string
-    field :anchors, {:array, :string}
+    field :bookends, {:array, :string}
     field :bait, :string
     field :deep_bridges, {:array, :string}
     field :likely_bridges, {:array, :string}
@@ -35,7 +35,7 @@ defmodule MeaningGame.Pages.AuthoredPage do
     :chapter,
     :give,
     :theme,
-    :anchors,
+    :bookends,
     :bait,
     :deep_bridges,
     :likely_bridges,
@@ -47,13 +47,14 @@ defmodule MeaningGame.Pages.AuthoredPage do
   ]
 
   def changeset(authored_page, attrs) do
+
     authored_page
     |> cast(attrs, @fields)
     |> validate_required([
       :page_id,
       :chapter,
       :theme,
-      :anchors,
+      :bookends,
       :bait,
       :deep_bridges,
       :likely_bridges,

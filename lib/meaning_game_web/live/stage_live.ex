@@ -74,7 +74,7 @@ defmodule MeaningGameWeb.StageLive do
 
       <.attempt room={@room} />
 
-      <.anchors room={@room} />
+      <.bookends room={@room} />
 
       <.assaying room={@room} />
 

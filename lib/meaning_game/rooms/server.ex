@@ -14,7 +14,7 @@ defmodule MeaningGame.Rooms.Server do
 
   The Page in progress is the exception, and it is a real one: Bridges and
   verdicts live in this process and nowhere else, so a Room that crashes
-  mid-Page comes back at the Anchors with both Bridges gone. The Chronicle is
+  mid-Page comes back at the Bookends with both Bridges gone. The Chronicle is
   written when a Page closes, not as it is played, so a crash costs the Page
   that was in flight — never a Page that finished, and never the Seats.
 
@@ -478,7 +478,7 @@ defmodule MeaningGame.Rooms.Server do
 
     {:ok, _} =
       Steward.overrule(
-        overrule.anchors,
+        overrule.bookends,
         overrule.bridges,
         %{
           closeness: overrule.couple_closeness,

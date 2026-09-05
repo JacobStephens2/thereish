@@ -4,7 +4,7 @@ defmodule MeaningGame.Chronicle.Page do
   number the players were shown when it did.
 
   Written once, when the Page closes, and never touched again. `document` is the
-  Page as the Author wrote it — Anchors today, more once there is an Author —
+  Page as the Author wrote it — Bookends today, more once there is an Author —
   kept as JSONB so that a contract which is still growing does not need a
   migration every time it does (ADR-0003).
   """

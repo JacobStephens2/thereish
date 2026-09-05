@@ -13,7 +13,7 @@ defmodule MeaningGame.Chronicle.Overrule do
 
   schema "chronicle_overrules" do
     field :attempt_number, :integer
-    field :anchors, {:array, :string}
+    field :bookends, {:array, :string}
     field :bridges, {:array, :string}
     field :machine_closeness, :integer
     field :machine_reasoning, :string
@@ -30,13 +30,14 @@ defmodule MeaningGame.Chronicle.Overrule do
 
   @doc false
   def changeset(overrule, attrs) do
+
     overrule
     |> cast(attrs, [
       :room_id,
       :page_id,
       :attempt_number,
       :proposer_seat_id,
-      :anchors,
+      :bookends,
       :bridges,
       :machine_closeness,
       :machine_reasoning,
@@ -48,7 +49,7 @@ defmodule MeaningGame.Chronicle.Overrule do
       :room_id,
       :attempt_number,
       :proposer_seat_id,
-      :anchors,
+      :bookends,
       :bridges,
       :couple_closeness,
       :couple_reasoning
