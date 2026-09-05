@@ -38,6 +38,27 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       html = render_component(&assaying/1, room: slow_room)
       assert html =~ "The Assayer is still reading"
     end
+
+    test "author_writing displays reading settings initially and still writing when slow" do
+      writing_room = %{
+        phase: :writing,
+        author_step: :writing
+      }
+
+      html = render_component(&author_writing/1, room: writing_room)
+      assert html =~ "The Author is reading your settings..."
+      assert html =~ ~s(data-role="beat-meter")
+      assert html =~ ~s(data-step="writing")
+
+      still_room = %{
+        phase: :writing,
+        author_step: :still_writing
+      }
+
+      html = render_component(&author_writing/1, room: still_room)
+      assert html =~ "The Author is still writing..."
+      assert html =~ ~s(data-step="still_writing")
+    end
   end
 
   describe "reveal component (the performance)" do
