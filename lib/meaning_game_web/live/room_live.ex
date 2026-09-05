@@ -31,7 +31,10 @@ defmodule MeaningGameWeb.RoomLive do
     slug = Rooms.open!(params["slug"])
     device_token = DeviceToken.from_session(session)
 
-    if connected?(socket), do: Rooms.subscribe(slug)
+    if connected?(socket) do
+      Rooms.subscribe(slug)
+      MeaningGameWeb.Presence.track_phone(socket, slug)
+    end
 
     {:ok,
      socket
@@ -172,6 +175,12 @@ defmodule MeaningGameWeb.RoomLive do
   # does not know about should still be a crash.
   def handle_info(:chronicle_changed, socket), do: {:noreply, socket}
 
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
+    {:noreply,
+     socket
+     |> assign(:stage_present?, MeaningGameWeb.Presence.stage_present?(socket.assigns.slug))}
+  end
+
   defp seat_for_device(slug, device_token) do
     case Rooms.rejoin(slug, device_token) do
       {:ok, seat} -> seat
@@ -181,7 +190,10 @@ defmodule MeaningGameWeb.RoomLive do
 
   defp resync(socket) do
     seat_id = socket.assigns.seat && socket.assigns.seat.id
-    assign(socket, :room, Rooms.snapshot(socket.assigns.slug, seat_id))
+
+    socket
+    |> assign(:room, Rooms.snapshot(socket.assigns.slug, seat_id))
+    |> assign(:stage_present?, MeaningGameWeb.Presence.stage_present?(socket.assigns.slug))
   end
 
   defp message(:give_required), do: "Type a setting first."
@@ -220,6 +232,11 @@ defmodule MeaningGameWeb.RoomLive do
         <p class="mt-2 text-center text-sm opacity-70">
           Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.
         </p>
+        <div class="mt-4">
+          <.button navigate={~p"/r/#{@slug}/stage"} data-role="make-stage" class="btn-sm text-xs">
+            Make this device the Stage
+          </.button>
+        </div>
       </section>
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">
@@ -319,7 +336,7 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.assaying room={@room} />
 
-      <.reveal room={@room} seat={@seat} mode={:phone} />
+      <.reveal room={@room} seat={@seat} mode={if @stage_present?, do: :quiet, else: :phone} />
 
       <.overrule_banner room={@room} seat={@seat} />
 

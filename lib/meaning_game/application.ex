@@ -12,6 +12,7 @@ defmodule MeaningGame.Application do
       MeaningGame.Repo,
       {DNSCluster, query: Application.get_env(:meaning_game, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: MeaningGame.PubSub},
+      MeaningGameWeb.Presence,
       # A Room is one supervised process, found by its slug. Rooms are started on
       # demand rather than listed here, because which Rooms exist is a question
       # for Postgres and for whoever just opened a URL.
