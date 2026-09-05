@@ -68,7 +68,7 @@ defmodule MeaningGame.ExperimentsTest do
 
   describe "arm scoring: bait vs plain" do
     @page %{
-      anchors: ["backyard", "weekend"],
+      bookends: ["backyard", "weekend"],
       bait: "barbecue",
       deep_bridges: ["lawnmower", "chores"],
       likely_bridges: ["barbecue", "lawnmower", "chores"],

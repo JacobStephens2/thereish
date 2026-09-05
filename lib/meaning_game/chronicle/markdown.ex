@@ -34,7 +34,7 @@ defmodule MeaningGame.Chronicle.Markdown do
   end
 
   defp render_page(page, index) do
-    anchors_str = Enum.join(page.anchors, " · ")
+    bookends_str = Enum.join(page.bookends, " · ")
     outcome_str = if page.melded, do: "Melded", else: "Unmelded"
     closed_detail = "#{outcome_str} (#{page.closed_because})"
     closeness_str = if page.closeness, do: "#{page.closeness} / 100", else: "None"
@@ -55,7 +55,7 @@ defmodule MeaningGame.Chronicle.Markdown do
 
     meta_lines =
       [
-        "### Page #{index}: #{anchors_str}",
+        "### Page #{index}: #{bookends_str}",
         "- Outcome: #{closed_detail}",
         "- Closeness: #{closeness_str}"
       ] ++
@@ -119,7 +119,7 @@ defmodule MeaningGame.Chronicle.Markdown do
   end
 
   defp render_attempt(attempt) do
-    anchors_str = Enum.join(attempt.anchors, " · ")
+    bookends_str = Enum.join(attempt.bookends, " · ")
 
     bridges_lines =
       attempt.bridges
@@ -222,7 +222,7 @@ defmodule MeaningGame.Chronicle.Markdown do
     attempt_lines =
       ([
          "#### Attempt #{attempt.number}",
-         "- Anchors: #{anchors_str}",
+         "- Bookends: #{bookends_str}",
          "- Bridges:\n#{bridges_lines}"
        ] ++
          verdict_lines ++
@@ -251,8 +251,8 @@ defmodule MeaningGame.Chronicle.Markdown do
 
     # Parse Page header
     [page_title | meta_lines] = String.split(header_part, "\n", trim: true)
-    [_, anchors_text] = Regex.run(~r/### Page \d+:\s*(.*)/, page_title)
-    anchors = String.split(anchors_text, " · ") |> Enum.map(&String.trim/1)
+    [_, bookends_text] = Regex.run(~r/### Page \d+:\s*(.*)/, page_title)
+    bookends = String.split(bookends_text, " · ") |> Enum.map(&String.trim/1)
 
     outcome_line =
       Enum.find(
@@ -295,7 +295,7 @@ defmodule MeaningGame.Chronicle.Markdown do
     attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
 
     %{
-      anchors: anchors,
+      bookends: bookends,
       melded: melded,
       closeness: closeness,
       give: give,
@@ -337,11 +337,19 @@ defmodule MeaningGame.Chronicle.Markdown do
     [_, num_str] = Regex.run(~r/#### Attempt (\d+)/, title)
     number = String.to_integer(num_str)
 
-    anchors_line = Enum.find(lines, &String.starts_with?(String.trim(&1), "- Anchors:"))
+    bookends_line =
+      Enum.find(
+        lines,
+        &(String.starts_with?(String.trim(&1), "- Bookends:") or
+            String.starts_with?(String.trim(&1), "- Anchors:"))
+      )
 
-    anchors =
-      if anchors_line do
-        anchors_line
+    bookends =
+      if bookends_line do
+        bookends_line
+        |> String.trim()
+        |> String.replace_prefix("- Bookends:", "")
+        # Compatibility clause: accept old Anchors: lines so earlier exports round-trip
         |> String.replace_prefix("- Anchors:", "")
         |> String.trim()
         |> String.split(" · ")
@@ -356,6 +364,7 @@ defmodule MeaningGame.Chronicle.Markdown do
         case Regex.run(~r/^\s*-\s*([^:]+):\s*(.*)$/, line) do
           [_, name, bridge]
           when name not in [
+                 "Bookends",
                  "Anchors",
                  "Bridges",
                  "Closeness",
@@ -405,7 +414,7 @@ defmodule MeaningGame.Chronicle.Markdown do
 
     %{
       number: number,
-      anchors: anchors,
+      bookends: bookends,
       bridges: bridges,
       closeness: closeness,
       band: band,

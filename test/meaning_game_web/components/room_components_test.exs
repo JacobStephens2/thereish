@@ -251,7 +251,7 @@ defmodule MeaningGameWeb.RoomComponentsTest do
 
   describe "the carry line" do
     test "names the two words the next attempt will hang between" do
-      room = %{phase: :reveal, next_anchors: ["cairn", "beacon"], next_anchors_chosen?: true}
+      room = %{phase: :reveal, next_bookends: ["cairn", "beacon"], next_bookends_chosen?: true}
 
       html = render_component(&carry_forward/1, room: room)
 
@@ -261,7 +261,7 @@ defmodule MeaningGameWeb.RoomComponentsTest do
     end
 
     test "says when the Assayer did not choose them" do
-      room = %{phase: :reveal, next_anchors: ["cairn", "beacon"], next_anchors_chosen?: false}
+      room = %{phase: :reveal, next_bookends: ["cairn", "beacon"], next_bookends_chosen?: false}
 
       html = render_component(&carry_forward/1, room: room)
 

@@ -28,7 +28,7 @@ pages = [
     chapter: chapter,
     theme: "the backyard barbecue",
     give: nil,
-    anchors: ["backyard", "weekend"],
+    bookends: ["backyard", "weekend"],
     bait: "barbecue",
     deep_bridges: ["lawnmower", "chores", "sprinkler"],
     likely_bridges: [
@@ -62,7 +62,7 @@ pages = [
     chapter: chapter,
     theme: "the morning rush",
     give: nil,
-    anchors: ["kitchen", "clock"],
+    bookends: ["kitchen", "clock"],
     bait: "breakfast",
     deep_bridges: ["backpack", "toast"],
     likely_bridges: [
@@ -75,7 +75,7 @@ pages = [
       "lunchbox"
     ],
     why_these:
-      "Kitchen and clock point straight to breakfast as the routine anchor. Backpack and lunchbox capture the frantic exit; toast is the rushed compromise.",
+      "Kitchen and clock point straight to breakfast as the routine bookend. Backpack and lunchbox capture the frantic exit; toast is the rushed compromise.",
     band_scripts: %{
       "miss" => "Sleeping through the alarm.",
       "adjacent" => "Passing each other in the hallway.",
@@ -96,7 +96,7 @@ pages = [
     chapter: chapter,
     theme: "the family road trip",
     give: nil,
-    anchors: ["highway", "minivan"],
+    bookends: ["highway", "minivan"],
     bait: "vacation",
     deep_bridges: ["luggage", "snacks"],
     likely_bridges: ["vacation", "luggage", "snacks", "detour", "rest", "playlist", "traffic"],
@@ -122,7 +122,7 @@ pages = [
     chapter: chapter,
     theme: "the garage sanctuary",
     give: nil,
-    anchors: ["workbench", "shelf"],
+    bookends: ["workbench", "shelf"],
     bait: "toolbox",
     deep_bridges: ["cobweb", "project"],
     likely_bridges: ["toolbox", "cobweb", "project", "nostalgia", "hammer", "clutter", "paint"],
