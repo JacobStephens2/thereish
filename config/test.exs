@@ -64,6 +64,14 @@ config :meaning_game, :steward,
       hume_api_key: "recorded-responses-need-no-key",
       hume_secret_key: "recorded-responses-need-no-key",
       jobs: [
+        effects: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
+        music: [
+          deadline_ms: 2_000,
+          poll_interval_ms: 5,
+          timeout_ms: 1_000,
+          api_key: "recorded-responses-need-no-key"
+        ],
+        ear: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
         voice: [
           provider: MeaningGame.Steward.Hume,
           voice_id: "44cb3a51-07b4-4934-83fd-9d9e8d363ce6",

@@ -144,6 +144,93 @@ defmodule MeaningGame.Steward.Live do
   end
 
   @impl true
+  def forge(brief, opts \\ []) do
+    brief_map = if is_binary(brief), do: %{prompt: brief}, else: Map.new(brief)
+    n = Keyword.get(opts, :n, 4)
+    kind = Map.get(brief_map, :kind) || Keyword.get(opts, :kind, :effects)
+
+    start_time = System.monotonic_time(:millisecond)
+
+    case kind do
+      :music ->
+        role = Steward.role(:foley, :music)
+        prompt = Map.get(brief_map, :prompt) || brief_map[:text] || ""
+
+        # Mureka enforces concurrent requests limit 1, so generate sequentially
+        results =
+          Enum.map(1..n, fn _ ->
+            params =
+              role
+              |> Map.merge(brief_map)
+              |> Map.merge(Map.new(opts))
+              |> Map.put(:prompt, prompt)
+              |> Map.put(:n, Map.get(role, :n, 1))
+
+            MeaningGame.Steward.Mureka.generate(params)
+          end)
+
+        wrap_candidates(results, start_time)
+
+      _effects ->
+        role = Steward.role(:foley, :effects)
+        text = Map.get(brief_map, :prompt) || Map.get(brief_map, :text) || ""
+        timeout_ms = Map.get(role, :timeout_ms, 30_000)
+
+        tasks =
+          for _ <- 1..n do
+            Task.async(fn ->
+              params =
+                role
+                |> Map.merge(brief_map)
+                |> Map.merge(Map.new(opts))
+                |> Map.put(:text, text)
+
+              MeaningGame.Steward.ElevenLabs.generate(params)
+            end)
+          end
+
+        results = Task.await_many(tasks, timeout_ms * n)
+        wrap_candidates(results, start_time)
+    end
+  end
+
+  defp wrap_candidates(results, start_time) do
+    latency_ms = System.monotonic_time(:millisecond) - start_time
+
+    with :ok <- check_all_ok(results) do
+      candidates =
+        Enum.map(results, fn {:ok, result} ->
+          %{
+            bytes: result.bytes,
+            meta: %{
+              model: result.model,
+              cost_usd: result.cost_usd,
+              latency_ms: latency_ms
+            }
+          }
+        end)
+
+      {:ok, candidates}
+    end
+  end
+
+  defp check_all_ok(results) do
+    case Enum.find(results, fn
+           {:ok, _} -> false
+           _ -> true
+         end) do
+      nil -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def rank(candidates, brief) do
+    role = Steward.role(:foley, :ear)
+    MeaningGame.Steward.Gemini.rank(candidates, brief, role)
+  end
+
+  @impl true
   def speak(line, opts \\ []) do
     role =
       try do
