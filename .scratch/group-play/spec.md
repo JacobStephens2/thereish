@@ -2,7 +2,7 @@
 
 Status: `ready-for-agent`
 Written: 2026-09-04
-Sources: `docs/design-brief.md` (Group play, decided 2026-09-04), `CONTEXT.md`, ADRs 0001–0010 (0010 is this feature's ruling), the Mind-Meld spec at `.scratch/archive/mind-meld/spec.md`, the grilling of 2026-09-04, and the follow-ups filed at `.scratch/group-play/issues/` and `.scratch/scribe/issues/`.
+Sources: `docs/design-brief.md` (Group play, decided 2026-09-04), `CONTEXT.md`, ADRs 0001–0010 (0010 is this feature's ruling), the Mind-Meld spec at `.scratch/resolved/mind-meld/spec.md`, the grilling of 2026-09-04, and the follow-ups filed at `.scratch/group-play/issues/` and `.scratch/scribe/issues/`.
 
 ## Problem Statement
 
