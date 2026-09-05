@@ -8,6 +8,7 @@ defmodule MeaningGame.Steward.NamingTest do
 
   import MeaningGame.StewardFixtures
 
+  alias MeaningGame.Steward
   alias MeaningGame.Steward.Live
 
   @digests [
@@ -151,7 +152,7 @@ defmodule MeaningGame.Steward.NamingTest do
         Req.Test.json(conn, naming_response("CANE"))
       end)
 
-      assert {:error, :timeout} = Live.name_room(@digests, ["couch"])
+      assert {:error, :timeout} = Steward.name_room(@digests, ["couch"])
     end
 
     test "a provider error is returned as error rather than crashing" do
@@ -159,7 +160,15 @@ defmodule MeaningGame.Steward.NamingTest do
         Req.Test.transport_error(conn, :econnrefused)
       end)
 
-      assert {:error, _reason} = Live.name_room(@digests, ["couch"])
+      assert {:error, _reason} = Steward.name_room(@digests, ["couch"])
+    end
+
+    test "no history makes no model call and returns :no_history" do
+      recorded(fn _conn, _body ->
+        flunk("no history should make no model call")
+      end)
+
+      assert Steward.name_room([], ["couch"]) == {:error, :no_history}
     end
   end
 end

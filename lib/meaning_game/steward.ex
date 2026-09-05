@@ -89,8 +89,22 @@ defmodule MeaningGame.Steward do
   history in `digests` and avoids `taken_codes`.
   """
   @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
   def name_room(digests, taken_codes) do
-    adapter().name_room(digests, taken_codes)
+    role = role(:scribe, :naming)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        adapter().name_room(digests, taken_codes)
+      end)
+
+    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
+      {:ok, other} -> other
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
+    end
   end
 
   @doc """

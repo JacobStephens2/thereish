@@ -44,7 +44,7 @@ if key = System.get_env("ANTHROPIC_API_KEY") do
   config :meaning_game, :steward,
     roles: [
       author: [api_key: key],
-      scribe: [api_key: key, jobs: [recap: [api_key: key]]]
+      scribe: [jobs: [recap: [api_key: key]]]
     ]
 end
 

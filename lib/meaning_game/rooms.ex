@@ -93,26 +93,10 @@ defmodule MeaningGame.Rooms do
   end
 
   defp name_with_scribe_or_fallback(player_count, digests) do
-    role = Steward.role(:scribe, :naming)
     taken = Store.taken_codes()
 
-    result =
-      try do
-        task =
-          Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
-            Steward.name_room(digests, taken)
-          end)
-
-        case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
-          {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
-          _ -> {:error, :fallback}
-        end
-      rescue
-        _ -> {:error, :fallback}
-      end
-
-    case result do
-      {:ok, code} ->
+    case Steward.name_room(digests, taken) do
+      {:ok, code} when is_binary(code) ->
         case Store.insert_room(code, player_count) do
           {:ok, room} ->
             with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
@@ -121,7 +105,7 @@ defmodule MeaningGame.Rooms do
             insert_with_a_free_code(player_count, @code_draws)
         end
 
-      {:error, _} ->
+      _ ->
         insert_with_a_free_code(player_count, @code_draws)
     end
   end

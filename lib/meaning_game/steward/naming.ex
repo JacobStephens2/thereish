@@ -24,7 +24,7 @@ defmodule MeaningGame.Steward.Naming do
   - Must be a real dictionary word.
   - Never profane or inappropriate.
   - Must not be one of the already taken Codes.
-  - The word should subtly nod to the themes, gives, anchors, or bridges in the history.
+  - The word should subtly nod to the themes, gives, bookends, or bridges in the history.
   """
 
   @doc "The version of the naming prompt and schema."

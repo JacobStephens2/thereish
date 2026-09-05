@@ -112,24 +112,14 @@ defmodule MeaningGame.Steward.Live do
   @impl true
   def name_room(digests, taken_codes) do
     role = Steward.role(:scribe, :naming)
+    prompt = Naming.prompt(digests, taken_codes)
 
-    task =
-      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
-        prompt = Naming.prompt(digests, taken_codes)
+    case Gate.answer(role, prompt, &Naming.check(&1, taken_codes)) do
+      {:ok, answer} ->
+        {:ok, Naming.word(answer.json)}
 
-        case Gate.answer(role, prompt, &Naming.check(&1, taken_codes)) do
-          {:ok, answer} ->
-            {:ok, Naming.word(answer.json)}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-      end)
-
-    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, result} -> result
-      {:exit, reason} -> {:error, reason}
-      nil -> {:error, :timeout}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
