@@ -172,6 +172,9 @@ defmodule MeaningGame.StewardFixtures do
       |> put_in([:roles, :assayer, :api_key], key)
       |> put_in([:roles, :assayer, :timeout_ms], 5_000)
       |> put_in([:roles, :assayer, :deadline_ms], 10_000)
+      |> put_in([:roles, :scribe, :jobs, :naming, :api_key], key)
+      |> put_in([:roles, :scribe, :jobs, :naming, :timeout_ms], 5_000)
+      |> put_in([:roles, :scribe, :jobs, :naming, :deadline_ms], 10_000)
 
     Application.put_env(:meaning_game, :steward, live)
   end

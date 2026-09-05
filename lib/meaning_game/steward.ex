@@ -82,6 +82,16 @@ defmodule MeaningGame.Steward do
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
   @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
+  @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+
+  @doc """
+  Asks the Scribe to name a Room with one four-letter word that nods to the
+  history in `digests` and avoids `taken_codes`.
+  """
+  @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  def name_room(digests, taken_codes) do
+    adapter().name_room(digests, taken_codes)
+  end
 
   @doc """
   Writes one closed Page back into the Chronicle as prose.
