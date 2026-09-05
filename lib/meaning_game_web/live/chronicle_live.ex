@@ -115,16 +115,21 @@ defmodule MeaningGameWeb.ChronicleLive do
   def handle_info(:room_changed, socket), do: {:noreply, load_pages(socket)}
   def handle_info(:chronicle_changed, socket), do: {:noreply, load_pages(socket)}
 
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket),
+    do: {:noreply, socket}
+
   defp load_pages(socket) do
     room_id = socket.assigns.room.id
     pages = Chronicle.book(room_id)
     unblinded = Chronicle.experiment_unblinded?(room_id, "bait_against_plain")
     readout = Chronicle.experiment_readout(room_id, "bait_against_plain")
+    spend = Chronicle.spend(room_id)
 
     socket
     |> assign(:pages, pages)
     |> assign(:unblinded, unblinded)
     |> assign(:readout, readout)
+    |> assign(:spend, spend)
   end
 
   defp default_correction_params do
@@ -395,6 +400,13 @@ defmodule MeaningGameWeb.ChronicleLive do
                 </div>
                 <p :if={v.reasoning} class="italic opacity-80">"{v.reasoning}"</p>
                 <p :if={v.quip} class="text-xs font-medium opacity-90">{v.quip}</p>
+                <p
+                  :if={v.furthest && length(v.furthest) == 2}
+                  data-role="carried-words"
+                  class="text-xs opacity-70"
+                >
+                  Carried: <span class="font-medium">{Enum.join(v.furthest, " · ")}</span>
+                </p>
               </div>
 
               <!-- Fairness taps on this attempt -->
@@ -609,6 +621,15 @@ defmodule MeaningGameWeb.ChronicleLive do
           </div>
         </article>
       </div>
+
+      <footer
+        data-role="chronicle-spend"
+        class="border-t border-base-300 pt-6 pb-12 text-sm text-base-content/80"
+      >
+        <p data-role="spend-line" class="font-mono text-xs opacity-75">
+          {Chronicle.spend_line(@spend)}
+        </p>
+      </footer>
     </main>
     """
   end

@@ -69,7 +69,7 @@ defmodule MeaningGameWeb.CheckLive do
       phx-hook=".BrowserReport"
       class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12"
     >
-      <h1 class="text-2xl font-semibold">Meaning Game</h1>
+      <h1 class="text-2xl font-semibold">Thereish</h1>
 
       <dl class="flex flex-col gap-4 text-lg">
         <div>

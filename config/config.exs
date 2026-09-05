@@ -27,6 +27,10 @@ config :meaning_game,
   # hands the ruling to the players. Ten seconds is a ceiling, not a target: the
   # measured p95 is around one.
   assayer_escalation_ms: [slow: 4_000, unavailable: 10_000],
+  # How the wait escalates when the Author is slow (spec: The Author fails honestly).
+  # At five seconds every screen says the Author is still writing; at the eight-second
+  # deadline the Room fails with a timeout reason and offers Try again and New settings.
+  author_escalation_ms: [still_writing: 5_000, deadline: 8_000],
   # How many tries a Page gets before it closes unmelded. Five is a guess about
   # how long a converging arc stays funny, which makes it a setting the couch
   # moves rather than a number in the rules.
@@ -123,7 +127,7 @@ config :meaning_game, :steward,
           # the Vale gate is for rather than a reason to pick a worse writer.
           provider: MeaningGame.Steward.Anthropic,
           model: "claude-fable-5-1",
-          effort: "low",
+          effort: "xhigh",
           max_tokens: 8_000,
           # Nobody is waiting. The budget is generous because a recap that takes
           # a minute is a recap, and a recap that was rushed is a paragraph the
