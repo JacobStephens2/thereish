@@ -74,6 +74,7 @@ defmodule MeaningGame.Steward.Fake do
            why: why,
            meta: %{
              model: "fake-author",
+             arm: :flash,
              prompt_version: MeaningGame.Steward.Author.version(),
              cost_usd: 0.0,
              latency_ms: delay,
