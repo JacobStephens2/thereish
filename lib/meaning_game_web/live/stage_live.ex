@@ -75,7 +75,7 @@ defmodule MeaningGameWeb.StageLive do
         data-role="giving-stage"
         class="flex flex-col items-center justify-center gap-3 text-center"
       >
-        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Giving Settings</p>
+        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Settings</p>
         <p class="text-2xl font-semibold">
           Waiting for settings: {@room.gives_in} of {length(@room.seats)}
         </p>

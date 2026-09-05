@@ -59,7 +59,6 @@ defmodule MeaningGame.Game do
     gives: %{},
     last_gives: %{},
     author_failure: nil,
-    bookends_taps: %{},
     bridges: %{},
     verdict: nil,
     played: [],
@@ -113,7 +112,6 @@ defmodule MeaningGame.Game do
           gives: %{String.t() => String.t()},
           last_gives: %{String.t() => String.t()},
           author_failure: term(),
-          bookends_taps: %{String.t() => String.t()},
           bridges: %{String.t() => String.t()},
           verdict: verdict() | nil,
           played: [attempt()],
@@ -220,8 +218,7 @@ defmodule MeaningGame.Game do
       bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
       gives: %{},
       last_gives: %{},
-      author_failure: nil,
-      bookends_taps: %{}
+      author_failure: nil
     }
   end
 
@@ -406,7 +403,7 @@ defmodule MeaningGame.Game do
       graded?: true,
       closeness: verdict.closeness,
       reasoning: verdict.reasoning,
-      quip: Map.get(verdict, :quip) || fallback_quip(state),
+      quip: Map.get(verdict, :quip),
       furthest: Map.get(verdict, :furthest),
       meta: Map.get(verdict, :meta, %{})
     })
@@ -417,7 +414,7 @@ defmodule MeaningGame.Game do
       graded?: false,
       closeness: nil,
       reasoning: nil,
-      quip: Map.get(event, :quip) || fallback_quip(state),
+      quip: Map.get(event, :quip),
       furthest: nil,
       meta: Map.get(event, :meta, %{})
     })
@@ -660,8 +657,6 @@ defmodule MeaningGame.Game do
   # Every Bridge of this attempt, in roster order.
   defp written_bridges(state), do: Enum.map(state.seats, &state.bridges[&1.id])
 
-  defp fallback_quip(_state), do: nil
-
   # An Attempt is graded once. The Room can deliver the same verdict twice — a
   # retry, a message that outlived the attempt it was about — and the second one
   # must not be able to change a number the players are already looking at.
@@ -713,11 +708,17 @@ defmodule MeaningGame.Game do
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
   # one sentence of reasoning, and the two words that landed furthest apart.
   defp reveal(state, phase) when phase in [:reveal, :closed] do
+    gives =
+      Enum.map(state.seats, fn seat ->
+        %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
+      end)
+
     state.verdict
     |> verdict_view()
     |> Map.merge(%{
       bridges: bridges_view(state, state.bridges),
-      furthest: furthest_view(state, chosen_furthest(state))
+      furthest: furthest_view(state, chosen_furthest(state)),
+      gives: gives
     })
   end
 
