@@ -30,13 +30,16 @@ defmodule MeaningGame.Steward.GeminiAudioTest do
 
         conn
         |> Plug.Conn.put_resp_header("content-type", "application/json")
-        |> Plug.Conn.send_resp(200, Jason.encode!(%{
-          "model" => "gemini-3.8-flash",
-          "choices" => [
-            %{"message" => %{"content" => content}, "finish_reason" => "stop"}
-          ],
-          "usage" => %{"prompt_tokens" => 300, "total_tokens" => 350}
-        }))
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "model" => "gemini-3.8-flash",
+            "choices" => [
+              %{"message" => %{"content" => content}, "finish_reason" => "stop"}
+            ],
+            "usage" => %{"prompt_tokens" => 300, "total_tokens" => 350}
+          })
+        )
       end)
 
       assert {:ok, ranking} =
@@ -77,11 +80,14 @@ defmodule MeaningGame.Steward.GeminiAudioTest do
 
         conn
         |> Plug.Conn.put_resp_header("content-type", "application/json")
-        |> Plug.Conn.send_resp(200, Jason.encode!(%{
-          "model" => "gemini-3.8-flash",
-          "choices" => [%{"message" => %{"content" => content}}],
-          "usage" => %{"prompt_tokens" => 100, "total_tokens" => 150}
-        }))
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "model" => "gemini-3.8-flash",
+            "choices" => [%{"message" => %{"content" => content}}],
+            "usage" => %{"prompt_tokens" => 100, "total_tokens" => 150}
+          })
+        )
       end)
 
       assert {:error, {:rejected, _why}} =
@@ -103,11 +109,14 @@ defmodule MeaningGame.Steward.GeminiAudioTest do
 
         conn
         |> Plug.Conn.put_resp_header("content-type", "application/json")
-        |> Plug.Conn.send_resp(200, Jason.encode!(%{
-          "model" => "gemini-3.8-flash",
-          "choices" => [%{"message" => %{"content" => content}}],
-          "usage" => %{"prompt_tokens" => 100, "total_tokens" => 150}
-        }))
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "model" => "gemini-3.8-flash",
+            "choices" => [%{"message" => %{"content" => content}}],
+            "usage" => %{"prompt_tokens" => 100, "total_tokens" => 150}
+          })
+        )
       end)
 
       assert {:error, {:rejected, _why}} =

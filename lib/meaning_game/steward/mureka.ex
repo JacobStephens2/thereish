@@ -40,7 +40,10 @@ defmodule MeaningGame.Steward.Mureka do
       n = Map.get(request, :n) || Map.get(request, "n", 1)
       prompt = Map.get(request, :prompt) || Map.get(request, "prompt")
       deadline_ms = Map.get(request, :deadline_ms) || Map.get(request, "deadline_ms", 180_000)
-      poll_interval_ms = Map.get(request, :poll_interval_ms) || Map.get(request, "poll_interval_ms", 2_000)
+
+      poll_interval_ms =
+        Map.get(request, :poll_interval_ms) || Map.get(request, "poll_interval_ms", 2_000)
+
       timeout_ms = Map.get(request, :timeout_ms) || Map.get(request, "timeout_ms", 30_000)
 
       poll_opts = %{
@@ -162,7 +165,9 @@ defmodule MeaningGame.Steward.Mureka do
 
   defp api_key(request) do
     case Map.get(request, :api_key) || Map.get(request, "api_key") do
-      key when is_binary(key) and key != "" -> {:ok, key}
+      key when is_binary(key) and key != "" ->
+        {:ok, key}
+
       _ ->
         Logger.error("MUREKA_API_KEY is not set; Foley cannot generate music")
         {:error, :no_api_key}

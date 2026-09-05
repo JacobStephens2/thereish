@@ -128,6 +128,11 @@ defmodule MeaningGame.Foley.Briefs do
   @spec get(atom() | String.t()) :: map() | nil
   def get(key) do
     str_key = to_string(key)
-    Enum.find(@briefs, &(to_string(&1.key) == str_key or to_string(&1.id) == str_key or &1.target_filename == str_key))
+
+    Enum.find(
+      @briefs,
+      &(to_string(&1.key) == str_key or to_string(&1.id) == str_key or
+          &1.target_filename == str_key)
+    )
   end
 end

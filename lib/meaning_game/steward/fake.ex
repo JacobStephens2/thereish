@@ -180,7 +180,6 @@ defmodule MeaningGame.Steward.Fake do
     end
   end
 
-
   # The Scribe with no model behind it writes the one true sentence about a
   # Page: who wrote what, first and last. It is a dial like the grade is — a
   # test that wants a recap naming a word writes that word as a Bridge — and it

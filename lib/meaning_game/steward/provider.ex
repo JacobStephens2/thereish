@@ -91,7 +91,6 @@ defmodule MeaningGame.Steward.Provider do
 
   def decode_body(body), do: body
 
-
   @doc """
   Options handed to every HTTP request the providers make.
 

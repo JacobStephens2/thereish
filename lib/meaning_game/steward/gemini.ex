@@ -75,7 +75,6 @@ defmodule MeaningGame.Steward.Gemini do
     end
   end
 
-
   # The key is configuration like the model and the effort are, read out of
   # `GEMINI_API_KEY` in `config/runtime.exs` so that nothing has to reach for the
   # environment mid-Page.
@@ -145,15 +144,22 @@ defmodule MeaningGame.Steward.Gemini do
   end
 
   defp rank_body(model, brief_text, clips, opts_map) do
-    user_parts = [
-      %{type: "text", text: "Brief:\n#{brief_text}\n\nListen to the following #{length(clips)} candidate clips and rank them from best to worst based on how well they fit the brief."}
-    ] ++ Enum.flat_map(Enum.with_index(clips, 1), fn {clip, index} ->
-      bytes = extract_clip_bytes(clip)
+    user_parts =
       [
-        %{type: "text", text: "Candidate #{index}:"},
-        %{type: "input_audio", input_audio: %{data: Base.encode64(bytes), format: "mp3"}}
-      ]
-    end)
+        %{
+          type: "text",
+          text:
+            "Brief:\n#{brief_text}\n\nListen to the following #{length(clips)} candidate clips and rank them from best to worst based on how well they fit the brief."
+        }
+      ] ++
+        Enum.flat_map(Enum.with_index(clips, 1), fn {clip, index} ->
+          bytes = extract_clip_bytes(clip)
+
+          [
+            %{type: "text", text: "Candidate #{index}:"},
+            %{type: "input_audio", input_audio: %{data: Base.encode64(bytes), format: "mp3"}}
+          ]
+        end)
 
     system_text =
       "You are Foley's ear. Evaluate each candidate audio clip against the brief. " <>
@@ -250,4 +256,3 @@ defmodule MeaningGame.Steward.Gemini do
   defp extract_brief_text(text) when is_binary(text), do: text
   defp extract_brief_text(other), do: inspect(other)
 end
-
