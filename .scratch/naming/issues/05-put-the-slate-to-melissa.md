@@ -1,4 +1,4 @@
-# 05: Put the slate to Melissa
+# 05: Run the slate
 
 **What to build:** Melissa hears the four surviving names and picks one. This is the decision the whole naming ticket has been waiting on, and it is the only part of it a machine cannot do.
 
