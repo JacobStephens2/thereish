@@ -478,8 +478,7 @@ defmodule MeaningGame.Rooms.Server do
 
     {:ok, _} =
       Steward.overrule(
-        overrule.bookends,
-        overrule.bridges,
+        overrule,
         %{
           closeness: overrule.couple_closeness,
           reasoning: overrule.couple_reasoning,

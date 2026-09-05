@@ -92,6 +92,11 @@ defmodule MeaningGame.Steward.Precedent do
   Keyed by model, prompt version, and normalized inputs. Both orderings of
   bridges and bookends sort to the same canonical representation.
   """
+  @spec key(String.t(), String.t(), MeaningGame.Steward.request()) :: String.t()
+  def key(model, prompt_version, %{bookends: bookends, bridges: bridges}) do
+    key(model, prompt_version, bookends, bridges)
+  end
+
   @spec key(String.t(), String.t(), [String.t()], [String.t()]) :: String.t()
   def key(model, prompt_version, bookends, bridges) do
     {sorted_bookends, sorted_bridges} = canonical_inputs(bookends, bridges)
@@ -114,10 +119,17 @@ defmodule MeaningGame.Steward.Precedent do
   end
 
   @doc """
-  Fetches a precedent by model, prompt version, bookends, and bridges.
+  Fetches a precedent by model, prompt version, and either a request map
+  or explicit bookends and bridges.
 
   Returns `{:ok, verdict}` if found, or `:miss` if not.
   """
+  @spec get(String.t(), String.t(), MeaningGame.Steward.request()) ::
+          {:ok, MeaningGame.Steward.verdict()} | :miss
+  def get(model, prompt_version, %{bookends: bookends, bridges: bridges}) do
+    get(model, prompt_version, bookends, bridges)
+  end
+
   @spec get(String.t(), String.t(), [String.t()], [String.t()]) ::
           {:ok, MeaningGame.Steward.verdict()} | :miss
   def get(model, prompt_version, bookends, bridges) do
@@ -135,11 +147,17 @@ defmodule MeaningGame.Steward.Precedent do
   If a precedent already exists for this key, it is left untouched: nothing
   silently rewrites a grade (ADR-0006).
   """
+  @spec put(String.t(), String.t(), MeaningGame.Steward.request(), MeaningGame.Steward.verdict()) ::
+          {:ok, Precedent.t()} | {:error, Ecto.Changeset.t()}
+  def put(model, prompt_version, %{bookends: bookends, bridges: bridges}, verdict) do
+    put(model, prompt_version, bookends, bridges, verdict)
+  end
+
   @spec put(String.t(), String.t(), [String.t()], [String.t()], MeaningGame.Steward.verdict()) ::
           {:ok, Precedent.t()} | {:error, Ecto.Changeset.t()}
   def put(model, prompt_version, bookends, bridges, verdict) do
     {normalized_bookends, normalized_bridges} = canonical_inputs(bookends, bridges)
-    cache_key = key(model, prompt_version, bookends, bridges)
+    cache_key = hash(model, prompt_version, normalized_bookends, normalized_bridges)
 
     attrs = %{
       key: cache_key,
@@ -171,11 +189,17 @@ defmodule MeaningGame.Steward.Precedent do
   A joint player overrule is the only thing in the system that rewrites
   precedent (ADR-0006, design law 3).
   """
+  @spec overrule(String.t(), String.t(), MeaningGame.Steward.request(), map()) ::
+          {:ok, Precedent.t()} | {:error, Ecto.Changeset.t()}
+  def overrule(model, prompt_version, %{bookends: bookends, bridges: bridges}, ruling) do
+    overrule(model, prompt_version, bookends, bridges, ruling)
+  end
+
   @spec overrule(String.t(), String.t(), [String.t()], [String.t()], map()) ::
           {:ok, Precedent.t()} | {:error, Ecto.Changeset.t()}
   def overrule(model, prompt_version, bookends, bridges, ruling) do
     {normalized_bookends, normalized_bridges} = canonical_inputs(bookends, bridges)
-    cache_key = key(model, prompt_version, bookends, bridges)
+    cache_key = hash(model, prompt_version, normalized_bookends, normalized_bridges)
 
     attrs = %{
       key: cache_key,
