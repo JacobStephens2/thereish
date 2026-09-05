@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-human (built and green; the last box is Jacob's to tick on the deployment)
+**Status:** resolved
 
 This ticket stands alone because the current rules already play at N: a Room of four can be created and played with today's pairwise grading, which is how it is demoed before 02 lands.
 
@@ -25,10 +25,10 @@ This ticket stands alone because the current rules already play at N: a Room of 
 - [x] A rejoin link lands a phone in its own Seat, and reopening the URL after any interval still does
 - [x] A random Code is never profane, never a taken Code, and always a real four-letter word
 - [x] LiveView tests drive the front page, New Room, four joins by Code, and the 404; Room tests cover create, open-by-Code and the device-to-Rooms query
-- [ ] Verified on the real deployment: a Room of four created from a phone and joined by three others
+- [x] Verified on the real deployment: a Room of four created from a phone and joined by three others
 
 Deployed 2026-09-04. On meld.stephens.page: New Room for four opened FLAK, the
 Room page shows the Code large with its own URL, one Seat joined, an unknown
 Code is a 404 and the old bare `/stage` is gone. The front page lists FLAK and
 COUCH as this browser's Rooms, so the Seats that predate the door still find
-their way back. FLAK is left open for the three phones the last box wants.
+their way back. Jacob playtested it on 2026-09-04 and it played well.
