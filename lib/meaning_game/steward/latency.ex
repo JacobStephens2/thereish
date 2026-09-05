@@ -52,21 +52,8 @@ defmodule MeaningGame.Steward.Latency do
   """
   @spec measure(keyword()) :: %{p50: non_neg_integer(), p95: non_neg_integer(), met?: boolean()}
   def measure(opts \\ []) do
-    {:ok, _started} = Application.ensure_all_started(:meaning_game)
-
     runs = Keyword.get(opts, :runs, 20)
-    verdicts = Enum.map(1..runs, &one(&1, runs))
-    graded = Enum.filter(verdicts, &match?({:ok, _verdict}, &1))
-    latencies = for {:ok, verdict} <- graded, do: verdict.meta.latency_ms
-
-    report(%{
-      runs: runs,
-      failures: runs - length(graded),
-      p50: percentile(latencies, 50),
-      p95: percentile(latencies, 95),
-      max: Enum.max(latencies, fn -> 0 end),
-      cost_usd: Enum.sum(for {:ok, verdict} <- graded, do: verdict.meta.cost_usd)
-    })
+    benchmark(runs, &one/2, &report/1)
   end
 
   # One grade, announced as it happens: a run against a provider that has gone
@@ -95,6 +82,87 @@ defmodule MeaningGame.Steward.Latency do
     Assayer round trip, #{measured.runs} grades, #{measured.failures} without a verdict
       p50 #{measured.p50} ms
       p95 #{measured.p95} ms   (target #{@target_ms} ms: #{if met?, do: "MET", else: "MISSED"})
+      max #{measured.max} ms
+      spent $#{Float.round(measured.cost_usd, 4)}
+    """)
+
+    Map.put(measured, :met?, met?)
+  end
+
+  @author_target_ms 5_000
+
+  @author_requests [
+    %{
+      gives: [
+        %{name: "Mara", text: "coastal lighthouse in storm"},
+        %{name: "Jacob", text: "old library with rolling ladders"},
+        %{name: "Ada", text: "artisan glassblowing workshop"},
+        %{name: "Sam", text: "mountain observatory at dusk"}
+      ]
+    },
+    %{
+      gives: [
+        %{name: "Mara", text: "candlelit cathedral"},
+        %{name: "Jacob", text: "cyberpunk nightclub"},
+        %{name: "Ada", text: "deep sea trench"},
+        %{name: "Sam", text: "vintage bookstore in autumn"}
+      ]
+    }
+  ]
+
+  @doc """
+  Measures the Author writing Bookends from four Gives.
+  """
+  @spec measure_author(keyword()) :: %{
+          p50: non_neg_integer(),
+          p95: non_neg_integer(),
+          met?: boolean()
+        }
+  def measure_author(opts \\ []) do
+    runs = Keyword.get(opts, :runs, 10)
+    benchmark(runs, &one_author/2, &report_author/1)
+  end
+
+  defp benchmark(runs, runner, reporter) do
+    {:ok, _started} = Application.ensure_all_started(:meaning_game)
+
+    results = Enum.map(1..runs, &runner.(&1, runs))
+    successful = Enum.filter(results, &match?({:ok, _item}, &1))
+    latencies = for {:ok, item} <- successful, do: item.meta.latency_ms
+
+    reporter.(%{
+      runs: runs,
+      failures: runs - length(successful),
+      p50: percentile(latencies, 50),
+      p95: percentile(latencies, 95),
+      max: Enum.max(latencies, fn -> 0 end),
+      cost_usd: Enum.sum(for {:ok, item} <- successful, do: item.meta.cost_usd)
+    })
+  end
+
+  defp one_author(number, runs) do
+    request = Enum.at(@author_requests, rem(number - 1, length(@author_requests)))
+    result = Steward.author(request)
+
+    IO.puts("  #{number}/#{runs} Author (4 gives): #{said_author(result)}")
+
+    result
+  end
+
+  defp said_author({:ok, answer}) do
+    "#{Enum.join(answer.bookends, " · ")} in #{answer.meta.latency_ms} ms ($#{Float.round(answer.meta.cost_usd, 5)})"
+  end
+
+  defp said_author({:error, reason}), do: "no bookends — #{inspect(reason)}"
+
+  defp report_author(measured) do
+    met? = measured.p95 <= @author_target_ms
+
+    IO.puts("""
+
+    Author round trip (4 Gives), #{measured.runs} requests, #{measured.failures} failures
+      p50 #{measured.p50} ms
+      p95 #{measured.p95} ms   (target #{@author_target_ms} ms: #{if met?, do: "MET", else: "MISSED"})
       max #{measured.max} ms
       spent $#{Float.round(measured.cost_usd, 4)}
     """)
