@@ -324,4 +324,21 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       refute readout_text =~ "p-value"
     end
   end
+
+  describe "spend foot line (ticket 09)" do
+    test "renders the spend line at the foot of the Chronicle book view",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairns")
+      await_recap(slug)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=chronicle-spend]")
+      spend_text = render(element(view, "[data-role=spend-line]"))
+      assert spend_text =~ "Spend:"
+      assert spend_text =~ "Author"
+      assert spend_text =~ "Assayer"
+      assert spend_text =~ "Scribe"
+    end
+  end
 end
