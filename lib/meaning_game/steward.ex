@@ -93,7 +93,10 @@ defmodule MeaningGame.Steward do
   """
   @spec recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
   def recap(page, digest) do
-    adapter().recap(page, digest)
+    # Narrowed here rather than in the adapter, because what the Scribe may know
+    # about a Page is the seam's rule and not one adapter's good manners: the
+    # closeness never crosses (ADR-0006).
+    adapter().recap(MeaningGame.Steward.Recap.readable(page), digest)
   end
 
   @doc """

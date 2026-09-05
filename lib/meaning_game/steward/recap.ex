@@ -27,6 +27,12 @@ defmodule MeaningGame.Steward.Recap do
   # (design law 14).
   @version "recap-2"
 
+  # The question asks for seventy words and `Scribe/Length.yml` refuses at
+  # eighty. The ten words of slack are deliberate: a model told the number the
+  # gate enforces writes to it and overshoots, and an overshoot costs a whole
+  # second call. Asking for less than the gate allows is what buys the
+  # first-attempt pass.
+
   @system """
   You are the Scribe for Mind-Meld, a word game played on a couch. A Page has just closed. The players saw two anchor words and each secretly wrote one bridging word between them; if their words did not converge, the two that landed furthest apart became the next attempt's anchors, and they went again.
 
@@ -55,11 +61,35 @@ defmodule MeaningGame.Steward.Recap do
   def version, do: @version
 
   @doc """
-  Everything one recap request is made of: the closed Page as the book computes
-  it, and the digest of everything this Room played before it.
+  The Page as the Scribe is allowed to see it: words, bands and reasoning, and
+  nowhere a number.
 
-  The Page is handed over as bands and words rather than as numbers, because the
-  number is the one thing the Scribe is not allowed to have.
+  This runs at the seam rather than inside the prompt, so that the grade never
+  crosses to an adapter at all. A prompt that leaves the closeness out is a
+  prompt this module happens to have written carefully; a seam that never hands
+  it over is the rule (ADR-0006). The next adapter gets the same Page this one
+  does.
+  """
+  @spec readable(map()) :: map()
+  def readable(page) do
+    %{
+      anchors: page.anchors,
+      melded: page.melded,
+      attempts:
+        Enum.map(page.attempts, fn attempt ->
+          %{
+            number: attempt.number,
+            anchors: attempt.anchors,
+            bridges: Enum.map(attempt.bridges, &Map.take(&1, [:seat_name, :bridge])),
+            verdicts: Enum.map(attempt.verdicts, &Map.take(&1, [:band, :reasoning]))
+          }
+        end)
+    }
+  end
+
+  @doc """
+  Everything one recap request is made of: the closed Page as `readable/1` hands
+  it over, and the digest of everything this Room played before it.
   """
   @spec prompt(map(), String.t()) :: map()
   def prompt(page, digest) do

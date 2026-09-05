@@ -213,6 +213,36 @@ defmodule MeaningGame.ScribeTest do
       assert page.recap.recap == recap.recap
     end
 
+    test "carries the callback beside it", ctx do
+      play(ctx, "cairn", "cairo")
+      await_recap(ctx.slug)
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      play(ctx, "mirage", "mirages")
+      await_scribe()
+
+      assert {:ok, [_first, second]} =
+               Chronicle.from_markdown(Chronicle.to_markdown(ctx.slug))
+
+      assert second.recap.callback == "They have been here before."
+    end
+
+    test "a recap that wrapped over several lines comes back whole", ctx do
+      play(ctx, "cairn", "cairo")
+      await_recap(ctx.slug)
+      [stored] = Chronicle.pages(room_id(ctx.slug))
+
+      {:ok, _} =
+        Chronicle.record_recap(room_id(ctx.slug), %{
+          page_id: stored.id,
+          recap: "They both wrote cairn.\nNeither would say why.",
+          callback: "Like the candy cane."
+        })
+
+      assert {:ok, [page]} = Chronicle.from_markdown(Chronicle.to_markdown(ctx.slug))
+      assert page.recap.recap == "They both wrote cairn.\nNeither would say why."
+      assert page.recap.callback == "Like the candy cane."
+    end
+
     test "a Page with no recap exports without one", ctx do
       steward(recap_mode: :unavailable)
       play(ctx, "cairn", "cairo")
@@ -220,6 +250,42 @@ defmodule MeaningGame.ScribeTest do
 
       assert {:ok, [page]} = Chronicle.from_markdown(Chronicle.to_markdown(ctx.slug))
       assert page.recap == nil
+    end
+  end
+
+  describe "what the Scribe is allowed to see" do
+    test "the Page it is handed carries bands and words and no number" do
+      page = %{
+        id: "page-1",
+        anchors: ["lantern", "harbour"],
+        melded: true,
+        closeness: 88,
+        attempts: [
+          %{
+            number: 1,
+            anchors: ["lantern", "harbour"],
+            closeness: 88,
+            bridges: [
+              %{seat_name: "Jacob", bridge: "keeper", seat_id: "a", corrected?: false},
+              %{seat_name: "Melissa", bridge: "guide", seat_id: "b", corrected?: false}
+            ],
+            verdicts: [
+              %{band: "meld", reasoning: "One shore.", closeness: 88, quip: "Ha.", forward: 90}
+            ]
+          }
+        ]
+      }
+
+      readable = MeaningGame.Steward.Recap.readable(page)
+
+      # Everything the Scribe writes from, and not one number anywhere in it.
+      assert readable.attempts |> hd() |> Map.get(:bridges) |> hd() |> Map.get(:bridge) ==
+               "keeper"
+
+      assert readable.attempts |> hd() |> Map.get(:verdicts) |> hd() |> Map.get(:band) == "meld"
+
+      refute readable |> inspect() |> String.contains?("88")
+      refute readable |> inspect() |> String.contains?("closeness")
     end
   end
 

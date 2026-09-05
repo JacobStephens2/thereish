@@ -56,6 +56,14 @@ defmodule MeaningGameWeb.CheckLiveTest do
     assert html =~ "Screen Wake Lock: unavailable"
   end
 
+  test "a deployment without the Scribe's prose gate says so", %{conn: conn} do
+    # A missing `vale` serves every page perfectly and writes no recaps at all,
+    # which is exactly the kind of quiet breakage this page is for.
+    {:ok, _live, html} = live(conn, ~p"/check")
+
+    assert html =~ "Prose gate: installed"
+  end
+
   test "falling back to long polling is named as the broken thing it is", %{conn: conn} do
     {:ok, live, _html} = live(conn, ~p"/check")
 

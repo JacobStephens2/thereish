@@ -108,7 +108,14 @@ defmodule MeaningGame.Chronicle.Markdown do
   defp render_recap(recap) do
     [recap.recap, recap[:callback]]
     |> Enum.reject(&is_nil/1)
-    |> Enum.map_join("\n>\n", fn paragraph -> "> " <> paragraph end)
+    |> Enum.map_join("\n>\n", &quote_paragraph/1)
+  end
+
+  # Every line of a paragraph gets its own `> `, because a blockquote whose
+  # second line is not marked is not a blockquote to anything that reads
+  # Markdown, this parser included.
+  defp quote_paragraph(paragraph) do
+    paragraph |> String.split("\n") |> Enum.map_join("\n", &("> " <> &1))
   end
 
   defp render_attempt(attempt) do
@@ -301,17 +308,26 @@ defmodule MeaningGame.Chronicle.Markdown do
 
   # The blockquote, back into its two paragraphs. A Page the Scribe never got to
   # has none, which reads back as `nil` rather than as an empty paragraph.
+  #
+  # Paragraphs are separated by the bare `>` the renderer writes between them,
+  # and a paragraph that wrapped over several lines is joined back up — the gate
+  # keeps a recap to eighty words, but nothing keeps those eighty words on one
+  # line, and a round trip that quietly dropped the second line would be a
+  # Chronicle that edits itself.
   defp parse_recap(meta_lines) do
-    case meta_lines |> Enum.filter(&String.starts_with?(&1, ">")) |> quoted() do
+    case meta_lines |> Enum.filter(&String.starts_with?(&1, ">")) |> paragraphs() do
       [] -> nil
       [recap] -> %{recap: recap, callback: nil}
       [recap, callback | _] -> %{recap: recap, callback: callback}
     end
   end
 
-  defp quoted(lines) do
+  defp paragraphs(lines) do
     lines
     |> Enum.map(&(&1 |> String.replace_prefix(">", "") |> String.trim()))
+    |> Enum.chunk_by(&(&1 == ""))
+    |> Enum.reject(&(&1 == [""]))
+    |> Enum.map(&Enum.join(&1, "\n"))
     |> Enum.reject(&(&1 == ""))
   end
 

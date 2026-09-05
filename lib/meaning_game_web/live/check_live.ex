@@ -7,6 +7,12 @@ defmodule MeaningGameWeb.CheckLive do
   upgrade, and is the browser in a secure context — the precondition for the
   Screen Wake Lock `MeaningGameWeb.StageLive` takes.
 
+  It also answers a fourth, which is the same shape of problem: is the Scribe's
+  prose gate installed? A deployment without the `vale` binary serves every page
+  perfectly and quietly writes no recaps at all, because prose nobody checked is
+  not shown (design law 14). That is exactly the working page hiding a broken
+  deployment this module exists to catch.
+
   The socket answer is the server's own: `connected?/1` is false in the dead
   render and true when mount runs again over the socket. The other facts are
   ones only the browser knows, so the `BrowserReport` hook pushes them back.
@@ -25,7 +31,8 @@ defmodule MeaningGameWeb.CheckLive do
      |> assign(:connected, connected?(socket))
      |> assign(:transport, nil)
      |> assign(:secure_context, :unknown)
-     |> assign(:wake_lock, :unknown)}
+     |> assign(:wake_lock, :unknown)
+     |> assign(:prose_gate, reported(MeaningGame.Steward.Vale.installed?()))}
   end
 
   @impl true
@@ -87,6 +94,12 @@ defmodule MeaningGameWeb.CheckLive do
           <dt class="sr-only">Screen Wake Lock</dt>
           <dd data-check="wake-lock">
             Screen Wake Lock: {label(@wake_lock, "available", "unavailable")}
+          </dd>
+        </div>
+        <div>
+          <dt class="sr-only">Prose gate</dt>
+          <dd data-check="prose-gate">
+            Prose gate: {label(@prose_gate, "installed", "missing (no recaps will be written)")}
           </dd>
         </div>
       </dl>
