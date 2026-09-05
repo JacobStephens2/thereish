@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Chronicle.ExportTest do
     {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
     :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
-    :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+    :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
     await_reveal(slug)
 
     %{slug: slug, melissa: melissa, jacob: jacob}
@@ -30,7 +30,7 @@ defmodule Mix.Tasks.Chronicle.ExportTest do
     assert output =~ "## Room: #{slug}"
     assert output =~ "lantern · harbour"
     assert output =~ "Melissa: cairn"
-    assert output =~ "Jacob: cairo"
+    assert output =~ "Jacob: cairns"
   end
 
   test "exports Chronicle to a specified output file", %{slug: slug} do

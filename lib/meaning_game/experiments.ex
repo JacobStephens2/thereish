@@ -107,13 +107,13 @@ defmodule MeaningGame.Experiments do
           verdict
 
         bait != "" and Enum.all?(written, &(&1 == bait)) ->
-          # Converged on the bait trap: a Meld on the lowest rung (75) per ADR-0004.
+          # Converged on the bait trap: a Meld on the lowest rung (meld threshold) per ADR-0004.
           # Blinding: Do NOT leak arm or "bait trap" into player-visible reasoning during play!
           meta = Map.put(verdict.meta || %{}, :trap_sprung, true)
 
           %{
             verdict
-            | closeness: 75,
+            | closeness: MeaningGame.Ladder.meld_threshold(),
               meta: meta
           }
 

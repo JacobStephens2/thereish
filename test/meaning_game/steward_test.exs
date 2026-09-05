@@ -476,4 +476,117 @@ defmodule MeaningGame.StewardTest do
       assert verdict.reasoning == "Overruled with request map."
     end
   end
+
+  describe "assay-3" do
+    test "request carries Bookends, Bridges with players' names in roster order, earlier Attempts, and Gives with names" do
+      assayer(requests: 1, retries: 0)
+      test_pid = self()
+
+      request = %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["beacon", "cairn"],
+        player_bridges: [
+          %{player: "Jacob", bridge: "beacon"},
+          %{player: "Melissa", bridge: "cairn"}
+        ],
+        earlier_attempts: [
+          %{
+            number: 1,
+            bookends: ["pier", "quay"],
+            bridges: [
+              %{player: "Jacob", bridge: "jetty"},
+              %{player: "Melissa", bridge: "dock"}
+            ]
+          }
+        ],
+        gives: [
+          %{player: "Jacob", give: "foggy coast"},
+          %{player: "Melissa", give: "night watch"}
+        ]
+      }
+
+      recorded(fn conn, body ->
+        [%{"content" => user}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
+        send(test_pid, {:user_prompt, user})
+
+        Req.Test.json(conn, response(verdict(furthest: ["beacon", "cairn"])))
+      end)
+
+      assert {:ok, verdict} = Live.assay(request)
+      assert verdict.meta.prompt_version == "assay-3"
+
+      assert_receive {:user_prompt, prompt1}
+      assert_receive {:user_prompt, prompt2}
+
+      for prompt <- [prompt1, prompt2] do
+        # Bookends
+        assert prompt =~ "LANTERN and HARBOUR"
+        # Gives with names
+        assert prompt =~ "Jacob gave: foggy coast"
+        assert prompt =~ "Melissa gave: night watch"
+        # Earlier attempts
+        assert prompt =~ "Attempt 1: Bookends: PIER and QUAY"
+        assert prompt =~ "Jacob bridged with: jetty"
+        assert prompt =~ "Melissa bridged with: dock"
+      end
+
+      # Both orderings tested
+      prompts = [prompt1, prompt2]
+
+      assert Enum.any?(prompts, fn p ->
+               {j, _} = :binary.match(p, "Jacob bridged with: beacon")
+               {m, _} = :binary.match(p, "Melissa bridged with: cairn")
+               j < m
+             end)
+
+      assert Enum.any?(prompts, fn p ->
+               {j, _} = :binary.match(p, "Jacob bridged with: beacon")
+               {m, _} = :binary.match(p, "Melissa bridged with: cairn")
+               m < j
+             end)
+    end
+
+    test "rejects a furthest pair that is not two of the bridges (e.g. naming a Give or hallucinated word)" do
+      assayer(requests: 1, retries: 2)
+      counts = counts()
+
+      request = %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["beacon", "cairn"],
+        player_bridges: [
+          %{player: "Jacob", bridge: "beacon"},
+          %{player: "Melissa", bridge: "cairn"}
+        ],
+        gives: [%{player: "Jacob", give: "foggy coast"}]
+      }
+
+      recorded(fn conn, body ->
+        case asked(counts, ordering(body)) do
+          # The model mistakenly named a Give instead of a Bridge
+          1 -> Req.Test.json(conn, response(verdict(furthest: ["foggy coast", "beacon"])))
+          _ -> Req.Test.json(conn, response(verdict(furthest: ["beacon", "cairn"])))
+        end
+      end)
+
+      assert {:ok, verdict} = Live.assay(request)
+      assert verdict.furthest == ["beacon", "cairn"]
+      assert Agent.get(counts, &Map.values/1) == [2, 2]
+    end
+
+    test "a model that repeatedly names an invalid furthest pair fails with {:rejected, why}" do
+      assayer(requests: 1, retries: 1)
+
+      request = %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["beacon", "cairn"]
+      }
+
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, response(verdict(furthest: ["foggy coast", "beacon"])))
+      end)
+
+      assert {:error, {:rejected, why}} = Live.assay(request)
+      assert why =~ "furthest"
+    end
+  end
 end

@@ -146,6 +146,7 @@ defmodule MeaningGame.Steward.Fake do
     "miss" => "Different neighbourhoods entirely.",
     "adjacent" => "On the same block, across the street.",
     "close" => "Passable.",
+    "almost" => "Same neighbourhood, distinct framing.",
     "meld" => "You both saw the grill.",
     "deep_meld" => "Two minds at the mower."
   }
@@ -191,7 +192,7 @@ defmodule MeaningGame.Steward.Fake do
     # the pairs come out in roster order, so a table that ties gets the same
     # answer every time it plays.
     {[left, right], _lowest} = Enum.min_by(graded, &elem(&1, 1))
-    shared = shared_prefix(left, right)
+    shared = shared_prefix(normalize_bridge(left), normalize_bridge(right))
 
     %{
       closeness: closeness,
@@ -225,14 +226,32 @@ defmodule MeaningGame.Steward.Fake do
   # Every unordered pair, in roster order, so that the tie-break is the order the
   # Seats are sitting in rather than the order a map happened to iterate.
   defp every_pair(bridges) do
-    for {left, i} <- Enum.with_index(bridges),
-        {right, j} <- Enum.with_index(bridges),
+    bridge_strings = Enum.map(bridges, &bridge_text/1)
+
+    for {left, i} <- Enum.with_index(bridge_strings),
+        {right, j} <- Enum.with_index(bridge_strings),
         i < j,
         do: [left, right]
   end
 
+  defp bridge_text(item), do: MeaningGame.Steward.Legality.bridge_text(item)
+
+  defp normalize_bridge(str) do
+    str
+    |> bridge_text()
+    |> MeaningGame.Steward.Legality.normalize_bridge()
+  end
+
   defp pair_closeness([left, right]) do
-    round(200 * shared_prefix(left, right) / (String.length(left) + String.length(right)))
+    l_norm = normalize_bridge(left)
+    r_norm = normalize_bridge(right)
+    total_len = String.length(l_norm) + String.length(r_norm)
+
+    if total_len == 0 do
+      0
+    else
+      round(200 * shared_prefix(l_norm, r_norm) / total_len)
+    end
   end
 
   # Rounded once at the end. At two Bridges there is one pair and rounding an

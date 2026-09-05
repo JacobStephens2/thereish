@@ -168,8 +168,29 @@ defmodule MeaningGame.Steward.Author do
 
   defp check_bookends(_), do: {:error, "bookends must be a list of exactly two words"}
 
+  defp check_author_bridge(word, bookends) do
+    w = word |> to_string() |> String.trim() |> String.downcase()
+
+    cond do
+      w == "" ->
+        {:illegal, "Write a word first."}
+
+      !Legality.single_word?(w) ->
+        {:illegal, "One word, letters only (\"#{w}\")."}
+
+      Legality.profane?(w) ->
+        {:illegal, "Not in this Room."}
+
+      !Legality.in_dictionary?(w) ->
+        {:illegal, "\"#{w}\" is not in the dictionary."}
+
+      true ->
+        Legality.check_bridge(w, bookends)
+    end
+  end
+
   defp check_bait(bait, bookends) do
-    case Legality.check_bridge(bait, bookends) do
+    case check_author_bridge(bait, bookends) do
       :ok -> :ok
       {:illegal, why} -> {:error, "bait: #{why}"}
     end
@@ -180,7 +201,7 @@ defmodule MeaningGame.Steward.Author do
       {:error, "deep_bridges must have at least two words"}
     else
       Enum.reduce_while(deep_bridges, :ok, fn bridge, :ok ->
-        case Legality.check_bridge(bridge, bookends) do
+        case check_author_bridge(bridge, bookends) do
           :ok -> {:cont, :ok}
           {:illegal, why} -> {:halt, {:error, "deep bridge \"#{bridge}\": #{why}"}}
         end
@@ -204,7 +225,7 @@ defmodule MeaningGame.Steward.Author do
 
       true ->
         Enum.reduce_while(likely, :ok, fn bridge, :ok ->
-          case Legality.check_bridge(bridge, bookends) do
+          case check_author_bridge(bridge, bookends) do
             :ok -> {:cont, :ok}
             {:illegal, why} -> {:halt, {:error, "likely bridge \"#{bridge}\": #{why}"}}
           end
@@ -218,16 +239,16 @@ defmodule MeaningGame.Steward.Author do
   You are the Author for a two-player couch word game played by Jacob and Melissa. Tonight's game is Mind-Meld.
 
   How a Page works:
-  Both players see the same two bookend words. Each secretly writes one bridging word that sits between the bookends in meaning; at the reveal, the Assayer measures how close the two bridges landed to each other. If they meld (closeness 75 or more) the Page is won; otherwise the two bridges become the next bookends and the players try again, up to five attempts.
+  Both players see the same two bookend words. Each secretly writes one bridging word that sits between the bookends in meaning; at the reveal, the Assayer measures how close the two bridges landed to each other. If they meld (closeness 90 or more) the Page is won; otherwise the two bridges become the next bookends and the players try again, up to five attempts.
 
   Your job:
   Build one Page for the theme / meaning-space you are given:
   1. Bookends: exactly two single common English lowercase words with shared meaning-space.
-  2. Bait: the obvious, automatic bridge both players will immediately think of. Converging on the bait is a Meld on the lowest rung (75).
-  3. Deep bridges: at least two deeper, subtler bridging words that reward reflection and land on the top rung (90+).
+  2. Bait: the obvious, automatic bridge both players will immediately think of. Converging on the bait is a Meld on the lowest rung (90).
+  3. Deep bridges: at least two deeper, subtler bridging words that reward reflection and land on the top rung (100).
   4. Likely bridges: 3 to 8 bridging words you foresee players reaching for (must include the bait and the deep bridges).
   5. Why these: narrate the misdirection and why these Bookends invite interesting divergence.
-  6. Band scripts: prewritten fallback remarks for each of the five ladder bands (miss, adjacent, close, meld, deep_meld).
+  6. Band scripts: prewritten fallback remarks for each of the six ladder bands (miss, adjacent, close, almost, meld, deep_meld).
 
   Legality rules (enforced strictly):
   - Every bookend, bait, and bridge must be a single, common lowercase English word (letters only, no spaces, hyphens, or punctuation).

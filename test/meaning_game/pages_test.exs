@@ -17,6 +17,7 @@ defmodule MeaningGame.PagesTest do
       "miss" => "Different neighbourhoods entirely.",
       "adjacent" => "On the same block, across the street.",
       "close" => "Passable.",
+      "almost" => "Same neighbourhood, distinct framing.",
       "meld" => "You both saw the grill.",
       "deep_meld" => "Two minds at the mower."
     },
@@ -180,6 +181,15 @@ defmodule MeaningGame.PagesTest do
 
     test "no Bridge among the likely ones is a miss" do
       assert Pages.provisional_reading(@valid_page, ~w(spaceship airplane submarine)) == :miss
+    end
+
+    test "hand-written fallback pages define all six ladder bands in band_scripts" do
+      for page <- Pages.hand_written_pages() do
+        for band <- ~w(miss adjacent close almost meld deep_meld) do
+          assert Map.has_key?(page.band_scripts, band),
+                 "Page #{page.id} missing band_script for #{band}"
+        end
+      end
     end
   end
 end

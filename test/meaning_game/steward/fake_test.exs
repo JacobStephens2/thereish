@@ -49,6 +49,30 @@ defmodule MeaningGame.Steward.FakeTest do
     end
   end
 
+  describe "grading phrases" do
+    test "grades phrases on their shared prefix" do
+      # "viking beaches" (14) and "viking boats" (12) share "viking b" (8):
+      # round(200 * 8 / 26) = 62
+      assert graded(["viking beaches", "viking boats"]).closeness == 62
+    end
+
+    test "identical phrases grade 100 regardless of casing or extra whitespace" do
+      assert graded(["Viking beaches", "  viking   beaches "]).closeness == 100
+      assert graded(["Gold Rush", "gold rush"]).closeness == 100
+    end
+
+    test "grades bridges provided as maps with player names" do
+      player_bridges = [
+        %{player: "Melissa", bridge: "viking beaches"},
+        %{player: "Jacob", bridge: "viking boats"}
+      ]
+
+      {:ok, verdict} = Fake.assay(%{bookends: @bookends, bridges: player_bridges})
+      assert verdict.closeness == 62
+      assert verdict.furthest == ["viking beaches", "viking boats"]
+    end
+  end
+
   describe "a table of four" do
     # The six pairs of these four words grade 80, 40, 0, 40, 0 and 0, which is a
     # mean of 26.67 and a Closeness of 27. A test that wants a different number

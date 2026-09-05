@@ -88,7 +88,7 @@ defmodule MeaningGame.ExperimentsTest do
       assert scored.reasoning == "Exact match on barbecue."
     end
 
-    test "bait arm scores convergence on the bait as a Meld on the lowest rung (75) without leaking arm" do
+    test "bait arm scores convergence on the bait as a Meld on the lowest rung (90) without leaking arm" do
       # Converging on the obvious trap is still a Meld, but on the lowest rung (ADR-0004).
       # Blinding: reasoning must NOT leak arm labels or trap notices to players during play.
       verdict = %{
@@ -99,7 +99,7 @@ defmodule MeaningGame.ExperimentsTest do
       }
 
       scored = Experiments.apply_arm_closeness(verdict, @page, :bait, ["barbecue", "barbecue"])
-      assert scored.closeness == 75
+      assert scored.closeness == 90
       assert scored.meta[:trap_sprung] == true
       # Reasoning is preserved without leaking arm or trap
       assert scored.reasoning == "Exact match on barbecue."
@@ -159,7 +159,7 @@ defmodule MeaningGame.ExperimentsTest do
           "barbecue"
         ])
 
-      assert sprung.closeness == 75
+      assert sprung.closeness == 90
       assert sprung.meta[:trap_sprung] == true
     end
 

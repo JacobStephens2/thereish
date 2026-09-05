@@ -240,7 +240,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
         assert html =~ "cairn"
         assert html =~ "cairo"
         assert has_element?(view, "[data-role=closeness]", "80")
-        assert has_element?(view, "[data-role=band]", "meld")
+        assert has_element?(view, "[data-role=band]", "almost")
         assert has_element?(view, "[data-role=reasoning]", "share 4 letters")
         # The joke is about the two words they actually wrote, and it is on
         # every screen the number is on (ADR-0005).
@@ -298,10 +298,10 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {:ok, _} = MeaningGame.Pages.draw(room.id)
 
       commit(ctx.melissa, "cairn")
-      commit(ctx.jacob, "cairo")
+      commit(ctx.jacob, "cairns")
       await_reveal_on(ctx.stage)
 
-      # Room is closed because cairn and cairo meld
+      # Room is closed because cairn and cairns meld (91)
       assert has_element?(ctx.melissa, "[data-role=one-more]")
 
       # Tapping "one-more" calls next_page; pool is exhausted
@@ -407,13 +407,13 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
     test "a Meld is the end of the Page and says so", ctx do
       commit(ctx.melissa, "cairn")
-      commit(ctx.jacob, "cairo")
+      commit(ctx.jacob, "cairns")
       await_reveal_on(ctx.stage)
 
       for view <- ctx.screens do
         assert has_element?(view, "[data-role=ending-line]", "melded first try")
         # The grade the reveal landed on is still up under it.
-        assert has_element?(view, "[data-role=closeness]", "80")
+        assert has_element?(view, "[data-role=closeness]", "91")
         refute has_element?(view, "[data-role=again]")
         refute has_element?(view, "[data-role=attempt]")
       end
@@ -439,7 +439,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
     test "one more? is one tap, and the next Page is up for both of them", ctx do
       commit(ctx.melissa, "cairn")
-      commit(ctx.jacob, "cairo")
+      commit(ctx.jacob, "cairns")
       await_reveal_on(ctx.stage)
 
       press(ctx.melissa, "one-more")
@@ -571,10 +571,10 @@ defmodule MeaningGameWeb.RoomLiveTest do
       # Jacob agrees
       jacob |> element("[data-role=agree-overrule]") |> render_click()
 
-      # Overrule takes effect on all three views: grade 100, melded!
+      # Overrule takes effect on all three views: grade 90 (meld floor), melded!
       for view <- [melissa, jacob, stage] do
-        assert has_element?(view, "[data-role=closeness]", "100")
-        assert has_element?(view, "[data-role=band]", "deep meld")
+        assert has_element?(view, "[data-role=closeness]", "90")
+        assert has_element?(view, "[data-role=band]", "meld")
         assert render(view) =~ "Overruled jointly"
       end
 
@@ -655,12 +655,12 @@ defmodule MeaningGameWeb.RoomLiveTest do
     test "reveal lands: side-by-side comparison first, climbing number, quip punchline, and phone vs stage split",
          ctx do
       commit(ctx.melissa, "cairn")
-      commit(ctx.jacob, "cairo")
+      commit(ctx.jacob, "cairns")
 
       for view <- ctx.screens do
         await_reveal_on(view)
         assert has_element?(view, "[data-role=comparison]")
-        assert has_element?(view, "[data-role=closeness]", "80")
+        assert has_element?(view, "[data-role=closeness]", "91")
         assert has_element?(view, "[data-role=band]", "meld")
         assert render(view) =~ "ClimbNumber"
         assert has_element?(view, "[data-role=reasoning]")
@@ -677,6 +677,27 @@ defmodule MeaningGameWeb.RoomLiveTest do
       # Stage has public stage mode and no private (you) attribution
       assert has_element?(ctx.stage, "[data-mode=stage]")
       refute has_element?(ctx.stage, "[data-bridge][data-you=true]")
+    end
+
+    test "an almost grade lands in the almost band and next attempt is offered", ctx do
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      for view <- ctx.screens do
+        await_reveal_on(view)
+        assert has_element?(view, "[data-role=comparison]")
+        assert has_element?(view, "[data-role=closeness]", "80")
+        assert has_element?(view, "[data-role=band]", "almost")
+        assert has_element?(view, "[data-arrival=almost]")
+        assert render(view) =~ "Same neighbourhood, distinct framing."
+        refute has_element?(view, "[data-role=ending-line]")
+      end
+
+      for phone <- [ctx.melissa, ctx.jacob] do
+        assert has_element?(phone, "[data-role=again]")
+      end
+
+      refute has_element?(ctx.stage, "[data-role=again]")
     end
 
     test "a miss is staged as a shared comedy deadpan joke, not an error sting", ctx do
@@ -720,7 +741,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       join(jacob, "Jacob")
 
       commit(melissa, "cairn")
-      commit(jacob, "cairo")
+      commit(jacob, "cairns")
 
       await_reveal_on(melissa)
       await_reveal_on(jacob)
@@ -826,7 +847,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       # Play continues meanwhile!
       commit(ctx.melissa, "cairn")
-      commit(ctx.jacob, "cairo")
+      commit(ctx.jacob, "cairns")
       await_reveal_on(ctx.melissa)
 
       # Stage announces when Pages land

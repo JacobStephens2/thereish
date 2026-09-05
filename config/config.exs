@@ -37,7 +37,7 @@ config :meaning_game,
   # they should, and a Meld starts at the floor of the `meld` band.
   ladder: [
     scale: 0..100,
-    bands: [miss: 0, adjacent: 30, close: 55, meld: 75, deep_meld: 90]
+    bands: [miss: 0, adjacent: 30, close: 55, almost: 75, meld: 90, deep_meld: 100]
   ]
 
 # The one seam to the models. Two adapters satisfy it: the live one, which is

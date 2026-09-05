@@ -630,6 +630,15 @@ defmodule MeaningGameWeb.RoomComponents do
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
   defp reveal_arrival(_), do: "no_verdict"
 
+  defp closeness_presentation(%{band: :deep_meld}, heads) do
+    %{
+      container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
+      number_class: "text-primary",
+      badge_class: "bg-primary text-primary-content font-bold",
+      flavour: "#{String.capitalize(in_words(heads))} minds, one thought."
+    }
+  end
+
   defp closeness_presentation(%{melded?: true}, heads) do
     %{
       container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
@@ -639,12 +648,12 @@ defmodule MeaningGameWeb.RoomComponents do
     }
   end
 
-  defp closeness_presentation(%{band: :deep_meld}, heads) do
+  defp closeness_presentation(%{band: :almost}, _heads) do
     %{
-      container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
-      number_class: "text-primary",
-      badge_class: "bg-primary text-primary-content font-bold",
-      flavour: "#{String.capitalize(in_words(heads))} minds, one thought."
+      container_class: "border border-secondary/40 bg-base-200/40",
+      number_class: "text-base-content",
+      badge_class: "bg-secondary/20 text-secondary font-bold",
+      flavour: "Same neighbourhood, distinct framing."
     }
   end
 
