@@ -20,8 +20,8 @@ defmodule MeaningGame.Steward.AuthorTest do
       assert {:error, _why} = Author.check_schema(json)
     end
 
-    test "rejects fewer than two anchors" do
-      json = Jason.decode!(authored_page_json(anchors: ["single"]))
+    test "rejects fewer than two bookends" do
+      json = Jason.decode!(authored_page_json(bookends: ["single"]))
       assert {:error, _why} = Author.check(json)
     end
 
@@ -67,14 +67,14 @@ defmodule MeaningGame.Steward.AuthorTest do
   end
 
   describe "legality checking on Author output" do
-    test "rejects when anchors share a root" do
-      json = Jason.decode!(authored_page_json(anchors: ["run", "running"]))
+    test "rejects when bookends share a root" do
+      json = Jason.decode!(authored_page_json(bookends: ["run", "running"]))
       assert {:error, why} = Author.check(json)
       assert why =~ "share a root"
     end
 
-    test "rejects when bait shares root with an anchor" do
-      json = Jason.decode!(authored_page_json(anchors: ["garden", "house"], bait: "gardening"))
+    test "rejects when bait shares root with a bookend" do
+      json = Jason.decode!(authored_page_json(bookends: ["garden", "house"], bait: "gardening"))
       assert {:error, why} = Author.check(json)
       assert why =~ "shares a root"
     end
@@ -118,8 +118,8 @@ defmodule MeaningGame.Steward.AuthorTest do
 
         case call_num do
           1 ->
-            # First attempt produces an illegal clue: bait shares root with anchor
-            illegal = authored_page_json(anchors: ["flower", "soil"], bait: "flowering")
+            # First attempt produces an illegal clue: bait shares root with bookend
+            illegal = authored_page_json(bookends: ["flower", "soil"], bait: "flowering")
             Req.Test.json(conn, author_response(illegal))
 
           2 ->
@@ -132,7 +132,7 @@ defmodule MeaningGame.Steward.AuthorTest do
 
             legal =
               authored_page_json(
-                anchors: ["flower", "soil"],
+                bookends: ["flower", "soil"],
                 bait: "petal",
                 deep_bridges: ["growth", "seed"],
                 likely_bridges: ["petal", "growth", "seed"]
@@ -145,7 +145,7 @@ defmodule MeaningGame.Steward.AuthorTest do
       assert {:ok, page} = Steward.author("botany")
       assert page.meta.attempts == 2
       assert page.bait == "petal"
-      assert page.anchors == ["flower", "soil"]
+      assert page.bookends == ["flower", "soil"]
       assert page.meta.model == "claude-fable-5-1"
       assert is_float(page.meta.cost_usd) and page.meta.cost_usd > 0
     end

@@ -34,7 +34,7 @@ defmodule MeaningGame.StewardSmokeTest do
 
   test "the Assayer grades a real pair, in both orderings, inside the beat" do
     {:ok, verdict} =
-      Steward.assay(%{anchors: ["ocean", "night"], bridges: ["tide", "moon"]})
+      Steward.assay(%{bookends: ["ocean", "night"], bridges: ["tide", "moon"]})
 
     assert verdict.closeness in 0..100
     assert Ladder.read(verdict.closeness).band != nil
@@ -66,7 +66,7 @@ defmodule MeaningGame.StewardSmokeTest do
     bridges = ["lighthouse", "beacon", "lamp", "gull"]
 
     {:ok, verdict} =
-      Steward.assay(%{anchors: ["harbour", "dusk"], bridges: bridges})
+      Steward.assay(%{bookends: ["harbour", "dusk"], bridges: bridges})
 
     assert verdict.closeness in 0..100
     assert Ladder.read(verdict.closeness).band != nil
@@ -80,7 +80,7 @@ defmodule MeaningGame.StewardSmokeTest do
     assert String.trim(verdict.quip) != ""
 
     # The carry-forward is two words somebody actually wrote, because those two
-    # are about to be the next Attempt's Anchors. That they are two *different*
+    # are about to be the next Attempt's Bookends. That they are two *different*
     # words is not asserted and not enforced: a table that all wrote "moon" has
     # "moon" and "moon" as its furthest pair, and nothing defends against the two
     # carried words being the same word.
@@ -102,12 +102,12 @@ defmodule MeaningGame.StewardSmokeTest do
   @tag :anthropic
   test "the Scribe writes a real recap, and Vale lets it through" do
     page = %{
-      anchors: ["lantern", "harbour"],
+      bookends: ["lantern", "harbour"],
       melded: true,
       attempts: [
         %{
           number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: [
             %{seat_name: "Jacob", bridge: "keeper"},
             %{seat_name: "Mara", bridge: "guide"}
@@ -118,7 +118,7 @@ defmodule MeaningGame.StewardSmokeTest do
         },
         %{
           number: 2,
-          anchors: ["keeper", "guide"],
+          bookends: ["keeper", "guide"],
           bridges: [
             %{seat_name: "Jacob", bridge: "watch"},
             %{seat_name: "Mara", bridge: "watch"}

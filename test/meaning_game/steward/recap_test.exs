@@ -13,12 +13,12 @@ defmodule MeaningGame.Steward.RecapTest do
 
   defp page do
     %{
-      anchors: ["lantern", "harbour"],
+      bookends: ["lantern", "harbour"],
       melded: true,
       attempts: [
         %{
           number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: [
             %{seat_name: "Jacob", bridge: "keeper"},
             %{seat_name: "Mara", bridge: "guide"}
@@ -27,7 +27,7 @@ defmodule MeaningGame.Steward.RecapTest do
         },
         %{
           number: 2,
-          anchors: ["keeper", "guide"],
+          bookends: ["keeper", "guide"],
           bridges: [
             %{seat_name: "Jacob", bridge: "watch"},
             %{seat_name: "Mara", bridge: "watch"}

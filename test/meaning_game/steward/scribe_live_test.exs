@@ -16,12 +16,12 @@ defmodule MeaningGame.Steward.ScribeLiveTest do
 
   defp page do
     %{
-      anchors: ["lantern", "harbour"],
+      bookends: ["lantern", "harbour"],
       melded: true,
       attempts: [
         %{
           number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: [
             %{seat_name: "Jacob", bridge: "cairn"},
             %{seat_name: "Mara", bridge: "beacon"}

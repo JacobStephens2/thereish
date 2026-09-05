@@ -41,7 +41,7 @@ defmodule MeaningGame.ChronicleTest do
 
       assert [page] = chronicled(ctx.slug)
       assert page.document["id"] == "hand-written-1"
-      assert page.document["anchors"] == ["lantern", "harbour"]
+      assert page.document["bookends"] == ["lantern", "harbour"]
       assert page.document["bait"] == "lighthouse"
       assert page.closed_because == "meld"
       assert page.melded == true
@@ -80,7 +80,7 @@ defmodule MeaningGame.ChronicleTest do
 
       # The carry-forward is legible from the rows alone: each attempt hangs
       # between the two Bridges that missed on the one before it.
-      assert Enum.map(page.attempts, & &1.anchors) == [
+      assert Enum.map(page.attempts, & &1.bookends) == [
                ["lantern", "harbour"],
                ["cairn", "beacon"],
                ["wharf", "gantry"]
@@ -208,7 +208,7 @@ defmodule MeaningGame.ChronicleTest do
       overrule_attrs = %{
         attempt_number: 1,
         proposer_seat_id: ctx.mara.id,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "beacon"],
         machine_closeness: 41,
         machine_reasoning: "Too far apart.",
@@ -290,7 +290,7 @@ defmodule MeaningGame.ChronicleTest do
           page_id: p2.id,
           attempt_number: 1,
           proposer_seat_id: ctx.mara.id,
-          anchors: p2_attempt1.anchors,
+          bookends: p2_attempt1.bookends,
           bridges: ["mirage", "oasis"],
           machine_closeness: 40,
           machine_reasoning: "Distinct ideas",
@@ -319,7 +319,7 @@ defmodule MeaningGame.ChronicleTest do
       assert latest_page.id != first_page.id
 
       # First page in history (which is second in reverse order)
-      assert first_page.anchors == ["lantern", "harbour"]
+      assert first_page.bookends == ["lantern", "harbour"]
       assert first_page.melded == true
       [first_attempt] = first_page.attempts
       assert Enum.map(first_attempt.bridges, & &1.seat_name) == ["Mara", "Jacob"]
@@ -358,7 +358,7 @@ defmodule MeaningGame.ChronicleTest do
           page_id: p2.id,
           attempt_number: 1,
           proposer_seat_id: ctx.mara.id,
-          anchors: p2_attempt1.anchors,
+          bookends: p2_attempt1.bookends,
           bridges: ["mirage", "oasis"],
           machine_closeness: 40,
           machine_reasoning: "Distinct ideas",
@@ -399,7 +399,7 @@ defmodule MeaningGame.ChronicleTest do
       assert length(parsed_evening) == 2
 
       [roundtrip_p1, roundtrip_p2] = parsed_evening
-      assert roundtrip_p1.anchors == ["lantern", "harbour"]
+      assert roundtrip_p1.bookends == ["lantern", "harbour"]
       assert roundtrip_p1.melded == true
       [a1] = roundtrip_p1.attempts
       assert a1.bridges == [{"Mara", "cairn"}, {"Jacob", "cairn"}]
@@ -446,7 +446,7 @@ defmodule MeaningGame.ChronicleTest do
       attrs = %{
         seat_id: ctx.mara.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -458,7 +458,7 @@ defmodule MeaningGame.ChronicleTest do
       assert {:ok, tap} = Chronicle.record_fairness_tap(room.id, attrs)
       assert tap.room_id == room.id
       assert tap.seat_id == ctx.mara.id
-      assert tap.anchors == ["lantern", "harbour"]
+      assert tap.bookends == ["lantern", "harbour"]
       assert tap.bridges == ["cairn", "cairo"]
       assert tap.grade == 80
       assert tap.closeness == 80
@@ -476,7 +476,7 @@ defmodule MeaningGame.ChronicleTest do
         Chronicle.record_fairness_tap(room.id, %{
           seat_id: ctx.mara.id,
           attempt_number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: ["cairn", "cairo"],
           grade: 80,
           band: "meld",
@@ -489,7 +489,7 @@ defmodule MeaningGame.ChronicleTest do
         Chronicle.record_fairness_tap(room.id, %{
           seat_id: ctx.jacob.id,
           attempt_number: 1,
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bridges: ["cairn", "cairo"],
           grade: 80,
           band: "meld",
@@ -510,7 +510,7 @@ defmodule MeaningGame.ChronicleTest do
       Chronicle.record_fairness_tap(room.id, %{
         seat_id: ctx.mara.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -522,7 +522,7 @@ defmodule MeaningGame.ChronicleTest do
       Chronicle.record_fairness_tap(room.id, %{
         seat_id: ctx.jacob.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -536,7 +536,7 @@ defmodule MeaningGame.ChronicleTest do
       assert length(dataset) == 2
       [entry1, _entry2] = dataset
 
-      assert entry1.anchors == ["lantern", "harbour"]
+      assert entry1.bookends == ["lantern", "harbour"]
       assert entry1.bridges == ["cairn", "cairo"]
       assert entry1.grade == 80
       assert entry1.band == "meld"
@@ -550,7 +550,7 @@ defmodule MeaningGame.ChronicleTest do
       assert is_binary(json_export)
       assert {:ok, parsed_json} = Jason.decode(json_export)
       assert length(parsed_json) == 2
-      assert hd(parsed_json)["anchors"] == ["lantern", "harbour"]
+      assert hd(parsed_json)["bookends"] == ["lantern", "harbour"]
       assert hd(parsed_json)["bridges"] == ["cairn", "cairo"]
       assert hd(parsed_json)["grade"] == 80
       assert hd(parsed_json)["model"] == "gemini-3.8-flash"
@@ -566,7 +566,7 @@ defmodule MeaningGame.ChronicleTest do
         page_id: page.id,
         seat_id: ctx.mara.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -579,7 +579,7 @@ defmodule MeaningGame.ChronicleTest do
         page_id: page.id,
         seat_id: ctx.jacob.id,
         attempt_number: 1,
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         bridges: ["cairn", "cairo"],
         grade: 80,
         band: "meld",
@@ -614,7 +614,7 @@ defmodule MeaningGame.ChronicleTest do
           chapter: give,
           give: give,
           theme: give,
-          anchors: ["nurse", "clinic"],
+          bookends: ["nurse", "clinic"],
           bait: "hospital",
           deep_bridges: ["triage", "pager"],
           likely_bridges: ["hospital", "triage", "pager"],
@@ -640,7 +640,7 @@ defmodule MeaningGame.ChronicleTest do
         attempts: [
           %{
             number: 1,
-            anchors: ["nurse", "clinic"],
+            bookends: ["nurse", "clinic"],
             closeness: 85,
             melded?: true,
             bridges: [
@@ -668,7 +668,7 @@ defmodule MeaningGame.ChronicleTest do
       # In book view:
       [view] = Chronicle.book(room.id)
       assert view.give == give
-      assert view.anchors == ["nurse", "clinic"]
+      assert view.bookends == ["nurse", "clinic"]
 
       # In Markdown rendering:
       markdown = Chronicle.to_markdown(room.id)
@@ -681,6 +681,30 @@ defmodule MeaningGame.ChronicleTest do
       # Appears in digest:
       digest = Chronicle.digest(room.id)
       assert digest =~ "[Give: #{give}]"
+    end
+
+    test "from_markdown accepts legacy '- Anchors:' lines for backwards compatibility" do
+      legacy_markdown = """
+      # The Chronicle
+
+      ## Room: test-room
+
+      ### Page 1: lantern · harbour
+      - Outcome: Melded (meld)
+      - Closeness: 80 / 100
+
+      #### Attempt 1
+      - Anchors: lantern · harbour
+      - Bridges:
+        - Mara: cairn
+        - Jacob: cairn
+      - Closeness: 80 / 100 (meld)
+      """
+
+      assert {:ok, [page]} = Chronicle.from_markdown(legacy_markdown)
+      assert page.bookends == ["lantern", "harbour"]
+      assert [attempt] = page.attempts
+      assert attempt.bookends == ["lantern", "harbour"]
     end
 
     test "assignment and outcome are Chronicle events, blinded until unblinded", ctx do
@@ -747,7 +771,7 @@ defmodule MeaningGame.ChronicleTest do
   end
 
   describe "the two words that landed furthest apart" do
-    test "are written down beside the Verdict, so the book can say where the next Anchors came from" do
+    test "are written down beside the Verdict, so the book can say where the next Bookends came from" do
       slug = open_room(seat_limit: 4)
       room = Repo.get_by!(Room, slug: slug)
 
@@ -763,7 +787,7 @@ defmodule MeaningGame.ChronicleTest do
         page: %{
           id: "hand-written-4",
           chapter: "harbour",
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bait: "lighthouse",
           deep_bridges: ["cairn"],
           likely_bridges: ["lighthouse", "beacon", "cairn"],
@@ -776,7 +800,7 @@ defmodule MeaningGame.ChronicleTest do
         attempts: [
           %{
             number: 1,
-            anchors: ["lantern", "harbour"],
+            bookends: ["lantern", "harbour"],
             closeness: 27,
             melded?: false,
             bridges:
@@ -818,7 +842,7 @@ defmodule MeaningGame.ChronicleTest do
         page: %{
           id: "hand-written-2",
           chapter: "harbour",
-          anchors: ["lantern", "harbour"],
+          bookends: ["lantern", "harbour"],
           bait: "lighthouse",
           deep_bridges: ["cairn"],
           likely_bridges: ["lighthouse", "beacon", "cairn"],
@@ -831,7 +855,7 @@ defmodule MeaningGame.ChronicleTest do
         attempts: [
           %{
             number: 1,
-            anchors: ["lantern", "harbour"],
+            bookends: ["lantern", "harbour"],
             closeness: nil,
             melded?: false,
             bridges: [

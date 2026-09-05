@@ -347,13 +347,13 @@ defmodule MeaningGame.ScribeTest do
     test "the Page it is handed carries bands and words and no number" do
       page = %{
         id: "page-1",
-        anchors: ["lantern", "harbour"],
+        bookends: ["lantern", "harbour"],
         melded: true,
         closeness: 88,
         attempts: [
           %{
             number: 1,
-            anchors: ["lantern", "harbour"],
+            bookends: ["lantern", "harbour"],
             closeness: 88,
             bridges: [
               %{seat_name: "Jacob", bridge: "keeper", seat_id: "a", corrected?: false},

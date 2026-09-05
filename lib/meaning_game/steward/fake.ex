@@ -41,7 +41,7 @@ defmodule MeaningGame.Steward.Fake do
   @behaviour MeaningGame.Steward
 
   @impl true
-  def assay(%{anchors: [_, _], bridges: bridges}) when length(bridges) >= 2 do
+  def assay(%{bookends: [_, _], bridges: bridges}) when length(bridges) >= 2 do
     delay_ms() |> Process.sleep()
 
     case mode() do
@@ -59,16 +59,16 @@ defmodule MeaningGame.Steward.Fake do
     case author_mode() do
       :ok ->
         give = Keyword.get(opts, :give)
-        %{anchors: anchors, bait: bait, deep_bridges: deep_bridges} = authored_bridges(give)
+        %{bookends: bookends, bait: bait, deep_bridges: deep_bridges} = authored_bridges(give)
         likely_bridges = [bait | deep_bridges] ++ ["prayer", "faith"]
 
         json = %{
           "theme" => give || chapter,
-          "anchors" => anchors,
+          "bookends" => bookends,
           "bait" => bait,
           "deep_bridges" => deep_bridges,
           "likely_bridges" => likely_bridges,
-          "why_these" => "The anchors invite #{bait} as the immediate trap.",
+          "why_these" => "The bookends invite #{bait} as the immediate trap.",
           "band_scripts" => default_band_scripts()
         }
 
@@ -164,7 +164,7 @@ defmodule MeaningGame.Steward.Fake do
 
   defp authored_bridges(nil) do
     %{
-      anchors: ["backyard", "weekend"],
+      bookends: ["backyard", "weekend"],
       bait: "barbecue",
       deep_bridges: ["lawnmower", "chores"]
     }
@@ -172,14 +172,14 @@ defmodule MeaningGame.Steward.Fake do
 
   defp authored_bridges(give) do
     %{
-      anchors: give_anchors(give),
+      bookends: give_bookends(give),
       bait: "altar",
       deep_bridges: ["saint", "church"]
     }
   end
 
-  defp give_anchors("hospital" <> _), do: ["nurse", "clinic"]
-  defp give_anchors(_give), do: ["candle", "chapel"]
+  defp give_bookends("hospital" <> _), do: ["nurse", "clinic"]
+  defp give_bookends(_give), do: ["candle", "chapel"]
 
   defp author_delay_ms, do: config_get(:author_delay_ms, 0)
   defp author_mode, do: config_get(:author_mode, :ok)

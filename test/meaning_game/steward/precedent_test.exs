@@ -21,7 +21,7 @@ defmodule MeaningGame.Steward.PrecedentTest do
       assert forward == reverse
     end
 
-    test "both orderings of anchors collapse to the same key" do
+    test "both orderings of bookends collapse to the same key" do
       forward = Precedent.key("gemini-3.8-flash", "assay-1", ["ocean", "night"], ["tide", "moon"])
       reverse = Precedent.key("gemini-3.8-flash", "assay-1", ["night", "ocean"], ["tide", "moon"])
 
@@ -249,7 +249,7 @@ defmodule MeaningGame.Steward.PrecedentTest do
                Precedent.get("gemini-3.8-flash", "assay-2", ["lantern", "harbour"], @table)
 
       # Without these two words a cache hit would replay the grade but not the
-      # game: they are the next Attempt's Anchors (ADR-0010).
+      # game: they are the next Attempt's Bookends (ADR-0010).
       assert verdict.furthest == ["beacon", "seagull"]
     end
 
