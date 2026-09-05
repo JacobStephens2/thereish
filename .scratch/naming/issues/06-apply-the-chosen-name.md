@@ -4,7 +4,7 @@
 
 **Blocked by:** none — 05 resolved 2026-09-05. **The name is Thereish** (ADR-0008, accepted).
 
-**Status:** ready-for-agent
+**Status:** ready-for-agent — **carried by `.scratch/at-the-table/spec.md`** (build step 5) as of 2026-09-05; it lands there in one commit with the Anchors → Bookends rename rather than as a ticket of its own. This file stays as the checklist.
 
 **Scope, measured 2026-09-04:** 150 occurrences of "Mind-Meld". `docs/design-brief.md` (9), `.scratch/naming/issues/01-the-games-real-name.md` (10), ADRs 0004 / 0005 / 0007 / 0008, `docs/deploy.md`, `docs/research/two-player-communication-mechanics.md`, `docs/research/model-selection-for-play.md`, `lib/meaning_game/steward/author.ex` and `assay.ex` (one each, in prose), and `.scratch/mind-meld/` — a spec plus 10 issues, which is a `git mv` and not only a `sed`.
 
