@@ -118,7 +118,6 @@ defmodule MeaningGame.Steward.Live do
       :music ->
         role = Steward.role(:foley, :music)
         prompt = Map.get(brief_map, :prompt) || brief_map[:text] || ""
-        deadline_ms = Map.get(role, :deadline_ms, 180_000)
 
         # Mureka enforces concurrent requests limit 1, so generate sequentially
         results =
