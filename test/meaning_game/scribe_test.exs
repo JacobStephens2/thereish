@@ -94,6 +94,8 @@ defmodule MeaningGame.ScribeTest do
   end
 
   describe "a Scribe that cannot write" do
+    import ExUnit.CaptureLog
+
     test "leaves the Page without a recap rather than taking the Room down", ctx do
       steward(recap_mode: :unavailable)
 
@@ -115,6 +117,22 @@ defmodule MeaningGame.ScribeTest do
       assert Chronicle.recaps(room_id(ctx.slug)) == []
     end
 
+    test "an adapter that raises produces exactly one error log and no row", ctx do
+      assert_single_scribe_error(ctx, [recap_mode: :raise], "having a moment")
+    end
+
+    test "an adapter that times out produces exactly one error log and no row", ctx do
+      assert_single_scribe_error(ctx, [recap_mode: :timeout], "timeout")
+    end
+
+    test "an adapter that fails the gate produces exactly one error log and no row", ctx do
+      assert_single_scribe_error(
+        ctx,
+        [recap_mode: {:error, {:rejected, "the prose gate refused the recap"}}],
+        "prose gate refused"
+      )
+    end
+
     test "the Room does not wait for the paragraph", ctx do
       # A Scribe slower than the whole reveal. The couple see their grade
       # regardless, which is what running it in a task buys.
@@ -125,6 +143,56 @@ defmodule MeaningGame.ScribeTest do
       assert view.reveal != nil
       assert Chronicle.recaps(room_id(ctx.slug)) == []
       assert await_recap(ctx.slug)
+    end
+  end
+
+  defp assert_single_scribe_error(ctx, steward_opts, expected_reason) do
+    import ExUnit.CaptureLog
+
+    steward(steward_opts)
+
+    log =
+      capture_log(fn ->
+        play(ctx, "cairn", "cairo")
+        await_scribe()
+      end)
+
+    [page] = Chronicle.pages(room_id(ctx.slug))
+    assert Chronicle.recaps(room_id(ctx.slug)) == []
+
+    error_lines = log |> String.split("\n") |> Enum.filter(&(&1 =~ "[error]"))
+    assert length(error_lines) == 1
+    [error_line] = error_lines
+    assert error_line =~ ctx.slug
+    assert error_line =~ page.id
+    assert error_line =~ expected_reason
+  end
+
+  describe "syncing missing recaps" do
+    test "writes recaps for closed Pages that have none in order, accepting any case Code", ctx do
+      steward(recap_mode: :unavailable)
+      play(ctx, "cairn", "cairo")
+      await_scribe()
+
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      play(ctx, "mirage", "mirages")
+      await_scribe()
+
+      [page1, page2] = Chronicle.pages(room_id(ctx.slug))
+      assert Chronicle.recaps(room_id(ctx.slug)) == []
+
+      steward(recap_mode: :ok)
+      :ok = MeaningGame.Scribe.sync(String.upcase(ctx.slug))
+
+      recaps = Chronicle.recaps(room_id(ctx.slug))
+      assert length(recaps) == 2
+      [recap1, recap2] = recaps
+      assert recap1.page_id == page1.id
+      assert recap2.page_id == page2.id
+      assert recap1.recap =~ "cairn"
+      assert recap1.callback == nil
+      assert recap2.recap =~ "mirage"
+      assert recap2.callback == "They have been here before."
     end
   end
 
