@@ -57,7 +57,7 @@ defmodule MeaningGameWeb.StageLive do
     >
       <header class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
-          <h1 class="text-4xl font-semibold">Meaning Game</h1>
+          <h1 class="text-4xl font-semibold">Thereish</h1>
           <.link
             navigate={chronicle_path(@slug)}
             class="text-base font-medium underline opacity-70 hover:opacity-100"
