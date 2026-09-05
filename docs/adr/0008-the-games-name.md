@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The game's name: name the miss, and gate the slate on ownability
@@ -17,6 +17,10 @@ Adopted once distribution became a real possibility. It filters the *slate*, bef
 5. **Spellable on hearing** — word of mouth is the whole distribution channel for a couch game.
 
 The slate: **Nearabouts**, **Wellnigh**, **Thereish**, **Fairish**. Presented cold, without the case for any of them, and again after she has played a Page.
+
+## Decision (2026-09-05): Thereish
+
+My wife heard the slate cold on 2026-09-04 and again after playing, and picked **Thereish** both times — so Falsifier 2 did not fire. She added that she would prefer a name pointed at the game's goal over one pointed at the near miss, and Jacob, who prefers the miss, wanted that direction tried before settling. It was: `docs/research/name-candidate-clearance-round4.md` gated Jinx, Same Page, Unison, Chime and Kindred, and every one fails on facts — live marks in Nice 28 or 41, exact-title games on BGG or Steam, and two products launched in August 2026 that ship this exact mechanic under two of those names (*Same Page*, *Unison*). Goal-direction words are ordinary English for agreement, which is what companies name themselves; the miss-direction coinage was available for the same reason. **The game is Thereish**, for now and by Jacob's call in light of the register. **Deep Meld** is the recorded runner-up — clean on every register and store, 9 of 10 domain forms free — held off because it is the ladder's top rung and would face a similarity read against MIND MELD reg. 7540401 on identical goods. The rule that the title never reuses a glossary word was relaxed for the title's sake during this round; Thereish reuses none, so nothing on the ladder renames. If Falsifier 3 ever fires, Deep Meld is the first name to re-clear.
 
 ## Considered options
 

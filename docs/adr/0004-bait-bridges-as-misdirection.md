@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0011
 ---
 
 # Bait bridges are Mind-Meld's misdirection engine, shipped as an A/B layer
@@ -15,3 +15,7 @@ Stage 0 retired the clover candidate (unplayed) and left Mind-Meld, which carrie
 ## Consequences
 
 The Author's `likely_bridges` and `why_these` become load-bearing content — the narration of the trap. The bait rung must remain a meld, or the game punishes the obviousness that convergence games reward.
+
+## Superseded (2026-09-05)
+
+Retired by ADR-0011 after the second playtest: the one Bait that fired that night (lighthouse/lighthouse, graded 75 on the bait rung) was tapped "too harsh" by both players, and with Bookends chosen to stand far apart and Gives kept private, the misdirection the Bait supplied comes from the Page itself. The A/B harness stays; its first experiment is now the Author's model.

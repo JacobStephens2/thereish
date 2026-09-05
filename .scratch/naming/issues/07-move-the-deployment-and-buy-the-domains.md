@@ -2,7 +2,7 @@
 
 **What to build:** The game is served from a subdomain that carries its real name, and the domain forms worth holding are held. This is the only part of the rename that costs money and cannot be undone with a `git revert`, so it is spent exactly once.
 
-**Blocked by:** 06 (Apply the chosen name).
+**Blocked by:** 06 (Apply the chosen name). The name is **Thereish**; the target is `thereish.stephens.page`. Round three (`docs/research/name-candidate-clearance-round3.md` §8b) lists which Thereish domain forms were free on 2026-09-04 — re-check at the registry before buying.
 
 **Status:** ready-for-human
 

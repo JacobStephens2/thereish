@@ -24,3 +24,5 @@ This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the
 - [ ] Steward tests cover the gate, the retry, the fallback and the no-history path; a Room test asserts the configured fake word becomes the Code
 - [ ] One tagged live smoke test names a Room from a real digest once by hand
 - [ ] Verified on the real deployment: a Room created from Jacob's phone gets a word that nods to the couch's Chronicle
+
+**Since this was filed (2026-09-05, ADR-0011).** Nothing here changes shape. Two facts to carry: the digest the Scribe reads now includes each Seat's Gives and the Bookends the Author wrote from them, which is richer material for a nod than the old pool's Chapters; and `MeaningGame.Steward.Legality.dictionary/0` — the ENABLE list the gate and the random word draw from — stays even though player Bridges no longer pass a dictionary check, because a Code still has to be a word.
