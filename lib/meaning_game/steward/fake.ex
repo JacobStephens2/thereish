@@ -119,6 +119,26 @@ defmodule MeaningGame.Steward.Fake do
     end
   end
 
+  @impl true
+  def name_room(_digests, _taken_codes) do
+    delay = config_get(:name_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:name_mode, :ok) do
+      :ok ->
+        case config_get(:name_word, "cane") do
+          nil -> {:error, :no_name}
+          word -> {:ok, word}
+        end
+
+      :unavailable ->
+        {:error, :no_name}
+
+      :raise ->
+        raise "this Scribe is having a moment"
+    end
+  end
+
   # The Scribe with no model behind it writes the one true sentence about a
   # Page: who wrote what, first and last. It is a dial like the grade is — a
   # test that wants a recap naming a word writes that word as a Bridge — and it

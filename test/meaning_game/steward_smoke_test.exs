@@ -151,4 +151,26 @@ defmodule MeaningGame.StewardSmokeTest do
         "\n  callback: #{recap.callback || "(none)"}\n"
     )
   end
+
+  test "the Scribe names a Room from a real digest once by hand" do
+    alias MeaningGame.Steward.Legality
+
+    digest = """
+    Page 1 (candy · cane) [Give: Christmas] — Melded on attempt 2 (closeness: 88, meld)
+      Attempt 2: Jacob bridged "hook", Mara bridged "hook". Verdict: 88 (meld)
+      Recap: Both of them wrote hook, and neither would say why.
+    """
+
+    taken = ["couch", "flak"]
+
+    {:ok, code} = Steward.name_room([digest], taken)
+
+    assert is_binary(code)
+    assert String.length(code) == 4
+    assert Legality.in_dictionary?(code)
+    refute Legality.profane?(code)
+    refute code in taken
+
+    IO.puts("\n  live Scribe named Room: #{String.upcase(code)}\n")
+  end
 end

@@ -114,5 +114,28 @@ defmodule MeaningGame.Steward.FakeTest do
       assert Fake.assay(%{anchors: @anchors, bridges: ["cairn", "cairo", "cable", "beacon"]}) ==
                {:error, :no_verdict}
     end
+
+    test "the fake Scribe answers a configured word, or a default word" do
+      assert Fake.name_room(["some digest"], ["take"]) == {:ok, "cane"}
+
+      fake(name_word: "fork")
+      assert Fake.name_room(["some digest"], ["take"]) == {:ok, "fork"}
+    end
+
+    test "the fake Scribe answers nothing when configured to" do
+      fake(name_word: nil)
+      assert Fake.name_room(["some digest"], ["take"]) == {:error, :no_name}
+
+      fake(name_mode: :unavailable)
+      assert Fake.name_room(["some digest"], ["take"]) == {:error, :no_name}
+    end
+
+    test "the fake Scribe raises when configured to" do
+      fake(name_mode: :raise)
+
+      assert_raise RuntimeError, ~r/this Scribe is having a moment/, fn ->
+        Fake.name_room(["some digest"], ["take"])
+      end
+    end
   end
 end

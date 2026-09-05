@@ -56,7 +56,10 @@ config :meaning_game, :steward,
     author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"],
     scribe: [
       api_key: "recorded-responses-need-no-key",
-      jobs: [recap: [timeout_ms: 2_000, deadline_ms: 5_000]]
+      jobs: [
+        recap: [timeout_ms: 2_000, deadline_ms: 5_000],
+        naming: [timeout_ms: 500, deadline_ms: 1_000]
+      ]
     ]
   ],
   http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]
