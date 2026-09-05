@@ -70,7 +70,24 @@ defmodule MeaningGameWeb.StageLive do
         </p>
       </header>
 
-      <.give_announcement room={@room} />
+      <section
+        :if={@room.phase == :giving}
+        data-role="giving-stage"
+        class="flex flex-col items-center justify-center gap-3 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Settings</p>
+        <p class="text-2xl font-semibold">
+          Waiting for settings: {@room.gives_in} of {length(@room.seats)}
+        </p>
+      </section>
+
+      <section
+        :if={@room.phase == :writing}
+        data-role="writing-stage"
+        class="flex flex-col items-center justify-center gap-3 text-center"
+      >
+        <.author_writing mode={:stage} />
+      </section>
 
       <.attempt room={@room} />
 

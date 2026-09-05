@@ -287,11 +287,23 @@ defmodule MeaningGame.Rooms do
   def next_page(slug, seat_id), do: call(slug, {:next_page, seat_id})
 
   @doc """
-  Names a setting on the spot (a Give) and begins authoring Pages for it in the background.
+  Commits a setting (Give) for the upcoming Page.
   """
   @spec give(String.t(), String.t(), String.t()) ::
           :ok | {:error, :give_required | :no_such_seat | term()}
   def give(slug, seat_id, give), do: call(slug, {:give, seat_id, give})
+
+  @doc """
+  Retries writing the Page through the Author after a failure.
+  """
+  @spec retry_author(String.t(), String.t()) :: :ok | {:error, term()}
+  def retry_author(slug, seat_id), do: call(slug, {:retry_author, seat_id})
+
+  @doc """
+  Resets Gives so players can enter new settings after an Author failure.
+  """
+  @spec reset_gives(String.t(), String.t()) :: :ok | {:error, term()}
+  def reset_gives(slug, seat_id), do: call(slug, {:reset_gives, seat_id})
 
   @doc """
   Deliberately unblinds an experiment in the Room (ticket 13).

@@ -52,33 +52,36 @@ defmodule MeaningGame.Steward.Fake do
   end
 
   @impl true
-  def author(chapter, opts \\ []) do
+  def author(_request, opts \\ []) do
     delay = author_delay_ms()
     if delay > 0, do: Process.sleep(delay)
 
     case author_mode() do
       :ok ->
-        give = Keyword.get(opts, :give)
-        %{bookends: bookends, bait: bait, deep_bridges: deep_bridges} = authored_bridges(give)
-        likely_bridges = [bait | deep_bridges] ++ ["prayer", "faith"]
+        bookends =
+          Keyword.get(opts, :bookends) || config_get(:author_bookends, ["lantern", "harbour"])
 
-        json = %{
-          "theme" => give || chapter,
-          "bookends" => bookends,
-          "bait" => bait,
-          "deep_bridges" => deep_bridges,
-          "likely_bridges" => likely_bridges,
-          "why_these" => "The bookends invite #{bait} as the immediate trap.",
-          "band_scripts" => default_band_scripts()
-        }
+        why =
+          Keyword.get(opts, :why) ||
+            config_get(
+              :author_why,
+              "A light to see by stands opposite a shelter by the water."
+            )
 
         {:ok,
-         MeaningGame.Steward.Author.page(json, chapter, give, %{
-           model: "fake-author",
-           attempts: 1,
-           cost_usd: 0.0,
-           latency_ms: delay
-         })}
+         %{
+           bookends: bookends,
+           why: why,
+           meta: %{
+             model: "fake-author",
+             arm: :flash,
+             prompt_version: MeaningGame.Steward.Author.version(),
+             cost_usd: 0.0,
+             latency_ms: delay,
+             attempts: 1,
+             why: why
+           }
+         }}
 
       :refused ->
         {:error, :refused}
@@ -205,36 +208,6 @@ defmodule MeaningGame.Steward.Fake do
   # Scribe is asked to: by whether the digest has anything in it.
   defp remembered("Nothing yet" <> _rest), do: nil
   defp remembered(_digest), do: "They have been here before."
-
-  @default_band_scripts %{
-    "miss" => "Different neighbourhoods entirely.",
-    "adjacent" => "On the same block, across the street.",
-    "close" => "Passable.",
-    "meld" => "You both saw the grill.",
-    "deep_meld" => "Two minds at the mower."
-  }
-
-  @doc "Default band scripts used by the Fake author and test fixtures."
-  def default_band_scripts, do: @default_band_scripts
-
-  defp authored_bridges(nil) do
-    %{
-      bookends: ["backyard", "weekend"],
-      bait: "barbecue",
-      deep_bridges: ["lawnmower", "chores"]
-    }
-  end
-
-  defp authored_bridges(give) do
-    %{
-      bookends: give_bookends(give),
-      bait: "altar",
-      deep_bridges: ["saint", "church"]
-    }
-  end
-
-  defp give_bookends("hospital" <> _), do: ["nurse", "clinic"]
-  defp give_bookends(_give), do: ["candle", "chapel"]
 
   defp author_delay_ms, do: config_get(:author_delay_ms, 0)
   defp author_mode, do: config_get(:author_mode, :ok)

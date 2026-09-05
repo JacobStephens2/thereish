@@ -27,6 +27,7 @@ defmodule MeaningGame.Chronicle do
   alias MeaningGame.Chronicle.ExperimentOutcome
   alias MeaningGame.Chronicle.ExperimentUnblinding
   alias MeaningGame.Chronicle.FairnessTap
+  alias MeaningGame.Chronicle.Give
   alias MeaningGame.Chronicle.Overrule
   alias MeaningGame.Chronicle.Page
   alias MeaningGame.Chronicle.Recap
@@ -517,6 +518,7 @@ defmodule MeaningGame.Chronicle do
       )
       |> Repo.all()
       |> Repo.preload(
+        gives: :seat,
         attempts: [:verdicts, bridges: :seat],
         overrules: :proposer,
         corrections: :seat
@@ -699,7 +701,22 @@ defmodule MeaningGame.Chronicle do
         "Unmelded after #{length(page.attempts)} attempts"
       end
 
-    give_str = if page[:give], do: " [Give: #{page.give}]", else: ""
+    give_str =
+      cond do
+        page[:gives] && page[:gives] != [] ->
+          " [" <>
+            Enum.map_join(
+              page.gives,
+              ", ",
+              &"Give (#{Map.get(&1, :seat_name, "Player")}): #{Map.get(&1, :text, "")}"
+            ) <> "]"
+
+        page[:give] ->
+          " [Give: #{page.give}]"
+
+        true ->
+          ""
+      end
 
     lines = [
       "Page #{index} (#{bookends_str})#{give_str} — #{outcome_str}"
@@ -900,8 +917,29 @@ defmodule MeaningGame.Chronicle do
         }
       end)
 
+    formatted_gives =
+      case page.gives do
+        %Ecto.Association.NotLoaded{} ->
+          []
+
+        nil ->
+          []
+
+        list when is_list(list) ->
+          Enum.map(list, fn g ->
+            %{
+              id: g.id,
+              seat_id: g.seat_id,
+              seat_name: (g.seat && g.seat.name) || "Seat",
+              text: g.text,
+              order: g.order
+            }
+          end)
+      end
+
     opening_bookends =
       page.document["bookends"] ||
+        page.document[:bookends] ||
         case page.attempts do
           [first | _] -> first.bookends
           [] -> []
@@ -934,6 +972,8 @@ defmodule MeaningGame.Chronicle do
       id: page.id,
       room_id: page.room_id,
       document: page.document,
+      gives: formatted_gives,
+      author_meta: page.author_meta,
       give: page.document["give"] || page.document[:give],
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
@@ -1095,17 +1135,65 @@ defmodule MeaningGame.Chronicle do
   end
 
   defp insert_page(room_id, entry, opened_at) do
-    %Page{}
-    |> Page.changeset(%{
-      room_id: room_id,
-      document: entry.page,
-      closed_because: to_string(entry.closed_because),
-      melded: entry.melded?,
-      closeness: entry.closeness,
-      opened_at: opened_at,
-      closed_at: DateTime.utc_now()
-    })
-    |> Repo.insert!()
+    page_data = entry[:page] || %{}
+
+    author_meta =
+      Map.get(page_data, :author_meta) ||
+        Map.get(page_data, "author_meta") ||
+        Map.get(entry, :author_meta) ||
+        Map.get(entry, "author_meta")
+
+    page =
+      %Page{}
+      |> Page.changeset(%{
+        room_id: room_id,
+        document: page_data,
+        author_meta: author_meta,
+        closed_because: to_string(entry.closed_because),
+        melded: entry.melded?,
+        closeness: entry.closeness,
+        opened_at: opened_at,
+        closed_at: DateTime.utc_now()
+      })
+      |> Repo.insert!()
+
+    raw_gives =
+      entry[:gives] || entry["gives"] ||
+        (is_map(page_data) && (page_data[:gives] || page_data["gives"]))
+
+    gives =
+      cond do
+        is_list(raw_gives) ->
+          raw_gives
+
+        is_map(raw_gives) ->
+          Enum.map(raw_gives, fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
+
+        true ->
+          []
+      end
+
+    gives
+    |> Enum.with_index(1)
+    |> Enum.each(fn {give, idx} -> insert_give(page, give, idx) end)
+
+    page
+  end
+
+  defp insert_give(page, give, position) do
+    seat_id = give[:seat_id] || give["seat_id"]
+    text = give[:text] || give[:give] || give["text"] || give["give"] || ""
+
+    if seat_id do
+      %Give{}
+      |> Give.changeset(%{
+        page_id: page.id,
+        seat_id: seat_id,
+        text: text,
+        order: position
+      })
+      |> Repo.insert!()
+    end
   end
 
   defp insert_attempt(page, attempt) do

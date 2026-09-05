@@ -23,11 +23,10 @@ config :meaning_game,
   # the couch answers, not one to guess at here.
   reveal_beat_ms: 2500,
   # How the reveal escalates when the Assayer is slow (design law 10). Visible
-  # activity through four seconds; a provisional reading at eight, which shows
-  # the waiting state until the Author exists to pre-grade one; and at ten the
-  # game states it has no verdict and hands the ruling to the players. Ten
-  # seconds is a ceiling, not a target: the measured p95 is around one.
-  assayer_escalation_ms: [slow: 4_000, provisional: 8_000, unavailable: 10_000],
+  # activity through four seconds; at ten the game states it has no verdict and
+  # hands the ruling to the players. Ten seconds is a ceiling, not a target: the
+  # measured p95 is around one.
+  assayer_escalation_ms: [slow: 4_000, unavailable: 10_000],
   # How many tries a Page gets before it closes unmelded. Five is a guess about
   # how long a converging arc stays funny, which makes it a setting the couch
   # moves rather than a number in the rules.
@@ -82,14 +81,25 @@ config :meaning_game, :steward,
       api_key: nil
     ],
     author: [
-      provider: MeaningGame.Steward.Anthropic,
-      model: "claude-fable-5-1",
+      provider: MeaningGame.Steward.Gemini,
+      model: "gemini-3.8-flash",
       effort: "low",
-      max_tokens: 100_000,
-      retries: 2,
-      timeout_ms: 120_000,
-      deadline_ms: 300_000,
-      api_key: nil
+      max_tokens: 400,
+      requests: 1,
+      retries: 1,
+      timeout_ms: 5_000,
+      deadline_ms: 8_000,
+      api_key: nil,
+      jobs: [
+        flash: [
+          provider: MeaningGame.Steward.Gemini,
+          model: "gemini-3.8-flash",
+          effort: "low",
+          max_tokens: 400,
+          timeout_ms: 5_000,
+          deadline_ms: 8_000
+        ]
+      ]
     ],
     # The Scribe is the one role whose jobs want different models, so it is the
     # one role configured per job. Naming a Room happens with a table waiting

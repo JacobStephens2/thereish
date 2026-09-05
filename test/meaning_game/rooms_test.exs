@@ -45,6 +45,8 @@ defmodule MeaningGame.RoomsTest do
           seat
         end
 
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      await_phase(slug, :bridging)
       Enum.each(seats, &(:ok = Rooms.commit_bridge(slug, &1.id, "cairn")))
 
       # Six Bridges, one Verdict. The cap is about what a phone can show and
@@ -193,6 +195,9 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
       :ok = Rooms.subscribe(slug)
 
       %{slug: slug, mara: mara, jacob: jacob}
@@ -355,6 +360,9 @@ defmodule MeaningGame.RoomsTest do
           seat
         end
 
+      for seat <- seats, do: :ok = Rooms.give(slug, seat.id, "setting #{seat.name}")
+      await_phase(slug, :bridging)
+
       %{slug: slug, seats: seats}
     end
 
@@ -400,7 +408,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "one slow Verdict escalates once, and the whole table is told the same thing", ctx do
-      escalation(slow: 50, provisional: 200, unavailable: 400)
+      escalation(slow: 50, unavailable: 400)
       steward(delay_ms: 5_000)
 
       for {seat, bridge} <- Enum.zip(ctx.seats, ~w(cairn cairo beacon signal)) do
@@ -408,11 +416,6 @@ defmodule MeaningGame.RoomsTest do
       end
 
       assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
-
-      assert eventually(fn ->
-               snap = Rooms.snapshot(ctx.slug, nil)
-               snap.assayer_step == :provisional and snap.provisional_band != nil
-             end)
 
       view = await_reveal(ctx.slug)
 
@@ -433,12 +436,15 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
 
       # Rungs far enough apart that a test can catch the Room standing on each
       # one, and an Assayer slower than all of them — but not so much slower that
       # the test cannot wait for it to answer anyway, because one of these tests
       # is about what happens when it finally does.
-      escalation(slow: 50, provisional: 400, unavailable: 700)
+      escalation(slow: 50, unavailable: 700)
       steward(delay_ms: 1_000)
 
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
@@ -447,13 +453,8 @@ defmodule MeaningGame.RoomsTest do
       %{slug: slug, mara: mara, jacob: jacob}
     end
 
-    test "says it is still reading, and then that it is still nothing", ctx do
+    test "says it is still reading", ctx do
       assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
-
-      assert eventually(fn ->
-               snap = Rooms.snapshot(ctx.slug, nil)
-               snap.assayer_step == :provisional and snap.provisional_band != nil
-             end)
     end
 
     test "gives up at the last rung and hands the ruling to the players", ctx do
@@ -462,7 +463,6 @@ defmodule MeaningGame.RoomsTest do
       assert view.reveal.closeness == nil
       assert view.reveal.melded? == false
       refute view.reveal.graded?
-      assert view.reveal.quip != nil
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
 
       # The wait is over, so nothing on any screen is still narrating it.
@@ -495,6 +495,9 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
 
       %{slug: slug, mara: mara, jacob: jacob}
     end
@@ -572,13 +575,24 @@ defmodule MeaningGame.RoomsTest do
       for viewer <- [ctx.mara.id, ctx.jacob.id, nil] do
         view = Rooms.snapshot(ctx.slug, viewer)
 
-        assert view.phase == :bridging
-        assert view.attempt.number == 1
-        assert view.bookends != ["lantern", "harbour"]
+        assert view.phase == :giving
         assert view.reveal == nil
         assert view.played == []
         assert Enum.map(view.seats, & &1.name) == ["Mara", "Jacob"]
       end
+
+      # Prefill remembers each seat's last Give
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).your_last_give == "setting one"
+      assert Rooms.snapshot(ctx.slug, ctx.jacob.id).your_last_give == "setting two"
+
+      # New gives land, Author writes, and bridging begins again
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      view = Rooms.snapshot(ctx.slug, nil)
+      assert view.phase == :bridging
+      assert view.attempt.number == 1
     end
 
     test "one more? is refused while the Page is still being played", ctx do
@@ -606,10 +620,13 @@ defmodule MeaningGame.RoomsTest do
       assert Rooms.rejoin(slug, token) == {:ok, mara}
     end
 
-    test "a crashed Room comes back at the Bookends, and the Page in progress is gone" do
+    test "a crashed Room comes back with its Seats, and the Page in progress is gone" do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
       await_reveal(slug)
@@ -624,7 +641,7 @@ defmodule MeaningGame.RoomsTest do
       # Seats are still here; the Page they were playing is not.
       view = once_restarted(fn -> Rooms.snapshot(slug, mara.id) end)
 
-      assert view.phase == :bridging
+      assert view.phase == :giving
       assert view.reveal == nil
       assert view.your_bridge == nil
       assert Enum.map(view.seats, & &1.name) == ["Mara", "Jacob"]
@@ -672,6 +689,9 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", token)
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
       await_reveal(slug)
@@ -698,6 +718,9 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", token)
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
       await_reveal(slug)
@@ -720,6 +743,9 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", token)
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
       await_reveal(slug)
@@ -813,6 +839,9 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
 
       # Fake Assayer: "cairn" and "beacon" share no prefix -> closeness 0
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
@@ -865,6 +894,9 @@ defmodule MeaningGame.RoomsTest do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
 
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "beacon")
@@ -894,52 +926,14 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
-  describe "authored pool in Room lifecycle" do
-    test "draws next Page from authored pool and refuses to repeat when exhausted" do
-      {:ok, _page} =
-        MeaningGame.Pages.insert_page(%{
-          id: "P-POOL-1",
-          chapter: "room pool chapter",
-          theme: "room pool chapter",
-          give: nil,
-          bookends: ["candle", "shadow"],
-          bait: "flame",
-          deep_bridges: ["glow", "darkness"],
-          likely_bridges: ["flame", "glow", "darkness", "wax"],
-          why_these: "Candle and shadow invite flame.",
-          band_scripts: %{
-            "miss" => "Lost in dark.",
-            "adjacent" => "Near the light.",
-            "close" => "Passable. In the glow.",
-            "meld" => "Two minds at the flame.",
-            "deep_meld" => "Deep shadow."
-          },
-          meta: %{model: "fake", attempts: 1, cost_usd: 0.0}
-        })
-
-      slug = open_room()
-      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
-      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
-
-      # First page of room was drawn from pool
-      snapshot = Rooms.snapshot(slug, mara.id)
-      assert snapshot.bookends == ["candle", "shadow"]
-
-      # Play through to meld it
-      :ok = Rooms.commit_bridge(slug, mara.id, "flame")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "flame")
-      await_reveal(slug)
-
-      # Next page call refuses to repeat because pool is drained
-      assert {:error, :pool_exhausted} = Rooms.next_page(slug, mara.id)
-    end
-  end
-
   describe "the fairness tap (ticket 11)" do
     setup do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
 
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
@@ -978,42 +972,29 @@ defmodule MeaningGame.RoomsTest do
       # Next attempt / page proceeds without impediment
       assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.phase == :giving
       assert view.your_tap == nil
     end
   end
 
-  describe "naming a setting (ticket 12)" do
+  describe "giving settings at the table" do
     setup do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
-      # Seed one normal page in pool so room has existing pool
-      {:ok, _} =
-        MeaningGame.Pages.insert_page(%{
-          id: "P-EXISTING-01",
-          chapter: "the harbour",
-          theme: "the harbour",
-          give: nil,
-          bookends: ["lantern", "harbour"],
-          bait: "lighthouse",
-          deep_bridges: ["beacon", "buoy"],
-          likely_bridges: ["lighthouse", "beacon", "buoy"],
-          why_these: "Harbour bookends",
-          band_scripts: %{
-            "miss" => "m",
-            "adjacent" => "a",
-            "close" => "c",
-            "meld" => "meld",
-            "deep_meld" => "dm"
-          },
-          meta: %{model: "fake-author", prompt_version: "v1", attempts: 1, cost_usd: 0.0}
-        })
-
       steward = Application.fetch_env!(:meaning_game, :steward)
       on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
 
       %{slug: slug, mara: mara, jacob: jacob, steward: steward}
+    end
+
+    test "a full Room boots with no Page and is in giving phase", ctx do
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.phase == :giving
+      assert view.bookends == nil
+      assert view.gives_in == 0
+      assert view.your_give == nil
     end
 
     test "a Give requires a seat and non-blank input", ctx do
@@ -1022,68 +1003,33 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, :give_required} = Rooms.give(ctx.slug, ctx.mara.id, "   ")
     end
 
-    test "a Give queues a background Author run, play continues meanwhile, and arriving Pages join pool",
-         ctx do
-      # Configure fake author to take 15ms per page
-      fake_config = Keyword.get(ctx.steward, :fake, [])
+    test "submitting a Give shows only to the giver and updates count for others", ctx do
+      assert :ok = Rooms.give(ctx.slug, ctx.mara.id, "candlelit cathedral")
 
-      Application.put_env(
-        :meaning_game,
-        :steward,
-        Keyword.put(
-          ctx.steward,
-          :fake,
-          Keyword.merge(fake_config, author_delay_ms: 15, author_mode: :ok)
-        )
-      )
+      mara_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert mara_view.your_give == "candlelit cathedral"
+      assert mara_view.gives_in == 1
 
-      give = "the world St. Thérèse grew up in"
-      assert :ok = Rooms.give(ctx.slug, ctx.mara.id, give)
+      jacob_view = Rooms.snapshot(ctx.slug, ctx.jacob.id)
+      assert jacob_view.your_give == nil
+      assert jacob_view.gives_in == 1
+      refute inspect(jacob_view) =~ "candlelit cathedral"
 
-      # In-flight immediately:
-      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert view.give_status != nil
-      assert view.give_status.status == :in_flight
-      assert view.give_status.give == give
-
-      # Play continues meanwhile! Commit bridges on current page without stalling:
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
-      await_reveal(ctx.slug)
-
-      view_mid = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert view_mid.phase == :closed
-
-      # Wait for background Author task to complete
-      view_landed =
-        eventually(
-          fn ->
-            v = Rooms.snapshot(ctx.slug, ctx.mara.id)
-            v[:give_status] && v.give_status[:status] == :landed && v
-          end,
-          "the Author task never completed"
-        )
-
-      assert view_landed.give_status.status == :landed
-      assert view_landed.give_announcement != nil
-      assert view_landed.give_announcement.give == give
-      assert view_landed.give_announcement.count > 0
-
-      # The arriving pages have joined the pool
-      give_pages =
-        MeaningGame.Repo.all(from(p in MeaningGame.Pages.AuthoredPage, where: p.give == ^give))
-
-      assert length(give_pages) == view_landed.give_announcement.count
-
-      # Starting the next page moves to the Give setting!
-      assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
-      view_next = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert view_next.page_give == give
-      assert view_next.bookends != nil
+      stage_view = Rooms.snapshot(ctx.slug, nil)
+      assert stage_view.gives_in == 1
+      refute inspect(stage_view) =~ "candlelit cathedral"
     end
 
-    test "a failed or refused Author run degrades cleanly and leaves the evening playable", ctx do
-      # Configure fake author to fail/refuse
+    test "the last Give triggers the Author and transitions to bridging", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "candlelit cathedral")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "cyberpunk nightclub")
+
+      view = await_phase(ctx.slug, :bridging)
+      assert view.phase == :bridging
+      assert [_b1, _b2] = view.bookends
+    end
+
+    test "an Author failure allows retry or entering new settings", ctx do
       fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
@@ -1092,45 +1038,73 @@ defmodule MeaningGame.RoomsTest do
         Keyword.put(
           ctx.steward,
           :fake,
-          Keyword.merge(fake_config, author_delay_ms: 10, author_mode: :refused)
+          Keyword.merge(fake_config, author_mode: :unavailable)
         )
       )
 
-      give = "some forbidden content"
-      assert :ok = Rooms.give(ctx.slug, ctx.mara.id, give)
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
 
-      # Wait for task to fail
-      view =
+      failure_view =
         eventually(
           fn ->
             v = Rooms.snapshot(ctx.slug, ctx.mara.id)
-            v[:give_status] && v.give_status[:status] == :failed && v
+            v.author_failure && v
           end,
-          "the Author failure never landed"
+          "author failure never arrived"
         )
 
-      assert view.give_status.status == :failed
-      assert view.give_status.give == give
-      assert view.give_failure != nil
-      assert view.give_failure.give == give
-      assert view.give_failure.reason =~ "declined"
+      assert failure_view.author_failure != nil
 
-      # The evening remains completely playable from existing pool:
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
-      await_reveal(ctx.slug)
+      # Retry author
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :ok)
+        )
+      )
 
-      view_after = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert view_after.phase == :closed
-      assert view_after.reveal != nil
+      assert :ok = Rooms.retry_author(ctx.slug, ctx.mara.id)
+      assert await_phase(ctx.slug, :bridging).phase == :bridging
+    end
+
+    test "resetting gives allows players to enter fresh settings", ctx do
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :unavailable)
+        )
+      )
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.mara.id).author_failure end)
+
+      assert :ok = Rooms.reset_gives(ctx.slug, ctx.mara.id)
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.phase == :giving
+      assert view.gives_in == 0
+      assert view.author_failure == nil
     end
   end
 
-  describe "A/B experiments harness (ticket 13)" do
+  describe "A/B experiments harness" do
     setup do
       slug = open_room()
       {:ok, mara} = Rooms.join(slug, "Mara", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
 
       %{slug: slug, mara: mara, jacob: jacob}
     end
@@ -1143,87 +1117,6 @@ defmodule MeaningGame.RoomsTest do
       json = Jason.encode!(view)
       refute json =~ ~r/"arm"\s*:\s*"bait"/
       refute json =~ ~r/"arm"\s*:\s*"plain"/
-    end
-
-    test "every Page assignment and outcome are Chronicle events", ctx do
-      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
-
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
-      await_reveal(ctx.slug)
-
-      assert [assignment] = MeaningGame.Chronicle.experiment_assignments(room.id)
-      assert assignment.arm in ["bait", "plain"]
-      assert assignment.experiment_id == "bait_against_plain"
-
-      assert [outcome] = MeaningGame.Chronicle.experiment_outcomes(room.id)
-      assert outcome.arm == assignment.arm
-      assert outcome.melded == true
-      assert outcome.attempts_count == 1
-    end
-
-    test "scoring respects arm: bait convergence scores 75 in bait arm and 100 in plain arm",
-         ctx do
-      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
-
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "lighthouse")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "lighthouse")
-      reveal_view = await_reveal(ctx.slug)
-
-      [outcome1] = MeaningGame.Chronicle.experiment_outcomes(room.id)
-
-      if outcome1.arm == "bait" do
-        assert reveal_view.reveal.closeness == 75
-        assert outcome1.trap_converged == true
-      else
-        assert reveal_view.reveal.closeness == 100
-        assert outcome1.trap_converged == false
-      end
-
-      # Seed another page in authored pool with known bait
-      chapter = "stratified-test-chapter"
-
-      {:ok, _} =
-        MeaningGame.Pages.insert_page(%{
-          id: "P-DETERMINISTIC-01",
-          chapter: chapter,
-          theme: chapter,
-          bookends: ["beacon", "shore"],
-          bait: "light",
-          deep_bridges: ["reef"],
-          likely_bridges: ["light", "reef"],
-          why_these: "Test chapter",
-          band_scripts: %{
-            "miss" => "m",
-            "adjacent" => "a",
-            "close" => "c",
-            "meld" => "meld",
-            "deep_meld" => "dm"
-          },
-          meta: %{model: "fake", attempts: 1, cost_usd: 0.0}
-        })
-
-      # Pre-seed plain in chapter history so next assignment is deterministically bait
-      {:ok, _} =
-        MeaningGame.Chronicle.record_experiment_assignment(room.id, %{
-          page_identifier: "P-DETERMINISTIC-00",
-          experiment_id: "bait_against_plain",
-          arm: "plain",
-          chapter: chapter,
-          assigned_at: DateTime.utc_now()
-        })
-
-      assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "light")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "light")
-      reveal2 = await_reveal(ctx.slug)
-
-      # Deterministically assigned to bait because plain was trailing
-      outcomes = MeaningGame.Chronicle.experiment_outcomes(room.id)
-      outcome2 = List.last(outcomes)
-      assert outcome2.arm == "bait"
-      assert reveal2.reveal.closeness == 75
-      assert outcome2.trap_converged == true
     end
 
     test "unblinding is a deliberate action recorded in the Chronicle", ctx do
