@@ -290,7 +290,14 @@ defmodule MeaningGameWeb.ChronicleLive do
                   {Enum.join(page.bookends, " · ")}
                 </h2>
                 <span
-                  :if={page[:give]}
+                  :for={g <- page[:gives] || []}
+                  data-role="give-tag"
+                  class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+                >
+                  Give ({g.seat_name}): {g.text}
+                </span>
+                <span
+                  :if={(page[:gives] == nil or page[:gives] == []) and page[:give]}
                   data-role="give-tag"
                   class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >

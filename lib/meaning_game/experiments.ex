@@ -40,105 +40,10 @@ defmodule MeaningGame.Experiments do
   def definition(_), do: @first_experiment
 
   @doc """
-  Stratified arm assignment for a given chapter stratum.
-
-  Balances arms within each chapter: if one arm has fewer pages in this chapter,
-  it is assigned next. If balanced, randomly picks with 50/50 probability.
+  Arm assignment is fixed to :flash until Issue 08.
   """
-  @spec assign_arm([atom() | String.t()]) :: :bait | :plain
-  def assign_arm(chapter_history) when is_list(chapter_history) do
-    normalized =
-      Enum.map(chapter_history, fn
-        :bait -> :bait
-        "bait" -> :bait
-        _ -> :plain
-      end)
-
-    bait_count = Enum.count(normalized, &(&1 == :bait))
-    plain_count = Enum.count(normalized, &(&1 == :plain))
-
-    cond do
-      bait_count < plain_count -> :bait
-      plain_count < bait_count -> :plain
-      true -> Enum.random([:bait, :plain])
-    end
-  end
-
-  @doc """
-  Applies experimental arm grading rules to a verdict.
-
-  In the :plain arm, the Assayer's standard grading is preserved.
-  In the :bait arm:
-  - Every Bridge landing on the planted bait is scored as a Meld on the lowest
-    rung (75).
-  - Every Bridge landing on a deep bridge is rewarded with the top rung (95+).
-  - Anything short of the whole table agreeing keeps standard Assayer closeness.
-
-  Note: To preserve blinding during active play, arm labels and trap notices
-  are never written into verdict.reasoning (which is visible on phones and stage).
-  Trap and deep convergence flags are recorded in verdict.meta for Chronicle
-  unblinded viewing.
-  Joint player overrules are never overwritten (ADR-0006, design law 3).
-  """
-  @spec apply_arm_closeness(map(), map(), :bait | :plain | String.t(), [String.t()]) :: map()
-  def apply_arm_closeness(verdict, _page, arm, _bridges) when arm in [:plain, "plain"] do
-    verdict
-  end
-
-  def apply_arm_closeness(verdict, page, arm, bridges) when arm in [:bait, "bait"] do
-    if Map.get(verdict, :overruled?, false) or Map.get(verdict.meta || %{}, :overruled, false) do
-      verdict
-    else
-      # "Both Bridges" at two Seats is "every Bridge" at any number of them
-      # (ADR-0010): the trap is only sprung when the whole table walked into it,
-      # and the deep reward is only earned when the whole table went deep. Three
-      # players on the bait and one elsewhere is a table that did not converge,
-      # and the Assayer's own number already says so.
-      written = Enum.map(bridges, &normalize_word/1)
-
-      bait = normalize_word(page[:bait] || page["bait"])
-
-      deep_bridges =
-        (page[:deep_bridges] || page["deep_bridges"] || [])
-        |> Enum.map(&normalize_word/1)
-
-      cond do
-        written == [] or Enum.any?(written, &(&1 == "")) ->
-          verdict
-
-        bait != "" and Enum.all?(written, &(&1 == bait)) ->
-          # Converged on the bait trap: a Meld on the lowest rung (75) per ADR-0004.
-          # Blinding: Do NOT leak arm or "bait trap" into player-visible reasoning during play!
-          meta = Map.put(verdict.meta || %{}, :trap_sprung, true)
-
-          %{
-            verdict
-            | closeness: 75,
-              meta: meta
-          }
-
-        Enum.all?(written, &(&1 in deep_bridges)) ->
-          # Converged on deep bridges: top rung (:deep_meld)
-          meta = Map.put(verdict.meta || %{}, :deep_convergence, true)
-
-          %{
-            verdict
-            | closeness: max(verdict.closeness || 0, 95),
-              meta: meta
-          }
-
-        true ->
-          verdict
-      end
-    end
-  end
-
-  @doc """
-  Backwards-compatible alias for `apply_arm_closeness/4`.
-  """
-  @spec score_verdict(map(), map(), :bait | :plain | String.t(), [String.t()]) :: map()
-  def score_verdict(verdict, page, arm, bridges),
-    do: apply_arm_closeness(verdict, page, arm, bridges)
+  @spec assign_arm([atom() | String.t()]) :: :flash
+  def assign_arm(_chapter_history \\ []), do: :flash
 
   @doc """
   Computes a qualitative readout comparing the arms.
@@ -235,11 +140,5 @@ defmodule MeaningGame.Experiments do
   defp generate_narrative(bait, plain) do
     "Bait-scored pages achieved a meld rate of #{bait.meld_rate} (best streak: #{bait.longest_meld_streak}, mean attempts: #{bait.mean_attempts_to_meld}) with #{bait.trap_sprung_count} traps sprung and #{bait.fairness_summary}. " <>
       "Plain pages achieved a meld rate of #{plain.meld_rate} (best streak: #{plain.longest_meld_streak}, mean attempts: #{plain.mean_attempts_to_meld}) with #{plain.fairness_summary} and #{plain.overrules_count} overrules."
-  end
-
-  defp normalize_word(nil), do: ""
-
-  defp normalize_word(word) when is_binary(word) do
-    MeaningGame.Steward.Precedent.normalize(word)
   end
 end

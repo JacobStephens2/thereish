@@ -73,15 +73,49 @@ defmodule MeaningGame.Steward.Live do
   end
 
   @impl true
-  def author(chapter, opts \\ []) do
-    role = Steward.role(:author)
-    give = Keyword.get(opts, :give)
-    digest = Keyword.get(opts, :digest)
-    prompt = MeaningGame.Steward.Author.prompt(chapter, give, digest)
+  def author(request, opts \\ []) do
+    job = Keyword.get(opts, :job, :flash)
 
-    case Gate.answer(role, prompt, &MeaningGame.Steward.Author.check/1) do
+    role =
+      try do
+        Steward.role(:author, job)
+      rescue
+        _ -> Steward.role(:author)
+      end
+
+    gives =
+      cond do
+        is_map(request) and is_list(request[:gives]) -> request[:gives]
+        is_map(request) and is_list(request["gives"]) -> request["gives"]
+        is_list(request) -> request
+        true -> []
+      end
+
+    digest =
+      Keyword.get(opts, :digest) ||
+        (is_map(request) && (request[:digest] || request["digest"]))
+
+    prompt = MeaningGame.Steward.Author.prompt(gives, digest)
+
+    case Gate.answer(role, prompt, &MeaningGame.Steward.Author.check(&1, gives)) do
       {:ok, answer} ->
-        {:ok, MeaningGame.Steward.Author.page(answer.json, chapter, give, answer)}
+        bookends = answer.json["bookends"]
+        why = answer.json["why"]
+
+        {:ok,
+         %{
+           bookends: bookends,
+           why: why,
+           meta: %{
+             model: answer.model,
+             arm: :flash,
+             prompt_version: Map.get(role, :prompt_version, MeaningGame.Steward.Author.version()),
+             cost_usd: answer.cost_usd,
+             latency_ms: answer.latency_ms,
+             attempts: answer.attempts,
+             why: why
+           }
+         }}
 
       {:error, reason} ->
         {:error, reason}
