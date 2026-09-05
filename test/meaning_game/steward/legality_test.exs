@@ -52,7 +52,7 @@ defmodule MeaningGame.Steward.LegalityTest do
   end
 
   describe "check_bridge/2" do
-    test "approves a legal bridge spanning the anchors" do
+    test "approves a legal bridge spanning the bookends" do
       assert :ok = Legality.check_bridge("beacon", ["lantern", "harbour"])
       assert :ok = Legality.check_bridge("tide", ["ocean", "moon"])
     end
@@ -80,15 +80,15 @@ defmodule MeaningGame.Steward.LegalityTest do
                Legality.check_bridge("damn", ["lantern", "harbour"])
     end
 
-    test "rejects bridge identical to either anchor" do
-      assert {:illegal, "That is the anchor itself (\"harbour\")."} =
+    test "rejects bridge identical to either bookend" do
+      assert {:illegal, "That is the bookend itself (\"harbour\")."} =
                Legality.check_bridge("harbour", ["lantern", "harbour"])
 
-      assert {:illegal, "That is the anchor itself (\"lantern\")."} =
+      assert {:illegal, "That is the bookend itself (\"lantern\")."} =
                Legality.check_bridge("lantern", ["lantern", "harbour"])
     end
 
-    test "rejects bridge sharing a stem with either anchor" do
+    test "rejects bridge sharing a stem with either bookend" do
       assert {:illegal, "\"runner\" shares a root with \"run\"."} =
                Legality.check_bridge("runner", ["run", "fast"])
 
@@ -99,7 +99,7 @@ defmodule MeaningGame.Steward.LegalityTest do
                Legality.check_bridge("singer", ["sing", "choir"])
     end
 
-    test "rejects bridge sharing an inflection root with either anchor" do
+    test "rejects bridge sharing an inflection root with either bookend" do
       assert {:illegal, "\"ran\" shares a root with \"run\"."} =
                Legality.check_bridge("ran", ["run", "speed"])
 

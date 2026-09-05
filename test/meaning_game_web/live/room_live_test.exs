@@ -177,10 +177,10 @@ defmodule MeaningGameWeb.RoomLiveTest do
       %{slug: slug, melissa: melissa, melissa_conn: melissa_conn, jacob: jacob, stage: stage}
     end
 
-    test "the Anchors are up on both phones and the stage", ctx do
+    test "the Bookends are up on both phones and the stage", ctx do
       for view <- [ctx.melissa, ctx.jacob, ctx.stage] do
-        assert has_element?(view, "[data-role=anchors]", "lantern")
-        assert has_element?(view, "[data-role=anchors]", "harbour")
+        assert has_element?(view, "[data-role=bookends]", "lantern")
+        assert has_element?(view, "[data-role=bookends]", "harbour")
       end
     end
 
@@ -278,7 +278,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
           chapter: "pool test",
           theme: "pool test",
           give: nil,
-          anchors: ["sun", "sand"],
+          bookends: ["sun", "sand"],
           bait: "beach",
           deep_bridges: ["dune", "tide"],
           likely_bridges: ["beach", "dune", "tide"],
@@ -385,7 +385,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       await_reveal_on(ctx.stage)
     end
 
-    test "the failed Bridges become the next attempt's Anchors, on every screen", ctx do
+    test "the failed Bridges become the next attempt's Bookends, on every screen", ctx do
       miss(ctx)
 
       # The tap says what it is going to do before it does it.
@@ -396,8 +396,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
       press(ctx.melissa, "again")
 
       for view <- ctx.screens do
-        assert has_element?(view, "[data-role=anchors]", "cairn")
-        assert has_element?(view, "[data-role=anchors]", "beacon")
+        assert has_element?(view, "[data-role=bookends]", "cairn")
+        assert has_element?(view, "[data-role=bookends]", "beacon")
         assert has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
         refute has_element?(view, "[data-role=reveal]")
       end
@@ -445,7 +445,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       press(ctx.melissa, "one-more")
 
       for view <- ctx.screens do
-        assert has_element?(view, "[data-role=anchors]", "desert")
+        assert has_element?(view, "[data-role=bookends]", "desert")
         assert has_element?(view, "[data-role=attempt]", "Attempt 1 of 5")
         refute has_element?(view, "[data-role=ending]")
         refute has_element?(view, "[data-role=reveal]")
@@ -468,7 +468,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       for view <- ctx.screens do
         assert has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
-        assert has_element?(view, "[data-role=anchors]", "cairn")
+        assert has_element?(view, "[data-role=bookends]", "cairn")
       end
     end
   end

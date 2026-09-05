@@ -54,18 +54,18 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward.Vale
 
   @impl true
-  def assay(%{anchors: anchors, bridges: bridges}) when length(bridges) >= 2 do
+  def assay(%{bookends: bookends, bridges: bridges}) when length(bridges) >= 2 do
     role = Steward.role(:assayer)
     model = role.model
     prompt_version = Map.get(role, :prompt_version, Assay.version())
 
-    case Precedent.get(model, prompt_version, anchors, bridges) do
+    case Precedent.get(model, prompt_version, bookends, bridges) do
       {:ok, verdict} ->
         {:ok, verdict}
 
       :miss ->
-        with {:ok, verdict} <- grade_live(role, anchors, bridges, prompt_version) do
-          Precedent.put(model, prompt_version, anchors, bridges, verdict)
+        with {:ok, verdict} <- grade_live(role, bookends, bridges, prompt_version) do
+          Precedent.put(model, prompt_version, bookends, bridges, verdict)
           {:ok, verdict}
         end
     end
@@ -129,11 +129,11 @@ defmodule MeaningGame.Steward.Live do
     end
   end
 
-  defp grade_live(role, anchors, bridges, prompt_version) do
+  defp grade_live(role, bookends, bridges, prompt_version) do
     [forward, reverse] =
       [bridges, Enum.reverse(bridges)]
       |> Enum.map(fn ordering ->
-        Task.async(fn -> graded(role, anchors, ordering) end)
+        Task.async(fn -> graded(role, bookends, ordering) end)
       end)
       # The grading's whole budget: one request's timeout is `timeout_ms`, and
       # this is what all of them together, retries included, may spend before
@@ -157,8 +157,8 @@ defmodule MeaningGame.Steward.Live do
       [{:error, :timeout}, {:error, :timeout}]
   end
 
-  defp graded(role, anchors, ordering) do
-    prompt = Assay.prompt(anchors, ordering)
+  defp graded(role, bookends, ordering) do
+    prompt = Assay.prompt(bookends, ordering)
     check = &Assay.check(&1, ordering)
 
     case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
@@ -213,7 +213,7 @@ defmodule MeaningGame.Steward.Live do
   # The grade is the mean of the two orderings and the words are the forward
   # one's, because one reveal shows one sentence, one joke and one carry-forward.
   # The furthest pair is the forward ordering's for the same reason the reasoning
-  # is: the two orderings can name different pairs, and the next Attempt's Anchors
+  # is: the two orderings can name different pairs, and the next Attempt's Bookends
   # have to be one pair rather than an average of two. The reverse ordering's own
   # reasoning is kept beside them rather than thrown away: when the players argue
   # with a grade, the two arguments the model made are the evidence.

@@ -4,7 +4,7 @@ defmodule MeaningGameWeb.RoomComponents do
 
   Each of these is one component on purpose: "the stage lists who has joined;
   phones show the same roster" is a rule, and a rule with two implementations is
-  a rule with two answers. The same goes for the Anchors and, most of all, for
+  a rule with two answers. The same goes for the Bookends and, most of all, for
   the reveal — the number the stage shouts and the number the phone shows have
   to be the same number.
 
@@ -80,9 +80,9 @@ defmodule MeaningGameWeb.RoomComponents do
   attr :room, :map, required: true
 
   @doc "The two words the Page hangs between, shown to everyone at once."
-  def anchors(assigns) do
+  def bookends(assigns) do
     ~H"""
-    <div :if={@room.anchors} class="flex flex-col items-center gap-3">
+    <div :if={@room.bookends} class="flex flex-col items-center gap-3">
       <p
         :if={@room[:page_give]}
         data-role="page-give"
@@ -91,14 +91,14 @@ defmodule MeaningGameWeb.RoomComponents do
         Setting: {@room.page_give}
       </p>
       <div
-        data-role="anchors"
+        data-role="bookends"
         class="flex flex-wrap items-center justify-center gap-4"
       >
         <span
-          :for={anchor <- @room.anchors}
+          :for={bookend <- @room.bookends}
           class="rounded-lg bg-base-200 px-5 py-3 text-3xl font-semibold tracking-tight"
         >
-          {anchor}
+          {bookend}
         </span>
       </div>
     </div>
@@ -513,7 +513,7 @@ defmodule MeaningGameWeb.RoomComponents do
 
   @doc """
   What a miss means, said out loud on every screen: the two Bridges that landed
-  furthest apart are the next attempt's Anchors, named.
+  furthest apart are the next attempt's Bookends, named.
 
   One component rather than a line on each view, because "a miss converges" is a
   rule, and a rule said in two wordings is two rules. It names the words because
@@ -522,15 +522,15 @@ defmodule MeaningGameWeb.RoomComponents do
   def carry_forward(assigns) do
     ~H"""
     <p
-      :if={@room.phase == :reveal && @room.next_anchors}
+      :if={@room.phase == :reveal && @room.next_bookends}
       data-role="carry-forward"
       class="text-center text-sm opacity-70"
     >
-      <span :if={@room[:next_anchors_chosen?] == false}>
+      <span :if={@room[:next_bookends_chosen?] == false}>
         No verdict, so nobody chose:
       </span>
-      <span class="font-semibold">{Enum.join(@room.next_anchors, " and ")}</span>
-      become the next anchors.
+      <span class="font-semibold">{Enum.join(@room.next_bookends, " and ")}</span>
+      become the next bookends.
     </p>
     """
   end
@@ -557,7 +557,7 @@ defmodule MeaningGameWeb.RoomComponents do
           data-attempt={attempt.number}
           class="flex flex-wrap items-baseline justify-center gap-2"
         >
-          <span>{Enum.join(attempt.anchors, " + ")}</span>
+          <span>{Enum.join(attempt.bookends, " + ")}</span>
           <span aria-hidden="true">→</span>
           <span class="font-semibold">
             {attempt.bridges |> Enum.map(& &1.bridge) |> Enum.join(" · ")}
@@ -580,7 +580,7 @@ defmodule MeaningGameWeb.RoomComponents do
     do: "That's the Page — #{attempt} attempts, and the words kept their distance."
 
   @doc """
-  Whether the Room is still between the Anchors and the reveal.
+  Whether the Room is still between the Bookends and the reveal.
 
   Once the Bridges are up on the screen, who had already written one and what
   this phone wrote are answered by the reveal itself, and saying it twice makes
