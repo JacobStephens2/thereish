@@ -82,8 +82,30 @@ defmodule MeaningGame.Steward do
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
   @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
+  @callback forge(map() | String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  @callback rank([binary() | map()], map() | String.t()) :: {:ok, [map()]} | {:error, term()}
   @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
+  Generates N candidate sound effects or music tracks for a brief.
+
+  Used only by the forge task.
+  """
+  @spec forge(map() | String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def forge(brief, opts \\ []) do
+    adapter().forge(brief, opts)
+  end
+
+  @doc """
+  Ranks N candidate audio clips against a brief with one sentence each.
+
+  Used only by the forge task.
+  """
+  @spec rank([binary() | map()], map() | String.t()) :: {:ok, [map()]} | {:error, term()}
+  def rank(candidates, brief) do
+    adapter().rank(candidates, brief)
+  end
 
   @doc """
   Speaks one line as audio bytes with format and meta.
@@ -134,6 +156,7 @@ defmodule MeaningGame.Steward do
 
   @doc """
   Writes one closed Page back into the Chronicle as prose.
+
 
   Asked after a Page closes, from a task nobody is waiting on, which is what
   lets the Scribe have a model that writes well rather than one that answers

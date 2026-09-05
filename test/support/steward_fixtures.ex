@@ -205,6 +205,45 @@ defmodule MeaningGame.StewardFixtures do
     Application.put_env(:meaning_game, :steward, live)
   end
 
+  @doc "Puts the real ElevenLabs provider behind the seam for the smoke test."
+  def let_it_call_eleven_labs do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    key =
+      System.get_env("ELEVENLABS_API_KEY") ||
+        flunk("this test calls a provider and needs ELEVENLABS_API_KEY in the environment")
+
+    live =
+      steward
+      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :foley, :elevenlabs_api_key], key)
+      |> put_in([:roles, :foley, :jobs, :effects, :api_key], key)
+      |> put_in([:roles, :foley, :jobs, :voice, :provider], MeaningGame.Steward.ElevenLabs)
+      |> put_in([:roles, :foley, :jobs, :voice, :voice_id], "JBFqnCBsd6RMkjVDRZzb")
+      |> put_in([:roles, :foley, :jobs, :voice, :timeout_ms], 5_000)
+
+    Application.put_env(:meaning_game, :steward, live)
+  end
+
+  @doc "Puts the real Mureka provider behind the seam for the smoke test."
+  def let_it_call_mureka do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    key =
+      System.get_env("MUREKA_API_KEY") ||
+        flunk("this test calls a provider and needs MUREKA_API_KEY in the environment")
+
+    live =
+      steward
+      |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :foley, :jobs, :music, :api_key], key)
+
+    Application.put_env(:meaning_game, :steward, live)
+  end
+
   @doc "Puts a recorded response behind the Author's provider for this test."
   def recorded_author(answer) when is_function(answer, 2) do
     Req.Test.stub(MeaningGame.Steward.Gemini, fn conn ->
@@ -314,29 +353,6 @@ defmodule MeaningGame.StewardFixtures do
 
   @doc "Legacy alias for author_json."
   def authored_page_json(opts \\ []), do: author_json(opts)
-
-  @doc """
-  Puts the live ElevenLabs voice provider behind the seam for a live smoke test.
-  """
-  def let_it_call_eleven_labs do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
-
-    key =
-      System.get_env("ELEVENLABS_API_KEY") ||
-        flunk("this test calls ElevenLabs and needs ELEVENLABS_API_KEY in the environment")
-
-    live =
-      steward
-      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
-      |> Keyword.put(:http_options, [])
-      |> put_in([:roles, :foley, :elevenlabs_api_key], key)
-      |> put_in([:roles, :foley, :jobs, :voice, :provider], MeaningGame.Steward.ElevenLabs)
-      |> put_in([:roles, :foley, :jobs, :voice, :voice_id], "JBFqnCBsd6RMkjVDRZzb")
-      |> put_in([:roles, :foley, :jobs, :voice, :timeout_ms], 5_000)
-
-    Application.put_env(:meaning_game, :steward, live)
-  end
 
   @doc """
   Puts the live Hume voice provider behind the seam for a live smoke test.

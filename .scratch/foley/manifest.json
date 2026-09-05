@@ -1,0 +1,12 @@
+{
+  "beat": 1,
+  "sting_miss": 1,
+  "sting_adjacent": 4,
+  "sting_close": 4,
+  "sting_almost": 2,
+  "sting_meld": 3,
+  "sting_deep_meld": 4,
+  "ending_meld": 1,
+  "ending_unmelded": 1,
+  "house_loop": 4
+}

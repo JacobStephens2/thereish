@@ -50,27 +50,52 @@ defmodule MeaningGame.Steward.Provider do
   """
   @spec cost(String.t(), non_neg_integer(), non_neg_integer()) :: float()
   def cost(model, input_tokens, output_tokens) do
-    {per_input, per_output} = Map.get(prices(), model, {0.0, 0.0})
+    case Map.get(prices(), model, {0.0, 0.0}) do
+      {per_input, per_output} ->
+        input_tokens / 1.0e6 * per_input + output_tokens / 1.0e6 * per_output
 
-    input_tokens / 1.0e6 * per_input + output_tokens / 1.0e6 * per_output
+      _ ->
+        0.0
+    end
   end
 
   @doc """
-  What a call cost, in dollars, from the characters the voice provider reported.
+  What a call cost, in dollars, from characters consumed (ElevenLabs sound effects / voice).
   """
   @spec character_cost(String.t(), non_neg_integer()) :: float()
-  def character_cost(model, characters) when is_integer(characters) and characters >= 0 do
+  def character_cost(model, characters) when is_number(characters) and characters >= 0 do
     case Map.get(prices(), model) do
-      per_char when is_float(per_char) ->
+      {:characters, per_char} ->
         characters * per_char
 
-      per_char when is_integer(per_char) ->
+      per_char when is_number(per_char) ->
         characters * per_char * 1.0
 
       _ ->
         0.0
     end
   end
+
+  @doc """
+  What a track cost, in dollars (Mureka instrumental music).
+  """
+  @spec track_cost(String.t()) :: float()
+  def track_cost(model) do
+    case Map.get(prices(), model) do
+      {:track, price} -> price
+      _ -> 0.0
+    end
+  end
+
+  @doc "Decodes JSON body if binary, returning decoded map or original body on failure."
+  def decode_body(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, json} -> json
+      _ -> body
+    end
+  end
+
+  def decode_body(body), do: body
 
   @doc """
   Options handed to every HTTP request the providers make.

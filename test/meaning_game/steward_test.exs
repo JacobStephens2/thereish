@@ -589,4 +589,79 @@ defmodule MeaningGame.StewardTest do
       assert why =~ "furthest"
     end
   end
+
+  describe "foley forge and rank via Live adapter" do
+    test "forge with effects calls ElevenLabs" do
+      Req.Test.stub(MeaningGame.Steward.ElevenLabs, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
+        |> Plug.Conn.put_resp_header("character-cost", "100")
+        |> Plug.Conn.send_resp(200, <<255, 251, 144, 100, 1>>)
+      end)
+
+      assert {:ok, candidates} = Live.forge(%{prompt: "beat", kind: :effects}, n: 2)
+      assert length(candidates) == 2
+      assert hd(candidates).bytes == <<255, 251, 144, 100, 1>>
+    end
+
+    test "forge with music calls Mureka" do
+      Req.Test.stub(MeaningGame.Steward.Mureka, fn conn ->
+        case {conn.method, conn.request_path} do
+          {"POST", "/v1/instrumental/generate"} ->
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "application/json")
+            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_mureka_live"}))
+
+          {"GET", "/v1/instrumental/query/task_mureka_live"} ->
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "application/json")
+            |> Plug.Conn.send_resp(
+              200,
+              Jason.encode!(%{
+                "id" => "task_mureka_live",
+                "status" => "succeeded",
+                "choices" => [%{"url" => "https://cdn.mureka.ai/track.mp3"}]
+              })
+            )
+
+          {"GET", "/track.mp3"} ->
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
+            |> Plug.Conn.send_resp(200, <<255, 251, 144, 100, 2>>)
+        end
+      end)
+
+      assert {:ok, candidates} = Live.forge(%{prompt: "house loop", kind: :music}, n: 1)
+      assert length(candidates) == 1
+      assert hd(candidates).bytes == <<255, 251, 144, 100, 2>>
+    end
+
+    test "rank calls Gemini ear" do
+      clips = [<<1, 2, 3>>, <<4, 5, 6>>]
+
+      Req.Test.stub(MeaningGame.Steward.Gemini, fn conn ->
+        content =
+          Jason.encode!(%{
+            "ranking" => [
+              %{"index" => 2, "reason" => "Better fit."},
+              %{"index" => 1, "reason" => "Okay."}
+            ]
+          })
+
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "model" => "gemini-3.8-flash",
+            "choices" => [%{"message" => %{"content" => content}}],
+            "usage" => %{"prompt_tokens" => 50, "total_tokens" => 80}
+          })
+        )
+      end)
+
+      assert {:ok, ranking} = Live.rank(clips, "brief")
+      assert Enum.map(ranking, & &1.index) == [2, 1]
+    end
+  end
 end

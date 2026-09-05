@@ -43,6 +43,38 @@ defmodule MeaningGame.Steward.Gemini do
     end
   end
 
+  @doc """
+  Ranks N candidate audio clips against a brief using Gemini's ear.
+
+  Sends clips as inline audio parts (`input_audio`) alongside the brief,
+  and parses a ranking JSON schema. Rejects any ordering that names an index
+  it was not given or omits indices.
+  """
+  @spec rank([binary() | map()], String.t() | map(), keyword() | map()) ::
+          {:ok, [map()]} | {:error, term()}
+  def rank(clips, brief, opts \\ []) do
+    opts_map = if is_list(opts), do: Map.new(opts), else: opts
+
+    with {:ok, key} <- api_key(opts_map) do
+      model = Map.get(opts_map, :model, "gemini-3.8-flash")
+      timeout_ms = Map.get(opts_map, :timeout_ms, 30_000)
+      brief_text = extract_brief_text(brief)
+      n_clips = length(clips)
+
+      request_body = rank_body(model, brief_text, clips, opts_map)
+
+      [
+        json: request_body,
+        auth: {:bearer, key},
+        receive_timeout: timeout_ms,
+        retry: false
+      ]
+      |> Keyword.merge(Provider.http_options(__MODULE__))
+      |> then(&Req.post(@url, &1))
+      |> answer_rank(model, n_clips)
+    end
+  end
+
   # The key is configuration like the model and the effort are, read out of
   # `GEMINI_API_KEY` in `config/runtime.exs` so that nothing has to reach for the
   # environment mid-Page.
@@ -110,4 +142,117 @@ defmodule MeaningGame.Steward.Gemini do
 
     Provider.cost(model, input, total - input)
   end
+
+  defp rank_body(model, brief_text, clips, opts_map) do
+    user_parts =
+      [
+        %{
+          type: "text",
+          text:
+            "Brief:\n#{brief_text}\n\nListen to the following #{length(clips)} candidate clips and rank them from best to worst based on how well they fit the brief."
+        }
+      ] ++
+        Enum.flat_map(Enum.with_index(clips, 1), fn {clip, index} ->
+          bytes = extract_clip_bytes(clip)
+
+          [
+            %{type: "text", text: "Candidate #{index}:"},
+            %{type: "input_audio", input_audio: %{data: Base.encode64(bytes), format: "mp3"}}
+          ]
+        end)
+
+    system_text =
+      "You are Foley's ear. Evaluate each candidate audio clip against the brief. " <>
+        "Rank all candidates from best to worst. Provide a one-sentence reason for each candidate's placement. " <>
+        "Return a JSON object with a 'ranking' array containing an object for each candidate index from 1 to #{length(clips)}."
+
+    schema = %{
+      type: "object",
+      properties: %{
+        ranking: %{
+          type: "array",
+          items: %{
+            type: "object",
+            properties: %{
+              index: %{type: "integer"},
+              reason: %{type: "string"}
+            },
+            required: ["index", "reason"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["ranking"],
+      additionalProperties: false
+    }
+
+    %{
+      model: model,
+      messages: [
+        %{role: "system", content: system_text},
+        %{role: "user", content: user_parts}
+      ],
+      response_format: %{
+        type: "json_schema",
+        json_schema: %{name: "foley_ranking", strict: true, schema: schema}
+      }
+    }
+    |> maybe_put(:reasoning_effort, Map.get(opts_map, :effort))
+    |> maybe_put(:max_tokens, Map.get(opts_map, :max_tokens))
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, val), do: Map.put(map, key, val)
+
+  defp answer_rank({:ok, %Req.Response{status: 200, body: body}}, model, n_clips) do
+    choice = body |> Map.get("choices", []) |> List.first(%{})
+    content = get_in(choice, ["message", "content"])
+    usage = Map.get(body, "usage", %{})
+    cost_usd = cost(model, usage)
+
+    with {:ok, json} when is_map(json) <- Jason.decode(content || ""),
+         ranking when is_list(ranking) <- Map.get(json, "ranking"),
+         :ok <- validate_ranking_indices(ranking, n_clips) do
+      parsed =
+        Enum.map(ranking, fn item ->
+          %{
+            index: item["index"],
+            reason: item["reason"],
+            meta: %{model: model, cost_usd: cost_usd}
+          }
+        end)
+
+      {:ok, parsed}
+    else
+      {:error, :invalid_indices} ->
+        {:error, {:rejected, "ordering names an index it was not given or is missing indices"}}
+
+      _ ->
+        {:error, {:rejected, "invalid json schema response"}}
+    end
+  end
+
+  defp answer_rank({:ok, %Req.Response{status: status, body: body}}, _model, _n_clips) do
+    {:error, {:http, status, body}}
+  end
+
+  defp answer_rank({:error, reason}, _model, _n_clips), do: {:error, reason}
+
+  defp validate_ranking_indices(ranking, n_clips) do
+    indices = Enum.map(ranking, & &1["index"])
+    expected = Enum.to_list(1..n_clips)
+
+    if Enum.sort(indices) == expected do
+      :ok
+    else
+      {:error, :invalid_indices}
+    end
+  end
+
+  defp extract_clip_bytes(%{bytes: bytes}), do: bytes
+  defp extract_clip_bytes(bytes) when is_binary(bytes), do: bytes
+
+  defp extract_brief_text(%{prompt: prompt}), do: prompt
+  defp extract_brief_text(text) when is_binary(text), do: text
+  defp extract_brief_text(other), do: inspect(other)
 end
