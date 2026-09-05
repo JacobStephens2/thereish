@@ -33,11 +33,19 @@ end
 # middle of a reveal. A missing key is not fatal: the game says it has no
 # verdict, loudly, and the couple make the call.
 if key = System.get_env("GEMINI_API_KEY") do
-  config :meaning_game, :steward, roles: [assayer: [api_key: key], author: [api_key: key]]
+  config :meaning_game, :steward,
+    roles: [
+      assayer: [api_key: key],
+      author: [api_key: key],
+      scribe: [jobs: [naming: [api_key: key]]]
+    ]
 end
 
 if key = System.get_env("ANTHROPIC_API_KEY") do
-  config :meaning_game, :steward, roles: [scribe: [api_key: key]]
+  config :meaning_game, :steward,
+    roles: [
+      scribe: [jobs: [recap: [api_key: key]]]
+    ]
 end
 
 if config_env() == :dev do

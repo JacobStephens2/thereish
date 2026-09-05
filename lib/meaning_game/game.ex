@@ -703,7 +703,8 @@ defmodule MeaningGame.Game do
   defp closed(state, _phase), do: %{because: closed_because(state), attempt: state.attempt}
 
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
-  # one sentence of reasoning, and the two words that landed furthest apart.
+  # and the two words that landed furthest apart. Reasoning is kept in the
+  # Chronicle and kept off the screen.
   defp reveal(state, phase) when phase in [:reveal, :closed] do
     gives =
       Enum.map(state.seats, fn seat ->
@@ -712,6 +713,7 @@ defmodule MeaningGame.Game do
 
     state.verdict
     |> verdict_view()
+    |> Map.delete(:reasoning)
     |> Map.merge(%{
       bridges: bridges_view(state, state.bridges),
       furthest: furthest_view(state, chosen_furthest(state)),

@@ -16,13 +16,13 @@ This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the
 
 **The gate has the last word** (design law 14): four letters, in the ENABLE list, not profane, not an existing Code. A failing answer is asked for once more; then the Room draws a random word as in 03. No history means no model call. A model that raises, times out, or is refused is the fallback, never a failed creation.
 
-- [ ] Creating a Room from a phone with history asks the Scribe once with that phone's digests and the taken Codes, and uses the word when the gate accepts it
-- [ ] The gate rejects a word that is not four letters, not in the dictionary, profane, or already a Code; one retry, then a random word
-- [ ] Creating a Room from a phone with no history makes no model call and draws a random word
-- [ ] A Scribe that is slow past its deadline, raises, or answers nothing valid falls back to a random word and creation still succeeds within the configured wait
-- [ ] The scribe role is configuration with model, effort, timeout and deadline, and the fake adapter answers a configured word
-- [ ] Steward tests cover the gate, the retry, the fallback and the no-history path; a Room test asserts the configured fake word becomes the Code
-- [ ] One tagged live smoke test names a Room from a real digest once by hand
+- [x] Creating a Room from a phone with history asks the Scribe once with that phone's digests and the taken Codes, and uses the word when the gate accepts it
+- [x] The gate rejects a word that is not four letters, not in the dictionary, profane, or already a Code; one retry, then a random word
+- [x] Creating a Room from a phone with no history makes no model call and draws a random word
+- [x] A Scribe that is slow past its deadline, raises, or answers nothing valid falls back to a random word and creation still succeeds within the configured wait
+- [x] The scribe role is configuration with model, effort, timeout and deadline, and the fake adapter answers a configured word
+- [x] Steward tests cover the gate, the retry, the fallback and the no-history path; a Room test asserts the configured fake word becomes the Code
+- [x] One tagged live smoke test names a Room from a real digest once by hand
 - [ ] Verified on the real deployment: a Room created from Jacob's phone gets a word that nods to the couch's Chronicle
 
 **Since this was filed (2026-09-05, ADR-0011).** Nothing here changes shape. Two facts to carry: the digest the Scribe reads now includes each Seat's Gives and the Bookends the Author wrote from them, which is richer material for a nod than the old pool's Chapters; and `MeaningGame.Steward.Legality.dictionary/0` — the ENABLE list the gate and the random word draw from — stays even though player Bridges no longer pass a dictionary check, because a Code still has to be a word.

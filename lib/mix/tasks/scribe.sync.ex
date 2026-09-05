@@ -1,24 +1,31 @@
 defmodule Mix.Tasks.Scribe.Sync do
   @moduledoc """
-  Re-downloads the Vale packages the Scribe's prose gate is built on.
+  Synchronises the Scribe: refreshes vendored Vale packages, and writes recaps
+  for any closed Pages that have none.
 
-  The packages under `priv/vale/styles` are vendored rather than fetched at
-  runtime, so that the gate works on a laptop with no network and inside a
-  release image that never had one. This is how they are refreshed, and the diff
-  it leaves is the change of opinion — a package that decided something new
-  about prose since the last sync will start refusing recaps that used to pass,
-  and that is worth reading before it is committed.
-
-  The `Scribe` style itself is this repo's own and is never touched by a sync.
-
+      # Refreshes Vale packages and writes recaps for all rooms
       $ mix scribe.sync
+
+      # Writes recaps for one Room only (by Code)
+      $ mix scribe.sync dust
   """
   use Mix.Task
 
-  @shortdoc "Re-downloads the Vale packages behind the Scribe's prose gate"
+  @shortdoc "Refreshes Vale packages and syncs missing recaps for closed Pages"
 
   @impl Mix.Task
-  def run(_args) do
+  def run(args) do
+    code = List.first(args)
+
+    if code == nil do
+      sync_styles()
+    end
+
+    Mix.Task.run("app.start")
+    MeaningGame.Scribe.sync(code)
+  end
+
+  defp sync_styles do
     config = Path.join(File.cwd!(), "priv/vale/.vale.ini")
 
     bin =

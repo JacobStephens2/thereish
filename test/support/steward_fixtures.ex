@@ -173,6 +173,9 @@ defmodule MeaningGame.StewardFixtures do
       |> put_in([:roles, :assayer, :timeout_ms], 5_000)
       |> put_in([:roles, :assayer, :deadline_ms], 10_000)
       |> put_in([:roles, :author, :api_key], key)
+      |> put_in([:roles, :scribe, :jobs, :naming, :api_key], key)
+      |> put_in([:roles, :scribe, :jobs, :naming, :timeout_ms], 5_000)
+      |> put_in([:roles, :scribe, :jobs, :naming, :deadline_ms], 10_000)
 
     Application.put_env(:meaning_game, :steward, live)
   end
@@ -193,7 +196,7 @@ defmodule MeaningGame.StewardFixtures do
       steward
       |> Keyword.put(:adapter, MeaningGame.Steward.Live)
       |> Keyword.put(:http_options, [])
-      |> put_in([:roles, :scribe, :api_key], key)
+      |> put_in([:roles, :scribe, :jobs, :recap, :api_key], key)
       # The suite's Scribe answers in two seconds because it is a recording. A
       # model writing a real paragraph is given the couch's own budget.
       |> put_in([:roles, :scribe, :jobs, :recap, :timeout_ms], 120_000)
@@ -276,7 +279,7 @@ defmodule MeaningGame.StewardFixtures do
     live =
       steward
       |> Keyword.put(:adapter, MeaningGame.Steward.Live)
-      |> put_in([:roles, :scribe, :api_key], "recorded-responses-need-no-key")
+      |> put_in([:roles, :scribe, :jobs, :recap, :api_key], "recorded-responses-need-no-key")
       |> put_in([:roles, :scribe, :jobs, :recap], recap)
 
     Application.put_env(:meaning_game, :steward, live)

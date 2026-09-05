@@ -82,6 +82,30 @@ defmodule MeaningGame.Steward do
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
   @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
+  @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+
+  @doc """
+  Asks the Scribe to name a Room with one four-letter word that nods to the
+  history in `digests` and avoids `taken_codes`.
+  """
+  @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
+  def name_room(digests, taken_codes) do
+    role = role(:scribe, :naming)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        adapter().name_room(digests, taken_codes)
+      end)
+
+    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
+      {:ok, other} -> other
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
+    end
+  end
 
   @doc """
   Writes one closed Page back into the Chronicle as prose.
