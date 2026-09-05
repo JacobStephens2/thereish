@@ -560,6 +560,88 @@ defmodule MeaningGame.Chronicle do
   def from_markdown(markdown), do: MeaningGame.Chronicle.Markdown.parse(markdown)
 
   @doc """
+  Returns the last `count` quips recorded in a Room's Chronicle, in chronological order.
+
+  Looks first in the database for a Room with the given Code or UUID. If not found in
+  the database, looks for a Chronicle Markdown file at `priv/chronicles/<code>.md`.
+  """
+  @spec recent_quips(Ecto.UUID.t() | String.t(), pos_integer()) :: [String.t()]
+  def recent_quips(room_code_or_id, count \\ 5) do
+    quips =
+      case safe_resolve_room_id(room_code_or_id) do
+        {:ok, room_id} ->
+          views = page_views(room_id, :asc)
+
+          for page <- views,
+              attempt <- page.attempts,
+              quip <- quips_from_attempt(attempt) do
+            quip
+          end
+
+        :error ->
+          chronicle_path =
+            if is_binary(room_code_or_id) do
+              code = String.downcase(room_code_or_id)
+
+              candidates = [
+                try do
+                  Application.app_dir(
+                    :meaning_game,
+                    Path.join(["priv", "chronicles", "#{code}.md"])
+                  )
+                rescue
+                  _ -> nil
+                end,
+                Path.join(["priv", "chronicles", "#{code}.md"])
+              ]
+
+              Enum.find(candidates, &(&1 && File.exists?(&1)))
+            end
+
+          if chronicle_path do
+            {:ok, pages} = File.read!(chronicle_path) |> from_markdown()
+
+            for page <- pages,
+                attempt <- page.attempts,
+                quip <- quips_from_attempt(attempt) do
+              quip
+            end
+          else
+            []
+          end
+      end
+
+    Enum.take(quips, -count)
+  end
+
+  defp quips_from_attempt(attempt) do
+    cond do
+      is_binary(attempt[:quip]) and attempt[:quip] != "" ->
+        [attempt[:quip]]
+
+      is_list(attempt[:verdicts]) ->
+        for v <- attempt.verdicts, is_binary(v[:quip]) and v[:quip] != "", do: v[:quip]
+
+      true ->
+        []
+    end
+  end
+
+  defp safe_resolve_room_id(room_code_or_id) do
+    {:ok, resolve_room_id(room_code_or_id)}
+  rescue
+    _ ->
+      if is_binary(room_code_or_id) do
+        case Repo.get_by(MeaningGame.Rooms.Room, slug: String.downcase(room_code_or_id)) do
+          nil -> :error
+          room -> {:ok, room.id}
+        end
+      else
+        :error
+      end
+  end
+
+  @doc """
   Composes a concise digest of the Chronicle for feeding to models.
 
   Returns a default message if no Pages have been played yet.

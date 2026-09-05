@@ -29,7 +29,12 @@ defmodule MeaningGame.StewardSmokeTest do
   alias MeaningGame.Steward
 
   setup context do
-    if context[:anthropic], do: let_it_call_anthropic(), else: let_it_call_the_provider()
+    cond do
+      context[:eleven_labs] -> let_it_call_eleven_labs()
+      context[:hume] -> let_it_call_hume()
+      context[:anthropic] -> let_it_call_anthropic()
+      true -> let_it_call_the_provider()
+    end
   end
 
   test "the Assayer grades a real pair, in both orderings, inside the beat" do
@@ -174,6 +179,32 @@ defmodule MeaningGame.StewardSmokeTest do
         "\n  #{recap.recap}" <>
         "\n  callback: #{recap.callback || "(none)"}\n"
     )
+  end
+
+  @tag :eleven_labs
+  test "ElevenLabs v3 Conversational speaks a real line" do
+    line = "Miss. A quiet night at the harbour."
+    {:ok, result} = Steward.speak(line, provider: MeaningGame.Steward.ElevenLabs)
+
+    assert result.format == :mp3
+    assert is_binary(result.audio)
+    assert byte_size(result.audio) > 1000
+    assert result.meta.provider == MeaningGame.Steward.ElevenLabs
+    assert result.meta.characters > 0
+    assert result.meta.cost_usd > 0
+  end
+
+  @tag :hume
+  test "Hume Octave 2 speaks a real line" do
+    line = "Meld. Two minds at once."
+    {:ok, result} = Steward.speak(line, provider: MeaningGame.Steward.Hume)
+
+    assert result.format == :mp3
+    assert is_binary(result.audio)
+    assert byte_size(result.audio) > 1000
+    assert result.meta.provider == MeaningGame.Steward.Hume
+    assert result.meta.characters > 0
+    assert result.meta.cost_usd > 0
   end
 
   test "the Scribe names a Room from a real digest once by hand" do
