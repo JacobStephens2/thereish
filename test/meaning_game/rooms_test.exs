@@ -11,6 +11,7 @@ defmodule MeaningGame.RoomsTest do
 
   alias MeaningGame.Rooms
   alias MeaningGame.Rooms.Server
+  alias MeaningGame.Rooms.Store
 
   describe "joining by name" do
     test "two players join a Room and both appear in the roster" do
@@ -1132,6 +1133,144 @@ defmodule MeaningGame.RoomsTest do
       [unblinding] = MeaningGame.Chronicle.experiment_unblindings(room.id)
       assert unblinding.seat_id == ctx.jacob.id
       assert unblinding.experiment_id == "bait_against_plain"
+    end
+  end
+
+  describe "speaker and switches" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+
+      %{slug: slug, token_a: token_a, token_b: token_b, melissa: melissa, jacob: jacob}
+    end
+
+    test "a new Room has no speaker and both switches off by default", ctx do
+      room = Store.get_room(ctx.slug)
+      assert is_nil(room.speaker)
+      assert room.voice == false
+      assert room.house_loop_only == false
+    end
+
+    test "claiming the speaker updates the Room and broadcasts", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      assert_receive :room_changed
+
+      room = Store.get_room(ctx.slug)
+      assert room.speaker == ctx.token_a
+
+      # A claim from the current speaker is a no-op and does not re-broadcast
+      assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      refute_receive :room_changed
+    end
+
+    test "claiming the speaker from another device takes it from whoever had it", ctx do
+      assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      assert Store.get_room(ctx.slug).speaker == ctx.token_a
+
+      Rooms.subscribe(ctx.slug)
+      assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_b)
+      assert_receive :room_changed
+
+      assert Store.get_room(ctx.slug).speaker == ctx.token_b
+    end
+
+    test "releasing the speaker silences whoever had it, and a release from another device is a no-op",
+         ctx do
+      assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      # Releasing with a different token is a no-op
+      Rooms.subscribe(ctx.slug)
+      assert :ok = Rooms.release_speaker(ctx.slug, ctx.token_b)
+      refute_receive :room_changed
+      assert Store.get_room(ctx.slug).speaker == ctx.token_a
+
+      # Releasing with the holding token clears the speaker and broadcasts
+      assert :ok = Rooms.release_speaker(ctx.slug, ctx.token_a)
+      assert_receive :room_changed
+      assert is_nil(Store.get_room(ctx.slug).speaker)
+    end
+
+    test "voice and house-loop-only switches update the Room and broadcast", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      assert :ok = Rooms.set_voice(ctx.slug, true)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).voice == true
+
+      assert :ok = Rooms.set_house_loop_only(ctx.slug, true)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).house_loop_only == true
+
+      assert :ok = Rooms.set_voice(ctx.slug, false)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).voice == false
+    end
+
+    test "speaker, voice and house-loop-only survive a Room process restart", ctx do
+      assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      assert :ok = Rooms.set_voice(ctx.slug, true)
+      assert :ok = Rooms.set_house_loop_only(ctx.slug, true)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      room =
+        once_restarted(fn ->
+          {:ok, _slug, _pid} = Rooms.ensure_started(ctx.slug)
+          Store.get_room(ctx.slug)
+        end)
+
+      assert room.speaker == ctx.token_a
+      assert room.voice == true
+      assert room.house_loop_only == true
+    end
+
+    test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
+         ctx do
+      view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
+      view_stage = Rooms.snapshot(ctx.slug, nil, device_token())
+
+      for view <- [view_a, view_b, view_stage] do
+        assert view.speaker? == false
+        assert view.speaker_claimed? == false
+        assert view.voice == false
+        assert view.house_loop_only == false
+        refute Map.has_key?(view, :speaker)
+        refute Map.has_key?(view, :device_token)
+      end
+
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+      :ok = Rooms.set_house_loop_only(ctx.slug, true)
+
+      view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
+      view_stage = Rooms.snapshot(ctx.slug, nil, device_token())
+
+      assert view_a.speaker? == true
+      assert view_a.speaker_claimed? == true
+      assert view_a.voice == true
+      assert view_a.house_loop_only == true
+
+      assert view_b.speaker? == false
+      assert view_b.speaker_claimed? == true
+      assert view_b.voice == true
+      assert view_b.house_loop_only == true
+
+      assert view_stage.speaker? == false
+      assert view_stage.speaker_claimed? == true
+
+      json = Jason.encode!(view_a)
+      refute json =~ ctx.token_a
+      refute json =~ ctx.token_b
     end
   end
 
