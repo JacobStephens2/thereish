@@ -47,7 +47,6 @@ defmodule MeaningGame.Pages.AuthoredPage do
   ]
 
   def changeset(authored_page, attrs) do
-
     authored_page
     |> cast(attrs, @fields)
     |> validate_required([
