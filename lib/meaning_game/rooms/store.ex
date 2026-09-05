@@ -23,6 +23,10 @@ defmodule MeaningGame.Rooms.Store do
     Repo.all(from r in Room, select: r.slug)
   end
 
+  @doc "Every Room in the database."
+  @spec list_rooms() :: [Room.t()]
+  def list_rooms, do: Repo.all(Room)
+
   @doc """
   Writes a new Room down.
 
