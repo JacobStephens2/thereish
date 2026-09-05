@@ -20,8 +20,11 @@ defmodule MeaningGame.Chronicle.Markdown do
 
     header = "# The Chronicle\n\n## Room: #{room.slug}\n\n"
 
+    spend = Chronicle.spend(room.id)
+    spend_line = Chronicle.spend_line(spend)
+
     if page_views == [] do
-      header <> "No pages played yet.\n"
+      header <> "No pages played yet.\n\n---\n\n" <> spend_line <> "\n"
     else
       pages_md =
         page_views
@@ -29,7 +32,7 @@ defmodule MeaningGame.Chronicle.Markdown do
         |> Enum.map(fn {page, index} -> render_page(page, index) end)
         |> Enum.join("\n\n---\n\n")
 
-      header <> pages_md <> "\n"
+      header <> pages_md <> "\n\n---\n\n" <> spend_line <> "\n"
     end
   end
 
@@ -248,6 +251,13 @@ defmodule MeaningGame.Chronicle.Markdown do
   """
   @spec parse(String.t()) :: {:ok, [map()]} | {:error, term()}
   def parse(markdown) do
+    # Strip any trailing spend footer section
+    markdown =
+      case String.split(markdown, ~r/\n---\n\nSpend:/, parts: 2) do
+        [clean, _spend] -> clean
+        [clean] -> clean
+      end
+
     # Split by Page sections
     page_chunks =
       Regex.split(~r/(?=### Page \d+:)/, markdown)

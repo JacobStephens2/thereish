@@ -120,7 +120,7 @@ config :meaning_game, :steward,
           # the Vale gate is for rather than a reason to pick a worse writer.
           provider: MeaningGame.Steward.Anthropic,
           model: "claude-fable-5-1",
-          effort: "low",
+          effort: "xhigh",
           max_tokens: 8_000,
           # Nobody is waiting. The budget is generous because a recap that takes
           # a minute is a recap, and a recap that was rushed is a paragraph the
