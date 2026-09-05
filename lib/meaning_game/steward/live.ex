@@ -144,6 +144,29 @@ defmodule MeaningGame.Steward.Live do
   end
 
   @impl true
+  def speak(line, opts \\ []) do
+    role =
+      try do
+        Steward.role(:foley, :voice)
+      rescue
+        _ -> %{}
+      end
+
+    provider =
+      Keyword.get(opts, :provider) ||
+        role[:provider] ||
+        MeaningGame.Steward.Hume
+
+    merged_opts =
+      role
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Keyword.merge(opts)
+      |> Keyword.put(:provider, provider)
+
+    provider.speak(line, merged_opts)
+  end
+
+  @impl true
   def name_room(digests, taken_codes) do
     role = Steward.role(:scribe, :naming)
     prompt = Naming.prompt(digests, taken_codes)
