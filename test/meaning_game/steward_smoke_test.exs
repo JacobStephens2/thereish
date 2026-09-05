@@ -19,7 +19,7 @@ defmodule MeaningGame.StewardSmokeTest do
   same judgement, and the reveal beat is the same beat at four Seats as at two
   (ADR-0010).
   """
-  use ExUnit.Case, async: false
+  use MeaningGame.DataCase, async: false
 
   @moduletag :live
 
