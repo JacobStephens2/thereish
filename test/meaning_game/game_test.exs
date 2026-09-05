@@ -11,6 +11,7 @@ defmodule MeaningGame.GameTest do
   use ExUnit.Case, async: true
 
   alias MeaningGame.Game
+  alias MeaningGame.Ladder
 
   @page %{id: "test-page", bookends: ["lantern", "harbour"]}
 
@@ -299,6 +300,66 @@ defmodule MeaningGame.GameTest do
     test "a Bridge from someone who holds no Seat here is not a Bridge" do
       assert {:error, :no_such_seat} = commit(bridging(), "Ada", "cairn")
     end
+
+    test "phrases, digits, hyphens and apostrophes are legal bridges and 'Viking beaches' commits" do
+      {:ok, state, []} = commit(bridging(), "Mara", "Viking beaches")
+      assert Game.view(state, "seat-Mara").your_bridge == "viking beaches"
+
+      {:ok, state2, []} = commit(bridging(), "Mara", "ice-cream")
+      assert Game.view(state2, "seat-Mara").your_bridge == "ice-cream"
+
+      {:ok, state3, []} = commit(bridging(), "Mara", "rock 'n' roll")
+      assert Game.view(state3, "seat-Mara").your_bridge == "rock 'n' roll"
+
+      {:ok, state4, []} = commit(bridging(), "Mara", "apollo 11")
+      assert Game.view(state4, "seat-Mara").your_bridge == "apollo 11"
+    end
+
+    test "a Bridge sharing root with bookend is refused" do
+      assert {:error, {:illegal_bridge, "\"lanterns\" shares a root with \"lantern\"."}} =
+               commit(bridging(), "Mara", "lanterns")
+
+      assert {:error, {:illegal_bridge, "\"lantern\" shares a root with \"lantern\"."}} =
+               commit(bridging(), "Mara", "lantern")
+    end
+
+    test "in attempt 2, carried bridges and earlier attempt bridges are barred" do
+      # Attempt 1: bookends are ["lantern", "harbour"].
+      # Mara bridges "cairn", Jacob bridges "beacon".
+      # They do not meld (closeness 0).
+      {revealed, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 0)
+
+      # Advance to attempt 2: carried bookends are ["cairn", "beacon"]
+      attempt2 = again(revealed)
+
+      assert attempt2.attempt == 2
+      assert attempt2.bookends == ["cairn", "beacon"]
+      assert Game.barred_words(attempt2) == ["cairn", "beacon", "lantern", "harbour"]
+      assert Game.view(attempt2, nil).barred_words == ["cairn", "beacon", "lantern", "harbour"]
+
+      # Carried bridge is barred as bookend
+      assert {:error, {:illegal_bridge, "\"cairn\" shares a root with \"cairn\"."}} =
+               commit(attempt2, "Mara", "cairn")
+
+      # Attempt 1's bookends are also barred
+      assert {:error, {:illegal_bridge, "\"lantern\" shares a root with \"lantern\"."}} =
+               commit(attempt2, "Mara", "lantern")
+
+      # "lava rock" after "lava" refused naming lava:
+      # If attempt 1 had "lava", in attempt 2 "lava rock" is refused naming lava
+      lava_page = %{@page | bookends: ["mountain", "sea"]}
+
+      lava_bridging =
+        Game.init(seat_limit: 2, seats: [seat("Mara"), seat("Jacob")], page: lava_page)
+
+      {revealed_lava, _effects} =
+        attempt(lava_bridging, [{"Mara", "lava"}, {"Jacob", "island"}], 0)
+
+      attempt2_lava = again(revealed_lava)
+
+      assert {:error, {:illegal_bridge, "\"lava rock\" shares a root with \"lava\"."}} =
+               commit(attempt2_lava, "Mara", "lava rock")
+    end
   end
 
   describe "the last commit" do
@@ -360,9 +421,9 @@ defmodule MeaningGame.GameTest do
     end
 
     test "carries the closeness, the band and the Assayer's reasoning" do
-      view = Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], 78), nil)
+      view = Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "beacon"}], 92), nil)
 
-      assert view.reveal.closeness == 78
+      assert view.reveal.closeness == 92
       assert view.reveal.band == :meld
       assert view.reveal.melded? == true
       assert view.reveal.graded? == true
@@ -598,7 +659,7 @@ defmodule MeaningGame.GameTest do
 
   describe "a Page closes" do
     test "the moment a Meld lands, however many attempts were left" do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], 80)
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], 90)
 
       for viewer <- ["seat-Mara", "seat-Jacob", nil] do
         view = Game.view(state, viewer)
@@ -607,7 +668,7 @@ defmodule MeaningGame.GameTest do
         assert view.closed == %{because: :meld, attempt: 1}
         # The reveal is still up: closing a Page is an ending to the reveal, not
         # a screen that replaces it.
-        assert view.reveal.closeness == 80
+        assert view.reveal.closeness == 90
         assert view.reveal.melded?
         assert view.next_bookends == nil
       end
@@ -658,13 +719,13 @@ defmodule MeaningGame.GameTest do
       {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
       {_state, effects} =
-        attempt(again(state), [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], 82)
+        attempt(again(state), [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], 92)
 
       assert [{:chronicle, entry}] = chronicles(effects)
       assert entry.page == @page
       assert entry.closed_because == :meld
       assert entry.melded? == true
-      assert entry.closeness == 82
+      assert entry.closeness == 92
 
       assert [first, second] = entry.attempts
       assert first.number == 1
@@ -687,7 +748,7 @@ defmodule MeaningGame.GameTest do
       assert verdict.furthest == ["wharf", "wharfinger"]
       assert verdict.seat_ids == ["seat-Mara", "seat-Jacob"]
       assert verdict.graded? == true
-      assert verdict.closeness == 82
+      assert verdict.closeness == 92
       assert verdict.band == :meld
       assert verdict.reasoning == "because"
       assert verdict.meta.model == "test"
@@ -709,7 +770,7 @@ defmodule MeaningGame.GameTest do
       {state, _effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
       state = again(elem(Game.apply(state, {:verdict_unavailable, %{}}), 1))
 
-      {_state, effects} = attempt(state, [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], 82)
+      {_state, effects} = attempt(state, [{"Mara", "wharf"}, {"Jacob", "wharfinger"}], 92)
 
       assert [{:chronicle, entry}] = chronicles(effects)
       assert [first, _second] = entry.attempts
@@ -729,7 +790,7 @@ defmodule MeaningGame.GameTest do
 
   describe "one more?" do
     setup do
-      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], 80)
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "cairo"}], 90)
 
       %{closed: state}
     end
@@ -833,6 +894,15 @@ defmodule MeaningGame.GameTest do
       refute stage_view.overrule.you_agreed?
     end
 
+    test "a proposed overrule defaults to the meld floor read from the Ladder, not 100", ctx do
+      {:ok, proposed, []} =
+        Game.apply(ctx.revealed, {:overrule_proposed, %{seat_id: "seat-Mara"}})
+
+      view = Game.view(proposed, "seat-Mara")
+      assert view.overrule.closeness == Ladder.meld_threshold()
+      assert view.overrule.closeness == 90
+    end
+
     test "cannot propose an overrule before the reveal" do
       state = bridging()
 
@@ -857,7 +927,7 @@ defmodule MeaningGame.GameTest do
                Game.apply(proposed, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
 
       view = Game.view(agreed, nil)
-      assert view.reveal.closeness == 100
+      assert view.reveal.closeness == Ladder.meld_threshold()
       assert view.reveal.melded?
       assert view.reveal.overruled?
       assert view.phase == :closed
@@ -868,7 +938,7 @@ defmodule MeaningGame.GameTest do
       assert {:overrule, overrule} = Enum.find(effects, &match?({:overrule, _}, &1))
       assert overrule.proposer_seat_id == "seat-Mara"
       assert overrule.machine_closeness == 41
-      assert overrule.couple_closeness == 100
+      assert overrule.couple_closeness == Ladder.meld_threshold()
       assert overrule.bookends == ["lantern", "harbour"]
       assert overrule.bridges == ["cairn", "beacon"]
 
@@ -914,7 +984,7 @@ defmodule MeaningGame.GameTest do
                Game.apply(p3, {:overrule_agreed, %{seat_id: "seat-Ida"}})
 
       assert Game.view(agreed, nil).overrule == nil
-      assert Game.view(agreed, nil).reveal.closeness == 100
+      assert Game.view(agreed, nil).reveal.closeness == 90
       assert Game.view(agreed, nil).reveal.overruled?
 
       # The Precedent it rewrites is the one for the whole Bridge list.

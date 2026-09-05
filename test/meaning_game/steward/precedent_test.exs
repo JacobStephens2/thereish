@@ -334,5 +334,19 @@ defmodule MeaningGame.Steward.PrecedentTest do
       assert {:ok, overruled} = Precedent.get("gemini-3.8-flash", "assay-1", req)
       assert overruled.closeness == 99
     end
+
+    test "the version bump to assay-3 orphans assay-2 precedents" do
+      req = %{bookends: ["ocean", "night"], bridges: ["tide", "moon"]}
+
+      {:ok, _} =
+        Precedent.put("gemini-3.8-flash", "assay-2", req, %{
+          closeness: 85,
+          reasoning: "Old assay-2 verdict.",
+          quip: "Old quip.",
+          meta: %{model: "gemini-3.8-flash", prompt_version: "assay-2"}
+        })
+
+      assert Precedent.get("gemini-3.8-flash", "assay-3", req) == :miss
+    end
   end
 end

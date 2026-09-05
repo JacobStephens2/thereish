@@ -25,7 +25,7 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
 
   describe "GET /r/:slug/chronicle.md" do
     test "exports the Chronicle as Markdown on demand", %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       conn = get(conn, ~p"/r/#{slug}/chronicle.md")
 
@@ -37,8 +37,8 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
       assert body =~ "## Room: #{slug}"
       assert body =~ "Page 1: lantern · harbour"
       assert body =~ "Mara: cairn"
-      assert body =~ "Jacob: cairo"
-      assert body =~ "Closeness: 80 / 100 (meld)"
+      assert body =~ "Jacob: cairns"
+      assert body =~ "Closeness: 91 / 100 (meld)"
     end
 
     test "returns 404 for a Code no Room has", %{conn: conn} do
@@ -52,7 +52,7 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
     end
 
     test "a Code typed in any case reaches the same Room", %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       conn = get(conn, "/r/#{String.upcase(slug)}/chronicle.md")
 

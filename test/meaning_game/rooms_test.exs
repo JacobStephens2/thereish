@@ -217,8 +217,8 @@ defmodule MeaningGame.RoomsTest do
       view = await_reveal(ctx.slug)
 
       assert view.reveal.closeness == 80
-      assert view.reveal.band == :meld
-      assert view.reveal.melded?
+      assert view.reveal.band == :almost
+      refute view.reveal.melded?
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
       assert view.reveal.reasoning =~ "cairn"
     end
@@ -261,11 +261,13 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, {:illegal_bridge, "\"lanterns\" shares a root with \"lantern\"."}} =
                Rooms.commit_bridge(ctx.slug, ctx.mara.id, "lanterns")
 
-      assert {:error, {:illegal_bridge, "\"xyzzyq\" is not in the dictionary."}} =
-               Rooms.commit_bridge(ctx.slug, ctx.mara.id, "xyzzyq")
+      assert {:error,
+              {:illegal_bridge,
+               "Letters, digits, spaces, hyphens and apostrophes only (\"beacon!\")."}} =
+               Rooms.commit_bridge(ctx.slug, ctx.mara.id, "beacon!")
 
-      assert {:error, {:illegal_bridge, "Not in this Room."}} =
-               Rooms.commit_bridge(ctx.slug, ctx.mara.id, "damn")
+      assert {:error, {:illegal_bridge, "Too long to fit on a card."}} =
+               Rooms.commit_bridge(ctx.slug, ctx.mara.id, String.duplicate("a", 41))
 
       # Mara's seat is still uncommitted and attempt is still 1
       snapshot = Rooms.snapshot(ctx.slug, ctx.mara.id)
@@ -273,8 +275,8 @@ defmodule MeaningGame.RoomsTest do
       assert snapshot.your_bridge == nil
       assert snapshot.attempt.number == 1
 
-      # A legal bridge succeeds
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "beacon")
+      # A legal bridge (including phrases) succeeds
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "Viking beaches")
     end
 
     test "an Assayer that falls over is a Page that still reveals", ctx do
@@ -306,7 +308,7 @@ defmodule MeaningGame.RoomsTest do
 
     test "a phone that slept through the whole Page snapshots straight into the reveal", ctx do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_reveal(ctx.slug)
 
       mara = Rooms.snapshot(ctx.slug, ctx.mara.id)
@@ -543,7 +545,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "a Meld closes the Page there and then", ctx do
-      view = play(ctx, "cairn", "cairo")
+      view = play(ctx, "cairn", "cairn")
 
       assert view.phase == :closed
       assert view.closed == %{because: :meld, attempt: 1}
@@ -565,7 +567,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "one more? is a fresh Page with the same Seats", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairn")
 
       assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
 
@@ -773,7 +775,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.agree_overrule(ctx.slug, ctx.jacob.id)
 
       view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert view.reveal.closeness == 100
+      assert view.reveal.closeness == 90
       assert view.reveal.melded?
       assert view.phase == :closed
       assert view.overrule == nil
@@ -782,7 +784,7 @@ defmodule MeaningGame.RoomsTest do
       assert [overrule] = MeaningGame.Chronicle.overrules(room.id)
       assert overrule.proposer_seat_id == ctx.mara.id
       assert overrule.machine_closeness == 0
-      assert overrule.couple_closeness == 100
+      assert overrule.couple_closeness == 90
     end
 
     test "declining an overrule leaves the grade untouched", ctx do
@@ -817,7 +819,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.agree_overrule(slug, jacob.id)
 
       view = Rooms.snapshot(slug, mara.id)
-      assert view.reveal.closeness == 100
+      assert view.reveal.closeness == 90
       assert view.reveal.melded?
       assert view.phase == :closed
 
@@ -825,7 +827,7 @@ defmodule MeaningGame.RoomsTest do
       assert MeaningGame.Repo.aggregate(MeaningGame.Chronicle.Page, :count) == initial_page_count
       assert [overrule] = MeaningGame.Chronicle.overrules(room.id)
       assert overrule.machine_closeness == 0
-      assert overrule.couple_closeness == 100
+      assert overrule.couple_closeness == 90
     end
   end
 
@@ -877,7 +879,7 @@ defmodule MeaningGame.RoomsTest do
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairn")
       await_reveal(slug)
 
       %{slug: slug, mara: mara, jacob: jacob}
@@ -983,7 +985,7 @@ defmodule MeaningGame.RoomsTest do
 
       # Play continues meanwhile! Commit bridges on current page without stalling:
       assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_reveal(ctx.slug)
 
       view_mid = Rooms.snapshot(ctx.slug, ctx.mara.id)
@@ -1052,7 +1054,7 @@ defmodule MeaningGame.RoomsTest do
 
       # The evening remains completely playable from existing pool:
       assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_reveal(ctx.slug)
 
       view_after = Rooms.snapshot(ctx.slug, ctx.mara.id)
@@ -1084,7 +1086,7 @@ defmodule MeaningGame.RoomsTest do
       room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
 
       assert :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_reveal(ctx.slug)
 
       assert [assignment] = MeaningGame.Chronicle.experiment_assignments(room.id)
@@ -1097,7 +1099,7 @@ defmodule MeaningGame.RoomsTest do
       assert outcome.attempts_count == 1
     end
 
-    test "scoring respects arm: bait convergence scores 75 in bait arm and 100 in plain arm",
+    test "scoring respects arm: bait convergence scores 90 in bait arm and 100 in plain arm",
          ctx do
       room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
 
@@ -1108,7 +1110,7 @@ defmodule MeaningGame.RoomsTest do
       [outcome1] = MeaningGame.Chronicle.experiment_outcomes(room.id)
 
       if outcome1.arm == "bait" do
-        assert reveal_view.reveal.closeness == 75
+        assert reveal_view.reveal.closeness == 90
         assert outcome1.trap_converged == true
       else
         assert reveal_view.reveal.closeness == 100
@@ -1132,6 +1134,7 @@ defmodule MeaningGame.RoomsTest do
             "miss" => "m",
             "adjacent" => "a",
             "close" => "c",
+            "almost" => "almost",
             "meld" => "meld",
             "deep_meld" => "dm"
           },
@@ -1157,7 +1160,7 @@ defmodule MeaningGame.RoomsTest do
       outcomes = MeaningGame.Chronicle.experiment_outcomes(room.id)
       outcome2 = List.last(outcomes)
       assert outcome2.arm == "bait"
-      assert reveal2.reveal.closeness == 75
+      assert reveal2.reveal.closeness == 90
       assert outcome2.trap_converged == true
     end
 

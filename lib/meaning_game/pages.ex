@@ -30,6 +30,7 @@ defmodule MeaningGame.Pages do
         "miss" => "Adrift in the fog.",
         "adjacent" => "Along the quay.",
         "close" => "Passable. In the harbour mouth.",
+        "almost" => "Almost in the harbour mouth.",
         "meld" => "Two minds at the light.",
         "deep_meld" => "Deep navigation."
       },
@@ -49,6 +50,7 @@ defmodule MeaningGame.Pages do
         "miss" => "Lost in the dunes.",
         "adjacent" => "On the edge of the heat.",
         "close" => "Passable. At the reflection.",
+        "almost" => "Almost at the reflection.",
         "meld" => "You both saw the mirage.",
         "deep_meld" => "Crystalline convergence."
       },
@@ -68,6 +70,7 @@ defmodule MeaningGame.Pages do
         "miss" => "Standing on different banks.",
         "adjacent" => "Caught in the eddies.",
         "close" => "Passable. With the current.",
+        "almost" => "Almost in the current.",
         "meld" => "Two minds in the flow.",
         "deep_meld" => "Timeless convergence."
       },
@@ -87,6 +90,7 @@ defmodule MeaningGame.Pages do
         "miss" => "Cold butter.",
         "adjacent" => "On the board.",
         "close" => "Passable. At the jar.",
+        "almost" => "Almost at the jar.",
         "meld" => "Two minds spread thin.",
         "deep_meld" => "Pure comb."
       },
@@ -106,6 +110,7 @@ defmodule MeaningGame.Pages do
         "miss" => "In the rafters.",
         "adjacent" => "Under the floorboards.",
         "close" => "Passable. By the window.",
+        "almost" => "Almost at the trunk.",
         "meld" => "You found the trunk.",
         "deep_meld" => "Shared memory."
       },
@@ -217,6 +222,9 @@ defmodule MeaningGame.Pages do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @doc "The hand-written fallback pages used when the pool is empty."
+  def hand_written_pages, do: @hand_written_pool
 
   @doc """
   The opening Page for a Room. Draws from pool if available, otherwise falls

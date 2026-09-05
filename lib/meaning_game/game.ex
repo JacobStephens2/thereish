@@ -225,7 +225,7 @@ defmodule MeaningGame.Game do
   end
 
   def apply(%__MODULE__{} = state, {:bridge_committed, %{seat_id: seat_id, bridge: bridge}}) do
-    bridge = normalize(bridge)
+    bridge = MeaningGame.Steward.Legality.normalize_bridge(bridge)
 
     cond do
       phase(state) != :bridging ->
@@ -241,7 +241,7 @@ defmodule MeaningGame.Game do
         {:error, :bridge_required}
 
       true ->
-        case MeaningGame.Steward.Legality.check_bridge(bridge, state.bookends) do
+        case MeaningGame.Steward.Legality.check_bridge(bridge, barred_words(state)) do
           :ok -> committed(%{state | bridges: Map.put(state.bridges, seat_id, bridge)})
           {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
         end
@@ -271,7 +271,7 @@ defmodule MeaningGame.Game do
   end
 
   def apply(%__MODULE__{} = state, {:overrule_proposed, %{seat_id: seat_id} = attrs}) do
-    closeness = Map.get(attrs, :closeness, 100)
+    closeness = Map.get(attrs, :closeness, Ladder.meld_threshold())
 
     cond do
       not seated?(state, seat_id) ->
@@ -446,8 +446,29 @@ defmodule MeaningGame.Game do
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
       your_tap: Map.get(fairness_taps, viewer),
-      fairness_taps: fairness_taps
+      fairness_taps: fairness_taps,
+      barred_words: if(phase != :waiting, do: barred_words(state))
     }
+  end
+
+  @doc """
+  All words and phrases barred from being played as a Bridge on this Page:
+  the Bookends of every Attempt so far and every Bridge committed in earlier
+  attempts of this Page.
+  """
+  @spec barred_words(t()) :: [String.t()]
+  def barred_words(%__MODULE__{} = state) do
+    past_bookends = Enum.flat_map(state.played, fn a -> a[:bookends] || a.bookends || [] end)
+
+    past_bridges =
+      Enum.flat_map(state.played, fn a -> Map.values(a[:bridges] || a.bridges || %{}) end)
+
+    current_bookends = state.bookends || []
+
+    (current_bookends ++ past_bookends ++ past_bridges)
+    |> Enum.map(&to_string/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
   end
 
   # `init`, `apply` and `view` are the whole surface. Everything below is reached
@@ -474,7 +495,65 @@ defmodule MeaningGame.Game do
   # The Bridges go in roster order, the order the reveal puts them in, so that
   # the sentence the Assayer writes, the joke it makes and the two words it
   # names as furthest apart all read in the order they are on the screen.
-  defp assay(state), do: {:assay, %{bookends: state.bookends, bridges: written_bridges(state)}}
+  #
+  # assay-3 carries Bookends, Bridges with player names in roster order, earlier
+  # Attempts, and Gives.
+  defp assay(state) do
+    {:assay,
+     %{
+       bookends: state.bookends,
+       bridges: written_bridges(state),
+       player_bridges:
+         Enum.map(state.seats, fn seat ->
+           %{player: seat.name, bridge: state.bridges[seat.id]}
+         end),
+       earlier_attempts:
+         Enum.map(state.played, fn attempt ->
+           attempt_bridges = attempt[:bridges] || attempt.bridges || %{}
+
+           %{
+             number: attempt[:number] || attempt.number,
+             bookends: attempt[:bookends] || attempt.bookends,
+             bridges:
+               Enum.map(state.seats, fn seat ->
+                 %{player: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
+               end)
+           }
+         end),
+       gives: gives_for_assay(state)
+     }}
+  end
+
+  defp gives_for_assay(state) do
+    cond do
+      is_nil(state.page) ->
+        []
+
+      gives = state.page[:gives] || state.page["gives"] ->
+        case gives do
+          list when is_list(list) ->
+            list
+
+          map when is_map(map) ->
+            Enum.map(state.seats, fn seat ->
+              %{player: seat.name, give: map[seat.id] || map[seat.name]}
+            end)
+
+          _ ->
+            []
+        end
+
+      give = state.page[:give] || state.page["give"] ->
+        if is_binary(give) and give != "" do
+          [%{give: give}]
+        else
+          []
+        end
+
+      true ->
+        []
+    end
+  end
 
   # Every Bridge of this attempt, in roster order.
   defp written_bridges(state), do: Enum.map(state.seats, &state.bridges[&1.id])
@@ -794,10 +873,6 @@ defmodule MeaningGame.Game do
   defp find_seat(state, seat_id), do: Enum.find(state.seats, &(&1.id == seat_id))
 
   defp full?(state), do: length(state.seats) >= state.seat_limit
-
-  # A Bridge is one word, and the game says it its own way: what the players are
-  # shown side by side should differ in meaning, not in the shift key.
-  defp normalize(bridge), do: bridge |> String.trim() |> String.downcase()
 
   defp normalize_label(:fair), do: "fair"
   defp normalize_label(:too_kind), do: "too_kind"

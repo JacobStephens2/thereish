@@ -56,7 +56,6 @@ defmodule MeaningGame.Steward.Precedent do
 
   @doc false
   def changeset(precedent, attrs) do
-
     precedent
     |> cast(attrs, [
       :key,
@@ -223,7 +222,10 @@ defmodule MeaningGame.Steward.Precedent do
   defp canonical_inputs(bookends, bridges) do
     {
       bookends |> Enum.map(&normalize/1) |> Enum.sort(),
-      bridges |> Enum.map(&normalize/1) |> Enum.sort()
+      bridges
+      |> Enum.map(&MeaningGame.Steward.Legality.bridge_text/1)
+      |> Enum.map(&normalize/1)
+      |> Enum.sort()
     }
   end
 
