@@ -94,14 +94,14 @@ defmodule MeaningGame.Scribe do
   Finds all closed Pages without recaps, in chronological order, and writes
   recaps for them.
 
-  If a Room slug or ID is provided, only Pages in that Room are processed.
+  If a Room Code is provided, only Pages in that Room are processed.
   """
-  @spec sync(String.t() | Ecto.UUID.t() | nil) :: :ok
-  def sync(room_id_or_slug \\ nil) do
-    rooms = rooms_for_sync(room_id_or_slug)
+  @spec sync(String.t() | nil) :: :ok
+  def sync(code \\ nil) do
+    rooms = rooms_for_sync(code)
 
     for room <- rooms do
-      pages = unrecapped_pages(room.id)
+      pages = Chronicle.unrecapped_pages(room.id)
 
       for page <- pages do
         recap(room, page)
@@ -111,28 +111,12 @@ defmodule MeaningGame.Scribe do
     :ok
   end
 
-  defp rooms_for_sync(nil), do: MeaningGame.Repo.all(MeaningGame.Rooms.Room)
+  defp rooms_for_sync(nil), do: MeaningGame.Rooms.list_rooms()
 
-  defp rooms_for_sync(slug_or_id) when is_binary(slug_or_id) do
-    room =
-      MeaningGame.Repo.get_by(MeaningGame.Rooms.Room, slug: slug_or_id) ||
-        case Ecto.UUID.cast(slug_or_id) do
-          {:ok, uuid} -> MeaningGame.Repo.get(MeaningGame.Rooms.Room, uuid)
-          :error -> nil
-        end
-
-    if room, do: [room], else: []
-  end
-
-  defp unrecapped_pages(room_id) do
-    import Ecto.Query
-
-    from(p in MeaningGame.Chronicle.Page,
-      left_join: r in MeaningGame.Chronicle.Recap,
-      on: r.page_id == p.id,
-      where: p.room_id == ^room_id and is_nil(r.id),
-      order_by: [asc: p.closed_at, asc: p.id]
-    )
-    |> MeaningGame.Repo.all()
+  defp rooms_for_sync(code) when is_binary(code) do
+    case MeaningGame.Rooms.get_room(code) do
+      nil -> []
+      room -> [room]
+    end
   end
 end

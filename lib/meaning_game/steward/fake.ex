@@ -117,9 +117,6 @@ defmodule MeaningGame.Steward.Fake do
       :timeout ->
         {:error, :timeout}
 
-      :gate_failed ->
-        {:error, {:rejected, "the prose gate refused the recap"}}
-
       {:error, reason} ->
         {:error, reason}
 

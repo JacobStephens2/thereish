@@ -3,17 +3,11 @@ defmodule Mix.Tasks.Scribe.Sync do
   Synchronises the Scribe: refreshes vendored Vale packages, and writes recaps
   for any closed Pages that have none.
 
-      # Refresh styles (if vale is present) and write recaps for all rooms
+      # Refreshes Vale packages and writes recaps for all rooms
       $ mix scribe.sync
 
-      # Write recaps for a specific room only
+      # Writes recaps for one Room only (by Code)
       $ mix scribe.sync dust
-
-      # Only refresh Vale packages
-      $ mix scribe.sync --styles
-
-      # Only write recaps
-      $ mix scribe.sync --recaps [ROOM_SLUG]
   """
   use Mix.Task
 
@@ -21,30 +15,14 @@ defmodule Mix.Tasks.Scribe.Sync do
 
   @impl Mix.Task
   def run(args) do
-    {opts, rest, _} =
-      OptionParser.parse(args,
-        switches: [styles: :boolean, recaps: :boolean],
-        aliases: [s: :styles, r: :recaps]
-      )
+    code = List.first(args)
 
-    styles_only? = Keyword.get(opts, :styles, false)
-    recaps_only? = Keyword.get(opts, :recaps, false)
-    room_slug = List.first(rest)
-
-    cond do
-      styles_only? ->
-        sync_styles()
-
-      recaps_only? or room_slug != nil ->
-        sync_recaps(room_slug)
-
-      true ->
-        if System.find_executable("vale") do
-          sync_styles()
-        end
-
-        sync_recaps(nil)
+    if code == nil do
+      sync_styles()
     end
+
+    Mix.Task.run("app.start")
+    MeaningGame.Scribe.sync(code)
   end
 
   defp sync_styles do
@@ -61,10 +39,5 @@ defmodule Mix.Tasks.Scribe.Sync do
     if status != 0 do
       Mix.raise("`vale sync` failed (exit #{status})")
     end
-  end
-
-  defp sync_recaps(room_slug) do
-    Mix.Task.run("app.start")
-    MeaningGame.Scribe.sync(room_slug)
   end
 end
