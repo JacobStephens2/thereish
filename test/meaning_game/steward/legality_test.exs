@@ -57,34 +57,68 @@ defmodule MeaningGame.Steward.LegalityTest do
       assert :ok = Legality.check_bridge("tide", ["ocean", "moon"])
     end
 
-    test "rejects empty bridge" do
+    test "approves multi-word phrases and short phrases" do
+      assert :ok = Legality.check_bridge("Viking beaches", ["lantern", "harbour"])
+      assert :ok = Legality.check_bridge("Gold Rush", ["lantern", "harbour"])
+    end
+
+    test "approves hyphens, apostrophes, and digits" do
+      assert :ok = Legality.check_bridge("ice-cream", ["lantern", "harbour"])
+      assert :ok = Legality.check_bridge("rock 'n' roll", ["lantern", "harbour"])
+      assert :ok = Legality.check_bridge("apollo 11", ["lantern", "harbour"])
+      assert :ok = Legality.check_bridge("route 66", ["lantern", "harbour"])
+    end
+
+    test "normalizes whitespace and casing" do
+      assert :ok = Legality.check_bridge("   viking   beaches   ", ["lantern", "harbour"])
+    end
+
+    test "allows words not in the dictionary for player bridges" do
+      assert :ok = Legality.check_bridge("xyzzyq", ["lantern", "harbour"])
+      assert :ok = Legality.check_bridge("blergblerg", ["lantern", "harbour"])
+    end
+
+    test "allows profanity for player bridges" do
+      assert :ok = Legality.check_bridge("damn", ["lantern", "harbour"])
+      assert :ok = Legality.check_bridge("hell", ["lantern", "harbour"])
+    end
+
+    test "rejects empty bridge or whitespace/punctuation only" do
       assert {:illegal, "Write a word first."} =
                Legality.check_bridge("", ["lantern", "harbour"])
+
+      assert {:illegal, "Write a word first."} =
+               Legality.check_bridge("   ", ["lantern", "harbour"])
+
+      assert {:illegal, "Write a word first."} =
+               Legality.check_bridge("- -", ["lantern", "harbour"])
+
+      assert {:illegal, "Write a word first."} =
+               Legality.check_bridge("'", ["lantern", "harbour"])
     end
 
-    test "rejects non-letter characters or multi-word bridge" do
-      assert {:illegal, "One word, letters only (\"two words\")."} =
-               Legality.check_bridge("two words", ["lantern", "harbour"])
+    test "rejects characters outside letters, digits, spaces, hyphens, and apostrophes" do
+      assert {:illegal, "Letters, digits, spaces, hyphens and apostrophes only (\"hello!\")."} =
+               Legality.check_bridge("hello!", ["lantern", "harbour"])
 
-      assert {:illegal, "One word, letters only (\"ice-cream\")."} =
-               Legality.check_bridge("ice-cream", ["lantern", "harbour"])
+      assert {:illegal, "Letters, digits, spaces, hyphens and apostrophes only (\"cool@stuff\")."} =
+               Legality.check_bridge("cool@stuff", ["lantern", "harbour"])
     end
 
-    test "rejects non-dictionary words" do
-      assert {:illegal, "\"xyzzyq\" is not in the dictionary."} =
-               Legality.check_bridge("xyzzyq", ["lantern", "harbour"])
-    end
+    test "rejects bridges over 40 characters" do
+      long = String.duplicate("a", 41)
 
-    test "rejects profanity" do
-      assert {:illegal, "Not in this Room."} =
-               Legality.check_bridge("damn", ["lantern", "harbour"])
+      assert {:illegal, "Too long to fit on a card."} =
+               Legality.check_bridge(long, ["lantern", "harbour"])
+
+      assert :ok = Legality.check_bridge(String.duplicate("a", 40), ["lantern", "harbour"])
     end
 
     test "rejects bridge identical to either bookend" do
-      assert {:illegal, "That is the bookend itself (\"harbour\")."} =
+      assert {:illegal, "\"harbour\" shares a root with \"harbour\"."} =
                Legality.check_bridge("harbour", ["lantern", "harbour"])
 
-      assert {:illegal, "That is the bookend itself (\"lantern\")."} =
+      assert {:illegal, "\"lantern\" shares a root with \"lantern\"."} =
                Legality.check_bridge("lantern", ["lantern", "harbour"])
     end
 
@@ -111,6 +145,22 @@ defmodule MeaningGame.Steward.LegalityTest do
 
       assert {:illegal, "\"knives\" shares a root with \"knife\"."} =
                Legality.check_bridge("knives", ["knife", "fork"])
+    end
+
+    test "rejects phrase colliding with a bookend and names the collision" do
+      assert {:illegal, "\"lava rock\" shares a root with \"lava\"."} =
+               Legality.check_bridge("lava rock", ["lava", "mountain"])
+
+      assert {:illegal, "\"rocky road\" shares a root with \"rock\"."} =
+               Legality.check_bridge("rocky road", ["mountain", "rock"])
+    end
+
+    test "rejects bridge colliding with a word in a multi-word barred phrase" do
+      assert {:illegal, "\"beaches\" shares a root with \"beaches\"."} =
+               Legality.check_bridge("beaches", ["viking beaches", "harbour"])
+
+      assert {:illegal, "\"viking ship\" shares a root with \"viking\"."} =
+               Legality.check_bridge("viking ship", ["viking beaches", "harbour"])
     end
   end
 end

@@ -55,7 +55,7 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward.Vale
 
   @impl true
-  def assay(%{bookends: bookends, bridges: bridges} = request) when length(bridges) >= 2 do
+  def assay(%{bookends: _bookends} = request) do
     role = Steward.role(:assayer)
     model = role.model
     prompt_version = Map.get(role, :prompt_version, Assay.version())
@@ -65,7 +65,7 @@ defmodule MeaningGame.Steward.Live do
         {:ok, verdict}
 
       :miss ->
-        with {:ok, verdict} <- grade_live(role, bookends, bridges, prompt_version) do
+        with {:ok, verdict} <- grade_live(role, request, prompt_version) do
           Precedent.put(model, prompt_version, request, verdict)
           {:ok, verdict}
         end
@@ -288,11 +288,13 @@ defmodule MeaningGame.Steward.Live do
     end
   end
 
-  defp grade_live(role, bookends, bridges, prompt_version) do
+  defp grade_live(role, request, prompt_version) do
+    items = ordering_items(request)
+
     [forward, reverse] =
-      [bridges, Enum.reverse(bridges)]
+      [items, Enum.reverse(items)]
       |> Enum.map(fn ordering ->
-        Task.async(fn -> graded(role, bookends, ordering) end)
+        Task.async(fn -> graded(role, request, ordering) end)
       end)
       # The grading's whole budget: one request's timeout is `timeout_ms`, and
       # this is what all of them together, retries included, may spend before
@@ -302,6 +304,20 @@ defmodule MeaningGame.Steward.Live do
     with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
       {:ok, reconciled(forward, reverse, prompt_version)}
     end
+  end
+
+  defp ordering_items(%{seat_bridges: seat_bridges})
+       when is_list(seat_bridges) and length(seat_bridges) >= 2 do
+    seat_bridges
+  end
+
+  defp ordering_items(%{player_bridges: player_bridges})
+       when is_list(player_bridges) and length(player_bridges) >= 2 do
+    player_bridges
+  end
+
+  defp ordering_items(%{bridges: bridges}) when is_list(bridges) do
+    bridges
   end
 
   # An ordering that never came back at all is a verdict the game does not have.
@@ -316,8 +332,8 @@ defmodule MeaningGame.Steward.Live do
       [{:error, :timeout}, {:error, :timeout}]
   end
 
-  defp graded(role, bookends, ordering) do
-    prompt = Assay.prompt(bookends, ordering)
+  defp graded(role, request, ordering) do
+    prompt = Assay.prompt(request, ordering)
     check = &Assay.check(&1, ordering)
 
     case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do

@@ -222,8 +222,8 @@ defmodule MeaningGame.RoomsTest do
       view = await_reveal(ctx.slug)
 
       assert view.reveal.closeness == 80
-      assert view.reveal.band == :meld
-      assert view.reveal.melded?
+      assert view.reveal.band == :almost
+      refute view.reveal.melded?
       assert Enum.map(view.reveal.bridges, & &1.bridge) == ["cairn", "cairo"]
       refute Map.has_key?(view.reveal, :reasoning)
     end
@@ -266,11 +266,13 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, {:illegal_bridge, "\"lanterns\" shares a root with \"lantern\"."}} =
                Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "lanterns")
 
-      assert {:error, {:illegal_bridge, "\"xyzzyq\" is not in the dictionary."}} =
-               Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "xyzzyq")
+      assert {:error,
+              {:illegal_bridge,
+               "Letters, digits, spaces, hyphens and apostrophes only (\"beacon!\")."}} =
+               Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "beacon!")
 
-      assert {:error, {:illegal_bridge, "Not in this Room."}} =
-               Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "damn")
+      assert {:error, {:illegal_bridge, "Too long to fit on a card."}} =
+               Rooms.commit_bridge(ctx.slug, ctx.melissa.id, String.duplicate("a", 41))
 
       # Melissa's seat is still uncommitted and attempt is still 1
       snapshot = Rooms.snapshot(ctx.slug, ctx.melissa.id)
@@ -278,8 +280,8 @@ defmodule MeaningGame.RoomsTest do
       assert snapshot.your_bridge == nil
       assert snapshot.attempt.number == 1
 
-      # A legal bridge succeeds
-      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "beacon")
+      # A legal bridge (including phrases) succeeds
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "Viking beaches")
     end
 
     test "an Assayer that falls over is a Page that still reveals", ctx do
@@ -311,7 +313,7 @@ defmodule MeaningGame.RoomsTest do
 
     test "a phone that slept through the whole Page snapshots straight into the reveal", ctx do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_reveal(ctx.slug)
 
       melissa = Rooms.snapshot(ctx.slug, ctx.melissa.id)
@@ -546,7 +548,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "a Meld closes the Page there and then", ctx do
-      view = play(ctx, "cairn", "cairo")
+      view = play(ctx, "cairn", "cairn")
 
       assert view.phase == :closed
       assert view.closed == %{because: :meld, attempt: 1}
@@ -568,7 +570,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "one more? is a fresh Page with the same Seats", ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairn")
 
       assert :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
 
@@ -693,7 +695,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.give(slug, jacob.id, "setting two")
       await_phase(slug, :bridging)
       :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
       await_reveal(slug)
 
       steward(name_word: "fork")
@@ -722,7 +724,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.give(slug, jacob.id, "setting two")
       await_phase(slug, :bridging)
       :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
       await_reveal(slug)
 
       steward(name_mode: :raise)
@@ -747,7 +749,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.give(slug, jacob.id, "setting two")
       await_phase(slug, :bridging)
       :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
       await_reveal(slug)
 
       # 1500ms delay exceeds the test deadline of 1000ms
@@ -867,7 +869,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.agree_overrule(ctx.slug, ctx.jacob.id)
 
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view.reveal.closeness == 100
+      assert view.reveal.closeness == 90
       assert view.reveal.melded?
       assert view.phase == :closed
       assert view.overrule == nil
@@ -876,7 +878,7 @@ defmodule MeaningGame.RoomsTest do
       assert [overrule] = MeaningGame.Chronicle.overrules(room.id)
       assert overrule.proposer_seat_id == ctx.melissa.id
       assert overrule.machine_closeness == 0
-      assert overrule.couple_closeness == 100
+      assert overrule.couple_closeness == 90
     end
 
     test "declining an overrule leaves the grade untouched", ctx do
@@ -914,7 +916,7 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.agree_overrule(slug, jacob.id)
 
       view = Rooms.snapshot(slug, melissa.id)
-      assert view.reveal.closeness == 100
+      assert view.reveal.closeness == 90
       assert view.reveal.melded?
       assert view.phase == :closed
 
@@ -922,7 +924,7 @@ defmodule MeaningGame.RoomsTest do
       assert MeaningGame.Repo.aggregate(MeaningGame.Chronicle.Page, :count) == initial_page_count
       assert [overrule] = MeaningGame.Chronicle.overrules(room.id)
       assert overrule.machine_closeness == 0
-      assert overrule.couple_closeness == 100
+      assert overrule.couple_closeness == 90
     end
   end
 
@@ -936,7 +938,7 @@ defmodule MeaningGame.RoomsTest do
       await_phase(slug, :bridging)
 
       :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairn")
       await_reveal(slug)
 
       %{slug: slug, melissa: melissa, jacob: jacob}

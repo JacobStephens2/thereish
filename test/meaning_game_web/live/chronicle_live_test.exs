@@ -44,7 +44,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
 
   describe "what the Scribe wrote" do
     test "is on the Page it was written about", %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(slug)
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
@@ -55,7 +55,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
 
     test "reaches back to an earlier Page where the Chronicle has one",
          %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(slug)
       :ok = Rooms.next_page(slug, ctx.melissa.id)
       play(ctx, "mirage", "mirages")
@@ -71,7 +71,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
     test "is nowhere at all on a Page the Scribe could not write",
          %{conn: conn, slug: slug} = ctx do
       steward(recap_mode: :unavailable)
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_scribe()
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
@@ -82,7 +82,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
 
     test "is the players' to rewrite, like everything else in the book",
          %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(slug)
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
@@ -117,7 +117,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
 
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
       await_recap(slug)
 
       assert eventually(
@@ -138,7 +138,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
     test "reads pages in reverse chronological order with bookends, attempts, bridges, and verdicts",
          %{conn: conn, slug: slug} = ctx do
       # Play first page: melded
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       # Play second page with different bookends: two attempts
       attempt_cap(2)
@@ -165,7 +165,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       assert rendered_html =~ "Melissa"
       assert rendered_html =~ "cairn"
       assert rendered_html =~ "Jacob"
-      assert rendered_html =~ "cairo"
+      assert rendered_html =~ "cairns"
       assert rendered_html =~ "80"
 
       {p2_pos, _} = :binary.match(rendered_html, "cactus")
@@ -179,7 +179,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
 
     test "shows overrules and player corrections, and allows recording an edit",
          %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       room = Repo.get_by!(Room, slug: slug)
       [page] = Chronicle.pages(room.id)
@@ -191,7 +191,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
           attempt_number: 1,
           proposer_seat_id: ctx.melissa.id,
           bookends: ["lantern", "harbour"],
-          bridges: ["cairn", "cairo"],
+          bridges: ["cairn", "cairns"],
           machine_closeness: 80,
           machine_reasoning: "Share 4 letters",
           machine_quip: "Quip",
@@ -220,7 +220,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
         "correction" => %{
           "attempt_number" => "1",
           "target" => "bridge",
-          "original_value" => "cairo",
+          "original_value" => "cairns",
           "corrected_value" => "cairn",
           "note" => "Fixed spelling on phone"
         }
@@ -232,19 +232,19 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       rendered = render(view)
       assert rendered =~ "Fixed spelling on phone"
       assert rendered =~ "cairn"
-      assert rendered =~ "(cairo)"
+      assert rendered =~ "(cairns)"
 
       # Database verifies it appended rather than mutating
       assert [correction] = Chronicle.corrections(room.id)
       assert correction.page_id == page.id
       assert correction.attempt_number == 1
       assert correction.corrected_value == "cairn"
-      assert correction.original_value == "cairo"
+      assert correction.original_value == "cairns"
     end
 
     test "shows fairness taps alongside the page and attempt they judge",
          %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       :ok = Rooms.record_fairness_tap(slug, ctx.melissa.id, :fair)
       :ok = Rooms.record_fairness_tap(slug, ctx.jacob.id, :too_harsh)
@@ -263,7 +263,7 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
 
     test "experiment is blinded until deliberately unblinded, then reveals qualitative readout",
          %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairo")
+      play(ctx, "cairn", "cairns")
 
       room = Repo.get_by!(Room, slug: slug)
       [page] = Chronicle.pages(room.id)
