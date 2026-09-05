@@ -8,7 +8,7 @@ defmodule MeaningGameWeb.ChronicleController do
   alias MeaningGame.Rooms
 
   def export(conn, params) do
-    slug = Rooms.open!(params["slug"] || Rooms.default_slug())
+    slug = Rooms.open!(params["slug"])
     markdown = Chronicle.to_markdown(slug)
 
     conn

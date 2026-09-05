@@ -19,7 +19,7 @@ defmodule MeaningGameWeb.ChronicleLive do
 
   @impl true
   def mount(params, session, socket) do
-    slug = Rooms.open!(params["slug"] || Rooms.default_slug())
+    slug = Rooms.open!(params["slug"])
     device_token = DeviceToken.from_session(session)
     room = Repo.get_by!(Room, slug: slug)
     seat = seat_for_device(slug, device_token)
@@ -583,19 +583,11 @@ defmodule MeaningGameWeb.ChronicleLive do
     """
   end
 
-  defp room_path(slug) do
-    if slug == Rooms.default_slug(), do: ~p"/", else: ~p"/r/#{slug}"
-  end
+  defp room_path(slug), do: ~p"/r/#{slug}"
 
-  defp export_path(slug) do
-    if slug == Rooms.default_slug(), do: ~p"/chronicle.md", else: ~p"/r/#{slug}/chronicle.md"
-  end
+  defp export_path(slug), do: ~p"/r/#{slug}/chronicle.md"
 
-  defp export_calibration_path(slug) do
-    if slug == Rooms.default_slug(),
-      do: ~p"/calibration.json",
-      else: ~p"/r/#{slug}/calibration.json"
-  end
+  defp export_calibration_path(slug), do: ~p"/r/#{slug}/calibration.json"
 
   defp human_label(label), do: MeaningGame.Chronicle.FairnessTap.label_human(label)
 

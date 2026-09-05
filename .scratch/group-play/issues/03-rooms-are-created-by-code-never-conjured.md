@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human (built and green; the last box is Jacob's to tick on the deployment)
 
 This ticket stands alone because the current rules already play at N: a Room of four can be created and played with today's pairwise grading, which is how it is demoed before 02 lands.
 
@@ -16,13 +16,13 @@ This ticket stands alone because the current rules already play at N: a Room of 
 
 **One new query.** The Rooms in which a device token holds a Seat, with the Seat, newest first. The front page uses it for rejoin links; 04 reuses it for digests.
 
-- [ ] The front page shows a Code box, a New Room button, and a rejoin link for each Room this phone holds a Seat in
-- [ ] New Room takes a player count from two to six (default two), creates a Room with a random four-letter dictionary word as its Code, and lands in it with the Code shown large
-- [ ] The Code is accepted in any case and shown uppercase; existing slugs open as before
-- [ ] A Code that is not a Room is a 404, and no Room is created by visiting a path
-- [ ] The Room page shows the Code and the join URL while Seats are open; the roster and open-seat count work at four
-- [ ] A fifth phone at a Room of four is turned away with the existing message
-- [ ] A rejoin link lands a phone in its own Seat, and reopening the URL after any interval still does
-- [ ] A random Code is never profane, never a taken Code, and always a real four-letter word
-- [ ] LiveView tests drive the front page, New Room, four joins by Code, and the 404; Room tests cover create, open-by-Code and the device-to-Rooms query
+- [x] The front page shows a Code box, a New Room button, and a rejoin link for each Room this phone holds a Seat in
+- [x] New Room takes a player count from two to six (default two), creates a Room with a random four-letter dictionary word as its Code, and lands in it with the Code shown large
+- [x] The Code is accepted in any case and shown uppercase; existing slugs open as before
+- [x] A Code that is not a Room is a 404, and no Room is created by visiting a path
+- [x] The Room page shows the Code and the join URL while Seats are open; the roster and open-seat count work at four
+- [x] A fifth phone at a Room of four is turned away with the existing message
+- [x] A rejoin link lands a phone in its own Seat, and reopening the URL after any interval still does
+- [x] A random Code is never profane, never a taken Code, and always a real four-letter word
+- [x] LiveView tests drive the front page, New Room, four joins by Code, and the 404; Room tests cover create, open-by-Code and the device-to-Rooms query
 - [ ] Verified on the real deployment: a Room of four created from a phone and joined by three others

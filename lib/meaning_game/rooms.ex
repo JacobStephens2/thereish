@@ -16,58 +16,142 @@ defmodule MeaningGame.Rooms do
   the shortcut that skips retyping it.
   """
 
+  # How many times a Code is drawn before creation gives up.
+  @code_draws 20
+
+  alias MeaningGame.Rooms.Code
   alias MeaningGame.Rooms.NoSuchRoomError
   alias MeaningGame.Rooms.Room
   alias MeaningGame.Rooms.Seat
   alias MeaningGame.Rooms.Server
+  alias MeaningGame.Rooms.Store
 
-  @doc "The Room the bare URL opens — the couch."
+  @doc """
+  The Room the exports and the mix tasks mean when nobody names one.
+
+  The couch is a Room like any other now that the bare URL is the front page;
+  this is only the answer to "which Room did you mean" on the command line.
+  """
   def default_slug, do: Application.fetch_env!(:meaning_game, :default_room_slug)
 
   @doc """
-  How many Seats a Room holds when it is first opened.
+  How many Seats the New Room form offers by default.
 
   Configuration rather than a constant: the two-player couch is the first Room
-  this game has, not the only shape it can take.
+  this game has, not the only shape it can take. It is a default on a form and
+  nothing else — a Room's Seats are chosen by whoever creates it.
   """
   def default_seat_limit, do: Application.fetch_env!(:meaning_game, :seats_per_room)
 
   @doc """
-  Opens the Room with this slug, and returns the slug.
+  The Seat counts a Room may be created with: two at the least, and at most what
+  one reveal can hold on a phone.
+  """
+  @spec seat_counts() :: Range.t()
+  def seat_counts, do: 2..MeaningGame.Steward.seat_cap()
+
+  @doc """
+  Opens a new Room of `player_count` Seats and returns its Code.
+
+  Rooms are created, never conjured. Nothing else in this interface brings one
+  into being: every other call finds a Room that somebody made here, which is
+  why a mistyped Code is a 404 rather than an empty Room nobody meant.
+
+  `device_token` is the creating phone's, which is what the Scribe will read to
+  name the Room after the Rooms that phone has played in. Until then the Code is
+  drawn at random.
+  """
+  @spec create(pos_integer(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def create(player_count, device_token)
+
+  def create(player_count, _device_token) when is_integer(player_count) do
+    if player_count in seat_counts() do
+      insert_with_a_free_code(player_count, @code_draws)
+    else
+      {:error, :bad_player_count}
+    end
+  end
+
+  def create(_player_count, _device_token), do: {:error, :bad_player_count}
+
+  # A drawn word that somebody else already took is drawn again, and nothing
+  # else is. There are thousands of four-letter words and a household will never
+  # crowd them, so a handful of draws is a ceiling that exists only so a bug
+  # cannot spin here.
+  defp insert_with_a_free_code(_player_count, 0), do: {:error, :no_free_code}
+
+  defp insert_with_a_free_code(player_count, draws_left) do
+    case Store.insert_room(Code.draw(), player_count) do
+      {:ok, room} ->
+        with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
+
+      {:error, changeset} ->
+        if code_taken?(changeset) do
+          insert_with_a_free_code(player_count, draws_left - 1)
+        else
+          {:error, changeset}
+        end
+    end
+  end
+
+  defp code_taken?(%Ecto.Changeset{errors: errors}), do: Keyword.has_key?(errors, :slug)
+
+  @doc """
+  Opens the Room with this Code, and returns the Code in its stored form.
 
   Raises `MeaningGame.Rooms.NoSuchRoomError`, which Phoenix renders as a 404, if
-  the slug is not one a Room could have — a mistyped URL should find nothing
-  rather than conjure a Room out of whatever was typed.
+  no Room has it — a Code nobody created should find nothing rather than conjure
+  a Room out of whatever was typed.
   """
   @spec open!(String.t()) :: String.t()
-  def open!(slug) do
-    case ensure_started(slug) do
-      {:ok, _pid} -> slug
-      {:error, _reason} -> raise NoSuchRoomError, slug: slug
+  def open!(code) do
+    case ensure_started(code) do
+      {:ok, code, _pid} -> code
+      {:error, _reason} -> raise NoSuchRoomError, slug: code
     end
   end
 
   @doc """
-  Starts the Room with this slug if it is not already running, and returns its
-  process either way.
+  Starts the Room with this Code if it is not already running, and returns its
+  stored Code and its process.
 
-  A Room that has never been opened is created holding `default_seat_limit/0`
-  Seats; one that already exists keeps the number of Seats it was opened with.
+  A Code that no Room has is `{:error, :no_such_room}`, and a Code no Room could
+  have is `{:error, :bad_code}`. Neither creates anything.
   """
-  @spec ensure_started(String.t()) :: {:ok, pid()} | {:error, term()}
-  def ensure_started(slug) do
-    if is_binary(slug) and Regex.match?(Room.slug_format(), slug) do
-      start_room(slug)
-    else
-      {:error, :bad_slug}
+  @spec ensure_started(term()) :: {:ok, String.t(), pid()} | {:error, :bad_code | :no_such_room}
+  def ensure_started(code) do
+    case Code.normalise(code) do
+      nil ->
+        {:error, :bad_code}
+
+      code ->
+        # A Room already running is a Room that exists, so the every-event path
+        # through `call/2` costs a registry lookup rather than a query.
+        case GenServer.whereis(Server.via(code)) do
+          pid when is_pid(pid) -> {:ok, code, pid}
+          nil -> start_if_it_exists(code)
+        end
     end
   end
 
-  defp start_room(slug) do
-    DynamicSupervisor.start_child(
-      MeaningGame.Rooms.Supervisor,
-      {Server, slug: slug, seat_limit: default_seat_limit()}
-    )
+  defp start_if_it_exists(code) do
+    if Store.get_room(code) do
+      with {:ok, pid} <- start_room(code), do: {:ok, code, pid}
+    else
+      {:error, :no_such_room}
+    end
+  end
+
+  @doc """
+  Every Room this browser holds a Seat in, newest first, each with the Seat.
+
+  The front page's one-tap way back in.
+  """
+  @spec for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
+  def for_device(device_token), do: Store.rooms_for_device(device_token)
+
+  defp start_room(code) do
+    DynamicSupervisor.start_child(MeaningGame.Rooms.Supervisor, {Server, slug: code})
     |> case do
       {:ok, pid} -> {:ok, pid}
       {:error, {:already_started, pid}} -> {:ok, pid}
@@ -204,8 +288,8 @@ defmodule MeaningGame.Rooms do
 
   # Every call starts the Room first, so a Room that crashed between one request
   # and the next is simply back rather than an error the caller has to handle.
-  defp call(slug, message) do
-    {:ok, _pid} = ensure_started(slug)
-    GenServer.call(Server.via(slug), message)
+  defp call(code, message) do
+    {:ok, code, _pid} = ensure_started(code)
+    GenServer.call(Server.via(code), message)
   end
 end

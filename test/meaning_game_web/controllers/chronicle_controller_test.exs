@@ -41,21 +41,22 @@ defmodule MeaningGameWeb.ChronicleControllerTest do
       assert body =~ "Closeness: 80 / 100 (meld)"
     end
 
-    test "exports the default room over /chronicle.md", %{conn: conn} do
-      default_slug = Rooms.default_slug()
-      open_room(slug: default_slug)
+    test "returns 404 for a Code no Room has", %{conn: conn} do
+      assert_error_sent 404, fn ->
+        get(conn, "/r/Not_A_Code/chronicle.md")
+      end
 
-      conn = get(conn, ~p"/chronicle.md")
-
-      assert response(conn, 200)
-      assert response_content_type(conn, :markdown) =~ "text/markdown"
-      assert response(conn, 200) =~ "## Room: #{default_slug}"
+      assert_error_sent 404, fn ->
+        get(conn, "/r/nobodyshome/chronicle.md")
+      end
     end
 
-    test "returns 404 for an unknown room", %{conn: conn} do
-      assert_error_sent 404, fn ->
-        get(conn, "/r/NOT-A-SLUG/chronicle.md")
-      end
+    test "a Code typed in any case reaches the same Room", %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairo")
+
+      conn = get(conn, "/r/#{String.upcase(slug)}/chronicle.md")
+
+      assert response(conn, 200) =~ "## Room: #{slug}"
     end
   end
 

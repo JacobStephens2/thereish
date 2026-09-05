@@ -31,7 +31,12 @@ defmodule Mix.Tasks.Chronicle.Export do
         List.first(argv) ||
         MeaningGame.Rooms.default_slug()
 
-    MeaningGame.Rooms.ensure_started(slug)
+    slug =
+      case MeaningGame.Rooms.ensure_started(slug) do
+        {:ok, code, _pid} -> code
+        {:error, _reason} -> Mix.raise("No Room has the Code #{slug}.")
+      end
+
     markdown = MeaningGame.Chronicle.to_markdown(slug)
 
     case opts[:output] do
