@@ -11,11 +11,11 @@
 **The four naming research notes keep saying "Mind-Meld".** `name-mind-meld-availability.md` alone holds 61 of the 150, and all four are dated primary sources *about* that name. Renaming them would falsify the record that justified the decision.
 
 - [ ] The design brief, the spec, ADRs 0004 / 0005 / 0007 and the deploy doc carry the chosen name
-- [ ] `.scratch/archive/mind-meld/` is renamed, and its ticket paths and internal references follow
+- [ ] `.scratch/resolved/mind-meld/` is renamed, and its ticket paths and internal references follow
 - [ ] The prose mentions in `lib/` are updated
 - [ ] `CONTEXT.md` is checked for any surviving working-title reference
 - [x] The design brief's two "Naming" bullets move from Open questions to Settled decisions, including the umbrella term now settled by ADR-0009 (done 2026-09-05)
 - [x] ADR-0008's status goes `proposed` → `accepted`, and it records which name won and how she read the others (done 2026-09-05)
 - [ ] The four naming research notes are left untouched
 
-**Since this was filed (2026-09-05).** The mind-meld tracker directory has moved to `.scratch/archive/mind-meld/`, so the `git mv` happens there. The two prose mentions in `lib/` (`steward/author.ex`, `steward/assay.ex`) are in files the at-the-table spec rewrites anyway — the Author writes Bookends live and the Assayer prompt bumps to `assay-3` (ADR-0011) — so land the rename with those changes rather than as a separate `sed`. "Anchors" is also renamed to "Bookends" across the same files (CONTEXT.md); one pass can carry both. The round-four clearance note joins the four naming notes that stay untouched.
+**Since this was filed (2026-09-05).** The mind-meld tracker directory has moved to `.scratch/resolved/mind-meld/`, so the `git mv` happens there. The two prose mentions in `lib/` (`steward/author.ex`, `steward/assay.ex`) are in files the at-the-table spec rewrites anyway — the Author writes Bookends live and the Assayer prompt bumps to `assay-3` (ADR-0011) — so land the rename with those changes rather than as a separate `sed`. "Anchors" is also renamed to "Bookends" across the same files (CONTEXT.md); one pass can carry both. The round-four clearance note joins the four naming notes that stay untouched.

@@ -7,8 +7,8 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 - One feature per directory: `.scratch/<feature-slug>/`
 - The spec is `.scratch/<feature-slug>/spec.md`
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`, never a single combined tickets file
-- Resolved issues are moved to `.scratch/<feature-slug>/issues/archive/<NN>-<slug>.md` to keep open issues visible at a glance
-- Completed feature directories can be moved to `.scratch/archive/<feature-slug>/`
+- Resolved issues are moved to `.scratch/<feature-slug>/issues/resolved/<NN>-<slug>.md` to keep open issues visible at a glance; the folder is named for the status of what is in it
+- Completed feature directories can be moved to `.scratch/resolved/<feature-slug>/`
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
