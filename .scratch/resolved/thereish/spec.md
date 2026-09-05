@@ -1,4 +1,4 @@
-# Spec: Mind-Meld — the playable slice, first milestone couch night
+# Spec: Thereish (working title Mind-Meld) — the playable slice, first milestone couch night
 
 Status: `ready-for-agent`
 Written: 2026-09-02

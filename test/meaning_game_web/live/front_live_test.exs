@@ -23,6 +23,8 @@ defmodule MeaningGameWeb.FrontLiveTest do
     test "asks for a Code and offers a New Room", %{conn: conn} do
       {:ok, front, html} = live(conn, ~p"/")
 
+      assert page_title(front) =~ "Thereish"
+      assert has_element?(front, "h1", "Thereish")
       assert html =~ "Code"
       assert has_element?(front, "input[name=code]")
       assert has_element?(front, "[data-role=new-room]")
