@@ -147,6 +147,11 @@ defmodule MeaningGame.Steward.Live do
     end
   end
 
+  defp ordering_items(%{seat_bridges: seat_bridges})
+       when is_list(seat_bridges) and length(seat_bridges) >= 2 do
+    seat_bridges
+  end
+
   defp ordering_items(%{player_bridges: player_bridges})
        when is_list(player_bridges) and length(player_bridges) >= 2 do
     player_bridges

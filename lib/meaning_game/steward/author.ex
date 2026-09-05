@@ -168,29 +168,8 @@ defmodule MeaningGame.Steward.Author do
 
   defp check_bookends(_), do: {:error, "bookends must be a list of exactly two words"}
 
-  defp check_author_bridge(word, bookends) do
-    w = word |> to_string() |> String.trim() |> String.downcase()
-
-    cond do
-      w == "" ->
-        {:illegal, "Write a word first."}
-
-      !Legality.single_word?(w) ->
-        {:illegal, "One word, letters only (\"#{w}\")."}
-
-      Legality.profane?(w) ->
-        {:illegal, "Not in this Room."}
-
-      !Legality.in_dictionary?(w) ->
-        {:illegal, "\"#{w}\" is not in the dictionary."}
-
-      true ->
-        Legality.check_bridge(w, bookends)
-    end
-  end
-
   defp check_bait(bait, bookends) do
-    case check_author_bridge(bait, bookends) do
+    case Legality.check_author_bridge(bait, bookends) do
       :ok -> :ok
       {:illegal, why} -> {:error, "bait: #{why}"}
     end
@@ -201,7 +180,7 @@ defmodule MeaningGame.Steward.Author do
       {:error, "deep_bridges must have at least two words"}
     else
       Enum.reduce_while(deep_bridges, :ok, fn bridge, :ok ->
-        case check_author_bridge(bridge, bookends) do
+        case Legality.check_author_bridge(bridge, bookends) do
           :ok -> {:cont, :ok}
           {:illegal, why} -> {:halt, {:error, "deep bridge \"#{bridge}\": #{why}"}}
         end
@@ -225,7 +204,7 @@ defmodule MeaningGame.Steward.Author do
 
       true ->
         Enum.reduce_while(likely, :ok, fn bridge, :ok ->
-          case check_author_bridge(bridge, bookends) do
+          case Legality.check_author_bridge(bridge, bookends) do
             :ok -> {:cont, :ok}
             {:illegal, why} -> {:halt, {:error, "likely bridge \"#{bridge}\": #{why}"}}
           end

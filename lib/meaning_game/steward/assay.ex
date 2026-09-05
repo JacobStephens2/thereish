@@ -85,11 +85,11 @@ defmodule MeaningGame.Steward.Assay do
       ordering
       |> Enum.with_index(1)
       |> Enum.map_join("\n", fn
-        {%{player: player, bridge: bridge}, _idx} when is_binary(player) and player != "" ->
-          "#{player} bridged with: #{bridge}"
-
         {%{name: name, bridge: bridge}, _idx} when is_binary(name) and name != "" ->
           "#{name} bridged with: #{bridge}"
+
+        {%{player: player, bridge: bridge}, _idx} when is_binary(player) and player != "" ->
+          "#{player} bridged with: #{bridge}"
 
         {bridge, number} when is_binary(bridge) ->
           "Player #{number} bridged with: #{bridge}"
@@ -255,14 +255,11 @@ defmodule MeaningGame.Steward.Assay do
   defp format_gives(gives) when is_list(gives) do
     lines =
       Enum.map(gives, fn
-        %{player: player, give: give} when is_binary(give) and give != "" ->
-          if player && player != "", do: "#{player} gave: #{give}", else: give
-
         %{name: name, give: give} when is_binary(give) and give != "" ->
           if name && name != "", do: "#{name} gave: #{give}", else: give
 
-        %{name: name, text: text} when is_binary(text) and text != "" ->
-          if name && name != "", do: "#{name} gave: #{text}", else: text
+        %{player: player, give: give} when is_binary(give) and give != "" ->
+          if player && player != "", do: "#{player} gave: #{give}", else: give
 
         %{give: give} when is_binary(give) and give != "" ->
           give
@@ -290,8 +287,8 @@ defmodule MeaningGame.Steward.Assay do
     lines =
       Enum.with_index(attempts, 1)
       |> Enum.map(fn {attempt, idx} ->
-        number = attempt[:number] || attempt["number"] || idx
-        bookends = attempt[:bookends] || attempt["bookends"] || []
+        number = attempt[:number] || attempt.number || idx
+        bookends = attempt[:bookends] || attempt.bookends || []
 
         bookends_text =
           case bookends do
@@ -299,24 +296,15 @@ defmodule MeaningGame.Steward.Assay do
             _ -> Enum.map_join(bookends, " and ", &String.upcase/1)
           end
 
-        bridges = attempt[:bridges] || attempt["bridges"] || []
+        bridges = attempt[:bridges] || attempt.bridges || []
 
         bridges_text =
-          case bridges do
-            list when is_list(list) ->
-              Enum.map_join(list, ", ", fn
-                %{player: p, bridge: b} -> "#{p} bridged with: #{b}"
-                %{name: n, bridge: b} -> "#{n} bridged with: #{b}"
-                b when is_binary(b) -> b
-                _ -> ""
-              end)
-
-            map when is_map(map) ->
-              Enum.map_join(map, ", ", fn {k, v} -> "#{k}: #{v}" end)
-
-            _ ->
-              ""
-          end
+          Enum.map_join(bridges, ", ", fn
+            %{name: n, bridge: b} -> "#{n} bridged with: #{b}"
+            %{player: p, bridge: b} -> "#{p} bridged with: #{b}"
+            b when is_binary(b) -> b
+            _ -> ""
+          end)
 
         "Attempt #{number}: Bookends: #{bookends_text}. Bridges: #{bridges_text}."
       end)

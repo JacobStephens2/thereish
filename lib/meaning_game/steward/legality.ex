@@ -92,6 +92,32 @@ defmodule MeaningGame.Steward.Legality do
     end
   end
 
+  @doc """
+  Validates an Author bridge or bookend against single-word, dictionary,
+  profanity, and barred-word constraints.
+  """
+  @spec check_author_bridge(term(), [term()]) :: :ok | {:illegal, String.t()}
+  def check_author_bridge(word, bookends) do
+    w = word |> to_string() |> String.trim() |> String.downcase()
+
+    cond do
+      w == "" ->
+        {:illegal, "Write a word first."}
+
+      !single_word?(w) ->
+        {:illegal, "One word, letters only (\"#{w}\")."}
+
+      profane?(w) ->
+        {:illegal, "Not in this Room."}
+
+      !in_dictionary?(w) ->
+        {:illegal, "\"#{w}\" is not in the dictionary."}
+
+      true ->
+        check_bridge(w, bookends)
+    end
+  end
+
   @doc "Splits a phrase into component words, stripping punctuation boundaries."
   @spec extract_words(String.t()) :: [String.t()]
   def extract_words(text) when is_binary(text) do
