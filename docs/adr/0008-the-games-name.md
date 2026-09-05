@@ -41,6 +41,7 @@ Recorded because most of these will be suggested again otherwise. Cleared across
 - The **Band** formerly called *near* is renamed **close**, so the title cannot collide with a rung of its own ladder.
 - `meld.stephens.page` stands until the name is final, then changes **exactly once** — it is the only part of the rename carrying a DNS record, a vhost and a TLS cert. No candidate-specific subdomain in the meantime.
 - Domain purchase is back in scope now that distribution is plausible; trademark filing remains out of scope and is an attorney's question, not this project's.
+- **Bought (2026-09-05): `thereish.app`**, pointed at the droplet; the game moves there from `meld.stephens.page` (naming issue 07). `thereish.com` is parked dark by a speculator until 2026-12-18 and is not approached; if it drops, it is registered then and redirected.
 
 ## Falsifiers
 
