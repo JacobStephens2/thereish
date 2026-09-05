@@ -568,17 +568,17 @@ defmodule MeaningGameWeb.RoomComponents do
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
   defp reveal_arrival(_), do: "no_verdict"
 
-  defp closeness_presentation(%{melded?: true}) do
+  defp closeness_presentation(%{band: :deep_meld}) do
     %{
-      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
+      container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
       number_class: "text-primary",
       badge_class: "bg-primary text-primary-content font-bold"
     }
   end
 
-  defp closeness_presentation(%{band: :deep_meld}) do
+  defp closeness_presentation(%{melded?: true}) do
     %{
-      container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
+      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
       number_class: "text-primary",
       badge_class: "bg-primary text-primary-content font-bold"
     }
