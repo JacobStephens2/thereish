@@ -118,63 +118,19 @@ defmodule MeaningGame.ScribeTest do
     end
 
     test "an adapter that raises produces exactly one error log and no row", ctx do
-      steward(recap_mode: :raise)
-
-      log =
-        capture_log(fn ->
-          play(ctx, "cairn", "cairo")
-          await_scribe()
-        end)
-
-      [page] = Chronicle.pages(room_id(ctx.slug))
-      assert Chronicle.recaps(room_id(ctx.slug)) == []
-
-      error_lines = log |> String.split("\n") |> Enum.filter(&(&1 =~ "[error]"))
-      assert length(error_lines) == 1
-      [error_line] = error_lines
-      assert error_line =~ ctx.slug
-      assert error_line =~ page.id
-      assert error_line =~ "having a moment"
+      assert_single_scribe_error(ctx, [recap_mode: :raise], "having a moment")
     end
 
     test "an adapter that times out produces exactly one error log and no row", ctx do
-      steward(recap_mode: :timeout)
-
-      log =
-        capture_log(fn ->
-          play(ctx, "cairn", "cairo")
-          await_scribe()
-        end)
-
-      [page] = Chronicle.pages(room_id(ctx.slug))
-      assert Chronicle.recaps(room_id(ctx.slug)) == []
-
-      error_lines = log |> String.split("\n") |> Enum.filter(&(&1 =~ "[error]"))
-      assert length(error_lines) == 1
-      [error_line] = error_lines
-      assert error_line =~ ctx.slug
-      assert error_line =~ page.id
-      assert error_line =~ "timeout"
+      assert_single_scribe_error(ctx, [recap_mode: :timeout], "timeout")
     end
 
     test "an adapter that fails the gate produces exactly one error log and no row", ctx do
-      steward(recap_mode: {:error, {:rejected, "the prose gate refused the recap"}})
-
-      log =
-        capture_log(fn ->
-          play(ctx, "cairn", "cairo")
-          await_scribe()
-        end)
-
-      [page] = Chronicle.pages(room_id(ctx.slug))
-      assert Chronicle.recaps(room_id(ctx.slug)) == []
-
-      error_lines = log |> String.split("\n") |> Enum.filter(&(&1 =~ "[error]"))
-      assert length(error_lines) == 1
-      [error_line] = error_lines
-      assert error_line =~ ctx.slug
-      assert error_line =~ page.id
-      assert error_line =~ "prose gate refused"
+      assert_single_scribe_error(
+        ctx,
+        [recap_mode: {:error, {:rejected, "the prose gate refused the recap"}}],
+        "prose gate refused"
+      )
     end
 
     test "the Room does not wait for the paragraph", ctx do
@@ -190,8 +146,30 @@ defmodule MeaningGame.ScribeTest do
     end
   end
 
+  defp assert_single_scribe_error(ctx, steward_opts, expected_reason) do
+    import ExUnit.CaptureLog
+
+    steward(steward_opts)
+
+    log =
+      capture_log(fn ->
+        play(ctx, "cairn", "cairo")
+        await_scribe()
+      end)
+
+    [page] = Chronicle.pages(room_id(ctx.slug))
+    assert Chronicle.recaps(room_id(ctx.slug)) == []
+
+    error_lines = log |> String.split("\n") |> Enum.filter(&(&1 =~ "[error]"))
+    assert length(error_lines) == 1
+    [error_line] = error_lines
+    assert error_line =~ ctx.slug
+    assert error_line =~ page.id
+    assert error_line =~ expected_reason
+  end
+
   describe "syncing missing recaps" do
-    test "writes recaps for closed Pages that have none in order", ctx do
+    test "writes recaps for closed Pages that have none in order, accepting any case Code", ctx do
       steward(recap_mode: :unavailable)
       play(ctx, "cairn", "cairo")
       await_scribe()
@@ -204,7 +182,7 @@ defmodule MeaningGame.ScribeTest do
       assert Chronicle.recaps(room_id(ctx.slug)) == []
 
       steward(recap_mode: :ok)
-      :ok = MeaningGame.Scribe.sync(ctx.slug)
+      :ok = MeaningGame.Scribe.sync(String.upcase(ctx.slug))
 
       recaps = Chronicle.recaps(room_id(ctx.slug))
       assert length(recaps) == 2
