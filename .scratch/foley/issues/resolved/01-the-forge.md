@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The Steward behaviour gains `forge` (N candidate effects for a brief) and `rank` (an ordering of clips against a brief); the Fake answers fixture MP3s and a fixed ordering
 - [x] The `foley` role exists in configuration with `effects` (ElevenLabs sound generation, `eleven_text_to_sound_v2`, MP3 44.1 kHz, `loop` for the house loop if made there), `music` (Mureka instrumental, `n: 1`, model `auto`, a three-minute deadline) and `ear` (Gemini 3.8 Flash, audio in, JSON out) jobs; keys from `MUREKA_API_KEY` and `ELEVENLABS_API_KEY` through runtime configuration; the price table gains both

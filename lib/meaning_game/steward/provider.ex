@@ -66,8 +66,6 @@ defmodule MeaningGame.Steward.Provider do
   def character_cost(model, characters) when is_number(characters) do
     case Map.get(prices(), model) do
       {:characters, per_char} -> characters * per_char
-      {_per_in, per_out} -> characters / 1.0e6 * per_out
-      per_char when is_float(per_char) -> characters * per_char
       _ -> 0.0
     end
   end
@@ -79,10 +77,19 @@ defmodule MeaningGame.Steward.Provider do
   def track_cost(model) do
     case Map.get(prices(), model) do
       {:track, price} -> price
-      price when is_float(price) -> price
       _ -> 0.0
     end
   end
+
+  @doc "Decodes JSON body if binary, returning decoded map or original body on failure."
+  def decode_body(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, json} -> json
+      _ -> body
+    end
+  end
+
+  def decode_body(body), do: body
 
 
   @doc """
