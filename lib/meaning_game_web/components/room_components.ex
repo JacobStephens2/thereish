@@ -82,6 +82,29 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  The Author writing: pulsing beat meter while Gemini writes the Bookends.
+  """
+  def author_writing(assigns) do
+    ~H"""
+    <div data-role="beat-meter" class="flex flex-col items-center gap-2">
+      <div class="flex items-center gap-2" aria-hidden="true">
+        <span class="size-2.5 rounded-full bg-primary animate-ping"></span>
+        <span class="size-2.5 rounded-full bg-primary/70 animate-pulse"></span>
+        <span class="size-2.5 rounded-full bg-primary/40 animate-pulse"></span>
+      </div>
+      <p class="text-xs font-semibold tracking-widest uppercase opacity-60">
+        The Author is writing
+      </p>
+    </div>
+    <p class={if @mode == :stage, do: "text-2xl font-semibold", else: "text-lg font-medium"}>
+      The Author is reading your settings...
+    </p>
+    """
+  end
+
   attr :room, :map, required: true
 
   @doc """

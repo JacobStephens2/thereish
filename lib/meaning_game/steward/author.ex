@@ -15,19 +15,19 @@ defmodule MeaningGame.Steward.Author do
 
   @doc "The JSON schema the Author's responses must satisfy."
   def schema do
-    o([
+    ordered_object([
       {"type", "object"},
       {"properties",
-       o([
+       ordered_object([
          {"bookends",
-          o([
+          ordered_object([
             {"type", "array"},
-            {"items", o([{"type", "string"}])},
+            {"items", ordered_object([{"type", "string"}])},
             {"description",
              "Exactly two words or two-word phrases, each drawn from a different setting when there are two or more."}
           ])},
          {"why",
-          o([
+          ordered_object([
             {"type", "string"},
             {"description",
              "One sentence explaining why these bookends stand far apart in meaning while each belongs to its setting's world."}
@@ -38,7 +38,7 @@ defmodule MeaningGame.Steward.Author do
     ])
   end
 
-  defp o(values), do: %Jason.OrderedObject{values: values}
+  defp ordered_object(values), do: %Jason.OrderedObject{values: values}
 
   @doc "Validates the Author JSON against the schema with JSV."
   def check_schema(json) do
@@ -145,17 +145,25 @@ defmodule MeaningGame.Steward.Author do
     end
   end
 
+  @doc "Extracts text from a Give."
+  def give_text(%{text: text}) when is_binary(text), do: text
+  def give_text(%{"text" => text}) when is_binary(text), do: text
+  def give_text(%{give: text}) when is_binary(text), do: text
+  def give_text(%{"give" => text}) when is_binary(text), do: text
+  def give_text(text) when is_binary(text), do: text
+  def give_text(_), do: ""
+
+  @doc "Extracts seat name from a Give."
+  def give_name(%{name: name}) when is_binary(name), do: name
+  def give_name(%{"name" => name}) when is_binary(name), do: name
+  def give_name(%{seat_name: name}) when is_binary(name), do: name
+  def give_name(%{"seat_name" => name}) when is_binary(name), do: name
+  def give_name(_), do: "Seat"
+
   defp check_no_root_with_gives(bookend_words, gives) do
     give_words =
       gives
-      |> Enum.flat_map(fn
-        %{text: text} -> extract_words(text)
-        %{give: text} -> extract_words(text)
-        %{"text" => text} -> extract_words(text)
-        %{"give" => text} -> extract_words(text)
-        text when is_binary(text) -> extract_words(text)
-        _ -> []
-      end)
+      |> Enum.flat_map(fn g -> g |> give_text() |> extract_words() end)
 
     collision =
       Enum.find_value(bookend_words, fn bw ->
@@ -208,14 +216,7 @@ defmodule MeaningGame.Steward.Author do
       else
         "Settings:\n" <>
           Enum.map_join(gives_list, "\n", fn g ->
-            name = if is_map(g), do: g[:name] || g["name"] || "Player", else: "Player"
-
-            text =
-              if is_map(g),
-                do: g[:text] || g[:give] || g["text"] || g["give"] || "",
-                else: to_string(g)
-
-            "- #{name}: #{text}"
+            "- #{give_name(g)}: #{give_text(g)}"
           end)
       end
 

@@ -40,57 +40,10 @@ defmodule MeaningGame.Experiments do
   def definition(_), do: @first_experiment
 
   @doc """
-  Stratified arm assignment for a given chapter stratum.
-
-  Balances arms within each chapter: if one arm has fewer pages in this chapter,
-  it is assigned next. If balanced, randomly picks with 50/50 probability.
+  Arm assignment is fixed to :flash until Issue 08.
   """
-  @spec assign_arm([atom() | String.t()]) :: :bait | :plain
-  def assign_arm(chapter_history) when is_list(chapter_history) do
-    normalized =
-      Enum.map(chapter_history, fn
-        :bait -> :bait
-        "bait" -> :bait
-        _ -> :plain
-      end)
-
-    bait_count = Enum.count(normalized, &(&1 == :bait))
-    plain_count = Enum.count(normalized, &(&1 == :plain))
-
-    cond do
-      bait_count < plain_count -> :bait
-      plain_count < bait_count -> :plain
-      true -> Enum.random([:bait, :plain])
-    end
-  end
-
-  @doc """
-  Applies experimental arm grading rules to a verdict.
-
-  In the :plain arm, the Assayer's standard grading is preserved.
-  In the :bait arm:
-  - Every Bridge landing on the planted bait is scored as a Meld on the lowest
-    rung (75).
-  - Every Bridge landing on a deep bridge is rewarded with the top rung (95+).
-  - Anything short of the whole table agreeing keeps standard Assayer closeness.
-
-  Note: To preserve blinding during active play, arm labels and trap notices
-  are never written into verdict.reasoning (which is visible on phones and stage).
-  Trap and deep convergence flags are recorded in verdict.meta for Chronicle
-  unblinded viewing.
-  Joint player overrules are never overwritten (ADR-0006, design law 3).
-  """
-  @spec apply_arm_closeness(map(), map(), term(), [String.t()]) :: map()
-  def apply_arm_closeness(verdict, _page, _arm, _bridges) do
-    verdict
-  end
-
-  @doc """
-  Backwards-compatible alias for `apply_arm_closeness/4`.
-  """
-  @spec score_verdict(map(), map(), :bait | :plain | String.t(), [String.t()]) :: map()
-  def score_verdict(verdict, page, arm, bridges),
-    do: apply_arm_closeness(verdict, page, arm, bridges)
+  @spec assign_arm([atom() | String.t()]) :: :flash
+  def assign_arm(_chapter_history \\ []), do: :flash
 
   @doc """
   Computes a qualitative readout comparing the arms.
