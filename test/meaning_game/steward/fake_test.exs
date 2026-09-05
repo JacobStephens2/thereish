@@ -115,6 +115,39 @@ defmodule MeaningGame.Steward.FakeTest do
                {:error, :no_verdict}
     end
 
+    test "Fake.speak answers a fixture MP3 with format and meta" do
+      fake(voice_mode: :ok)
+
+      assert {:ok, result} = Fake.speak("Close. One of you was thinking of the shore.")
+      assert is_binary(result.audio)
+      assert byte_size(result.audio) > 0
+      assert result.format == :mp3
+      assert result.meta.provider == "fake"
+      assert result.meta.cost_usd == 0.0
+    end
+
+    test "Fake.speak obeys dials for unavailable, custom errors, and raise" do
+      fake(voice_mode: :unavailable)
+      assert Fake.speak("Miss.") == {:error, :voice_unavailable}
+
+      fake(voice_mode: {:error, :rate_limited})
+      assert Fake.speak("Miss.") == {:error, :rate_limited}
+
+      fake(voice_mode: :raise)
+
+      assert_raise RuntimeError, "this Voice is having a moment", fn ->
+        Fake.speak("Miss.")
+      end
+    end
+
+    test "Steward.speak measures latency and passes options to adapter" do
+      fake(voice_mode: :ok, voice_delay_ms: 5)
+
+      assert {:ok, result} = MeaningGame.Steward.speak("Meld.", voice_id: "custom-voice")
+      assert result.meta.voice_id == "custom-voice"
+      assert result.meta.latency_ms >= 5
+    end
+
     test "the fake Scribe answers a configured word, or a default word" do
       assert Fake.name_room(["some digest"], ["take"]) == {:ok, "cane"}
 

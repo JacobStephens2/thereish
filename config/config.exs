@@ -131,14 +131,32 @@ config :meaning_game, :steward,
           deadline_ms: 5_000
         ]
       ]
+    ],
+    foley: [
+      elevenlabs_api_key: nil,
+      hume_api_key: nil,
+      hume_secret_key: nil,
+      jobs: [
+        # Either provider is one config line. Dungeon Master (Hume, bake-off winner) with George (ElevenLabs) as alternative.
+        voice: [
+          provider: MeaningGame.Steward.Hume,
+          voice_id: "44cb3a51-07b4-4934-83fd-9d9e8d363ce6",
+          timeout_ms: 3_000
+        ]
+        # Alternative:
+        # voice: [provider: MeaningGame.Steward.ElevenLabs, voice_id: "JBFqnCBsd6RMkjVDRZzb", timeout_ms: 3_000]
+      ]
     ]
   ],
   # Dollars per million tokens, {input, output}, from each provider's pricing
-  # page on 2026-09-02. Google's promotional rate for Flash runs to 2026-12-31;
-  # $1.50 / $7.50 after that. Fable 5.1 is $10 / $50.
+  # page on 2026-09-02, and per-character rates for voice models from
+  # 2026-09-05 ($0.10/1k chars for ElevenLabs v3 Conversational, $0.15/1k chars
+  # for Hume Octave 2).
   prices: %{
     "gemini-3.8-flash" => {0.75, 3.75},
-    "claude-fable-5-1" => {10.0, 50.0}
+    "claude-fable-5-1" => {10.0, 50.0},
+    "eleven_v3_conversational" => 0.00010,
+    "octave-2" => 0.00015
   },
   # The most Seats a Room may hold, because live grading is N choose 2 requests
   # per attempt and six Seats is already fifteen of them. A limit on what a

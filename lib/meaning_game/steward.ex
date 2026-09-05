@@ -83,6 +83,31 @@ defmodule MeaningGame.Steward do
   @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
   @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
+  Speaks one line as audio bytes with format and meta.
+
+  Rendered from the configured voice job. Measured here so latency provenance is
+  kept by the seam.
+  """
+  @spec speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def speak(line, opts \\ []) do
+    started = System.monotonic_time(:millisecond)
+
+    case adapter().speak(line, opts) do
+      {:ok, %{meta: meta} = answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, %{answer | meta: Map.put_new(meta, :latency_ms, latency)}}
+
+      {:ok, answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, Map.put(answer, :meta, %{latency_ms: latency})}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
   @doc """
   Asks the Scribe to name a Room with one four-letter word that nods to the
