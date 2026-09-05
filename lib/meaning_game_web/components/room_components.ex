@@ -105,7 +105,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
     </div>
     <p class={if @mode == :stage, do: "text-2xl font-semibold", else: "text-lg font-medium"}>
-      {if @room[:author_step] in [:still_writing, :slow],
+      {if @room[:author_step] == :still_writing,
         do: "The Author is still writing...",
         else: "The Author is reading your settings..."}
     </p>
