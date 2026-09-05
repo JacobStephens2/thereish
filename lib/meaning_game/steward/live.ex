@@ -108,6 +108,102 @@ defmodule MeaningGame.Steward.Live do
     end
   end
 
+  @impl true
+  def forge(brief, opts \\ []) do
+    brief_map = if is_binary(brief), do: %{prompt: brief}, else: Map.new(brief)
+    n = Keyword.get(opts, :n, 4)
+    kind = Map.get(brief_map, :kind) || Keyword.get(opts, :kind, :effects)
+
+    case kind do
+      :music ->
+        role = Steward.role(:foley, :music)
+        prompt = Map.get(brief_map, :prompt) || brief_map[:text] || ""
+        deadline_ms = Map.get(role, :deadline_ms, 180_000)
+
+        # Mureka enforces concurrent requests limit 1, so generate sequentially
+        results =
+          Enum.map(1..n, fn _ ->
+            params =
+              role
+              |> Map.merge(brief_map)
+              |> Map.merge(Map.new(opts))
+              |> Map.put(:prompt, prompt)
+              |> Map.put(:n, Map.get(role, :n, 1))
+
+            MeaningGame.Steward.Mureka.generate(params)
+          end)
+
+        with :ok <- check_all_ok(results) do
+          candidates =
+            Enum.map(results, fn {:ok, result} ->
+              %{
+                bytes: result.bytes,
+                meta: %{
+                  model: result.model,
+                  cost_usd: result.cost_usd,
+                  latency_ms: 0
+                }
+              }
+            end)
+
+          {:ok, candidates}
+        end
+
+      _effects ->
+        role = Steward.role(:foley, :effects)
+        text = Map.get(brief_map, :prompt) || Map.get(brief_map, :text) || ""
+        timeout_ms = Map.get(role, :timeout_ms, 30_000)
+
+        tasks =
+          for _ <- 1..n do
+            Task.async(fn ->
+              params =
+                role
+                |> Map.merge(brief_map)
+                |> Map.merge(Map.new(opts))
+                |> Map.put(:text, text)
+
+              MeaningGame.Steward.ElevenLabs.generate(params)
+            end)
+          end
+
+        results = Task.await_many(tasks, timeout_ms * n)
+
+        with :ok <- check_all_ok(results) do
+          candidates =
+            Enum.map(results, fn {:ok, result} ->
+              %{
+                bytes: result.bytes,
+                meta: %{
+                  model: result.model,
+                  cost_usd: result.cost_usd,
+                  latency_ms: 0
+                }
+              }
+            end)
+
+          {:ok, candidates}
+        end
+    end
+  end
+
+  defp check_all_ok(results) do
+    case Enum.find(results, fn
+           {:ok, _} -> false
+           _ -> true
+         end) do
+      nil -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def rank(candidates, brief) do
+    role = Steward.role(:foley, :ear)
+    MeaningGame.Steward.Gemini.rank(candidates, brief, role)
+  end
+
+
   # The Scribe's gate, both halves of it, run as the Gate's own last word — so
   # the repair pass is the retry the seam already knows how to do and the model
   # is handed the rule that fired rather than a shrug (design law 14). The
