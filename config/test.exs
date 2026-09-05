@@ -42,7 +42,11 @@ config :meaning_game, :steward,
   adapter: MeaningGame.Steward.Fake,
   roles: [
     assayer: [timeout_ms: 1_000, deadline_ms: 2_000, api_key: "recorded-responses-need-no-key"],
-    author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"]
+    author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"],
+    scribe: [
+      api_key: "recorded-responses-need-no-key",
+      jobs: [recap: [timeout_ms: 2_000, deadline_ms: 5_000]]
+    ]
   ],
   http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]
 

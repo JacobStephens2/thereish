@@ -1,0 +1,6 @@
+extends: existence
+message: "'%s' is the epigram machine talking. Say the one true thing and stop."
+level: error
+ignorecase: true
+raw:
+  - "\\b(?:it(?:'s| is| was|'s not| isn't| wasn't)? ?)?not (?:just|only|merely|simply) [^.,;]{1,40}[,;] (?:it(?:'s| is| was)|but|they(?:'re| are)) "

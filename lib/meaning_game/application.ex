@@ -21,6 +21,12 @@ defmodule MeaningGame.Application do
       # is slow, or that dies, is something the Room waits on rather than
       # something that happens to it.
       {Task.Supervisor, name: MeaningGame.Steward.Tasks},
+      # The Scribe writes under its own supervisor rather than the Steward's,
+      # because its work is a different length of thing: an assay lives and dies
+      # inside a reveal beat, and a recap is a model writing a paragraph after
+      # everyone has stood up. Nothing should have to wait on one to know about
+      # the other.
+      {Task.Supervisor, name: MeaningGame.Scribe.Tasks},
       # Start to serve requests, typically the last entry
       MeaningGameWeb.Endpoint
     ]

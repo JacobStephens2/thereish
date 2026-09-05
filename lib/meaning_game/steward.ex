@@ -62,8 +62,39 @@ defmodule MeaningGame.Steward do
           meta: meta()
         }
 
+  @typedoc """
+  A closed Page written back to the players in their own words, the line that
+  reaches back to an earlier Page (or nothing, on an evening with nothing behind
+  it), and what writing it took.
+  """
+  @type recap :: %{
+          recap: String.t(),
+          callback: String.t() | nil,
+          meta: %{
+            model: String.t(),
+            prompt_version: String.t(),
+            cost_usd: float() | nil,
+            latency_ms: non_neg_integer(),
+            attempts: pos_integer()
+          }
+        }
+
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
   @callback author(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
+
+  @doc """
+  Writes one closed Page back into the Chronicle as prose.
+
+  Asked after a Page closes, from a task nobody is waiting on, which is what
+  lets the Scribe have a model that writes well rather than one that answers
+  fast. An error is not a crash and not an empty paragraph: the Chronicle simply
+  has no recap for that Page, which is a thing the book says out loud.
+  """
+  @spec recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
+  def recap(page, digest) do
+    adapter().recap(page, digest)
+  end
 
   @doc """
   Pre-generates a Page ahead of play against a named Chapter.
@@ -169,11 +200,37 @@ defmodule MeaningGame.Steward do
   """
   @spec role(atom()) :: map()
   def role(name) do
+    name |> settings() |> Keyword.delete(:jobs) |> Map.new()
+  end
+
+  @doc """
+  What answers one *job* of one role.
+
+  Only the Scribe has these, and it has them because its two jobs disagree about
+  what matters. Naming a Room happens with a table waiting for a Code and wants
+  the fast tier; writing a recap happens after everyone has gone to bed and
+  wants the model that writes best. A role whose every job wants the same model
+  needs none of this and does not have any.
+
+  A job inherits everything the role says and overrides only what it names, so
+  the API key and the retry count are written once.
+  """
+  @spec role(atom(), atom()) :: map()
+  def role(name, job) do
+    settings = settings(name)
+
+    settings
+    |> Keyword.get(:jobs, [])
+    |> Keyword.fetch!(job)
+    |> then(&Keyword.merge(Keyword.delete(settings, :jobs), &1))
+    |> Map.new()
+  end
+
+  defp settings(name) do
     :meaning_game
     |> Application.fetch_env!(:steward)
     |> Keyword.fetch!(:roles)
     |> Keyword.fetch!(name)
-    |> Map.new()
   end
 
   @doc """

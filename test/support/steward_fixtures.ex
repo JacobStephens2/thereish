@@ -176,6 +176,31 @@ defmodule MeaningGame.StewardFixtures do
     Application.put_env(:meaning_game, :steward, live)
   end
 
+  @doc """
+  Puts the live Scribe behind the seam and takes the recorded responses out of
+  its way, for the smoke test that is meant to call somebody.
+  """
+  def let_it_call_anthropic do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    key =
+      System.get_env("ANTHROPIC_API_KEY") ||
+        flunk("this test calls a provider and needs ANTHROPIC_API_KEY in the environment")
+
+    live =
+      steward
+      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :scribe, :api_key], key)
+      # The suite's Scribe answers in two seconds because it is a recording. A
+      # model writing a real paragraph is given the couch's own budget.
+      |> put_in([:roles, :scribe, :jobs, :recap, :timeout_ms], 120_000)
+      |> put_in([:roles, :scribe, :jobs, :recap, :deadline_ms], 300_000)
+
+    Application.put_env(:meaning_game, :steward, live)
+  end
+
   @doc "Puts a recorded response behind the Author's provider for this test."
   def recorded_author(answer) when is_function(answer, 2) do
     Req.Test.stub(MeaningGame.Steward.Anthropic, fn conn ->
@@ -202,6 +227,41 @@ defmodule MeaningGame.StewardFixtures do
         "output_tokens" => Keyword.get(opts, :output_tokens, 350)
       }
     }
+  end
+
+  @doc """
+  Puts the live Scribe behind the seam for one test, with a recorded provider
+  behind that.
+
+  Configuration is global, so a test that reaches for this cannot be async.
+  """
+  def live_scribe(job_opts \\ []) do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    recap = Keyword.merge(steward[:roles][:scribe][:jobs][:recap], job_opts)
+
+    live =
+      steward
+      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> put_in([:roles, :scribe, :api_key], "recorded-responses-need-no-key")
+      |> put_in([:roles, :scribe, :jobs, :recap], recap)
+
+    Application.put_env(:meaning_game, :steward, live)
+  end
+
+  @doc "A well-formed recap, as the Scribe writes it: a JSON object in a string."
+  def written_recap(opts \\ []) do
+    Jason.encode!(%{
+      "recap" =>
+        Keyword.get(
+          opts,
+          :recap,
+          ~s(Jacob wrote "cairn" and Melissa wrote "beacon", and they spent the evening ) <>
+            ~s(circling the same lonely hill.)
+        ),
+      "callback" => Keyword.get(opts, :callback, "")
+    })
   end
 
   @doc "A well-formed authored page JSON."

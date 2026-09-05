@@ -50,6 +50,8 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward.Assay
   alias MeaningGame.Steward.Gate
   alias MeaningGame.Steward.Precedent
+  alias MeaningGame.Steward.Recap
+  alias MeaningGame.Steward.Vale
 
   @impl true
   def assay(%{anchors: anchors, bridges: bridges}) when length(bridges) >= 2 do
@@ -82,6 +84,43 @@ defmodule MeaningGame.Steward.Live do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @impl true
+  def recap(page, digest) do
+    role = Steward.role(:scribe, :recap)
+    prompt = Recap.prompt(page, digest)
+
+    case Gate.answer(role, prompt, &accept(&1, page)) do
+      {:ok, answer} ->
+        {:ok,
+         Map.put(Recap.recap(answer.json), :meta, %{
+           model: answer.model,
+           prompt_version: Map.get(role, :prompt_version, Recap.version()),
+           cost_usd: answer.cost_usd,
+           latency_ms: answer.latency_ms,
+           attempts: answer.attempts
+         })}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # The Scribe's gate, both halves of it, run as the Gate's own last word — so
+  # the repair pass is the retry the seam already knows how to do and the model
+  # is handed the rule that fired rather than a shrug (design law 14). The
+  # `retries: 1` on the role is what makes it *one* repair pass.
+  #
+  # The cheap check runs first: a recap about nobody's words is a rejection a
+  # regular expression can write, and there is no sense starting a linter to
+  # find it.
+  defp accept(json, page) do
+    with :ok <- Recap.check(json, page) do
+      %{recap: recap, callback: callback} = Recap.recap(json)
+
+      Vale.check(Enum.join(Enum.reject([recap, callback], &is_nil/1), "\n\n"))
     end
   end
 

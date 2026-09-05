@@ -1,0 +1,6 @@
+extends: existence
+message: "No exclamation marks. The recap is warm because of what it notices, not because of its punctuation."
+level: error
+nonword: true
+tokens:
+  - '!'

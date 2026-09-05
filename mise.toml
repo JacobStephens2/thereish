@@ -1,3 +1,7 @@
 [tools]
 elixir = "1.19.6-otp-28"
 erlang = "28.5"
+# The Scribe's prose gate (design law 14). Pinned to the version the guardrails
+# research was verified against, and pinned here rather than left to whoever's
+# laptop, because a gate that is only installed on one machine is not a gate.
+vale = "3.19.0"

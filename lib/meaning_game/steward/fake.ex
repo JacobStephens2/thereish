@@ -27,6 +27,16 @@ defmodule MeaningGame.Steward.Fake do
   that says it cannot answer, and `mode: :raise` is one that falls over without
   saying anything — the two shapes a failed grade comes in, both of which the
   game answers the same way.
+
+  ## The other two roles
+
+  The Author and the Scribe have the same dials under the same names —
+  `author_mode`, `author_delay_ms`, `recap_mode`, `recap_delay_ms` — and the
+  Scribe takes a `recap` and a `recap_callback` for a test that wants particular
+  prose. Left alone, the fake Scribe writes the one true sentence about a Page
+  out of the Bridges in it, and reaches back for a callback only when the digest
+  it was handed has something in it, which is the same thing that decides it for
+  the real one.
   """
   @behaviour MeaningGame.Steward
 
@@ -80,6 +90,57 @@ defmodule MeaningGame.Steward.Fake do
         raise "this Author is having a moment"
     end
   end
+
+  @impl true
+  def recap(page, digest) do
+    delay = config_get(:recap_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:recap_mode, :ok) do
+      :ok ->
+        {:ok,
+         %{
+           recap: config_get(:recap, nil) || written(page),
+           callback: config_get(:recap_callback, nil) || remembered(digest),
+           meta: %{
+             model: "fake-scribe",
+             prompt_version: "fake-recap-1",
+             cost_usd: 0.0,
+             latency_ms: delay,
+             attempts: 1
+           }
+         }}
+
+      :unavailable ->
+        {:error, :no_recap}
+
+      :raise ->
+        raise "this Scribe is having a moment"
+    end
+  end
+
+  # The Scribe with no model behind it writes the one true sentence about a
+  # Page: who wrote what, first and last. It is a dial like the grade is — a
+  # test that wants a recap naming a word writes that word as a Bridge — and it
+  # is deliberately prose the real Vale gate would pass, so that no test is ever
+  # asserting on a paragraph the couch would never be shown.
+  defp written(page) do
+    first = List.first(page.attempts)
+    last = List.last(page.attempts)
+
+    opening = Enum.map_join(first.bridges, ", ", &~s(#{&1.seat_name} wrote "#{&1.bridge}"))
+    closing = Enum.map_join(last.bridges, " and ", &~s("#{&1.bridge}"))
+
+    ending = if page.melded, do: "They met at", else: "They ended on"
+
+    "On the first attempt, #{opening}. #{ending} #{closing}."
+  end
+
+  # A callback needs a Chronicle to reach back into, and a Room playing its
+  # first Page has none. The fake tells the two apart the same way the real
+  # Scribe is asked to: by whether the digest has anything in it.
+  defp remembered("Nothing yet" <> _rest), do: nil
+  defp remembered(_digest), do: "They have been here before."
 
   @default_band_scripts %{
     "miss" => "Different neighbourhoods entirely.",
