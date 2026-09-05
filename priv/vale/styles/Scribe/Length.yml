@@ -1,0 +1,6 @@
+extends: metric
+message: "A recap runs to %s words. Keep it under 80 — this is a paragraph in a book, not a report."
+level: error
+formula: |
+  words
+condition: "> 80.0"

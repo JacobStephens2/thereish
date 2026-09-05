@@ -460,6 +460,8 @@ defmodule MeaningGame.Rooms.Server do
     arm = state[:current_arm] || :bait
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
 
+    scribe(state.room, page)
+
     state
   rescue
     error ->
@@ -507,6 +509,55 @@ defmodule MeaningGame.Rooms.Server do
     end)
 
     waiting_on(state)
+  end
+
+  # The Scribe writes after play, and after play means after the Page is safely
+  # in the Chronicle: the recap is about rows that exist. It runs in a task and
+  # not here because the model that writes recaps takes the better part of a
+  # minute, and the Room has a next Page to deal — nobody at the couch waits for
+  # a paragraph.
+  #
+  # The recap is asked for and written entirely inside the task. Nothing is sent
+  # back to the Room, because nothing in the Room's state depends on it: the
+  # book computes the recap from its row, so telling everyone looking at the
+  # Chronicle to look again is the whole of the update.
+  defp scribe(room, page) do
+    Task.Supervisor.start_child(MeaningGame.Scribe.Tasks, fn ->
+      write_recap(room, page)
+    end)
+  end
+
+  defp write_recap(room, page) do
+    # The digest is composed before the recap is asked for, so it holds every
+    # Page but this one — which is what a callback reaches back into. Written
+    # out of the log rather than passed down from here, because the Page has
+    # just been read back out of it and the two views should not be able to
+    # disagree.
+    [view] = Enum.filter(Chronicle.page_views(room.id, :desc), &(&1.id == page.id))
+    digest = Chronicle.scribe_digest(room.id, page.id)
+
+    case Steward.recap(view, digest) do
+      {:ok, recap} ->
+        {:ok, _row} =
+          Chronicle.record_recap(room.id, Map.put(recap, :page_id, page.id))
+
+        # The Chronicle changed and the Room did not, which is exactly the
+        # difference between the two events: a phone in the middle of a Page has
+        # nothing to redraw, and a phone reading the book has a new paragraph.
+        Phoenix.PubSub.broadcast(
+          MeaningGame.PubSub,
+          MeaningGame.Rooms.topic(room.slug),
+          :chronicle_changed
+        )
+
+      {:error, reason} ->
+        # A Page with no recap is a Page with no recap. The book says so, and
+        # the couple can write their own (design law 5).
+        Logger.warning("the Scribe wrote no recap for #{room.slug}: #{inspect(reason)}")
+    end
+  rescue
+    error ->
+      Logger.error("the Scribe fell over: #{Exception.message(error)}")
   end
 
   # One assay per Attempt, so the ladder is armed by the asking and there is

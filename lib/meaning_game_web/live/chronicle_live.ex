@@ -444,6 +444,26 @@ defmodule MeaningGameWeb.ChronicleLive do
             <p class="mt-1 italic">"{o.couple_reasoning}"</p>
           </div>
 
+          <!-- What the Scribe wrote about this Page -->
+          <div
+            :if={page.recap}
+            data-role="recap"
+            class="flex flex-col gap-1.5 rounded border-l-2 border-primary/40 bg-base-200/40 px-3 py-2.5"
+          >
+            <span class="text-xs uppercase tracking-wider opacity-50">The Scribe</span>
+            <p data-role="recap-prose" class="text-sm leading-relaxed">{page.recap.recap}</p>
+            <p
+              :if={page.recap.callback}
+              data-role="recap-callback"
+              class="text-sm italic leading-relaxed opacity-80"
+            >
+              {page.recap.callback}
+            </p>
+            <p :if={page.recap.corrected?} class="text-xs opacity-50">
+              Corrected by the players.
+            </p>
+          </div>
+
           <!-- Corrections Section -->
           <div
             :if={page.corrections != []}
@@ -517,6 +537,9 @@ defmodule MeaningGameWeb.ChronicleLive do
                   name="correction[target]"
                   class="select select-sm w-full rounded border border-base-300 bg-base-100"
                 >
+                  <option value="recap" selected={@correction_params["target"] == "recap"}>
+                    Recap
+                  </option>
                   <option value="bridge" selected={@correction_params["target"] == "bridge"}>
                     Bridge
                   </option>

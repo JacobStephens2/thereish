@@ -93,10 +93,22 @@ defmodule MeaningGame.Chronicle.Markdown do
       end
 
     sections =
-      [Enum.join(meta_lines, "\n"), attempts_md, page_corrections_md]
+      [Enum.join(meta_lines, "\n"), render_recap(page[:recap]), attempts_md, page_corrections_md]
       |> Enum.reject(&(&1 in [nil, ""]))
 
     Enum.join(sections, "\n\n")
+  end
+
+  # The Scribe's paragraph, as a blockquote at the head of the Page — which is
+  # where a reader wants the story before the ledger of what was written, and
+  # which is one Markdown construct rather than a heading the parser would have
+  # to tell from an attempt's.
+  defp render_recap(nil), do: nil
+
+  defp render_recap(recap) do
+    [recap.recap, recap[:callback]]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map_join("\n>\n", fn paragraph -> "> " <> paragraph end)
   end
 
   defp render_attempt(attempt) do
@@ -282,8 +294,25 @@ defmodule MeaningGame.Chronicle.Markdown do
       give: give,
       experiment: experiment,
       arm: arm,
+      recap: parse_recap(meta_lines),
       attempts: attempts
     }
+  end
+
+  # The blockquote, back into its two paragraphs. A Page the Scribe never got to
+  # has none, which reads back as `nil` rather than as an empty paragraph.
+  defp parse_recap(meta_lines) do
+    case meta_lines |> Enum.filter(&String.starts_with?(&1, ">")) |> quoted() do
+      [] -> nil
+      [recap] -> %{recap: recap, callback: nil}
+      [recap, callback | _] -> %{recap: recap, callback: callback}
+    end
+  end
+
+  defp quoted(lines) do
+    lines
+    |> Enum.map(&(&1 |> String.replace_prefix(">", "") |> String.trim()))
+    |> Enum.reject(&(&1 == ""))
   end
 
   defp parse_attempt_chunk(chunk) do

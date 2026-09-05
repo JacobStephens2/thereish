@@ -90,6 +90,35 @@ config :meaning_game, :steward,
       timeout_ms: 120_000,
       deadline_ms: 300_000,
       api_key: nil
+    ],
+    # The Scribe is the one role whose jobs want different models, so it is the
+    # one role configured per job. Naming a Room happens with a table waiting
+    # for a Code and wants the fast tier; writing a recap happens after everyone
+    # has gone to bed and wants the model that writes well. A `jobs` entry
+    # inherits everything the role says and overrides what it names.
+    scribe: [
+      api_key: nil,
+      # One repair pass and no more (design law 14). The gates hand back the
+      # rule that fired, a model told which rule fired usually fixes it, and a
+      # model that did not fix it the first time writes a worse paragraph the
+      # third — there is no player waiting, so a missing recap costs nothing.
+      retries: 1,
+      jobs: [
+        recap: [
+          # `claude-fable-5-1` because the Steward prototype measured it writing
+          # the best recaps of the models benched, and long ones — which is what
+          # the Vale gate is for rather than a reason to pick a worse writer.
+          provider: MeaningGame.Steward.Anthropic,
+          model: "claude-fable-5-1",
+          effort: "low",
+          max_tokens: 8_000,
+          # Nobody is waiting. The budget is generous because a recap that takes
+          # a minute is a recap, and a recap that was rushed is a paragraph the
+          # couple will read next month.
+          timeout_ms: 60_000,
+          deadline_ms: 150_000
+        ]
+      ]
     ]
   ],
   # Dollars per million tokens, {input, output}, from each provider's pricing

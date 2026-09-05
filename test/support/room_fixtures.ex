@@ -29,6 +29,12 @@ defmodule MeaningGame.RoomFixtures do
       Supervisor.child_spec({Server, slug: slug}, id: {Server, slug})
     )
 
+    # A Page that closes leaves the Scribe writing in a task the Room does not
+    # wait for. Neither should the test — until it ends, at which point a task
+    # still talking to Postgres would be talking to a sandbox connection whose
+    # owner has gone.
+    ExUnit.Callbacks.on_exit(&await_scribe/0)
+
     slug
   end
 
@@ -134,6 +140,27 @@ defmodule MeaningGame.RoomFixtures do
       end,
       "the reveal never landed in this Room"
     )
+  end
+
+  @doc """
+  Waits until the Scribe has finished writing.
+
+  It writes from a task the Room deliberately does not wait for, so a test that
+  wants to look at what it decided — including a test that wants to see it
+  decide nothing — waits for the task rather than for a row that may never
+  arrive. It also keeps the sandbox honest: a task still holding a connection
+  when the test's owner exits takes the connection down with it.
+
+  The Assayer's tasks are somebody else's supervisor and are deliberately not
+  waited on here: a test that wants a slow grade wants it still in flight.
+  """
+  def await_scribe do
+    eventually(
+      fn -> Task.Supervisor.children(MeaningGame.Scribe.Tasks) == [] end,
+      "the Scribe was still writing"
+    )
+
+    :ok
   end
 
   @doc """

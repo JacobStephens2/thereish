@@ -33,6 +33,12 @@ defmodule MeaningGameWeb.StageLive do
   @impl true
   def handle_info(:room_changed, socket), do: {:noreply, resync(socket)}
 
+  # A recap landing is news for the book and for nothing on this screen. It
+  # arrives here because the Scribe broadcasts on the Room's topic, and it is
+  # ignored here on purpose rather than by a catch-all: a message this screen
+  # does not know about should still be a crash.
+  def handle_info(:chronicle_changed, socket), do: {:noreply, socket}
+
   # The stage holds no Seat, so it sees the Room the way anyone standing behind
   # the couch sees it.
   defp resync(socket), do: assign(socket, :room, Rooms.snapshot(socket.assigns.slug, nil))

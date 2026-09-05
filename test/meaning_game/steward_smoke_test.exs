@@ -12,7 +12,7 @@ defmodule MeaningGame.StewardSmokeTest do
   Run it by hand, with a key, after changing anything about the prompt, the
   schema, or the model:
 
-      GEMINI_API_KEY=... mix test --include live
+      GEMINI_API_KEY=... ANTHROPIC_API_KEY=... mix test --include live
 
   One test per role, and one more for the table: the couch's grading and a
   four-word grading are the same call, but they are not the same prompt or the
@@ -28,8 +28,8 @@ defmodule MeaningGame.StewardSmokeTest do
   alias MeaningGame.Ladder
   alias MeaningGame.Steward
 
-  setup do
-    let_it_call_the_provider()
+  setup context do
+    if context[:anthropic], do: let_it_call_anthropic(), else: let_it_call_the_provider()
   end
 
   test "the Assayer grades a real pair, in both orderings, inside the beat" do
@@ -96,6 +96,59 @@ defmodule MeaningGame.StewardSmokeTest do
         "in #{verdict.meta.latency_ms} ms for $#{Float.round(verdict.meta.cost_usd, 5)}" <>
         "\n  furthest apart: #{left} / #{right}" <>
         "\n  #{verdict.reasoning}\n  #{verdict.quip}\n"
+    )
+  end
+
+  @tag :anthropic
+  test "the Scribe writes a real recap, and Vale lets it through" do
+    page = %{
+      anchors: ["lantern", "harbour"],
+      melded: true,
+      attempts: [
+        %{
+          number: 1,
+          anchors: ["lantern", "harbour"],
+          bridges: [
+            %{seat_name: "Jacob", bridge: "keeper"},
+            %{seat_name: "Mara", bridge: "guide"}
+          ],
+          verdicts: [
+            %{band: "adjacent", reasoning: "Two jobs on the same shore.", closeness: 41}
+          ]
+        },
+        %{
+          number: 2,
+          anchors: ["keeper", "guide"],
+          bridges: [
+            %{seat_name: "Jacob", bridge: "watch"},
+            %{seat_name: "Mara", bridge: "watch"}
+          ],
+          verdicts: [%{band: "deep_meld", reasoning: "The same word twice.", closeness: 100}]
+        }
+      ]
+    }
+
+    digest = """
+    Page 1 (candy · cane) [Give: Christmas] — Melded on attempt 2 (closeness: 88, meld)
+      Attempt 2: Jacob bridged "hook", Mara bridged "hook". Verdict: 88 (meld)
+      Recap: Both of them wrote hook, and neither would say why.
+    """
+
+    {:ok, recap} = Steward.recap(page, digest)
+
+    # It got past both gates, which is the whole claim: a real model's real
+    # paragraph is prose the couch would be shown.
+    assert String.trim(recap.recap) != ""
+    refute recap.recap =~ ~r/\d/
+
+    # A digest with a candy cane in it is a digest with something to reach back
+    # for, though whether the Scribe reaches is its own judgement rather than
+    # something to fail a build over.
+    IO.puts(
+      "\n  live Scribe: #{recap.meta.model} in #{recap.meta.latency_ms} ms " <>
+        "over #{recap.meta.attempts} attempt(s) for $#{Float.round(recap.meta.cost_usd, 5)}" <>
+        "\n  #{recap.recap}" <>
+        "\n  callback: #{recap.callback || "(none)"}\n"
     )
   end
 end

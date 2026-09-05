@@ -1,0 +1,11 @@
+extends: existence
+message: "'%s' restates the Assayer's grade. The recap tells the story; the number is the verdict's (ADR-0006)."
+level: error
+ignorecase: true
+tokens:
+  - 'out of (?:a hundred|100)'
+  - 'score[ds]?'
+  - 'scoring'
+  - 'closeness of'
+  - '\d+ ?(?:points|%)'
+  - 'graded (?:it |them )?(?:a |an )?\d+'

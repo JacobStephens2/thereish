@@ -8,6 +8,8 @@
 
 This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the role's seat in the Steward's configuration; the Scribe proper — recaps and the Vale gate — is `.scratch/scribe/issues/01`.
 
+**Since this was filed**, `scribe/01` shipped and built the seat: the `scribe` role exists in `config/config.exs` with the API key and retry count on the role and a `jobs:` list under it, read by `MeaningGame.Steward.role/2`. This ticket adds a `naming:` job beside `recap:` — Gemini 3.8 Flash, its own short timeout and deadline — and inherits the rest. The digest to read is `Chronicle.digest/1` (the Author's) rather than `scribe_digest/2`, which is the recaps folded in and is about the Scribe's own past prose.
+
 **The seam.** The Steward behaviour gains a naming callback: given a list of Chronicle digests and the Codes already taken, answer with one word. Both adapters satisfy it. The fake answers a configured word, or nothing when configured to, so a test can assert either the word was used or the fallback drew a real one.
 
 **The role.** A `scribe` role in configuration: Gemini 3.8 Flash at low effort, because a table is waiting; one request, no hedging; a short timeout and a deadline shorter than the Assayer's, both settings. The prompt asks for one real English word of four letters that nods to the history, avoiding the taken Codes, and the schema is one string. The digest it reads is the same digest the Author already reads for a Give.

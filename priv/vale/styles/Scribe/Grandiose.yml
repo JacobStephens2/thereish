@@ -1,0 +1,18 @@
+extends: substitution
+message: "Write '%s' rather than '%s'. The Scribe writes the players' words back to them, not a brochure."
+level: error
+ignorecase: true
+swap:
+  'journeys?': evening
+  'delv(?:e|es|ed|ing)': dig
+  'tapestr(?:y|ies)': run
+  'testaments?': proof
+  'realms?': place
+  'landscapes?': ground
+  'underscor(?:e|es|ed|ing)': show
+  'showcas(?:e|es|ed|ing)': show
+  'navigat(?:e|es|ed|ing)': find
+  'unpack(?:s|ed|ing)?': open
+  'leverag(?:e|es|ed|ing)': use
+  'utiliz(?:e|es|ed|ing)': use
+  '(?:true|real) masterclass': good one

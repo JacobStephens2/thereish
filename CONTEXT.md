@@ -104,6 +104,14 @@ _Avoid_: tier, bucket, rank, grade (that's the number itself)
 The cached verdict that future identical inputs inherit — the grade the players saw. Only a joint overrule rewrites it.
 _Avoid_: cache entry, ruling, second opinion
 
+**Recap**:
+The Scribe's paragraph about one closed Page, written after play in the players' own words back to them. It carries no number: the grade is the Verdict's and a recap never restates one. Player-editable like everything else in the Chronicle, and a Page the Scribe could not write about simply has none.
+_Avoid_: summary, narration, AI summary, blurb
+
+**Callback**:
+The line in a Recap that reaches back to an earlier Page — the sentence next month that remembers tonight's candy cane. It touches the Chronicle and nothing else: a callback never becomes the Author's next Anchors. A Room with nothing behind it has no callback rather than an invented one.
+_Avoid_: reference, easter egg, throwback, memory
+
 **Chronicle**:
 The persistent, player-visible and player-editable record of one Room's play history — every Page, every ruling, every overrule — kept by the machine and woven back into that Room's future Pages. Every Room has its own.
 _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)

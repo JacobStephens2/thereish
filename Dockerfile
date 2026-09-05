@@ -80,6 +80,17 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
+# The Scribe's prose gate. It is a single Go binary and it is the only thing the
+# app ever shells out to; without it there is no recap at all, because prose
+# nobody checked is not shown (design law 14). Pinned to the same version as
+# `mise.toml`, so the gate that ran on the laptop is the gate that runs here.
+ARG VALE_VERSION="3.19.0"
+ADD https://github.com/vale-cli/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz /tmp/vale.tar.gz
+RUN tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale \
+  && chmod +x /usr/local/bin/vale \
+  && rm /tmp/vale.tar.gz \
+  && vale --version
+
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
   && locale-gen

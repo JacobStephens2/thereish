@@ -27,6 +27,85 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
     await_reveal(ctx.slug)
   end
 
+  # The Scribe writes from a task the Room does not wait for, so a page that
+  # wants the paragraph on screen waits for it the way the phone does.
+  defp await_recap(slug) do
+    eventually(
+      fn -> Chronicle.recaps(Repo.get_by!(Room, slug: slug).id) != [] end,
+      "the Scribe never wrote a recap for #{slug}"
+    )
+  end
+
+  describe "what the Scribe wrote" do
+    test "is on the Page it was written about", %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairo")
+      await_recap(slug)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=recap]")
+      assert render(element(view, "[data-role=recap-prose]")) =~ "cairn"
+    end
+
+    test "is nowhere at all on a Page the Scribe could not write",
+         %{conn: conn, slug: slug} = ctx do
+      steward(recap_mode: :unavailable)
+      play(ctx, "cairn", "cairo")
+      await_scribe()
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=chronicle-page]")
+      refute has_element?(view, "[data-role=recap]")
+    end
+
+    test "is the players' to rewrite, like everything else in the book",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairo")
+      await_recap(slug)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+      [page] = Chronicle.book(slug)
+
+      view
+      |> element(~s([data-role=open-correction][data-page-id="#{page.id}"]))
+      |> render_click()
+
+      view
+      |> form(~s(form[data-role=correction-form]), %{
+        "correction" => %{
+          "attempt_number" => "",
+          "target" => "recap",
+          "original_value" => page.recap.recap,
+          "corrected_value" => "We both wrote cairn, near enough, and went to bed.",
+          "note" => "The Scribe missed the point"
+        }
+      })
+      |> render_submit()
+
+      assert render(element(view, "[data-role=recap-prose]")) =~
+               "We both wrote cairn, near enough"
+
+      assert render(view) =~ "The Scribe missed the point"
+    end
+
+    test "arrives on a book that is already open", %{conn: conn, slug: slug} = ctx do
+      # The paragraph lands after the reveal, so a phone left on the Chronicle
+      # gets it without being asked to look again.
+      steward(recap_delay_ms: 150)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      play(ctx, "cairn", "cairo")
+      await_recap(slug)
+
+      assert eventually(
+               fn -> render(view) =~ "cairn" and has_element?(view, "[data-role=recap]") end,
+               "the recap never reached a book that was already open"
+             )
+    end
+  end
+
   describe "the Chronicle book page" do
     test "shows empty state when no pages have closed", %{conn: conn, slug: slug} do
       {:ok, view, html} = live(conn, ~p"/r/#{slug}/chronicle")
