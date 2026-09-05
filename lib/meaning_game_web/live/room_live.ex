@@ -357,7 +357,7 @@ defmodule MeaningGameWeb.RoomLive do
           You are <span class="font-semibold">{@seat.name}</span>.
         </p>
         <div class="flex items-center justify-between">
-          <h1 class="text-lg font-semibold">Meaning Game</h1>
+          <h1 class="text-lg font-semibold">Thereish</h1>
           <.link
             navigate={chronicle_path(@slug)}
             class="text-sm font-medium underline opacity-70 hover:opacity-100"

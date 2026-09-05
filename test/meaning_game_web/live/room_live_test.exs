@@ -682,7 +682,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {footer_idx, _} = :binary.match(phone_html, "<footer")
       assert reveal_idx < footer_idx
       assert has_element?(ctx.mara, "footer [data-role=you]", "Mara")
-      assert has_element?(ctx.mara, "footer h1", "Meaning Game")
+      assert has_element?(ctx.mara, "footer h1", "Thereish")
+      assert has_element?(ctx.stage, "header h1", "Thereish")
       assert has_element?(ctx.mara, "footer a", "The Chronicle")
 
       # Stage has public stage mode and no private (you) attribution
