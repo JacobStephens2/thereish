@@ -75,9 +75,11 @@ defmodule MeaningGame.Rooms.Server do
   @impl true
   def init(opts) do
     slug = Keyword.fetch!(opts, :slug)
-    seat_limit = Keyword.fetch!(opts, :seat_limit)
 
-    with {:ok, room} <- Store.get_or_create_room(slug, seat_limit) do
+    # A Room is created through `MeaningGame.Rooms.create/2` and nowhere else,
+    # so a process asked to start for a Code no Room has is a bug upstream, not
+    # a Room to bring into being.
+    with %{} = room <- Store.get_room(slug) do
       seats = Store.list_seats(room.id)
       page = Pages.first(room.id)
       game = Game.init(seat_limit: room.seat_limit, seats: seats, page: page)
@@ -98,6 +100,8 @@ defmodule MeaningGame.Rooms.Server do
       }
 
       {:ok, opened(state)}
+    else
+      nil -> {:stop, {:no_such_room, slug}}
     end
   end
 

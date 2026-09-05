@@ -135,7 +135,15 @@ defmodule MeaningGame.Steward.Legality do
     end)
   end
 
-  defp dictionary do
+  @doc """
+  Every word the ENABLE dictionary holds.
+
+  Public because a Room's Code is drawn from it (`MeaningGame.Rooms.Code`), and
+  a second copy of the word list read from a second place is a second answer to
+  "is this a word".
+  """
+  @spec dictionary() :: MapSet.t(String.t())
+  def dictionary do
     key = {__MODULE__, :dictionary}
 
     case :persistent_term.get(key, nil) do

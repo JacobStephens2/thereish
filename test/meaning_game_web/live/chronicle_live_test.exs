@@ -71,11 +71,9 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       {p1_pos, _} = :binary.match(rendered_html, "lantern")
       assert p2_pos < p1_pos
 
-      # Also accessible via /chronicle (default room)
-      default_slug = Rooms.default_slug()
-      open_room(slug: default_slug)
-      {:ok, _default_view, default_html} = live(conn, ~p"/chronicle")
-      assert default_html =~ "The Chronicle"
+      # The Code opens it in whatever case it was typed in.
+      {:ok, _shouted, shouted_html} = live(conn, "/r/#{String.upcase(slug)}/chronicle")
+      assert shouted_html =~ "The Chronicle"
     end
 
     test "shows overrules and player corrections, and allows recording an edit",

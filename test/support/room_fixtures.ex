@@ -10,17 +10,40 @@ defmodule MeaningGame.RoomFixtures do
 
   alias MeaningGame.Rooms
   alias MeaningGame.Rooms.Server
+  alias MeaningGame.Rooms.Store
 
-  @doc "Opens a Room with a slug of its own, and returns the slug."
+  @doc """
+  Creates a Room with a Code of its own and starts it, returning the Code.
+
+  Creating before starting is the order the game itself uses: Rooms are created
+  through `MeaningGame.Rooms.create/2`, and a process is only ever started for a
+  Room that already exists.
+  """
   def open_room(opts \\ []) do
     slug = Keyword.get_lazy(opts, :slug, &unique_slug/0)
     seat_limit = Keyword.get(opts, :seat_limit, Rooms.default_seat_limit())
 
+    {:ok, _room} = Store.insert_room(slug, seat_limit)
+
     ExUnit.Callbacks.start_supervised!(
-      Supervisor.child_spec({Server, slug: slug, seat_limit: seat_limit}, id: {Server, slug})
+      Supervisor.child_spec({Server, slug: slug}, id: {Server, slug})
     )
 
     slug
+  end
+
+  @doc """
+  Takes a Room's process down again.
+
+  For the tests that create a Room through `MeaningGame.Rooms.create/2` rather
+  than through `open_room/1`: that Room is nobody's child but the dynamic
+  supervisor's, so the test that made one puts it away itself.
+  """
+  def stop_room(code) do
+    case GenServer.whereis(Server.via(code)) do
+      nil -> :ok
+      pid -> DynamicSupervisor.terminate_child(MeaningGame.Rooms.Supervisor, pid)
+    end
   end
 
   @doc "A token standing in for one browser's."

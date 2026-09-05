@@ -22,12 +22,13 @@ defmodule MeaningGameWeb.RoomLive do
   import MeaningGameWeb.RoomComponents
 
   alias MeaningGame.Rooms
+  alias MeaningGame.Rooms.Code
   alias MeaningGame.Rooms.Seat
   alias MeaningGameWeb.DeviceToken
 
   @impl true
   def mount(params, session, socket) do
-    slug = Rooms.open!(params["slug"] || Rooms.default_slug())
+    slug = Rooms.open!(params["slug"])
     device_token = DeviceToken.from_session(session)
 
     if connected?(socket), do: Rooms.subscribe(slug)
@@ -35,6 +36,7 @@ defmodule MeaningGameWeb.RoomLive do
     {:ok,
      socket
      |> assign(:slug, slug)
+     |> assign(:join_url, url(~p"/r/#{slug}"))
      |> assign(:device_token, device_token)
      |> assign(:name, "")
      |> assign(:error, nil)
@@ -175,9 +177,9 @@ defmodule MeaningGameWeb.RoomLive do
   defp message(:pool_exhausted), do: "That's every Page for tonight."
   defp message(_), do: "Something went wrong. Try again."
 
-  defp chronicle_path(slug) do
-    if slug == Rooms.default_slug(), do: ~p"/chronicle", else: ~p"/r/#{slug}/chronicle"
-  end
+  defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
+
+  defp display_url(url), do: String.replace_prefix(url, "https://", "")
 
   @impl true
   def render(assigns) do
@@ -196,6 +198,20 @@ defmodule MeaningGameWeb.RoomLive do
           The Chronicle
         </.link>
       </div>
+
+      <section
+        :if={@room.open_seats > 0}
+        data-role="room-code"
+        class="flex flex-col items-center gap-1 rounded-lg border border-base-300 px-4 py-6"
+      >
+        <p class="text-sm uppercase tracking-wide opacity-60">Code</p>
+        <p data-role="code" class="font-mono text-5xl font-bold tracking-[0.3em]">
+          {Code.shout(@slug)}
+        </p>
+        <p class="mt-2 text-center text-sm opacity-70">
+          Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.
+        </p>
+      </section>
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">
         <.input name="name" value={@name} label="Your name" autocomplete="off" autofocus />

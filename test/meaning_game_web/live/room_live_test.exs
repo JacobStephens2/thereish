@@ -475,8 +475,13 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
   describe "a URL with no Room behind it" do
     test "is a 404 rather than a Room conjured out of the typo" do
-      assert_error_sent 404, fn -> get(build_conn(), "/r/NOT-A-SLUG") end
-      assert_error_sent 404, fn -> get(build_conn(), "/r/NOT-A-SLUG/stage") end
+      assert_error_sent 404, fn -> get(build_conn(), "/r/Not_A_Code") end
+      assert_error_sent 404, fn -> get(build_conn(), "/r/Not_A_Code/stage") end
+
+      # A word shaped exactly like a Code, that nobody opened a Room under, is
+      # still nothing: visiting a path has stopped creating Rooms.
+      assert_error_sent 404, fn -> get(build_conn(), "/r/nobodyshome") end
+      refute MeaningGame.Repo.get_by(MeaningGame.Rooms.Room, slug: "nobodyshome")
     end
   end
 
@@ -519,16 +524,6 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
       assert has_element?(stage, "[data-role=join-url]", "/r/#{slug}")
-    end
-
-    test "the bare URL is the couch, on the phone and on the stage" do
-      Rooms.ensure_started(Rooms.default_slug())
-      on_exit(fn -> stop_default_room() end)
-
-      assert {:ok, _phone, _} = live(build_conn(), ~p"/")
-      assert {:ok, stage, _} = live(build_conn(), ~p"/stage")
-
-      assert has_element?(stage, "[data-role=join-url]")
     end
   end
 
@@ -954,15 +949,6 @@ defmodule MeaningGameWeb.RoomLiveTest do
         refute html =~ "bait-scored"
         refute html =~ "plain-scored"
       end
-    end
-  end
-
-  # The default Room is the one Room without a slug of its own, so the test that
-  # touches it has to put it away itself.
-  defp stop_default_room do
-    case GenServer.whereis(MeaningGame.Rooms.Server.via(Rooms.default_slug())) do
-      nil -> :ok
-      pid -> DynamicSupervisor.terminate_child(MeaningGame.Rooms.Supervisor, pid)
     end
   end
 end

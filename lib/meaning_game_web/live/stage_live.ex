@@ -19,14 +19,14 @@ defmodule MeaningGameWeb.StageLive do
 
   @impl true
   def mount(params, _session, socket) do
-    slug = Rooms.open!(params["slug"] || Rooms.default_slug())
+    slug = Rooms.open!(params["slug"])
 
     if connected?(socket), do: Rooms.subscribe(slug)
 
     {:ok,
      socket
      |> assign(:slug, slug)
-     |> assign(:join_url, join_url(params))
+     |> assign(:join_url, join_url(slug))
      |> resync()}
   end
 
@@ -37,12 +37,9 @@ defmodule MeaningGameWeb.StageLive do
   # the couch sees it.
   defp resync(socket), do: assign(socket, :room, Rooms.snapshot(socket.assigns.slug, nil))
 
-  defp join_url(%{"slug" => slug}), do: url(~p"/r/#{slug}")
-  defp join_url(_params), do: url(~p"/")
+  defp join_url(slug), do: url(~p"/r/#{slug}")
 
-  defp chronicle_path(slug) do
-    if slug == Rooms.default_slug(), do: ~p"/chronicle", else: ~p"/r/#{slug}/chronicle"
-  end
+  defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
 
   @impl true
   def render(assigns) do

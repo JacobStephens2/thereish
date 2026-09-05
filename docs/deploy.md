@@ -187,12 +187,16 @@ spent. It costs cents.
 
 | | |
 |---|---|
-| `https://meld.stephens.page/` | a phone: the couch's Room, joined by typing a name |
-| `https://meld.stephens.page/stage` | the laptop: the same Room as the stage |
+| `https://meld.stephens.page/` | the front page: a Code box, New Room, and this phone's Rooms |
+| `https://meld.stephens.page/new` | New Room: how many players, then a Code to read aloud |
+| `https://meld.stephens.page/r/couch` | a phone in the couch's Room, joined by typing a name |
+| `https://meld.stephens.page/r/couch/stage` | the laptop: the same Room as the stage |
 | `https://meld.stephens.page/check` | the deployment's proof of life |
 
-The bare URL is the phone's, because that is the one a player types. `/r/<slug>`
-and `/r/<slug>/stage` open any other Room; nothing needs one yet.
+Every Room lives under its Code, the couch included. The bare URL is the door a
+friend at a table opens: they were told one word, and it asks for that word. A
+Code that no Room has is a 404 — visiting a path has never created a Room since
+Rooms became things people open on purpose.
 
 ## Checking it
 

@@ -55,11 +55,9 @@ defmodule MeaningGame.RoomsTest do
       assert view.reveal.closeness == 100
     end
 
-    test "a Room too big for the Assayer to grade does not open" do
-      seats_per_room(MeaningGame.Steward.seat_cap() + 1)
-
-      assert {:error, _reason} =
-               Rooms.ensure_started("too-many-#{System.unique_integer([:positive])}")
+    test "a Room too big for the Assayer to grade cannot be created" do
+      assert {:error, :bad_player_count} =
+               Rooms.create(MeaningGame.Steward.seat_cap() + 1, device_token())
     end
 
     test "a third player is turned away from a Room built for two" do
@@ -633,12 +631,66 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
-  describe "opening a Room" do
-    test "a slug no Room could have is no Room, not a new one" do
-      assert {:error, :bad_slug} = Rooms.ensure_started("Not A Slug")
-      assert {:error, :bad_slug} = Rooms.ensure_started("")
+  describe "creating a Room" do
+    test "a Room is created with a Code of its own and opens under it" do
+      assert {:ok, code} = Rooms.create(4, device_token())
 
-      assert_raise MeaningGame.Rooms.NoSuchRoomError, fn -> Rooms.open!("Not A Slug") end
+      assert String.length(code) == 4
+      assert Rooms.open!(code) == code
+      assert Rooms.snapshot(code, nil).seat_limit == 4
+
+      stop_room(code)
+    end
+
+    test "the Code is a real word nobody would be embarrassed to read aloud" do
+      alias MeaningGame.Steward.Legality
+
+      codes =
+        for _ <- 1..10 do
+          {:ok, code} = Rooms.create(2, device_token())
+          stop_room(code)
+          code
+        end
+
+      for code <- codes do
+        assert Legality.in_dictionary?(code)
+        refute Legality.profane?(code)
+      end
+
+      # Two Rooms never share a Code, however many are opened in one evening.
+      assert length(Enum.uniq(codes)) == length(codes)
+    end
+
+    test "a table smaller than two, or bigger than a phone can show, is not a Room" do
+      assert {:error, :bad_player_count} = Rooms.create(1, device_token())
+      assert {:error, :bad_player_count} = Rooms.create(0, device_token())
+      assert {:error, :bad_player_count} = Rooms.create("four", device_token())
+    end
+  end
+
+  describe "opening a Room" do
+    test "a Code no Room could have is no Room, not a new one" do
+      assert {:error, :bad_code} = Rooms.ensure_started("Not A Code")
+      assert {:error, :bad_code} = Rooms.ensure_started("")
+
+      assert_raise MeaningGame.Rooms.NoSuchRoomError, fn -> Rooms.open!("Not A Code") end
+    end
+
+    test "a Code nobody created is a 404, and visiting it creates nothing" do
+      code = "cane-#{System.unique_integer([:positive])}"
+
+      assert {:error, :no_such_room} = Rooms.ensure_started(code)
+      assert_raise MeaningGame.Rooms.NoSuchRoomError, fn -> Rooms.open!(code) end
+
+      refute MeaningGame.Repo.get_by(MeaningGame.Rooms.Room, slug: code)
+    end
+
+    test "a Code opens the same Room in any case" do
+      slug = open_room()
+
+      assert Rooms.open!(String.upcase(slug)) == slug
+      assert {:ok, _} = Rooms.join(String.upcase(slug), "Mara", device_token())
+      assert length(Rooms.snapshot(slug, nil).seats) == 1
     end
 
     test "opening the same Room twice is the same Room" do
@@ -648,6 +700,35 @@ defmodule MeaningGame.RoomsTest do
       assert {:ok, _} = Rooms.join(slug, "Mara", device_token())
       assert Rooms.open!(slug) == slug
       assert length(Rooms.snapshot(slug, nil).seats) == 1
+    end
+  end
+
+  describe "the Rooms a phone holds a Seat in" do
+    test "every Room this browser sat in, newest first, with its Seat" do
+      phone = device_token()
+      first = open_room()
+      second = open_room()
+
+      {:ok, _} = Rooms.join(first, "Mara", phone)
+      {:ok, seat} = Rooms.join(second, "Mel", phone)
+
+      assert [%{room: newest, seat: newest_seat}, %{room: oldest}] = Rooms.for_device(phone)
+
+      assert newest.slug == second
+      assert newest_seat.id == seat.id
+      assert newest_seat.name == "Mel"
+      assert oldest.slug == first
+    end
+
+    test "a browser that has sat nowhere is offered nothing" do
+      assert Rooms.for_device(device_token()) == []
+    end
+
+    test "a Seat another phone holds is not this phone's way back in" do
+      slug = open_room()
+      {:ok, _} = Rooms.join(slug, "Mara", device_token())
+
+      assert Rooms.for_device(device_token()) == []
     end
   end
 

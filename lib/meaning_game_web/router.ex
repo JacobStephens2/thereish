@@ -18,21 +18,22 @@ defmodule MeaningGameWeb.Router do
   scope "/", MeaningGameWeb do
     pipe_through :browser
 
-    # The bare URL is the couch's Room, because it is the one a player types on a
-    # phone. `/r/:slug` is the same view for any other Room, and is what the
-    # tests use so each one gets a Room of its own.
-    live "/", RoomLive, :default_room
-    live "/stage", StageLive, :default_stage
+    # The bare URL is the door: a Code to type, a Room to open, a way back into
+    # the Rooms this phone is already in. Every Room lives under its Code, the
+    # couch included — there is no Room the URL means on its own any more.
+    live "/", FrontLive, :front
+    live "/new", NewRoomLive, :new
+
     live "/r/:slug", RoomLive, :room
     live "/r/:slug/stage", StageLive, :stage
 
-    live "/chronicle", ChronicleLive, :default_room
-    live "/book", ChronicleLive, :default_room
     live "/r/:slug/chronicle", ChronicleLive, :room
     live "/r/:slug/book", ChronicleLive, :room
 
-    get "/chronicle.md", ChronicleController, :export
     get "/r/:slug/chronicle.md", ChronicleController, :export
+
+    # Every Room's calibration at once, which is an operator's export rather
+    # than a Room's, and so is the one thing here that names no Code.
     get "/calibration.json", ChronicleController, :export_calibration, assigns: %{format: :json}
     get "/calibration.jsonl", ChronicleController, :export_calibration, assigns: %{format: :jsonl}
 

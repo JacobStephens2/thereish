@@ -13,38 +13,41 @@ defmodule MeaningGame.Rooms.Store do
   alias MeaningGame.Rooms.Room
   alias MeaningGame.Rooms.Seat
 
-  @doc """
-  The Room with this slug, created with `seat_limit` Seats if it is new.
+  @doc "The Room with this Code, or nil."
+  @spec get_room(String.t()) :: Room.t() | nil
+  def get_room(code), do: Repo.get_by(Room, slug: code)
 
-  An existing Room keeps the `seat_limit` it was created with; the argument is a
-  default for a first visit, not a setting a visitor can change.
+  @doc """
+  Writes a new Room down.
+
+  A Code someone else took between the draw and the write comes back as a
+  changeset error, which is the caller's cue to draw another word rather than a
+  reason to fail.
   """
-  @spec get_or_create_room(String.t(), pos_integer()) ::
-          {:ok, Room.t()} | {:error, Ecto.Changeset.t()}
-  def get_or_create_room(slug, seat_limit) do
-    case Repo.get_by(Room, slug: slug) do
-      %Room{} = room -> {:ok, room}
-      nil -> create_room(slug, seat_limit)
-    end
+  @spec insert_room(String.t(), pos_integer()) :: {:ok, Room.t()} | {:error, Ecto.Changeset.t()}
+  def insert_room(code, seat_limit) do
+    %Room{}
+    |> Room.changeset(%{slug: code, seat_limit: seat_limit})
+    |> Repo.insert()
   end
 
-  defp create_room(slug, seat_limit) do
-    %Room{}
-    |> Room.changeset(%{slug: slug, seat_limit: seat_limit})
-    |> Repo.insert()
-    |> case do
-      {:ok, room} ->
-        {:ok, room}
+  @doc """
+  Every Room this browser holds a Seat in, newest Seat first, each with the Seat
+  it holds.
 
-      {:error, changeset} ->
-        # Either someone opened the same Room between the read and the write, or
-        # the slug is not one a Room can have. Only the first has a Room to
-        # return.
-        case Repo.get_by(Room, slug: slug) do
-          %Room{} = room -> {:ok, room}
-          nil -> {:error, changeset}
-        end
-    end
+  This is what the front page's rejoin links are made of: a phone that has been
+  in a Room is one tap from its own Seat, without remembering a Code.
+  """
+  @spec rooms_for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
+  def rooms_for_device(device_token) do
+    Repo.all(
+      from s in Seat,
+        join: r in assoc(s, :room),
+        where: ^device_token in s.device_tokens,
+        order_by: [desc: s.inserted_at, desc: s.id],
+        preload: [room: r]
+    )
+    |> Enum.map(&%{room: &1.room, seat: &1})
   end
 
   @doc "Every Seat in the Room, in the order they were first taken."
