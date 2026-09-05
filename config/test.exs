@@ -16,9 +16,20 @@ config :meaning_game, MeaningGame.Repo,
 # The server runs during test so `MeaningGameWeb.EndpointTest` can prove the
 # endpoint actually boots and serves over a real socket, not just through
 # `Plug.Test`. Every other test still goes through `Phoenix.ConnTest`.
+#
+# One suite per port: because it really listens, two worktrees running
+# `mix test` in the same moment would collide on 4002 with `:eaddrinuse`. The
+# partition that already names the database names the port too, so parallel
+# tickets each get their own; with no partition it is 4002 as before.
+test_port =
+  case System.get_env("MIX_TEST_PARTITION") do
+    nil -> 4002
+    partition -> 4010 + :erlang.phash2(partition, 990)
+  end
+
 config :meaning_game, MeaningGameWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
-  url: [host: "localhost", port: 4002],
+  http: [ip: {127, 0, 0, 1}, port: test_port],
+  url: [host: "localhost", port: test_port],
   secret_key_base: "GGMqZggnqg1t8Q+zsg6ClM7aAnFwYXJk0/zQFqiGudcO7XNGYHZaGz9qrpv/LDYt",
   server: true
 
