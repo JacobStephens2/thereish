@@ -573,37 +573,37 @@ defmodule MeaningGame.Rooms.Server do
     page = state.game.page
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
-      t_a = Task.async(fn -> assay(request.side_a, page, arm) end)
-      t_b = Task.async(fn -> assay(request.side_b, page, arm) end)
-      t_overall = Task.async(fn -> assay(request.overall, page, arm) end)
+      task_side_a = Task.async(fn -> assay(request.side_a, page, arm) end)
+      task_side_b = Task.async(fn -> assay(request.side_b, page, arm) end)
+      task_overall = Task.async(fn -> assay(request.overall, page, arm) end)
 
-      res_a = Task.await(t_a, 15_000)
-      res_b = Task.await(t_b, 15_000)
-      res_overall = Task.await(t_overall, 15_000)
+      result_side_a = Task.await(task_side_a, 15_000)
+      result_side_b = Task.await(task_side_b, 15_000)
+      result_overall = Task.await(task_overall, 15_000)
 
-      event = side_verdicts_event(res_a, res_b, res_overall)
+      event = side_verdicts_event(result_side_a, result_side_b, result_overall)
       send(room, {:assayed, event})
     end)
 
     waiting_on(state)
   end
 
-  defp side_verdicts_event({:ok, v_a}, {:ok, v_b}, res_overall) do
+  defp side_verdicts_event({:ok, verdict_side_a}, {:ok, verdict_side_b}, result_overall) do
     furthest =
-      case res_overall do
+      case result_overall do
         {:ok, %{furthest: [_, _] = f}} -> f
         _ -> nil
       end
 
     {:side_verdicts_received,
      %{
-       side_a: v_a,
-       side_b: v_b,
+       side_a: verdict_side_a,
+       side_b: verdict_side_b,
        furthest: furthest
      }}
   end
 
-  defp side_verdicts_event(_res_a, _res_b, _res_overall) do
+  defp side_verdicts_event(_result_side_a, _result_side_b, _result_overall) do
     {:side_verdicts_unavailable, %{}}
   end
 

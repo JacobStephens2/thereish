@@ -1012,10 +1012,10 @@ defmodule MeaningGame.Game do
 
       true ->
         furthest =
-          if data.furthest && length(data.furthest) == 2 do
+          if data[:furthest] && length(data.furthest) == 2 do
             data.furthest
           else
-            default_sides_furthest(state)
+            nil
           end
 
         new_state = %{
@@ -1134,13 +1134,13 @@ defmodule MeaningGame.Game do
     }
   end
 
-  defp determine_closer(v_a, v_b) do
-    c_a = v_a && v_a[:closeness]
-    c_b = v_b && v_b[:closeness]
+  defp determine_closer(verdict_a, verdict_b) do
+    closeness_a = verdict_a && verdict_a[:closeness]
+    closeness_b = verdict_b && verdict_b[:closeness]
 
     cond do
-      is_integer(c_a) and is_integer(c_b) and c_a > c_b -> :a
-      is_integer(c_a) and is_integer(c_b) and c_b > c_a -> :b
+      is_integer(closeness_a) and is_integer(closeness_b) and closeness_a > closeness_b -> :a
+      is_integer(closeness_a) and is_integer(closeness_b) and closeness_b > closeness_a -> :b
       true -> nil
     end
   end
@@ -1200,19 +1200,25 @@ defmodule MeaningGame.Game do
   # grade has no number rather than a zero: "we don't know" is not "you missed".
   defp headline(%{verdict: %{graded?: true, closeness: closeness}}), do: closeness
 
-  defp headline(%{side_verdicts: %{a: v_a, b: v_b}}) do
-    c_a = v_a && v_a[:graded?] && v_a[:closeness]
-    c_b = v_b && v_b[:graded?] && v_b[:closeness]
+  defp headline(%{side_verdicts: side_verdicts}) when is_map(side_verdicts) do
+    best_side_closeness(side_verdicts)
+  end
+
+  defp headline(_state), do: nil
+
+  defp best_side_closeness(%{a: verdict_a, b: verdict_b}) do
+    closeness_a = verdict_a && verdict_a[:graded?] && verdict_a[:closeness]
+    closeness_b = verdict_b && verdict_b[:graded?] && verdict_b[:closeness]
 
     cond do
-      c_a && c_b -> max(c_a, c_b)
-      c_a -> c_a
-      c_b -> c_b
+      closeness_a && closeness_b -> max(closeness_a, closeness_b)
+      closeness_a -> closeness_a
+      closeness_b -> closeness_b
       true -> nil
     end
   end
 
-  defp headline(_state), do: nil
+  defp best_side_closeness(_), do: nil
 
   # Medium's carry-forward rule, written for a list of Seats: the two Bridges
   # the Assayer named as landing furthest apart become the next attempt's
@@ -1299,16 +1305,8 @@ defmodule MeaningGame.Game do
 
   defp attempt_closeness(%{verdict: %{graded?: true, closeness: closeness}}), do: closeness
 
-  defp attempt_closeness(%{side_verdicts: %{a: v_a, b: v_b}}) do
-    c_a = v_a && v_a[:graded?] && v_a[:closeness]
-    c_b = v_b && v_b[:graded?] && v_b[:closeness]
-
-    cond do
-      c_a && c_b -> max(c_a, c_b)
-      c_a -> c_a
-      c_b -> c_b
-      true -> nil
-    end
+  defp attempt_closeness(%{side_verdicts: side_verdicts}) when is_map(side_verdicts) do
+    best_side_closeness(side_verdicts)
   end
 
   defp attempt_closeness(_attempt), do: nil
@@ -1409,63 +1407,42 @@ defmodule MeaningGame.Game do
   end
 
   defp agree_overrule(state) do
-    previously_closed? = phase(state) == :closed
-
-    %{proposer_id: proposer_id, closeness: couple_closeness} = state.overrule
-
-    original_verdict = state.verdict
-
-    couple_reasoning = "Overruled jointly across all Seats. Recorded as precedent."
-    couple_quip = "House law."
-
-    new_verdict =
-      Map.merge(original_verdict, %{
-        graded?: true,
-        closeness: couple_closeness,
-        reasoning: couple_reasoning,
-        quip: couple_quip,
-        overruled?: true,
-        original_closeness: original_verdict.closeness,
-        original_reasoning: original_verdict.reasoning,
-        original_quip: original_verdict.quip
-      })
-
-    overrule_effect_data = %{
-      attempt_number: state.attempt,
-      proposer_seat_id: proposer_id,
-      bookends: state.bookends,
-      bridges: written_bridges(state),
-      machine_closeness: original_verdict.closeness,
-      machine_reasoning: original_verdict.reasoning,
-      machine_quip: original_verdict.quip,
-      couple_closeness: couple_closeness,
-      couple_reasoning: couple_reasoning,
-      couple_quip: couple_quip
-    }
-
-    overrules = state.overrules ++ [overrule_effect_data]
-    state = %{state | verdict: new_verdict, overrule: nil, overrules: overrules}
-
-    effects = [{:overrule, overrule_effect_data}]
-
-    effects =
-      if phase(state) == :closed and not previously_closed? do
-        effects ++ [{:chronicle, chronicle(state)}]
-      else
-        effects
-      end
-
-    {:ok, state, effects}
+    apply_agreed_overrule(
+      state,
+      state.verdict,
+      "Overruled jointly across all Seats. Recorded as precedent.",
+      written_bridges(state),
+      fn s, new_verdict -> %{s | verdict: new_verdict} end
+    )
   end
 
   defp agree_side_overrule(state, side) do
+    original_verdict = state.side_verdicts[side.id]
+    side_bridges = Enum.map(side.seats, &state.bridges[&1.id])
+
+    apply_agreed_overrule(
+      state,
+      original_verdict,
+      "Overruled jointly by Side #{side.name}. Recorded as precedent.",
+      side_bridges,
+      fn s, new_verdict ->
+        %{s | side_verdicts: Map.put(s.side_verdicts, side.id, new_verdict)}
+      end,
+      %{side_id: side.id}
+    )
+  end
+
+  defp apply_agreed_overrule(
+         state,
+         original_verdict,
+         couple_reasoning,
+         bridges,
+         update_verdict_fn,
+         extra_effect_fields \\ %{}
+       ) do
     previously_closed? = phase(state) == :closed
 
     %{proposer_id: proposer_id, closeness: couple_closeness} = state.overrule
-
-    original_verdict = state.side_verdicts[side.id]
-
-    couple_reasoning = "Overruled jointly by Side #{side.name}. Recorded as precedent."
     couple_quip = "House law."
 
     new_verdict =
@@ -1480,25 +1457,26 @@ defmodule MeaningGame.Game do
         original_quip: original_verdict.quip
       })
 
-    side_bridges = Enum.map(side.seats, &state.bridges[&1.id])
+    overrule_effect_data =
+      Map.merge(
+        %{
+          attempt_number: state.attempt,
+          proposer_seat_id: proposer_id,
+          bookends: state.bookends,
+          bridges: bridges,
+          machine_closeness: original_verdict.closeness,
+          machine_reasoning: original_verdict.reasoning,
+          machine_quip: original_verdict.quip,
+          couple_closeness: couple_closeness,
+          couple_reasoning: couple_reasoning,
+          couple_quip: couple_quip
+        },
+        extra_effect_fields
+      )
 
-    overrule_effect_data = %{
-      attempt_number: state.attempt,
-      proposer_seat_id: proposer_id,
-      side_id: side.id,
-      bookends: state.bookends,
-      bridges: side_bridges,
-      machine_closeness: original_verdict.closeness,
-      machine_reasoning: original_verdict.reasoning,
-      machine_quip: original_verdict.quip,
-      couple_closeness: couple_closeness,
-      couple_reasoning: couple_reasoning,
-      couple_quip: couple_quip
-    }
-
-    updated_side_verdicts = Map.put(state.side_verdicts, side.id, new_verdict)
     overrules = state.overrules ++ [overrule_effect_data]
-    state = %{state | side_verdicts: updated_side_verdicts, overrule: nil, overrules: overrules}
+    state = update_verdict_fn.(state, new_verdict)
+    state = %{state | overrule: nil, overrules: overrules}
 
     effects = [{:overrule, overrule_effect_data}]
 

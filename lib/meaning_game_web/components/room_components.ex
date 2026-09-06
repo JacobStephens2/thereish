@@ -308,73 +308,11 @@ defmodule MeaningGameWeb.RoomComponents do
         {@room.reveal.quip}
       </p>
 
-      <div
+      <.fairness_controls
         :if={@mode in [:phone, :quiet] && @seat && @room.reveal.closeness}
-        data-role="fairness-controls"
-        class="flex flex-col items-center gap-2 pt-2"
-      >
-        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-          Was this grade fair?
-        </span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_harsh"
-            data-role="tap-too-harsh"
-            data-tap="too_harsh"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_harsh",
-                do: "btn-warning text-warning-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too harsh
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="fair"
-            data-role="tap-fair"
-            data-tap="fair"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "fair",
-                do: "btn-primary font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Fair
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_kind"
-            data-role="tap-too-kind"
-            data-tap="too_kind"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_kind",
-                do: "btn-info text-info-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too kind
-          </button>
-        </div>
-        <%= if tap = your_fairness_tap(@room, @seat) do %>
-          <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
-            <span data-role="seat-tap" class="font-semibold capitalize">
-              {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
-            </span>
-            recorded
-          </div>
-        <% end %>
-      </div>
+        room={@room}
+        seat={@seat}
+      />
 
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
@@ -538,78 +476,96 @@ defmodule MeaningGameWeb.RoomComponents do
         </div>
       </div>
 
-      <div
+      <.fairness_controls
         :if={@mode in [:phone, :quiet] && @seat && Enum.any?(@room.reveal.sides, & &1.closeness)}
-        data-role="fairness-controls"
-        class="flex flex-col items-center gap-2 pt-2"
-      >
-        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-          Was your Side's grade fair?
-        </span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_harsh"
-            data-role="tap-too-harsh"
-            data-tap="too_harsh"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_harsh",
-                do: "btn-warning text-warning-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too harsh
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="fair"
-            data-role="tap-fair"
-            data-tap="fair"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "fair",
-                do: "btn-primary font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Fair
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_kind"
-            data-role="tap-too-kind"
-            data-tap="too_kind"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_kind",
-                do: "btn-info text-info-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too kind
-          </button>
-        </div>
-        <%= if tap = your_fairness_tap(@room, @seat) do %>
-          <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
-            <span data-role="seat-tap" class="font-semibold capitalize">
-              {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
-            </span>
-            recorded
-          </div>
-        <% end %>
-      </div>
+        room={@room}
+        seat={@seat}
+        side_mode?={true}
+      />
 
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
       </p>
     </section>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :side_mode?, :boolean, default: false
+
+  def fairness_controls(assigns) do
+    ~H"""
+    <div
+      data-role="fairness-controls"
+      class="flex flex-col items-center gap-2 pt-2"
+    >
+      <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+        <%= if @side_mode? do %>
+          Was your Side's grade fair?
+        <% else %>
+          Was this grade fair?
+        <% end %>
+      </span>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="too_harsh"
+          data-role="tap-too-harsh"
+          data-tap="too_harsh"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "too_harsh",
+              do: "btn-warning text-warning-content font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Too harsh
+        </button>
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="fair"
+          data-role="tap-fair"
+          data-tap="fair"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "fair",
+              do: "btn-primary font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Fair
+        </button>
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="too_kind"
+          data-role="tap-too-kind"
+          data-tap="too_kind"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "too_kind",
+              do: "btn-info text-info-content font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Too kind
+        </button>
+      </div>
+      <%= if tap = your_fairness_tap(@room, @seat) do %>
+        <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
+          <span data-role="seat-tap" class="font-semibold capitalize">
+            {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
+          </span>
+          recorded
+        </div>
+      <% end %>
+    </div>
     """
   end
 
