@@ -323,6 +323,98 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       refute readout_text =~ ~r/p\s*<\s*0\.05/i
       refute readout_text =~ "p-value"
     end
+
+    test "author_model experiment is blinded until unblinded, showing Flash and Astra readout",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairns")
+
+      room = Repo.get_by!(Room, slug: slug)
+      [page] = Chronicle.pages(room.id)
+
+      {:ok, _} =
+        Chronicle.record_experiment_assignment(room.id, %{
+          page_id: page.id,
+          page_identifier: page.id,
+          experiment_id: "author_model",
+          arm: "flash",
+          chapter: "table",
+          assigned_at: DateTime.utc_now()
+        })
+
+      {:ok, _} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_id: page.id,
+          page_identifier: page.id,
+          experiment_id: "author_model",
+          arm: "flash",
+          melded: true,
+          closeness: 80,
+          closing_band: "meld",
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      {:ok, _} =
+        Chronicle.record_bookends_tap(room.id, %{
+          page_id: page.id,
+          page_identifier: page.id,
+          seat_id: ctx.mara.id,
+          label: "great",
+          bookends: page.document["bookends"],
+          arm: "flash"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert render(view) =~ "Flash against Astra"
+      assert has_element?(view, "[data-role=blinded-banner]")
+      assert has_element?(view, "[data-role=unblind-button]")
+      refute has_element?(view, "[data-role=experiment-readout]")
+
+      view |> element("[data-role=unblind-button]") |> render_click()
+
+      assert has_element?(view, "[data-role=unblinded-banner]")
+      assert has_element?(view, "[data-role=experiment-readout]")
+      assert has_element?(view, "[data-role=readout-arm-flash]")
+      assert has_element?(view, "[data-role=readout-arm-astra]")
+
+      readout_text = element(view, "[data-role=experiment-readout]") |> render()
+      assert readout_text =~ "Gemini 3.8 Flash"
+      assert readout_text =~ "GPT-6 Astra"
+      assert readout_text =~ "1 great"
+      assert readout_text =~ "meld:"
+
+      refute readout_text =~ "p-value"
+    end
+
+    test "book view displays gives, every bridge, the verdict with reasoning, and the carried words",
+         %{conn: conn, slug: slug} = ctx do
+      # Play attempt 1 which misses and carries furthest words
+      play(ctx, "cairn", "beacon")
+      # Advance and play attempt 2 which melds
+      :ok = Rooms.next_attempt(slug, ctx.mara.id)
+      play(ctx, "wharf", "wharf")
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=chronicle-page]")
+      assert has_element?(view, "[data-role=give-tag]", "Give (Mara): setting one")
+      assert has_element?(view, "[data-role=give-tag]", "Give (Jacob): setting two")
+
+      # Attempt 1 shows carried words
+      assert has_element?(
+               view,
+               ~s([data-role=attempt][data-attempt-number="1"] [data-role=carried-words])
+             )
+
+      carried_text =
+        element(view, ~s([data-role=attempt][data-attempt-number="1"] [data-role=carried-words]))
+        |> render()
+
+      assert carried_text =~ "Carried:"
+      assert carried_text =~ "cairn"
+      assert carried_text =~ "beacon"
+    end
   end
 
   describe "spend foot line (ticket 09)" do

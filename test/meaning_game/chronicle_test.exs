@@ -779,6 +779,110 @@ defmodule MeaningGame.ChronicleTest do
       assert unblinding.experiment_id == "bait_against_plain"
       assert Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
     end
+
+    test "author_model experiment records alternating arm assignments and bookends taps", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      # 1. Steward.assign_arm alternates arms within the room
+      assert MeaningGame.Steward.assign_arm(room.id, "P001") == :flash
+      assert MeaningGame.Steward.assign_arm(room.id, "P002") == :astra
+      assert MeaningGame.Steward.assign_arm(room.id, "P003") == :flash
+
+      assignments = Chronicle.experiment_assignments(room.id, "author_model")
+      assert length(assignments) == 3
+      assert Enum.map(assignments, & &1.arm) == ["flash", "astra", "flash"]
+
+      # 2. Record page outcomes with closing_band
+      {:ok, outcome1} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "P001",
+          experiment_id: "author_model",
+          arm: "flash",
+          melded: true,
+          closeness: 80,
+          closing_band: "meld",
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      assert outcome1.closing_band == "meld"
+      assert outcome1.taps == %{}
+
+      # 3. Record bookends taps (seats tap flat/fine/great once, replaceable)
+      tap_attrs1 = %{
+        page_identifier: "P001",
+        seat_id: ctx.mara.id,
+        label: "great",
+        bookends: ["lantern", "harbour"],
+        gives: %{ctx.mara.id => "light", ctx.jacob.id => "water"},
+        author_meta: %{"arm" => "flash"},
+        arm: "flash"
+      }
+
+      assert {:ok, tap1} = Chronicle.record_bookends_tap(room.id, tap_attrs1)
+      assert tap1.label == "great"
+      assert tap1.arm == "flash"
+
+      # Mara updates tap to fine (replaceable)
+      tap_attrs1_replaced = Map.put(tap_attrs1, :label, "fine")
+      assert {:ok, _} = Chronicle.record_bookends_tap(room.id, tap_attrs1_replaced)
+
+      # Jacob taps great
+      tap_attrs2 = %{
+        page_identifier: "P001",
+        seat_id: ctx.jacob.id,
+        label: "great",
+        bookends: ["lantern", "harbour"],
+        gives: %{ctx.mara.id => "light", ctx.jacob.id => "water"},
+        author_meta: %{"arm" => "flash"},
+        arm: "flash"
+      }
+
+      assert {:ok, _} = Chronicle.record_bookends_tap(room.id, tap_attrs2)
+
+      # Outcome taps reflect the updated taps per seat
+      [updated_outcome1] = Chronicle.experiment_outcomes(room.id, "author_model")
+      assert updated_outcome1.taps[to_string(ctx.mara.id)] == "fine"
+      assert updated_outcome1.taps[to_string(ctx.jacob.id)] == "great"
+
+      # Also test bookends_taps retrieval
+      taps = Chronicle.bookends_taps(room.id)
+      assert length(taps) == 3
+
+      # 4. Record outcome for P002 (astra)
+      {:ok, _outcome2} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "P002",
+          experiment_id: "author_model",
+          arm: "astra",
+          melded: true,
+          closeness: 90,
+          closing_band: "deep_meld",
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      {:ok, _} =
+        Chronicle.record_bookends_tap(room.id, %{
+          page_identifier: "P002",
+          seat_id: ctx.mara.id,
+          label: "great",
+          bookends: ["beacon", "tide"],
+          gives: %{},
+          author_meta: %{"arm" => "astra"},
+          arm: "astra"
+        })
+
+      # 5. Qualitative readout for author_model
+      readout = Chronicle.experiment_readout(room.id, "author_model")
+      assert readout.experiment.id == "author_model"
+      assert readout.flash.pages_count == 1
+      assert readout.astra.pages_count == 1
+      assert readout.flash.preferences_summary =~ "1 great, 1 fine"
+      assert readout.astra.preferences_summary =~ "1 great"
+      assert readout.summary_narrative =~ "Flash"
+      assert readout.summary_narrative =~ "Astra"
+    end
   end
 
   describe "the two words that landed furthest apart" do
@@ -888,6 +992,139 @@ defmodule MeaningGame.ChronicleTest do
       [verdict] = attempt.verdicts
 
       assert verdict.furthest == nil
+    end
+
+    test "a four-Seat Page writes four Give rows with their Seats and one Verdict row per Attempt with four Seat ids and the furthest pair" do
+      attempt_cap(1)
+      code = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: code)
+
+      seats =
+        for name <- ["Mara", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(code, name, device_token())
+          seat
+        end
+
+      [mara, jacob, ada, sam] = seats
+
+      assert Rooms.snapshot(code, nil).phase == :giving
+      :ok = Rooms.give(code, mara.id, "setting one")
+      :ok = Rooms.give(code, jacob.id, "setting two")
+      :ok = Rooms.give(code, ada.id, "setting three")
+      :ok = Rooms.give(code, sam.id, "setting four")
+
+      await_phase(code, :bridging)
+
+      :ok = Rooms.commit_bridge(code, mara.id, "beacon")
+      :ok = Rooms.commit_bridge(code, jacob.id, "cairn")
+      :ok = Rooms.commit_bridge(code, ada.id, "lamp")
+      :ok = Rooms.commit_bridge(code, sam.id, "seagull")
+
+      await_phase(code, :closed)
+
+      # 4 Give rows written with their Seats
+      [page] = Chronicle.pages(room.id)
+
+      give_rows =
+        Repo.all(
+          from(g in MeaningGame.Chronicle.Give,
+            where: g.page_id == ^page.id,
+            order_by: [asc: g.order]
+          )
+        )
+
+      assert length(give_rows) == 4
+      assert Enum.map(give_rows, & &1.seat_id) == Enum.map(seats, & &1.id)
+
+      assert Enum.map(give_rows, & &1.text) == [
+               "setting one",
+               "setting two",
+               "setting three",
+               "setting four"
+             ]
+
+      # One Verdict row per Attempt with 4 Seat ids and the furthest pair
+      verdict_rows =
+        Repo.all(
+          from(v in MeaningGame.Chronicle.Verdict,
+            join: a in assoc(v, :attempt),
+            where: a.page_id == ^page.id
+          )
+        )
+
+      assert [verdict] = verdict_rows
+      assert length(verdict.seat_ids) == 4
+      assert verdict.seat_ids == Enum.map(seats, & &1.id)
+      assert is_list(verdict.furthest) and length(verdict.furthest) == 2
+      assert Enum.all?(verdict.furthest, &(&1 in ["beacon", "cairn", "lamp", "seagull"]))
+
+      # Book view lists Gives, every Bridge, the one Verdict with reasoning, and the carried words
+      [view] = Chronicle.book(room.id)
+      assert length(view.gives) == 4
+      [attempt] = view.attempts
+      assert length(attempt.bridges) == 4
+      assert [v] = attempt.verdicts
+      assert v.reasoning != nil and v.reasoning != ""
+      assert v.furthest == verdict.furthest
+      assert attempt.carried == verdict.furthest
+
+      # Markdown export renders every Bridge, the one Verdict, and the carried words
+      markdown = Chronicle.to_markdown(room.id)
+      assert markdown =~ "Mara: beacon"
+      assert markdown =~ "Jacob: cairn"
+      assert markdown =~ "Ada: lamp"
+      assert markdown =~ "Sam: seagull"
+      assert markdown =~ "- Reasoning: #{v.reasoning}"
+      assert markdown =~ "- Carried: #{Enum.join(verdict.furthest, " · ")}"
+
+      # Round-trip parsing from Markdown
+      assert {:ok, [parsed_page]} = Chronicle.from_markdown(markdown)
+      assert length(parsed_page.gives) == 4
+      [parsed_attempt] = parsed_page.attempts
+      assert length(parsed_attempt.bridges) == 4
+      assert parsed_attempt.carried == verdict.furthest
+    end
+
+    test "calibration export carries the Bridge list on every tap for N seats" do
+      code = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: code)
+
+      seats =
+        for name <- ["Mara", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(code, name, device_token())
+          seat
+        end
+
+      bridges = ["beacon", "cairn", "lamp", "seagull"]
+
+      for seat <- seats do
+        Chronicle.record_fairness_tap(room.id, %{
+          seat_id: seat.id,
+          attempt_number: 1,
+          bookends: ["lantern", "harbour"],
+          bridges: bridges,
+          grade: 27,
+          band: "miss",
+          model: "gemini-3.8-flash",
+          prompt_version: "assay-3",
+          label: "fair"
+        })
+      end
+
+      dataset = Chronicle.calibration_dataset(room.id)
+      assert length(dataset) == 4
+
+      for entry <- dataset do
+        assert entry.bridges == bridges
+      end
+
+      json_export = Chronicle.export_calibration(room.id, :json)
+      {:ok, parsed_json} = Jason.decode(json_export)
+      assert length(parsed_json) == 4
+
+      for entry <- parsed_json do
+        assert entry["bridges"] == bridges
+      end
     end
   end
 

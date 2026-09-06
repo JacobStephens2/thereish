@@ -90,8 +90,7 @@ defmodule MeaningGame.Rooms.Server do
         held: [],
         opened_at: nil,
         assayer: nil,
-        author: nil,
-        current_arm: :flash,
+        current_arm: nil,
         voice_audio: nil,
         voice_meta: %{}
       }
@@ -161,6 +160,13 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  def handle_call({:tap_bookends, seat_id, label}, _from, state) do
+    case Game.apply(state.game, {:bookends_tapped, %{seat_id: seat_id, label: label}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   def handle_call({:give, seat_id, give}, _from, state) do
     case Game.apply(state.game, {:give_committed, %{seat_id: seat_id, give: give}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -187,8 +193,12 @@ defmodule MeaningGame.Rooms.Server do
   def handle_call({:next_page, seat_id}, _from, state) do
     case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
       {:ok, game, effects} ->
-        {:reply, :ok,
-         advance(%{state | opened_at: nil, voice_audio: nil, voice_meta: %{}}, game, effects)}
+        new_state =
+          %{state | opened_at: nil, voice_audio: nil, voice_meta: %{}}
+          |> Map.put(:current_arm, nil)
+          |> Map.put(:current_page_id, nil)
+
+        {:reply, :ok, advance(new_state, game, effects)}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
@@ -534,7 +544,7 @@ defmodule MeaningGame.Rooms.Server do
     entry = attach_voice_meta(entry, state.voice_meta)
     {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
 
-    arm = state[:current_arm] || :bait
+    arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
 
     # A Page that is safely in the log gets written about. It happens somewhere
@@ -542,7 +552,7 @@ defmodule MeaningGame.Rooms.Server do
     # paragraph (`MeaningGame.Scribe`).
     Scribe.write_about(state.room, page)
 
-    state
+    Map.put(state, :current_page_id, page.id)
   rescue
     error ->
       Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
@@ -578,15 +588,33 @@ defmodule MeaningGame.Rooms.Server do
       state
   end
 
+  defp perform({:bookends_tap, tap_data}, state) do
+    tap_data =
+      if state[:current_page_id] do
+        Map.put(tap_data, :page_id, state.current_page_id)
+      else
+        tap_data
+      end
+
+    {:ok, _} = Chronicle.record_bookends_tap(state.room.id, tap_data)
+    state
+  rescue
+    error ->
+      Logger.error("the bookends tap could not be recorded: #{Exception.message(error)}")
+      state
+  end
+
   defp perform({:author, request}, state) do
     state = author_answered(state)
     room = self()
     digest = Chronicle.digest(state.room.id)
+    page_num = (state.game && state.game.page && state.game.page.id) || nil
+    arm = state[:current_arm] || Steward.assign_arm(state.room.id, page_num)
     ref = make_ref()
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
-        case Steward.author(request, job: :flash, digest: digest) do
+        case Steward.author(request, job: arm, digest: digest) do
           {:ok, result} ->
             send(room, {:author_completed, ref, {:ok, result}})
 
@@ -602,7 +630,9 @@ defmodule MeaningGame.Rooms.Server do
       end
     end)
 
-    waiting_on_author(state, ref)
+    state
+    |> Map.put(:current_arm, arm)
+    |> waiting_on_author(ref)
   end
 
   defp perform({:assay, request}, state) do
