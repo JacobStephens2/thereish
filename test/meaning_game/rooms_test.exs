@@ -1268,6 +1268,47 @@ defmodule MeaningGame.RoomsTest do
       assert unblinding.seat_id == ctx.jacob.id
       assert unblinding.experiment_id == "bait_against_plain"
     end
+
+    test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      [asgn1] = MeaningGame.Chronicle.experiment_assignments(room.id, "author_model")
+      assert asgn1.arm == "flash"
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_phase(ctx.slug, :closed)
+
+      view1 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view1.phase == :closed
+      assert view1.your_bookends_tap == nil
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.melissa.id, "great")
+      view_m = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_m.your_bookends_tap == "great"
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.melissa.id, "fine")
+      assert Rooms.snapshot(ctx.slug, ctx.melissa.id).your_bookends_tap == "fine"
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.jacob.id, "flat")
+      assert Rooms.snapshot(ctx.slug, ctx.jacob.id).your_bookends_tap == "flat"
+
+      [outcome1] = MeaningGame.Chronicle.experiment_outcomes(room.id, "author_model")
+      assert outcome1.arm == "flash"
+      assert outcome1.taps[to_string(ctx.melissa.id)] == "fine"
+      assert outcome1.taps[to_string(ctx.jacob.id)] == "flat"
+      assert outcome1.closing_band == "deep_meld"
+
+      assert :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "harbour")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "lantern")
+      await_phase(ctx.slug, :bridging)
+
+      assignments = MeaningGame.Chronicle.experiment_assignments(room.id, "author_model")
+      assert length(assignments) == 2
+      assert Enum.map(assignments, & &1.arm) == ["flash", "astra"]
+    end
   end
 
   describe "speaker and switches" do

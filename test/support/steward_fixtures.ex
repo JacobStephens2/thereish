@@ -72,6 +72,16 @@ defmodule MeaningGame.StewardFixtures do
     })
   end
 
+  @doc "A well-formed quip JSON string, as the model writes it on a Precedent hit."
+  def quip_json(quip_text \\ "A fresh joke about tonight's words.") do
+    Jason.encode!(%{"quip" => quip_text})
+  end
+
+  @doc "One whole response containing a quip JSON."
+  def quip_response(quip_text \\ "A fresh joke about tonight's words.") do
+    response(quip_json(quip_text))
+  end
+
   @doc """
   Which of `bridges` this request asked about first, which is what tells the two
   orderings apart.
@@ -173,9 +183,38 @@ defmodule MeaningGame.StewardFixtures do
       |> put_in([:roles, :assayer, :timeout_ms], 5_000)
       |> put_in([:roles, :assayer, :deadline_ms], 10_000)
       |> put_in([:roles, :author, :api_key], key)
+      |> put_in([:roles, :author, :jobs, :flash, :api_key], key)
       |> put_in([:roles, :scribe, :jobs, :naming, :api_key], key)
       |> put_in([:roles, :scribe, :jobs, :naming, :timeout_ms], 5_000)
       |> put_in([:roles, :scribe, :jobs, :naming, :deadline_ms], 10_000)
+
+    live =
+      case System.get_env("OPENAI_API_KEY") do
+        nil -> live
+        openai_key -> put_in(live, [:roles, :author, :jobs, :astra, :api_key], openai_key)
+      end
+
+    Application.put_env(:meaning_game, :steward, live)
+  end
+
+  @doc """
+  Puts the live OpenAI provider behind the seam for the smoke test.
+  """
+  def let_it_call_openai do
+    steward = Application.fetch_env!(:meaning_game, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+
+    key =
+      System.get_env("OPENAI_API_KEY") ||
+        flunk("this test calls OpenAI and needs OPENAI_API_KEY in the environment")
+
+    live =
+      steward
+      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:http_options, [])
+      |> put_in([:roles, :author, :jobs, :astra, :api_key], key)
+      |> put_in([:roles, :author, :jobs, :astra, :timeout_ms], 10_000)
+      |> put_in([:roles, :author, :jobs, :astra, :deadline_ms], 15_000)
 
     Application.put_env(:meaning_game, :steward, live)
   end

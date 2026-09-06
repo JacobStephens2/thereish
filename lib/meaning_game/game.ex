@@ -64,7 +64,8 @@ defmodule MeaningGame.Game do
     played: [],
     overrule: nil,
     overrules: [],
-    fairness_taps: %{}
+    fairness_taps: %{},
+    bookends_taps: %{}
   ]
 
   @type seat :: %{id: String.t(), name: String.t()}
@@ -117,7 +118,8 @@ defmodule MeaningGame.Game do
           played: [attempt()],
           overrule: map() | nil,
           overrules: [map()],
-          fairness_taps: %{String.t() => String.t()}
+          fairness_taps: %{String.t() => String.t()},
+          bookends_taps: %{String.t() => String.t()}
         }
 
   @type viewer :: String.t() | nil
@@ -162,6 +164,11 @@ defmodule MeaningGame.Game do
                required(:seat_id) => String.t(),
                required(:label) => String.t() | atom()
              }}
+          | {:bookends_tapped,
+             %{
+               required(:seat_id) => String.t(),
+               required(:label) => String.t() | atom()
+             }}
 
   @typedoc """
   What the Room is asked to do next. Effects are descriptions, never actions:
@@ -177,6 +184,7 @@ defmodule MeaningGame.Game do
           | {:chronicle, map()}
           | {:overrule, map()}
           | {:fairness_tap, map()}
+          | {:bookends_tap, map()}
 
   @type error ::
           :room_full
@@ -319,6 +327,7 @@ defmodule MeaningGame.Game do
              overrule: nil,
              overrules: [],
              fairness_taps: %{},
+             bookends_taps: %{},
              author_failure: nil
          }, []}
     end
@@ -542,6 +551,46 @@ defmodule MeaningGame.Game do
     end
   end
 
+  def apply(%__MODULE__{} = state, {:bookends_tapped, %{seat_id: seat_id, label: label}}) do
+    label_str = normalize_label(label)
+
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) != :closed ->
+        {:error, :not_closed}
+
+      label_str not in ["flat", "fine", "great"] ->
+        {:error, :invalid_label}
+
+      true ->
+        meta = (state.page && state.page[:meta]) || %{}
+        arm = meta[:arm] || meta["arm"]
+        bookends = (state.page && state.page[:bookends]) || state.bookends
+
+        page_id =
+          (state.page && (state.page[:id] || state.page["id"])) ||
+            (bookends && Enum.join(bookends, "-")) || "page"
+
+        tap_effect_data = %{
+          page_id: page_id,
+          page_identifier: page_id,
+          seat_id: seat_id,
+          label: label_str,
+          bookends: bookends,
+          gives: (state.page && state.page[:gives]) || state.gives,
+          author_meta: meta,
+          arm: arm
+        }
+
+        current_taps = state.bookends_taps || %{}
+        next_state = %{state | bookends_taps: Map.put(current_taps, seat_id, label_str)}
+
+        {:ok, next_state, [{:bookends_tap, tap_effect_data}]}
+    end
+  end
+
   def apply(%__MODULE__{} = state, {:next_page, %{seat_id: seat_id}}) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- closed_page(state) do
@@ -561,6 +610,7 @@ defmodule MeaningGame.Game do
            overrule: nil,
            overrules: [],
            fairness_taps: %{},
+           bookends_taps: %{},
            author_failure: nil
        }, []}
     end
@@ -611,6 +661,8 @@ defmodule MeaningGame.Game do
       overrule: overrule_view(state, viewer),
       your_tap: Map.get(fairness_taps, viewer),
       fairness_taps: fairness_taps,
+      your_bookends_tap: Map.get(state.bookends_taps || %{}, viewer),
+      bookends_taps: state.bookends_taps || %{},
       barred_words: if(phase != :waiting, do: barred_words(state))
     }
   end

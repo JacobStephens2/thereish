@@ -278,6 +278,14 @@ defmodule MeaningGame.Rooms do
     do: call(slug, {:record_fairness_tap, seat_id, label})
 
   @doc """
+  Taps bookends at closed phase (flat, fine, or great).
+  """
+  @spec tap_bookends(String.t(), String.t(), String.t() | atom()) ::
+          :ok | {:error, term()}
+  def tap_bookends(code, seat_id, label),
+    do: call(code, {:tap_bookends, seat_id, label})
+
+  @doc """
   "One more?" — a fresh Page in the same Room, with the same Seats.
 
   Only from a Page that has closed, so that the tap can never take a Page away
