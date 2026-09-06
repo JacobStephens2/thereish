@@ -53,14 +53,25 @@ defmodule MeaningGameWeb.RoomLive do
   end
 
   @impl true
-  def handle_event("join", %{"name" => name}, socket) do
-    case Rooms.join(socket.assigns.slug, name, socket.assigns.device_token) do
+  def handle_event("join", params, socket) do
+    name = params["name"] || ""
+    partner_id = params["partner_id"]
+
+    case Rooms.join(socket.assigns.slug, name, socket.assigns.device_token, partner_id) do
       {:ok, seat} ->
         {:noreply, socket |> assign(seat: seat, error: nil) |> resync()}
 
       {:error, reason} ->
         {:noreply, assign(socket, name: name, error: message(reason))}
     end
+  end
+
+  def handle_event("pair_seat", %{"partner_id" => partner_id}, socket) do
+    if socket.assigns.seat do
+      Rooms.pair_seats(socket.assigns.slug, socket.assigns.seat.id, partner_id)
+    end
+
+    {:noreply, resync(socket)}
   end
 
   def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
@@ -136,6 +147,14 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("bookends_tap", %{"label" => label}, socket) do
+    if socket.assigns.seat do
+      Rooms.tap_bookends(socket.assigns.slug, socket.assigns.seat.id, label)
+    end
+
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("submit_give", %{"give" => give}, socket) do
     trimmed = String.trim(give || "")
 
@@ -195,6 +214,10 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply,
      socket
      |> assign(:stage_present?, MeaningGameWeb.Presence.stage_present?(socket.assigns.slug))}
+  end
+
+  def handle_info({:voice_ready, attempt}, socket) do
+    {:noreply, MeaningGameWeb.Foley.push_voice(socket, attempt)}
   end
 
   defp seat_for_device(slug, device_token) do
@@ -293,8 +316,43 @@ defmodule MeaningGameWeb.RoomLive do
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">
         <.input name="name" value={@name} label="Your name" autocomplete="off" autofocus />
+        <div :if={@room && @room.seats != []} class="flex flex-col gap-1">
+          <label class="text-xs uppercase tracking-wide opacity-60">Partner (optional)</label>
+          <select
+            name="partner_id"
+            data-role="partner-select"
+            class="select select-bordered select-sm w-full"
+          >
+            <option value="">No partner</option>
+            <option :for={s <- @room.seats} value={s.id}>With {s.name}</option>
+          </select>
+        </div>
         <p :if={@error} data-role="error" class="text-sm text-error">{@error}</p>
         <.button variant="primary">Join</.button>
+      </form>
+
+      <form
+        :if={
+          @seat && @room.phase == :waiting && is_nil(@room.you[:partner_name]) &&
+            length(@room.seats) > 1
+        }
+        phx-submit="pair_seat"
+        class="flex flex-col gap-1 border-t border-base-300 pt-3"
+      >
+        <label class="text-xs uppercase tracking-wide opacity-60">Pair with someone</label>
+        <div class="flex items-center gap-2">
+          <select
+            name="partner_id"
+            data-role="pair-select"
+            class="select select-bordered select-sm flex-1"
+          >
+            <option value="">Choose partner...</option>
+            <option :for={s <- @room.seats} :if={s.id != @seat.id} value={s.id}>
+              {s.name}
+            </option>
+          </select>
+          <.button class="btn-sm">Pair</.button>
+        </div>
       </form>
 
       <form
@@ -388,7 +446,11 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.assaying room={@room} />
 
-      <.reveal room={@room} seat={@seat} mode={if @stage_present?, do: :quiet, else: :phone} />
+      <.reveal
+        room={@room}
+        seat={@seat}
+        mode={if @stage_present? and not (@room && @room.speaker?), do: :quiet, else: :phone}
+      />
 
       <.overrule_banner room={@room} seat={@seat} />
 
@@ -411,7 +473,7 @@ defmodule MeaningGameWeb.RoomLive do
         </.button>
       </div>
 
-      <.ending room={@room} />
+      <.ending room={@room} seat={@seat} mode={:phone} />
 
       <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>

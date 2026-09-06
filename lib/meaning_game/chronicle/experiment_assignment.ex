@@ -43,6 +43,6 @@ defmodule MeaningGame.Chronicle.ExperimentAssignment do
       :chapter,
       :assigned_at
     ])
-    |> validate_inclusion(:arm, ["bait", "plain"])
+    |> validate_inclusion(:arm, ["bait", "plain", "flash", "astra"])
   end
 end

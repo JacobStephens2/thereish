@@ -311,12 +311,18 @@ defmodule MeaningGame.StewardTest do
       counts = counts()
 
       recorded(fn conn, body ->
-        asked(counts, table_ordering(body))
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            Req.Test.json(conn, quip_response("Table joke."))
 
-        Req.Test.json(
-          conn,
-          response(verdict(closeness: 33, furthest: ["beacon", "seagull"]))
-        )
+          _ ->
+            asked(counts, table_ordering(body))
+
+            Req.Test.json(
+              conn,
+              response(verdict(closeness: 33, furthest: ["beacon", "seagull"]))
+            )
+        end
       end)
 
       assert {:ok, _} = Live.assay(@table)
@@ -352,31 +358,131 @@ defmodule MeaningGame.StewardTest do
       assayer(requests: 1, retries: 0)
     end
 
-    test "a repeated pair returns the stored verdict without calling the provider" do
+    test "a repeated Attempt inherits closeness, reasoning and furthest Bridges, and writes a fresh quip" do
       counts = counts()
 
       recorded(fn conn, body ->
-        asked(counts, ordering(body))
-        Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            Req.Test.json(conn, quip_response("A fresh joke about tonight."))
+
+          "verdict" ->
+            asked(counts, ordering(body))
+
+            Req.Test.json(
+              conn,
+              response(
+                verdict(
+                  closeness: 77,
+                  reasoning: "First run.",
+                  quip: "Original quip.",
+                  furthest: ["beacon", "cairn"]
+                )
+              )
+            )
+        end
       end)
 
       assert {:ok, verdict1} = Live.assay(@pair)
       assert verdict1.closeness == 77
+      assert verdict1.quip == "Original quip."
+      refute Map.get(verdict1.meta, :precedent_hit, false)
       assert Agent.get(counts, &Map.values/1) == [1, 1]
 
-      # Subsequent call with the exact same pair skips provider entirely
+      # Subsequent call with the exact same pair is a Precedent hit:
+      # inherits closeness, reasoning and furthest pair, and gets a fresh quip
       assert {:ok, verdict2} = Live.assay(@pair)
       assert verdict2.closeness == 77
       assert verdict2.reasoning == "First run."
+      assert verdict2.furthest == ["beacon", "cairn"]
+      assert verdict2.quip == "A fresh joke about tonight."
+      assert verdict2.meta.precedent_hit == true
+      assert verdict2.meta.cost_usd > 0
+      assert is_integer(verdict2.meta.latency_ms)
+      # Did not grade the two orderings again!
       assert Agent.get(counts, &Map.values/1) == [1, 1]
+    end
+
+    test "a failed quip request falls back to the cached quip" do
+      recorded(fn conn, body ->
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            Plug.Conn.send_resp(conn, 500, "quip model failed")
+
+          "verdict" ->
+            Req.Test.json(
+              conn,
+              response(
+                verdict(
+                  closeness: 77,
+                  reasoning: "First run.",
+                  quip: "Original quip.",
+                  furthest: ["beacon", "cairn"]
+                )
+              )
+            )
+        end
+      end)
+
+      assert {:ok, verdict1} = Live.assay(@pair)
+      assert verdict1.quip == "Original quip."
+
+      # On Precedent hit, quip request fails (500) and falls back to cached quip
+      assert {:ok, verdict2} = Live.assay(@pair)
+      assert verdict2.closeness == 77
+      assert verdict2.reasoning == "First run."
+      assert verdict2.furthest == ["beacon", "cairn"]
+      assert verdict2.quip == "Original quip."
+      assert verdict2.meta.precedent_hit == true
+    end
+
+    test "a slow quip request falls back to the cached quip" do
+      assayer(requests: 1, retries: 0, timeout_ms: 50)
+
+      recorded(fn conn, body ->
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            Process.sleep(200)
+            Req.Test.json(conn, quip_response("Too slow."))
+
+          "verdict" ->
+            Req.Test.json(
+              conn,
+              response(
+                verdict(
+                  closeness: 77,
+                  reasoning: "First run.",
+                  quip: "Original quip.",
+                  furthest: ["beacon", "cairn"]
+                )
+              )
+            )
+        end
+      end)
+
+      assert {:ok, verdict1} = Live.assay(@pair)
+      assert verdict1.quip == "Original quip."
+
+      # On Precedent hit, quip request exceeds timeout and falls back
+      assert {:ok, verdict2} = Live.assay(@pair)
+      assert verdict2.closeness == 77
+      assert verdict2.reasoning == "First run."
+      assert verdict2.quip == "Original quip."
+      assert verdict2.meta.precedent_hit == true
     end
 
     test "the reverse ordering hits the same cached precedent" do
       counts = counts()
 
       recorded(fn conn, body ->
-        asked(counts, ordering(body))
-        Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            Req.Test.json(conn, quip_response("Reverse quip."))
+
+          _ ->
+            asked(counts, ordering(body))
+            Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
+        end
       end)
 
       assert {:ok, _} = Live.assay(@pair)
@@ -386,6 +492,8 @@ defmodule MeaningGame.StewardTest do
       assert {:ok, verdict} = Live.assay(reversed)
       assert verdict.closeness == 77
       assert verdict.reasoning == "First run."
+      assert verdict.quip == "Reverse quip."
+      assert verdict.meta.precedent_hit == true
       assert Agent.get(counts, &Map.values/1) == [1, 1]
     end
 
@@ -434,8 +542,14 @@ defmodule MeaningGame.StewardTest do
       counts = counts()
 
       recorded(fn conn, body ->
-        asked(counts, ordering(body))
-        Req.Test.json(conn, response(verdict(closeness: 41, reasoning: "Original grade.")))
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            Req.Test.json(conn, quip_response("House law."))
+
+          _ ->
+            asked(counts, ordering(body))
+            Req.Test.json(conn, response(verdict(closeness: 41, reasoning: "Original grade.")))
+        end
       end)
 
       assert {:ok, verdict1} = Live.assay(@pair)
@@ -459,7 +573,7 @@ defmodule MeaningGame.StewardTest do
       assert verdict2.closeness == 100
       assert verdict2.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
       assert verdict2.quip == "House law."
-      # Did not call the provider again!
+      # Did not call grading again!
       assert Agent.get(counts, &Map.values/1) == [1, 1]
     end
 
@@ -587,6 +701,40 @@ defmodule MeaningGame.StewardTest do
 
       assert {:error, {:rejected, why}} = Live.assay(request)
       assert why =~ "furthest"
+    end
+
+    test "quip_prompt carries Bookends, Bridges, earlier Attempts, and Gives" do
+      request = %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["beacon", "cairn"],
+        player_bridges: [
+          %{player: "Jacob", bridge: "beacon"},
+          %{player: "Mara", bridge: "cairn"}
+        ],
+        earlier_attempts: [
+          %{
+            number: 1,
+            bookends: ["pier", "quay"],
+            bridges: [%{player: "Jacob", bridge: "jetty"}]
+          }
+        ],
+        gives: [%{player: "Jacob", give: "foggy coast"}]
+      }
+
+      prompt = MeaningGame.Steward.Assay.quip_prompt(request, request.player_bridges)
+      assert prompt.schema_name == "quip"
+      assert prompt.user =~ "LANTERN and HARBOUR"
+      assert prompt.user =~ "Jacob bridged with: beacon"
+      assert prompt.user =~ "Mara bridged with: cairn"
+      assert prompt.user =~ "Jacob gave: foggy coast"
+      assert prompt.user =~ "Attempt 1: Bookends: PIER and QUAY"
+    end
+
+    test "check_quip accepts non-empty quips and rejects blank or missing ones" do
+      assert MeaningGame.Steward.Assay.check_quip(%{"quip" => "A good line."}) == :ok
+      assert {:error, _} = MeaningGame.Steward.Assay.check_quip(%{"quip" => ""})
+      assert {:error, _} = MeaningGame.Steward.Assay.check_quip(%{"quip" => "   "})
+      assert {:error, _} = MeaningGame.Steward.Assay.check_quip(%{})
     end
   end
 

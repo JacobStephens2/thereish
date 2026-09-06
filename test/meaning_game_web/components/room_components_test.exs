@@ -261,6 +261,143 @@ defmodule MeaningGameWeb.RoomComponentsTest do
     end
   end
 
+  describe "roster couples" do
+    test "roster highlights couples with partner names" do
+      room = %{
+        seats: [
+          %{
+            id: "s1",
+            name: "Mara",
+            you?: false,
+            committed?: false,
+            couple?: true,
+            partner_id: "s2",
+            partner_name: "Jacob"
+          },
+          %{
+            id: "s2",
+            name: "Jacob",
+            you?: true,
+            committed?: false,
+            couple?: true,
+            partner_id: "s1",
+            partner_name: "Mara"
+          }
+        ],
+        open_seats: 0,
+        seat_limit: 2,
+        phase: :waiting
+      }
+
+      html = render_component(&roster/1, room: room)
+
+      assert html =~ ~s(data-role="partner")
+      assert html =~ "(with Jacob)"
+      assert html =~ "(with Mara)"
+      assert html =~ ~s(data-couple="true")
+    end
+  end
+
+  describe "couples on the reveal and stage meld map" do
+    setup do
+      pairs = [
+        %{
+          seat_ids: ["s1", "s2"],
+          names: ["Mara", "Jacob"],
+          bridges: ["cairn", "cairo"],
+          closeness: 80,
+          band: :meld,
+          melded?: true,
+          couple?: true,
+          cross_couple?: false,
+          cross_couple_meld?: false,
+          surprise: nil
+        },
+        %{
+          seat_ids: ["s3", "s4"],
+          names: ["Ada", "Ida"],
+          bridges: ["wharf", "beacon"],
+          closeness: 30,
+          band: :miss,
+          melded?: false,
+          couple?: true,
+          cross_couple?: false,
+          cross_couple_meld?: false,
+          surprise: nil
+        },
+        %{
+          seat_ids: ["s1", "s4"],
+          names: ["Mara", "Ida"],
+          bridges: ["cairn", "beacon"],
+          closeness: 85,
+          band: :meld,
+          melded?: true,
+          couple?: false,
+          cross_couple?: true,
+          cross_couple_meld?: true,
+          surprise: "Mara and Ida think alike"
+        }
+      ]
+
+      room = %{
+        phase: :reveal,
+        reveal: %{
+          closeness: 65,
+          band: :close,
+          melded?: false,
+          bridges: [
+            %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "cairo"},
+            %{seat_id: "s3", name: "Ada", bridge: "wharf"},
+            %{seat_id: "s4", name: "Ida", bridge: "beacon"}
+          ],
+          graded?: true,
+          overruled?: false,
+          quip: "All together now.",
+          pairs: pairs
+        }
+      }
+
+      %{room: room, pairs: pairs}
+    end
+
+    test "phone reveal puts player's own couple score first and marks cross-couple Melds", %{
+      room: room
+    } do
+      mara_seat = %{id: "s1", name: "Mara"}
+      html = render_component(&reveal/1, room: room, seat: mara_seat, mode: :phone)
+
+      # Displays own couple pair closeness
+      assert html =~ ~s(data-role="own-couple-pair")
+      assert html =~ ~s(data-role="couple-closeness")
+      assert html =~ "Your couple: Mara &amp; Jacob"
+      assert html =~ "80"
+
+      # Displays surprise cross-couple meld alert
+      assert html =~ ~s(data-role="cross-couple-meld")
+      assert html =~ "Mara and Ida think alike"
+    end
+
+    test "stage reveal draws the meld map highlighting couples and cross-couple melds", %{
+      room: room
+    } do
+      html = render_component(&reveal/1, room: room, mode: :stage)
+
+      # Stage draws meld-map
+      assert html =~ ~s(data-role="meld-map")
+      assert html =~ "Meld Map"
+      assert html =~ "3 pairs"
+
+      # Couple badges
+      assert html =~ ~s(data-role="couple-badge")
+      assert html =~ "Couple"
+
+      # Cross-couple meld alert
+      assert html =~ ~s(data-role="cross-couple-meld")
+      assert html =~ "Mara and Ida think alike"
+    end
+  end
+
   describe "the carry line" do
     test "names the two words the next attempt will hang between" do
       room = %{phase: :reveal, next_bookends: ["cairn", "beacon"], next_bookends_chosen?: true}

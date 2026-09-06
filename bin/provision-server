@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# One-time setup of meld.stephens.page on the VPS: checkout, Postgres role and
+# One-time setup of thereish.app on the VPS: checkout, Postgres role and
 # database, pg_hba rule, .env, Apache vhost, TLS certificate.
 #
 # Idempotent — safe to re-run. Routine deploys are bin/deploy.
 set -euo pipefail
 
-SERVER="jacob@stephens.page"
-HOST="meld.stephens.page"
-APP_DIR="/var/www/${HOST}"
-REPO="https://github.com/JacobStephens2/meaning-game.git"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../deploy/env.sh"
 
 echo "== Ensuring the checkout at ${APP_DIR}"
 ssh "${SERVER}" bash -s <<REMOTE
