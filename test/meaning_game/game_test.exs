@@ -1336,6 +1336,166 @@ defmodule MeaningGame.GameTest do
     end
   end
 
+  describe "couples and the meld map (ticket 07)" do
+    test "a seat can be marked as paired with another seat in the room" do
+      state =
+        Game.init(seat_limit: 4)
+        |> play([
+          {:seat_joined, seat("Melissa")},
+          {:seat_joined, seat("Jacob")},
+          {:seats_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}}
+        ])
+
+      view = Game.view(state, "seat-Melissa")
+      melissa_seat = Enum.find(view.seats, &(&1.name == "Melissa"))
+      jacob_seat = Enum.find(view.seats, &(&1.name == "Jacob"))
+
+      assert melissa_seat.partner_id == "seat-Jacob"
+      assert melissa_seat.partner_name == "Jacob"
+      assert melissa_seat.couple? == true
+
+      assert jacob_seat.partner_id == "seat-Melissa"
+      assert jacob_seat.partner_name == "Melissa"
+      assert jacob_seat.couple? == true
+    end
+
+    test "a seat joining with partner_id pairs both seats mutually" do
+      state =
+        Game.init(seat_limit: 4)
+        |> play([
+          {:seat_joined, seat("Melissa")},
+          {:seat_joined, Map.put(seat("Jacob"), :partner_id, "seat-Melissa")}
+        ])
+
+      view = Game.view(state, "seat-Jacob")
+      melissa_seat = Enum.find(view.seats, &(&1.name == "Melissa"))
+      jacob_seat = Enum.find(view.seats, &(&1.name == "Jacob"))
+
+      assert melissa_seat.partner_id == "seat-Jacob"
+      assert jacob_seat.partner_id == "seat-Melissa"
+    end
+
+    test "the reveal puts each player's own couple-pair first and marks cross-couple Melds" do
+      state =
+        Game.init(
+          seat_limit: 4,
+          seats: [
+            Map.put(seat("Melissa"), :partner_id, "seat-Jacob"),
+            Map.put(seat("Jacob"), :partner_id, "seat-Melissa"),
+            Map.put(seat("Ada"), :partner_id, "seat-Ida"),
+            Map.put(seat("Ida"), :partner_id, "seat-Ada")
+          ],
+          page: @page
+        )
+
+      {state, effects} =
+        commit_all(state, [
+          {"Melissa", "dock"},
+          {"Jacob", "cairn"},
+          {"Ada", "cairo"},
+          {"Ida", "beacon"}
+        ])
+
+      pair_verdicts = [
+        %{
+          seat_ids: ["seat-Melissa", "seat-Jacob"],
+          names: ["Melissa", "Jacob"],
+          bridges: ["dock", "cairn"],
+          closeness: 60,
+          band: :close,
+          melded?: false,
+          couple?: true
+        },
+        %{
+          seat_ids: ["seat-Ada", "seat-Ida"],
+          names: ["Ada", "Ida"],
+          bridges: ["cairo", "beacon"],
+          closeness: 55,
+          band: :adjacent,
+          melded?: false,
+          couple?: true
+        },
+        %{
+          seat_ids: ["seat-Jacob", "seat-Ada"],
+          names: ["Jacob", "Ada"],
+          bridges: ["cairn", "cairo"],
+          closeness: 95,
+          band: :meld,
+          melded?: true,
+          couple?: false
+        },
+        %{
+          seat_ids: ["seat-Melissa", "seat-Ada"],
+          names: ["Melissa", "Ada"],
+          bridges: ["dock", "cairo"],
+          closeness: 20,
+          band: :miss,
+          melded?: false,
+          couple?: false
+        },
+        %{
+          seat_ids: ["seat-Melissa", "seat-Ida"],
+          names: ["Melissa", "Ida"],
+          bridges: ["dock", "beacon"],
+          closeness: 30,
+          band: :miss,
+          melded?: false,
+          couple?: false
+        },
+        %{
+          seat_ids: ["seat-Jacob", "seat-Ida"],
+          names: ["Jacob", "Ida"],
+          bridges: ["cairn", "beacon"],
+          closeness: 40,
+          band: :adjacent,
+          melded?: false,
+          couple?: false
+        }
+      ]
+
+      [{:assay, _request}] = assays(effects)
+
+      event =
+        {:verdict_received,
+         %{
+           closeness: 60,
+           reasoning: "overall close",
+           quip: "table quip",
+           furthest: ["dock", "beacon"],
+           pairs: pair_verdicts,
+           meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
+         }}
+
+      {:ok, state, _} = Game.apply(state, event)
+
+      melissa_view = Game.view(state, "seat-Melissa")
+      [first_pair_for_melissa | _] = melissa_view.reveal.pairs
+      assert first_pair_for_melissa.names == ["Melissa", "Jacob"]
+      assert first_pair_for_melissa.couple? == true
+
+      ada_view = Game.view(state, "seat-Ada")
+      [first_pair_for_ada | _] = ada_view.reveal.pairs
+      assert first_pair_for_ada.names == ["Ada", "Ida"]
+      assert first_pair_for_ada.couple? == true
+
+      jacob_ada_pair =
+        Enum.find(melissa_view.reveal.pairs, fn p ->
+          p.seat_ids == ["seat-Jacob", "seat-Ada"]
+        end)
+
+      assert jacob_ada_pair.cross_couple_meld? == true
+      assert jacob_ada_pair.surprise =~ "think alike"
+
+      melissa_ada_pair =
+        Enum.find(melissa_view.reveal.pairs, fn p ->
+          p.seat_ids == ["seat-Melissa", "seat-Ada"]
+        end)
+
+      assert melissa_ada_pair.cross_couple_meld? == false
+      assert melissa_ada_pair.surprise == nil
+    end
+  end
+
   describe "the bookends tap (ticket 08)" do
     setup do
       state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
