@@ -765,22 +765,62 @@ defmodule MeaningGameWeb.RoomComponents do
             source.start(0)
           }
 
+          this.stopMusic = () => {
+            if (this.currentMusic) {
+              try { this.currentMusic.source.stop() } catch (_) {}
+              this.currentMusic = null
+            }
+            if (this.musicSource) {
+              try { this.musicSource.stop() } catch (_) {}
+              this.musicSource = null
+            }
+          }
+
           this.handleEvent("foley:page", async ({path}) => {
             if (this.reducedMotion) return
             await this.resumeAudio()
             if (!this.ctx) return
             const trackUrl = path || "/audio/house-loop.mp3"
+
+            if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              return
+            }
+
             const buf = await this.fetchBuffer(trackUrl)
             if (!buf) return
 
-            if (this.musicSource) {
-              try { this.musicSource.stop() } catch (_) {}
+            if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              return
             }
-            this.musicSource = this.ctx.createBufferSource()
-            this.musicSource.buffer = buf
-            this.musicSource.loop = true
-            this.musicSource.connect(this.musicBus)
-            this.musicSource.start(0)
+
+            const now = this.ctx.currentTime
+            const fadeDuration = 2.0
+
+            const newGain = this.ctx.createGain()
+            const newSource = this.ctx.createBufferSource()
+            newSource.buffer = buf
+            newSource.loop = true
+            newSource.connect(newGain)
+            newGain.connect(this.musicBus)
+
+            const oldMusic = this.currentMusic
+            if (oldMusic) {
+              newGain.gain.setValueAtTime(0.001, now)
+              newGain.gain.linearRampToValueAtTime(1.0, now + fadeDuration)
+
+              oldMusic.gain.gain.cancelScheduledValues(now)
+              oldMusic.gain.gain.setValueAtTime(oldMusic.gain.gain.value, now)
+              oldMusic.gain.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
+              setTimeout(() => {
+                try { oldMusic.source.stop() } catch (_) {}
+              }, fadeDuration * 1000 + 100)
+            } else {
+              newGain.gain.setValueAtTime(1.0, now)
+            }
+
+            newSource.start(0)
+            this.currentMusic = {source: newSource, gain: newGain, path: trackUrl}
+            this.musicSource = newSource
           })
 
           this.handleEvent("foley:beat", async () => {
@@ -797,18 +837,12 @@ defmodule MeaningGameWeb.RoomComponents do
             const delayMs = (kind === "meld") ? 1800 : 0
             setTimeout(() => {
               this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 0)
-              if (this.musicSource) {
-                try { this.musicSource.stop() } catch (_) {}
-                this.musicSource = null
-              }
+              this.stopMusic()
             }, delayMs)
           })
 
           this.handleEvent("foley:stop", () => {
-            if (this.musicSource) {
-              try { this.musicSource.stop() } catch (_) {}
-              this.musicSource = null
-            }
+            this.stopMusic()
           })
 
           this.updateTapForSound()
@@ -817,17 +851,13 @@ defmodule MeaningGameWeb.RoomComponents do
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
           this.updateTapForSound()
-          if (!this.speaker && this.musicSource) {
-            try { this.musicSource.stop() } catch (_) {}
-            this.musicSource = null
+          if (!this.speaker) {
+            this.stopMusic()
           }
         },
 
         destroyed() {
-          if (this.musicSource) {
-            try { this.musicSource.stop() } catch (_) {}
-            this.musicSource = null
-          }
+          this.stopMusic()
           if (this.ctx) {
             try { this.ctx.close() } catch (_) {}
             this.ctx = null

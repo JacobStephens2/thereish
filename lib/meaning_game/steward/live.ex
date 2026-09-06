@@ -49,9 +49,11 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward
   alias MeaningGame.Steward.Assay
   alias MeaningGame.Steward.Gate
+  alias MeaningGame.Steward.Music
   alias MeaningGame.Steward.Naming
   alias MeaningGame.Steward.Precedent
   alias MeaningGame.Steward.Recap
+  alias MeaningGame.Steward.TrackCache
   alias MeaningGame.Steward.Vale
 
   @impl true
@@ -251,6 +253,29 @@ defmodule MeaningGame.Steward.Live do
       |> Keyword.put(:provider, provider)
 
     provider.speak(line, merged_opts)
+  end
+
+  @impl true
+  def score(gives, opts \\ []) do
+    case TrackCache.get(gives) do
+      {:ok, track} ->
+        {:ok, track}
+
+      :miss ->
+        role = Steward.role(:foley, :music)
+        prompt = Music.prompt(gives)
+
+        params =
+          role
+          |> Map.merge(Map.new(opts))
+          |> Map.put(:prompt, prompt)
+          |> Map.put(:n, 1)
+
+        with {:ok, result} <- MeaningGame.Steward.Mureka.generate(params),
+             {:ok, track} <- TrackCache.store(gives, result) do
+          {:ok, track}
+        end
+    end
   end
 
   @impl true
