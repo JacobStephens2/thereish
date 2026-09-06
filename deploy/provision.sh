@@ -7,8 +7,8 @@
 # which does not touch any of this.
 set -euo pipefail
 
-HOST="thereish.app"
-APP_DIR="/var/www/${HOST}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/env.sh"
 DB_NAME="meaning_game"
 DB_USER="meaning_game"
 ENV_FILE="${APP_DIR}/.env"
@@ -104,6 +104,15 @@ else
   sudo certbot --apache --non-interactive --agree-tos --keep-until-expiring \
     -m "${CERTBOT_EMAIL}" --redirect -d "${HOST}" -d "www.${HOST}"
   echo "issued the certificate and installed the TLS vhost"
+fi
+
+say "Legacy redirect (meld.stephens.page)"
+if [ -d "/etc/apache2/meld.stephens.page.d" ]; then
+  sudo rm -f "/etc/apache2/meld.stephens.page.d/proxy.conf"
+  sudo install -m 0644 "${APP_DIR}/deploy/apache/meld-redirect.conf" "/etc/apache2/meld.stephens.page.d/redirect.conf"
+  sudo apache2ctl configtest
+  sudo systemctl reload apache2
+  echo "synced /etc/apache2/meld.stephens.page.d/redirect.conf"
 fi
 
 say "Done. Deploy with bin/deploy from the Mac."
