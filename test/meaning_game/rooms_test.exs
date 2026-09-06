@@ -1267,6 +1267,47 @@ defmodule MeaningGame.RoomsTest do
       assert unblinding.seat_id == ctx.jacob.id
       assert unblinding.experiment_id == "bait_against_plain"
     end
+
+    test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      [asgn1] = MeaningGame.Chronicle.experiment_assignments(room.id, "author_model")
+      assert asgn1.arm == "flash"
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_phase(ctx.slug, :closed)
+
+      view1 = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view1.phase == :closed
+      assert view1.your_bookends_tap == nil
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.mara.id, "great")
+      view_m = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view_m.your_bookends_tap == "great"
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.mara.id, "fine")
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).your_bookends_tap == "fine"
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.jacob.id, "flat")
+      assert Rooms.snapshot(ctx.slug, ctx.jacob.id).your_bookends_tap == "flat"
+
+      [outcome1] = MeaningGame.Chronicle.experiment_outcomes(room.id, "author_model")
+      assert outcome1.arm == "flash"
+      assert outcome1.taps[to_string(ctx.mara.id)] == "fine"
+      assert outcome1.taps[to_string(ctx.jacob.id)] == "flat"
+      assert outcome1.closing_band == "deep_meld"
+
+      assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "harbour")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "lantern")
+      await_phase(ctx.slug, :bridging)
+
+      assignments = MeaningGame.Chronicle.experiment_assignments(room.id, "author_model")
+      assert length(assignments) == 2
+      assert Enum.map(assignments, & &1.arm) == ["flash", "astra"]
+    end
   end
 
   describe "speaker and switches" do
@@ -1406,7 +1447,6 @@ defmodule MeaningGame.RoomsTest do
       refute json =~ ctx.token_b
     end
   end
-
   describe "Sides: couple versus couple through the Room" do
     test "pairing seats forms Sides, broadcasts, and unpairing clears them" do
       {:ok, slug} = Rooms.create(4, device_token())
@@ -1481,6 +1521,100 @@ defmodule MeaningGame.RoomsTest do
       assert side_b.closer? == false
 
       stop_room(slug)
+    end
+  end
+
+  describe "couples and the meld map (ticket 07)" do
+    test "joining with a partner marks both seats as a couple and survives room restart" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), mara.id)
+
+      view = Rooms.snapshot(slug, mara.id)
+      mara_seat = Enum.find(view.seats, &(&1.id == mara.id))
+      jacob_seat = Enum.find(view.seats, &(&1.id == jacob.id))
+
+      assert mara_seat.partner_id == jacob.id
+      assert mara_seat.partner_name == "Jacob"
+      assert mara_seat.couple? == true
+
+      assert jacob_seat.partner_id == mara.id
+      assert jacob_seat.partner_name == "Mara"
+      assert jacob_seat.couple? == true
+
+      # Survives process crash and restart
+      stop_room(slug)
+
+      once_restarted(fn ->
+        view_after = Rooms.snapshot(slug, mara.id)
+        m = Enum.find(view_after.seats, &(&1.id == mara.id))
+        j = Enum.find(view_after.seats, &(&1.id == jacob.id))
+
+        assert m.partner_id == jacob.id
+        assert j.partner_id == mara.id
+      end)
+    end
+
+    test "two seats can be paired after joining via Rooms.pair_seats/3" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      assert :ok = Rooms.pair_seats(slug, mara.id, jacob.id)
+
+      view = Rooms.snapshot(slug, mara.id)
+      m = Enum.find(view.seats, &(&1.id == mara.id))
+      j = Enum.find(view.seats, &(&1.id == jacob.id))
+
+      assert m.partner_id == jacob.id
+      assert j.partner_id == mara.id
+    end
+
+    test "an Attempt commit grades all pairs alongside the one Verdict" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), mara.id)
+      assert {:ok, bram} = Rooms.join(slug, "Bram", device_token())
+      assert {:ok, esme} = Rooms.join(slug, "Esme", device_token(), bram.id)
+
+      Enum.each([mara, jacob, bram, esme], fn s ->
+        :ok = Rooms.give(slug, s.id, "setting #{s.name}")
+      end)
+
+      await_phase(slug, :bridging)
+
+      :ok = Rooms.commit_bridge(slug, mara.id, "dock")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, bram.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, esme.id, "beacon")
+
+      view = await_reveal(slug)
+
+      # The one Verdict is preserved (ADR-0010)
+      assert view.reveal.closeness != nil
+      assert view.reveal.furthest != nil
+
+      # Pairs are present: 4 choose 2 = 6 pairs
+      assert is_list(view.reveal.pairs)
+      assert length(view.reveal.pairs) == 6
+
+      # Mara's view puts Mara & Jacob couple first
+      mara_view = Rooms.snapshot(slug, mara.id)
+      [first_pair | _] = mara_view.reveal.pairs
+      assert first_pair.names == ["Mara", "Jacob"]
+      assert first_pair.couple? == true
+
+      # Bram's view puts Bram & Esme couple first
+      bram_view = Rooms.snapshot(slug, bram.id)
+      [first_pair_bryan | _] = bram_view.reveal.pairs
+      assert first_pair_bryan.names == ["Bram", "Esme"]
+      assert first_pair_bryan.couple? == true
+
+      assert Enum.count(view.reveal.pairs, & &1.couple?) == 2
+      assert Enum.count(view.reveal.pairs, & &1.cross_couple?) == 4
     end
   end
 

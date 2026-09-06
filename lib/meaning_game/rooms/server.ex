@@ -91,7 +91,7 @@ defmodule MeaningGame.Rooms.Server do
         opened_at: nil,
         assayer: nil,
         author: nil,
-        current_arm: :flash
+        current_arm: nil
       }
 
       {:ok, opened(state)}
@@ -101,10 +101,27 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   @impl true
-  def handle_call({:join, name, device_token}, _from, state) do
+  def handle_call({:join, name, device_token}, from, state) do
+    handle_call({:join, name, device_token, nil}, from, state)
+  end
+
+  def handle_call({:join, name, device_token, partner_id}, _from, state) do
     case held_seat(state, name, device_token) do
       %Seat{} = seat -> rejoin_seat(seat, device_token, state)
-      nil -> take_seat(name, device_token, state)
+      nil -> take_seat(name, device_token, partner_id, state)
+    end
+  end
+  def handle_call({:pair_seats, seat_id, nil}, from, state) do
+    handle_call({:unpair_seat, seat_id}, from, state)
+  end
+
+  def handle_call({:pair_seats, seat_id, partner_id}, _from, state) do
+    with {:ok, _seats} <- Store.pair_seats(state.room.id, seat_id, partner_id),
+         {:ok, game, effects} <-
+           Game.apply(state.game, {:seat_paired, %{seat_id: seat_id, partner_id: partner_id}}) do
+      {:reply, :ok, advance(state, game, effects)}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
@@ -129,15 +146,6 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
-  def handle_call({:pair_seats, seat_id, partner_id}, _from, state) do
-    with {:ok, _seats} <- Store.pair_seats(state.room.id, seat_id, partner_id),
-         {:ok, game, effects} <-
-           Game.apply(state.game, {:seat_paired, %{seat_id: seat_id, partner_id: partner_id}}) do
-      {:reply, :ok, advance(state, game, effects)}
-    else
-      {:error, reason} -> {:reply, {:error, reason}, state}
-    end
-  end
 
   def handle_call({:unpair_seat, seat_id}, _from, state) do
     with {:ok, _seats} <- Store.unpair_seat(state.room.id, seat_id),
@@ -178,6 +186,13 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  def handle_call({:tap_bookends, seat_id, label}, _from, state) do
+    case Game.apply(state.game, {:bookends_tapped, %{seat_id: seat_id, label: label}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   def handle_call({:give, seat_id, give}, _from, state) do
     case Game.apply(state.game, {:give_committed, %{seat_id: seat_id, give: give}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -203,8 +218,16 @@ defmodule MeaningGame.Rooms.Server do
 
   def handle_call({:next_page, seat_id}, _from, state) do
     case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
-      {:ok, game, effects} -> {:reply, :ok, advance(%{state | opened_at: nil}, game, effects)}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      {:ok, game, effects} ->
+        new_state =
+          %{state | opened_at: nil}
+          |> Map.put(:current_arm, nil)
+          |> Map.put(:current_page_id, nil)
+
+        {:reply, :ok, advance(new_state, game, effects)}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -425,15 +448,17 @@ defmodule MeaningGame.Rooms.Server do
 
   # The rules decide before Postgres hears anything, so a Room that is full costs
   # no write. The id is minted here because the rules need a Seat to rule on.
-  defp take_seat(name, device_token, state) do
+  defp take_seat(name, device_token, partner_id, state) do
     id = Ecto.UUID.generate()
 
-    with {:ok, game, effects} <- Game.apply(state.game, {:seat_joined, %{id: id, name: name}}),
-         {:ok, seat} <- Store.insert_seat(state.room.id, id, name, device_token) do
+    with {:ok, game, effects} <-
+           Game.apply(state.game, {:seat_joined, %{id: id, name: name, partner_id: partner_id}}),
+         {:ok, seat} <- Store.insert_seat(state.room.id, id, name, device_token, partner_id) do
       {:reply, {:ok, public(seat)}, advance(state, game, effects)}
     else
       {:error, :room_full} -> {:reply, {:error, :room_full}, state}
       {:error, %Ecto.Changeset{}} -> {:reply, {:error, :could_not_join}, state}
+      {:error, _reason} -> {:reply, {:error, :could_not_join}, state}
     end
   end
 
@@ -484,7 +509,7 @@ defmodule MeaningGame.Rooms.Server do
   defp perform({:chronicle, entry}, state) do
     {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
 
-    arm = state[:current_arm] || :bait
+    arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
 
     # A Page that is safely in the log gets written about. It happens somewhere
@@ -492,7 +517,7 @@ defmodule MeaningGame.Rooms.Server do
     # paragraph (`MeaningGame.Scribe`).
     Scribe.write_about(state.room, page)
 
-    state
+    Map.put(state, :current_page_id, page.id)
   rescue
     error ->
       Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
@@ -528,15 +553,33 @@ defmodule MeaningGame.Rooms.Server do
       state
   end
 
+  defp perform({:bookends_tap, tap_data}, state) do
+    tap_data =
+      if state[:current_page_id] do
+        Map.put(tap_data, :page_id, state.current_page_id)
+      else
+        tap_data
+      end
+
+    {:ok, _} = Chronicle.record_bookends_tap(state.room.id, tap_data)
+    state
+  rescue
+    error ->
+      Logger.error("the bookends tap could not be recorded: #{Exception.message(error)}")
+      state
+  end
+
   defp perform({:author, request}, state) do
     state = author_answered(state)
     room = self()
     digest = Chronicle.digest(state.room.id)
+    page_num = (state.game && state.game.page && state.game.page.id) || nil
+    arm = state[:current_arm] || Steward.assign_arm(state.room.id, page_num)
     ref = make_ref()
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
-        case Steward.author(request, job: :flash, digest: digest) do
+        case Steward.author(request, job: arm, digest: digest) do
           {:ok, result} ->
             send(room, {:author_completed, ref, {:ok, result}})
 
@@ -552,16 +595,91 @@ defmodule MeaningGame.Rooms.Server do
       end
     end)
 
-    waiting_on_author(state, ref)
+    state
+    |> Map.put(:current_arm, arm)
+    |> waiting_on_author(ref)
   end
 
   defp perform({:assay, request}, state) do
     room = self()
     arm = state[:current_arm] || :flash
     page = state.game.page
+    seats = state.game.seats
+    bridges = state.game.bridges
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
-      send(room, {:assayed, verdict_event(assay(request, page, arm))})
+      main_task = Task.async(fn -> assay(request, page, arm) end)
+
+      pair_tasks =
+        if length(seats) > 2 do
+          for {seat_a, idx} <- Enum.with_index(seats),
+              seat_b <- Enum.drop(seats, idx + 1) do
+            bridge_a = bridges[seat_a.id]
+            bridge_b = bridges[seat_b.id]
+
+            Task.async(fn ->
+              pair_request = %{bookends: request.bookends, bridges: [bridge_a, bridge_b]}
+
+              case assay(pair_request, page, arm) do
+                {:ok, pv} ->
+                  %{
+                    seat_ids: [seat_a.id, seat_b.id],
+                    closeness: pv[:closeness],
+                    quip: pv[:quip],
+                    verdict: pv
+                  }
+
+                {:error, _} ->
+                  %{
+                    seat_ids: [seat_a.id, seat_b.id],
+                    closeness: nil,
+                    verdict: nil
+                  }
+              end
+            end)
+          end
+        else
+          []
+        end
+
+      main_res = Task.await(main_task, :infinity)
+
+      pair_verdicts =
+        if length(seats) <= 2 do
+          case main_res do
+            {:ok, v} ->
+              [
+                %{
+                  seat_ids: Enum.map(seats, & &1.id),
+                  closeness: v[:closeness],
+                  quip: v[:quip],
+                  verdict: v
+                }
+              ]
+
+            _ ->
+              [
+                %{
+                  seat_ids: Enum.map(seats, & &1.id),
+                  closeness: nil,
+                  verdict: nil
+                }
+              ]
+          end
+        else
+          Enum.map(pair_tasks, &Task.await(&1, :infinity))
+        end
+
+      event =
+        case verdict_event(main_res) do
+          {:verdict_received, verdict} ->
+            {:verdict_received, Map.put(verdict, :pairs, pair_verdicts)}
+
+          other ->
+            other
+        end
+
+      send(room, {:assayed, event})
     end)
 
     waiting_on(state)

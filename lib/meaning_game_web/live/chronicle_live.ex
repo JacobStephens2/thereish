@@ -97,10 +97,11 @@ defmodule MeaningGameWeb.ChronicleLive do
   def handle_event("unblind_experiment", _params, socket) do
     room_id = socket.assigns.room.id
     seat_id = socket.assigns.seat && socket.assigns.seat.id
+    experiment_id = socket.assigns[:experiment_id] || "author_model"
 
     {:ok, _} =
       Chronicle.record_experiment_unblinding(room_id, %{
-        experiment_id: "bait_against_plain",
+        experiment_id: experiment_id,
         seat_id: seat_id,
         unblinded_at: DateTime.utc_now(),
         notes: "Deliberate unblinding from Chronicle"
@@ -121,15 +122,33 @@ defmodule MeaningGameWeb.ChronicleLive do
   defp load_pages(socket) do
     room_id = socket.assigns.room.id
     pages = Chronicle.book(room_id)
-    unblinded = Chronicle.experiment_unblinded?(room_id, "bait_against_plain")
-    readout = Chronicle.experiment_readout(room_id, "bait_against_plain")
+    experiment_id = active_experiment_id(room_id)
+    unblinded = Chronicle.experiment_unblinded?(room_id, experiment_id)
+    readout = Chronicle.experiment_readout(room_id, experiment_id)
     spend = Chronicle.spend(room_id)
 
     socket
     |> assign(:pages, pages)
+    |> assign(:experiment_id, experiment_id)
     |> assign(:unblinded, unblinded)
     |> assign(:readout, readout)
     |> assign(:spend, spend)
+  end
+
+  defp active_experiment_id(room_id) do
+    latest_outcome =
+      Chronicle.experiment_outcomes(room_id, nil)
+      |> List.last()
+
+    latest_assignment =
+      Chronicle.experiment_assignments(room_id, nil)
+      |> List.last()
+
+    cond do
+      latest_outcome -> latest_outcome.experiment_id
+      latest_assignment -> latest_assignment.experiment_id
+      true -> "author_model"
+    end
   end
 
   defp default_correction_params do
@@ -210,9 +229,9 @@ defmodule MeaningGameWeb.ChronicleLive do
                 Deliberately Unblinded
               </span>
             </div>
-            <h2 class="text-xl font-bold tracking-tight mt-1">Bait against plain</h2>
+            <h2 class="text-xl font-bold tracking-tight mt-1">{@readout.experiment.name}</h2>
             <p class="text-xs opacity-70 mt-0.5">
-              Testing ADR-0004's misdirection decision. Declared sample size: 20 Pages.
+              {@readout.experiment.description} Declared sample size: {@readout.experiment.sample_size} Pages.
             </p>
           </div>
           <div>
@@ -228,7 +247,11 @@ defmodule MeaningGameWeb.ChronicleLive do
         </div>
 
         <div class="text-xs opacity-75">
-          <p>
+          <p :if={@readout.experiment.id == "author_model"}>
+            <span class="font-semibold">Declared outcomes:</span>
+            Meld rate, attempts to meld, bookends preferences (flat / fine / great), and closing band distribution.
+          </p>
+          <p :if={@readout.experiment.id != "author_model"}>
             <span class="font-semibold">Declared outcomes:</span>
             Meld rate, attempts to meld, fairness preferences, overrules, and bait trap convergence.
           </p>
@@ -242,7 +265,29 @@ defmodule MeaningGameWeb.ChronicleLive do
         >
           <h3 class="text-sm font-bold uppercase tracking-wider opacity-70">Qualitative Readout</h3>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div
+            :if={@readout.experiment.id == "author_model"}
+            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+          >
+            <.author_arm_readout_card
+              data_role="readout-arm-flash"
+              title="Gemini 3.8 Flash"
+              title_class="text-secondary"
+              summary={@readout.flash}
+            />
+
+            <.author_arm_readout_card
+              data_role="readout-arm-astra"
+              title="GPT-6 Astra"
+              title_class="opacity-80"
+              summary={@readout.astra}
+            />
+          </div>
+
+          <div
+            :if={@readout.experiment.id != "author_model"}
+            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+          >
             <.arm_readout_card
               data_role="readout-arm-bait"
               title="Bait-scored Pages"
@@ -665,6 +710,37 @@ defmodule MeaningGameWeb.ChronicleLive do
         {@extra_label}: <span class="font-semibold">{@extra_value}</span>
       </div>
       <div class="mt-1 opacity-75">Fairness: {@summary.fairness_summary}</div>
+    </div>
+    """
+  end
+
+  attr :data_role, :string, required: true
+  attr :title, :string, required: true
+  attr :title_class, :string, default: "opacity-80"
+  attr :summary, :map, required: true
+
+  defp author_arm_readout_card(assigns) do
+    ~H"""
+    <div
+      data-role={@data_role}
+      class="rounded-lg bg-base-200/60 p-3 flex flex-col gap-1 text-xs"
+    >
+      <span class={["font-bold text-sm", @title_class]}>{@title}</span>
+      <div>Pages played: <span class="font-semibold">{@summary.pages_count}</span></div>
+      <div>Meld rate: <span class="font-semibold">{@summary.meld_rate}</span></div>
+      <div>
+        Mean attempts: <span class="font-semibold">{@summary.mean_attempts_to_meld}</span>
+      </div>
+      <div>
+        Best streak: <span class="font-semibold">{@summary.longest_meld_streak}</span>
+      </div>
+      <div class="mt-1 opacity-75">Preferences: {@summary.preferences_summary}</div>
+      <div
+        :if={@summary[:closing_bands] && map_size(@summary.closing_bands) > 0}
+        class="mt-0.5 opacity-60 text-[11px]"
+      >
+        Bands: {Enum.map_join(@summary.closing_bands, ", ", fn {k, v} -> "#{k}: #{v}" end)}
+      </div>
     </div>
     """
   end
