@@ -90,6 +90,7 @@ defmodule MeaningGame.Rooms.Server do
         held: [],
         opened_at: nil,
         assayer: nil,
+        author: nil,
         current_arm: nil,
         voice_audio: nil,
         voice_meta: %{}
