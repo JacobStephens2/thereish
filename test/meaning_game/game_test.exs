@@ -1397,15 +1397,64 @@ defmodule MeaningGame.GameTest do
         ])
 
       pair_verdicts = [
-        %{seat_ids: ["seat-Mara", "seat-Jacob"], names: ["Mara", "Jacob"], bridges: ["dock", "cairn"], closeness: 60, band: :close, melded?: false, couple?: true},
-        %{seat_ids: ["seat-Ada", "seat-Ida"], names: ["Ada", "Ida"], bridges: ["cairo", "beacon"], closeness: 55, band: :adjacent, melded?: false, couple?: true},
-        %{seat_ids: ["seat-Jacob", "seat-Ada"], names: ["Jacob", "Ada"], bridges: ["cairn", "cairo"], closeness: 95, band: :meld, melded?: true, couple?: false},
-        %{seat_ids: ["seat-Mara", "seat-Ada"], names: ["Mara", "Ada"], bridges: ["dock", "cairo"], closeness: 20, band: :miss, melded?: false, couple?: false},
-        %{seat_ids: ["seat-Mara", "seat-Ida"], names: ["Mara", "Ida"], bridges: ["dock", "beacon"], closeness: 30, band: :miss, melded?: false, couple?: false},
-        %{seat_ids: ["seat-Jacob", "seat-Ida"], names: ["Jacob", "Ida"], bridges: ["cairn", "beacon"], closeness: 40, band: :adjacent, melded?: false, couple?: false}
+        %{
+          seat_ids: ["seat-Mara", "seat-Jacob"],
+          names: ["Mara", "Jacob"],
+          bridges: ["dock", "cairn"],
+          closeness: 60,
+          band: :close,
+          melded?: false,
+          couple?: true
+        },
+        %{
+          seat_ids: ["seat-Ada", "seat-Ida"],
+          names: ["Ada", "Ida"],
+          bridges: ["cairo", "beacon"],
+          closeness: 55,
+          band: :adjacent,
+          melded?: false,
+          couple?: true
+        },
+        %{
+          seat_ids: ["seat-Jacob", "seat-Ada"],
+          names: ["Jacob", "Ada"],
+          bridges: ["cairn", "cairo"],
+          closeness: 95,
+          band: :meld,
+          melded?: true,
+          couple?: false
+        },
+        %{
+          seat_ids: ["seat-Mara", "seat-Ada"],
+          names: ["Mara", "Ada"],
+          bridges: ["dock", "cairo"],
+          closeness: 20,
+          band: :miss,
+          melded?: false,
+          couple?: false
+        },
+        %{
+          seat_ids: ["seat-Mara", "seat-Ida"],
+          names: ["Mara", "Ida"],
+          bridges: ["dock", "beacon"],
+          closeness: 30,
+          band: :miss,
+          melded?: false,
+          couple?: false
+        },
+        %{
+          seat_ids: ["seat-Jacob", "seat-Ida"],
+          names: ["Jacob", "Ida"],
+          bridges: ["cairn", "beacon"],
+          closeness: 40,
+          band: :adjacent,
+          melded?: false,
+          couple?: false
+        }
       ]
 
       [{:assay, _request}] = assays(effects)
+
       event =
         {:verdict_received,
          %{
@@ -1429,17 +1478,143 @@ defmodule MeaningGame.GameTest do
       assert first_pair_for_ada.names == ["Ada", "Ida"]
       assert first_pair_for_ada.couple? == true
 
-      jacob_ada_pair = Enum.find(mara_view.reveal.pairs, fn p ->
-        p.seat_ids == ["seat-Jacob", "seat-Ada"]
-      end)
+      jacob_ada_pair =
+        Enum.find(mara_view.reveal.pairs, fn p ->
+          p.seat_ids == ["seat-Jacob", "seat-Ada"]
+        end)
+
       assert jacob_ada_pair.cross_couple_meld? == true
       assert jacob_ada_pair.surprise =~ "think alike"
 
-      mara_ada_pair = Enum.find(mara_view.reveal.pairs, fn p ->
-        p.seat_ids == ["seat-Mara", "seat-Ada"]
-      end)
+      mara_ada_pair =
+        Enum.find(mara_view.reveal.pairs, fn p ->
+          p.seat_ids == ["seat-Mara", "seat-Ada"]
+        end)
+
       assert mara_ada_pair.cross_couple_meld? == false
       assert mara_ada_pair.surprise == nil
+    end
+  end
+
+  describe "the bookends tap (ticket 08)" do
+    setup do
+      state = Game.init(seat_limit: 2, seats: [seat("Mara"), seat("Jacob")])
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "beach walk"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "old tower"}})
+
+      meta = %{
+        model: "gemini-3.8-flash",
+        arm: :flash,
+        prompt_version: "author-3",
+        cost_usd: 0.001,
+        latency_ms: 250,
+        why: "Distant worlds."
+      }
+
+      {:ok, state, _} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: meta}})
+
+      {state, effects} = commit_all(state, [{"Mara", "dock"}, {"Jacob", "wharf"}])
+      closed = grade(state, effects, MeaningGame.Ladder.meld_threshold())
+
+      %{closed: closed}
+    end
+
+    test "tapping bookends at the close emits a bookends_tap effect carrying bookends, gives, author meta and arm",
+         ctx do
+      assert Game.view(ctx.closed, nil).phase == :closed
+
+      assert {:ok, tapped, effects} =
+               Game.apply(
+                 ctx.closed,
+                 {:bookends_tapped, %{seat_id: "seat-Mara", label: "great"}}
+               )
+
+      assert [
+               {:bookends_tap,
+                %{
+                  seat_id: "seat-Mara",
+                  label: "great",
+                  bookends: ["cliff", "wax"],
+                  gives: %{"seat-Mara" => "beach walk", "seat-Jacob" => "old tower"},
+                  author_meta: %{
+                    model: "gemini-3.8-flash",
+                    arm: :flash,
+                    prompt_version: "author-3",
+                    cost_usd: 0.001,
+                    latency_ms: 250,
+                    why: "Distant worlds."
+                  },
+                  arm: :flash
+                }}
+             ] = effects
+
+      assert Game.view(tapped, "seat-Mara").your_bookends_tap == "great"
+      assert Game.view(tapped, "seat-Mara").bookends_taps == %{"seat-Mara" => "great"}
+      assert Game.view(tapped, "seat-Jacob").your_bookends_tap == nil
+    end
+
+    test "bookends tap is replaceable per seat", ctx do
+      assert {:ok, s1, _} =
+               Game.apply(
+                 ctx.closed,
+                 {:bookends_tapped, %{seat_id: "seat-Mara", label: "fine"}}
+               )
+
+      assert {:ok, s2, [{:bookends_tap, tap2}]} =
+               Game.apply(
+                 s1,
+                 {:bookends_tapped, %{seat_id: "seat-Mara", label: "great"}}
+               )
+
+      assert tap2.label == "great"
+      assert Game.view(s2, "seat-Mara").your_bookends_tap == "great"
+      assert Game.view(s2, "seat-Mara").bookends_taps == %{"seat-Mara" => "great"}
+    end
+
+    test "rejects tapping when phase is not :closed" do
+      open_state = bridging()
+
+      assert {:error, :not_closed} =
+               Game.apply(
+                 open_state,
+                 {:bookends_tapped, %{seat_id: "seat-Mara", label: "great"}}
+               )
+    end
+
+    test "rejects an invalid bookends tap label", ctx do
+      assert {:error, :invalid_label} =
+               Game.apply(
+                 ctx.closed,
+                 {:bookends_tapped, %{seat_id: "seat-Mara", label: "bogus"}}
+               )
+    end
+
+    test "rejects unknown seat", ctx do
+      assert {:error, :no_such_seat} =
+               Game.apply(
+                 ctx.closed,
+                 {:bookends_tapped, %{seat_id: "seat-Ghost", label: "great"}}
+               )
+    end
+
+    test "next_page clears bookends_taps", ctx do
+      {:ok, tapped, _} =
+        Game.apply(
+          ctx.closed,
+          {:bookends_tapped, %{seat_id: "seat-Mara", label: "great"}}
+        )
+
+      assert {:ok, next_state, []} =
+               Game.apply(tapped, {:next_page, %{seat_id: "seat-Mara"}})
+
+      view = Game.view(next_state, "seat-Mara")
+      assert view.your_bookends_tap == nil
+      assert view.bookends_taps == %{}
     end
   end
 end
