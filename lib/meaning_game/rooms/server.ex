@@ -400,12 +400,7 @@ defmodule MeaningGame.Rooms.Server do
 
         {:error, reason} ->
           Logger.warning("Foley score failed for room #{state.room.slug}: #{inspect(reason)}")
-
-          failure_meta = %{
-            cost_usd: 0.0,
-            failure: inspect(reason)
-          }
-
+          failure_meta = MeaningGame.Steward.score_failure(reason)
           state = %{state | current_track: nil, music_meta: failure_meta}
           {:noreply, state}
       end
@@ -513,7 +508,7 @@ defmodule MeaningGame.Rooms.Server do
           state.music_meta
 
         true ->
-          %{cost_usd: 0.0, failure: "unfinished"}
+          MeaningGame.Steward.score_failure(:unfinished)
       end
 
     entry = Map.put(entry, :music_meta, music_meta)

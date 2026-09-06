@@ -95,6 +95,7 @@ defmodule MeaningGame.Steward do
   """
   @spec score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   def score(gives, opts \\ []) do
+    gives = Enum.map(gives, &MeaningGame.Steward.Author.give_text/1)
     started = System.monotonic_time(:millisecond)
 
     case adapter().score(gives, opts) do
@@ -109,6 +110,17 @@ defmodule MeaningGame.Steward do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @doc """
+  Builds failure provenance for a Foley score failure.
+  """
+  @spec score_failure(term()) :: map()
+  def score_failure(reason) do
+    %{
+      cost_usd: 0.0,
+      failure: to_string(reason)
+    }
   end
 
   @doc """
