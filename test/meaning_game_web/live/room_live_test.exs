@@ -1615,7 +1615,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert String.starts_with?(track_path, "/media/tracks/fake-")
       refute_push_event(ctx.mara, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
@@ -1633,7 +1634,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       ctx.mara |> element("[data-role=speaker-toggle]") |> render_click()
       assert_push_event(ctx.stage, "foley:stop", %{})
-      assert_push_event(ctx.mara, "foley:page", %{path: "/audio/house-loop.mp3"})
+      assert_push_event(ctx.mara, "foley:page", %{path: mara_track_path})
+      assert mara_track_path == track_path
 
       ctx.mara |> element("[data-role=again]") |> render_click()
       await_phase(ctx.slug, :bridging)
@@ -1653,6 +1655,21 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute_push_event(ctx.stage, "foley:ending", %{})
     end
 
+    test "toggling house-loop-only pushes house loop to speaker", ctx do
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert String.starts_with?(track_path, "/media/tracks/fake-")
+
+      # Toggle house-loop-only on
+      ctx.stage |> element("[data-role=house-loop-switch]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      refute_push_event(ctx.mara, "foley:page", %{})
+    end
+
     test "leaving stage releases speaker", ctx do
       assert Rooms.get_room(ctx.slug).speaker != nil
 
@@ -1661,6 +1678,63 @@ defmodule MeaningGameWeb.RoomLiveTest do
       eventually(fn ->
         is_nil(Rooms.get_room(ctx.slug).speaker)
       end)
+    end
+
+    test "foley:beat, foley:sting, and foley:voice push in order to speaking view alone", ctx do
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: _})
+      refute_push_event(ctx.mara, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      # Stage is speaker; enable voice switch
+      ctx.stage |> element("[data-role=voice-switch]") |> render_click()
+      assert Rooms.get_room(ctx.slug).voice == true
+
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      # Ordered push sequence: beat -> sting -> voice
+      assert_push_event(ctx.stage, "foley:beat", %{})
+      refute_push_event(ctx.mara, "foley:beat", %{})
+      refute_push_event(ctx.jacob, "foley:beat", %{})
+
+      await_reveal_on(ctx.stage)
+
+      assert_push_event(ctx.stage, "foley:sting", %{band: _})
+      refute_push_event(ctx.mara, "foley:sting", %{})
+      refute_push_event(ctx.jacob, "foley:sting", %{})
+
+      expected_stage_url = "/r/#{ctx.slug}/voice/1"
+      assert_push_event(ctx.stage, "foley:voice", %{attempt: 1, url: ^expected_stage_url})
+      refute_push_event(ctx.mara, "foley:voice", %{})
+      refute_push_event(ctx.jacob, "foley:voice", %{})
+
+      # Phone claims speaker; voice switch persists
+      ctx.mara |> element("[data-role=speaker-toggle]") |> render_click()
+      assert Rooms.get_room(ctx.slug).voice == true
+
+      ctx.mara |> element("[data-role=again]") |> render_click()
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.mara, "stone")
+      commit(ctx.jacob, "stone")
+
+      assert_push_event(ctx.mara, "foley:beat", %{})
+      refute_push_event(ctx.stage, "foley:beat", %{})
+
+      await_reveal_on(ctx.mara)
+
+      assert_push_event(ctx.mara, "foley:sting", %{band: _})
+      expected_mara_url = "/r/#{ctx.slug}/voice/2"
+      assert_push_event(ctx.mara, "foley:voice", %{attempt: 2, url: ^expected_mara_url})
+      refute_push_event(ctx.stage, "foley:sting", %{})
+      refute_push_event(ctx.stage, "foley:voice", %{})
+      refute_push_event(ctx.jacob, "foley:voice", %{})
     end
   end
 

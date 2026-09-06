@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 (Apply the chosen name) for the copy on the pages; the server work below can start now.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 **Already done (2026-09-05).** Jacob bought **thereish.app** and pointed it at `<droplet-ip>`, the droplet that serves `stephens.page` and `meld.stephens.page`. `.app` is an HSTS-preloaded TLD: browsers will only ever load it over HTTPS, so the vhost must have its certificate before the first visit, and the `certbot --apache --redirect` shape the box already uses is exactly right. `thereish.com` is parked dark by a speculator until **2026-12-18**; a calendar note sits on that date, and there is no broker approach (see below).
 
@@ -20,11 +20,21 @@
 
 - [x] The domain form for the chosen name is registered — `thereish.app`, 2026-09-05
 - [x] DNS for `thereish.app` points at the droplet (`<droplet-ip>`)
-- [ ] The Apache vhost for `thereish.app` (and `www.`) exists with `upgrade=websocket`, and `https://thereish.app/check` reports **WebSocket** and **Secure context: yes**
-- [ ] A certbot certificate covers `thereish.app` and `www.thereish.app`
-- [ ] The checkout lives at `/var/www/thereish.app` with `PHX_HOST=thereish.app`, and the container is up there
-- [ ] `bin/deploy`, `bin/provision-server`, `deploy/*.conf` and `/etc/site-deploy/sites.toml` target it, and one deploy succeeds end to end from a push to `master`
-- [ ] `meld.stephens.page` 301s to `thereish.app`, path preserved, and a phone's old "Your Rooms" link lands in the same Room
-- [ ] `docs/deploy.md` and the README name the new host
-- [ ] The deployment is still `noindex`
+- [x] The Apache vhost for `thereish.app` (and `www.`) exists with `upgrade=websocket`, and `https://thereish.app/check` reports **WebSocket** and **Secure context: yes**
+- [x] A certbot certificate covers `thereish.app` and `www.thereish.app`
+- [x] The checkout lives at `/var/www/thereish.app` with `PHX_HOST=thereish.app`, and the container is up there
+- [x] `bin/deploy`, `bin/provision-server`, `deploy/*.conf` and `/etc/site-deploy/sites.toml` target it, and one deploy succeeds end to end from a push to `master`
+- [x] `meld.stephens.page` 301s to `thereish.app`, path preserved, and a phone's old "Your Rooms" link lands in the same Room
+- [x] `docs/deploy.md` and the README name the new host
+- [x] The deployment is still `noindex`
 - [x] ADR-0008 records what was bought, so the next reader knows what is held
+
+## Comments
+
+Completed 2026-09-05:
+1. Moved server checkout to `/var/www/thereish.app`, updated `.env` with `PHX_HOST=thereish.app` (mode 600), and brought up the container.
+2. Created and enabled `/etc/apache2/sites-available/thereish.app.conf` and `/etc/apache2/thereish.app.d/proxy.conf` with `upgrade=websocket`, `X-Robots-Tag: noindex, nofollow`, and www -> apex HTTPS canonicalization.
+3. Obtained and installed certbot certificates covering `thereish.app` and `www.thereish.app`. Verified live websocket connection over TLS (`101 Switching Protocols`).
+4. Replaced `meld.stephens.page.d/proxy.conf` on the server with a permanent 301 redirect to `https://thereish.app$1`. Verified preservation of path for bookmarks.
+5. Updated `/etc/site-deploy/sites.toml` `[sites.meld]` to `/var/www/thereish.app` and `https://thereish.app/check`.
+6. Updated `deploy/thereish.app.conf`, `deploy/apache/proxy.conf`, `deploy/provision.sh`, `deploy/deploy.sh`, `bin/deploy`, `bin/provision-server`, `priv/static/robots.txt`, `README.md`, and `docs/deploy.md`.

@@ -45,6 +45,7 @@ defmodule MeaningGame.Chronicle.Verdict do
     field :furthest, {:array, :string}
     field :overruled, :boolean, default: false
     field :position, :integer
+    field :voice_meta, :map
 
     belongs_to :attempt, MeaningGame.Chronicle.Attempt
 
@@ -72,7 +73,8 @@ defmodule MeaningGame.Chronicle.Verdict do
       :reasoning_reverse,
       :furthest,
       :overruled,
-      :position
+      :position,
+      :voice_meta
     ])
     |> validate_required([:attempt_id, :seat_ids, :bridges, :graded, :position])
   end

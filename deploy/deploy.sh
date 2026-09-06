@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build-is-deploy hook for meld.stephens.page.
+# Build-is-deploy hook for thereish.app.
 # Rebuilds the Docker release image, runs migrations, and starts the container.
 #
 # Usage: deploy/deploy.sh (invoked by /usr/local/bin/site-deploy meld)

@@ -1092,6 +1092,9 @@ defmodule MeaningGameWeb.RoomComponents do
           this.stingsBus = null
           this.voiceBus = null
           this.musicSource = null
+          this.voiceSource = null
+          this.voiceObserver = null
+          this.currentVoiceAttempt = null
           this.audioBuffers = new Map()
 
           this.initAudio = () => {
@@ -1148,6 +1151,7 @@ defmodule MeaningGameWeb.RoomComponents do
             if (this.audioBuffers.has(url)) return this.audioBuffers.get(url)
             try {
               const res = await fetch(url)
+              if (!res.ok) return null
               const arrayBuf = await res.arrayBuffer()
               const audioBuf = await this.ctx.decodeAudioData(arrayBuf)
               this.audioBuffers.set(url, audioBuf)
@@ -1165,6 +1169,25 @@ defmodule MeaningGameWeb.RoomComponents do
             this.musicBus.gain.setTargetAtTime(0.7, now + durationSeconds, 0.2)
           }
 
+          this.restoreMusic = () => {
+            if (!this.ctx || !this.musicBus) return
+            const now = this.ctx.currentTime
+            this.musicBus.gain.cancelScheduledValues(now)
+            this.musicBus.gain.setTargetAtTime(0.7, now, 0.1)
+          }
+
+          this.stopVoice = () => {
+            if (this.voiceObserver) {
+              this.voiceObserver.disconnect()
+              this.voiceObserver = null
+            }
+            if (this.voiceSource) {
+              try { this.voiceSource.stop() } catch (_) {}
+              this.voiceSource = null
+              this.restoreMusic()
+            }
+          }
+
           this.playEffect = async (url, bus, duckDuration = 2.0) => {
             if (this.reducedMotion) return
             await this.resumeAudio()
@@ -1180,25 +1203,69 @@ defmodule MeaningGameWeb.RoomComponents do
             source.start(0)
           }
 
+          this.stopMusic = () => {
+            if (this.currentMusic) {
+              try { this.currentMusic.source.stop() } catch (_) {}
+              this.currentMusic = null
+            }
+            if (this.musicSource) {
+              try { this.musicSource.stop() } catch (_) {}
+              this.musicSource = null
+            }
+          }
+
           this.handleEvent("foley:page", async ({path}) => {
             if (this.reducedMotion) return
+            this.stopVoice()
+            this.currentVoiceAttempt = null
             await this.resumeAudio()
             if (!this.ctx) return
             const trackUrl = path || "/audio/house-loop.mp3"
+
+            if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              return
+            }
+
             const buf = await this.fetchBuffer(trackUrl)
             if (!buf) return
 
-            if (this.musicSource) {
-              try { this.musicSource.stop() } catch (_) {}
+            if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              return
             }
-            this.musicSource = this.ctx.createBufferSource()
-            this.musicSource.buffer = buf
-            this.musicSource.loop = true
-            this.musicSource.connect(this.musicBus)
-            this.musicSource.start(0)
+
+            const now = this.ctx.currentTime
+            const fadeDuration = 2.0
+
+            const newGain = this.ctx.createGain()
+            const newSource = this.ctx.createBufferSource()
+            newSource.buffer = buf
+            newSource.loop = true
+            newSource.connect(newGain)
+            newGain.connect(this.musicBus)
+
+            const oldMusic = this.currentMusic
+            if (oldMusic) {
+              newGain.gain.setValueAtTime(0.001, now)
+              newGain.gain.linearRampToValueAtTime(1.0, now + fadeDuration)
+
+              oldMusic.gain.gain.cancelScheduledValues(now)
+              oldMusic.gain.gain.setValueAtTime(oldMusic.gain.gain.value, now)
+              oldMusic.gain.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
+              setTimeout(() => {
+                try { oldMusic.source.stop() } catch (_) {}
+              }, fadeDuration * 1000 + 100)
+            } else {
+              newGain.gain.setValueAtTime(1.0, now)
+            }
+
+            newSource.start(0)
+            this.currentMusic = {source: newSource, gain: newGain, path: trackUrl}
+            this.musicSource = newSource
           })
 
           this.handleEvent("foley:beat", async () => {
+            this.stopVoice()
+            this.currentVoiceAttempt = null
             this.playEffect("/audio/beat.mp3", this.stingsBus, 2.5)
           })
 
@@ -1207,23 +1274,87 @@ defmodule MeaningGameWeb.RoomComponents do
             this.playEffect(`/audio/sting-${bandName}.mp3`, this.stingsBus, 2.0)
           })
 
+          this.handleEvent("foley:voice", async ({attempt, url}) => {
+            if (this.reducedMotion) return
+            await this.resumeAudio()
+            if (!this.ctx) return
+
+            this.stopVoice()
+            this.currentVoiceAttempt = attempt
+
+            const isQuipReady = () =>
+              document.querySelector("[data-role=quip]") ||
+              document.querySelector("[data-role=fairness-controls]")
+
+            const playWhenReady = (buf) => {
+              if (!buf || !this.ctx || this.currentVoiceAttempt !== attempt) return
+              if (!isQuipReady()) return
+
+              this.stopVoice()
+              this.currentVoiceAttempt = attempt
+
+              const source = this.ctx.createBufferSource()
+              source.buffer = buf
+              source.connect(this.voiceBus)
+              this.voiceSource = source
+
+              const duration = buf.duration || 3.0
+              this.duckMusic(duration)
+
+              source.onended = () => {
+                if (this.voiceSource === source) {
+                  this.voiceSource = null
+                  this.restoreMusic()
+                }
+              }
+              source.start(0)
+            }
+
+            const voiceUrl = url
+            const bufPromise = this.fetchBuffer(voiceUrl)
+
+            if (isQuipReady()) {
+              const buf = await bufPromise
+              playWhenReady(buf)
+            } else {
+              const observer = new MutationObserver(async (_mutations, obs) => {
+                if (this.currentVoiceAttempt !== attempt) {
+                  obs.disconnect()
+                  if (this.voiceObserver === obs) this.voiceObserver = null
+                  return
+                }
+                if (isQuipReady()) {
+                  obs.disconnect()
+                  if (this.voiceObserver === obs) this.voiceObserver = null
+                  const buf = await bufPromise
+                  playWhenReady(buf)
+                }
+              })
+              this.voiceObserver = observer
+              observer.observe(document.body, { childList: true, subtree: true })
+
+              setTimeout(() => {
+                if (this.voiceObserver === observer) {
+                  observer.disconnect()
+                  this.voiceObserver = null
+                }
+              }, 15000)
+            }
+          })
+
           this.handleEvent("foley:ending", async ({kind}) => {
             const endingKind = (kind === "meld") ? "meld" : "unmelded"
             const delayMs = (kind === "meld") ? 1800 : 0
             setTimeout(() => {
               this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 0)
-              if (this.musicSource) {
-                try { this.musicSource.stop() } catch (_) {}
-                this.musicSource = null
-              }
+              this.stopMusic()
             }, delayMs)
           })
 
           this.handleEvent("foley:stop", () => {
-            if (this.musicSource) {
-              try { this.musicSource.stop() } catch (_) {}
-              this.musicSource = null
-            }
+            this.stopVoice()
+            this.currentVoiceAttempt = null
+            this.stopMusic()
           })
 
           this.updateTapForSound()
@@ -1232,17 +1363,17 @@ defmodule MeaningGameWeb.RoomComponents do
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
           this.updateTapForSound()
-          if (!this.speaker && this.musicSource) {
-            try { this.musicSource.stop() } catch (_) {}
-            this.musicSource = null
+          if (!this.speaker) {
+            this.stopVoice()
+            this.currentVoiceAttempt = null
+            this.stopMusic()
           }
         },
 
         destroyed() {
-          if (this.musicSource) {
-            try { this.musicSource.stop() } catch (_) {}
-            this.musicSource = null
-          }
+          this.stopVoice()
+          this.currentVoiceAttempt = null
+          this.stopMusic()
           if (this.ctx) {
             try { this.ctx.close() } catch (_) {}
             this.ctx = null
