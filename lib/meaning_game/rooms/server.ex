@@ -91,7 +91,10 @@ defmodule MeaningGame.Rooms.Server do
         opened_at: nil,
         assayer: nil,
         author: nil,
-        current_arm: :flash
+        current_arm: :flash,
+        current_page_ref: nil,
+        current_track: nil,
+        music_meta: nil
       }
 
       {:ok, opened(state)}
@@ -174,7 +177,12 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   def handle_call({:reset_gives, seat_id}, _from, state) do
-    state = author_answered(state)
+    state =
+      state
+      |> author_answered()
+      |> Map.put(:current_page_ref, nil)
+      |> Map.put(:current_track, nil)
+      |> Map.put(:music_meta, nil)
 
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -183,8 +191,15 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   def handle_call({:next_page, seat_id}, _from, state) do
+    state =
+      state
+      |> Map.put(:opened_at, nil)
+      |> Map.put(:current_page_ref, nil)
+      |> Map.put(:current_track, nil)
+      |> Map.put(:music_meta, nil)
+
     case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
-      {:ok, game, effects} -> {:reply, :ok, advance(%{state | opened_at: nil}, game, effects)}
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -288,6 +303,8 @@ defmodule MeaningGame.Rooms.Server do
       |> Map.put(:speaker_claimed?, speaker_claimed?)
       |> Map.put(:voice, state.room.voice)
       |> Map.put(:house_loop_only, state.room.house_loop_only)
+      |> Map.put(:track, if(state.room.house_loop_only, do: nil, else: state[:current_track]))
+      |> Map.put(:music_meta, state[:music_meta])
 
     {:reply, view, state}
   end
@@ -365,6 +382,37 @@ defmodule MeaningGame.Rooms.Server do
 
   # Stale, duplicate, or superseded author tasks change nothing
   def handle_info({:author_completed, _ref, _result}, state), do: {:noreply, state}
+
+  def handle_info({:scored, page_ref, result}, %{current_page_ref: page_ref} = state) do
+    if MeaningGame.Game.phase(state.game) == :closed do
+      {:noreply, state}
+    else
+      case result do
+        {:ok, track} ->
+          state = %{state | current_track: track, music_meta: track.meta}
+          broadcast(state.room.slug)
+          {:noreply, state}
+
+        %{path: _} = track ->
+          state = %{state | current_track: track, music_meta: track.meta}
+          broadcast(state.room.slug)
+          {:noreply, state}
+
+        {:error, reason} ->
+          Logger.warning("Foley score failed for room #{state.room.slug}: #{inspect(reason)}")
+
+          failure_meta = %{
+            cost_usd: 0.0,
+            failure: inspect(reason)
+          }
+
+          state = %{state | current_track: nil, music_meta: failure_meta}
+          {:noreply, state}
+      end
+    end
+  end
+
+  def handle_info({:scored, _page_ref, _result}, state), do: {:noreply, state}
 
   defp format_author_error({:max_tokens, _}), do: "too broad or complex"
   defp format_author_error(:refused), do: "content declined"
@@ -456,6 +504,19 @@ defmodule MeaningGame.Rooms.Server do
   # bad; taking the Room down in front of the couple, and losing the Page they
   # are looking at along with it, is worse.
   defp perform({:chronicle, entry}, state) do
+    music_meta =
+      cond do
+        state.room.house_loop_only ->
+          nil
+
+        not is_nil(state[:music_meta]) ->
+          state.music_meta
+
+        true ->
+          %{cost_usd: 0.0, failure: "unfinished"}
+      end
+
+    entry = Map.put(entry, :music_meta, music_meta)
     {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
 
     arm = state[:current_arm] || :bait
@@ -507,6 +568,7 @@ defmodule MeaningGame.Rooms.Server do
     room = self()
     digest = Chronicle.digest(state.room.id)
     ref = make_ref()
+    page_ref = make_ref()
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
@@ -526,7 +588,13 @@ defmodule MeaningGame.Rooms.Server do
       end
     end)
 
-    waiting_on_author(state, ref)
+    maybe_start_score_task(room, page_ref, request, state.room.house_loop_only)
+
+    state
+    |> Map.put(:current_page_ref, page_ref)
+    |> Map.put(:current_track, nil)
+    |> Map.put(:music_meta, nil)
+    |> waiting_on_author(ref)
   end
 
   defp perform({:assay, request}, state) do
@@ -539,6 +607,50 @@ defmodule MeaningGame.Rooms.Server do
     end)
 
     waiting_on(state)
+  end
+
+  defp maybe_start_score_task(_room, _page_ref, _request, true), do: :ok
+
+  defp maybe_start_score_task(room, page_ref, request, false) do
+    gives = extract_give_strings(request)
+
+    Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
+      try do
+        case Steward.score(gives) do
+          {:ok, track} ->
+            send(room, {:scored, page_ref, {:ok, track}})
+
+          {:error, reason} ->
+            send(room, {:scored, page_ref, {:error, reason}})
+        end
+      rescue
+        error ->
+          send(room, {:scored, page_ref, {:error, error}})
+      catch
+        :exit, reason ->
+          send(room, {:scored, page_ref, {:error, {:exit, reason}}})
+      end
+    end)
+  end
+
+  defp extract_give_strings(request) do
+    cond do
+      is_map(request) and is_list(request[:gives]) ->
+        extract_from_give_list(request[:gives])
+
+      is_map(request) and is_list(request["gives"]) ->
+        extract_from_give_list(request["gives"])
+
+      is_list(request) ->
+        extract_from_give_list(request)
+
+      true ->
+        []
+    end
+  end
+
+  defp extract_from_give_list(list) do
+    Enum.map(list, &MeaningGame.Steward.Author.give_text/1)
   end
 
   defp waiting_on_author(state, ref) do

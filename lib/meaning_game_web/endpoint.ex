@@ -31,6 +31,8 @@ defmodule MeaningGameWeb.Endpoint do
     only: MeaningGameWeb.static_paths(),
     raise_on_missing_only: code_reloading?
 
+  plug MeaningGameWeb.Plugs.MediaStatic
+
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
   if code_reloading? do

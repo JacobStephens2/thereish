@@ -1048,6 +1048,44 @@ defmodule MeaningGame.ChronicleTest do
       assert line =~ "Author $0.0002"
       assert line =~ "Assayer $0.0015"
       assert line =~ "Scribe $0.0025"
+      assert line =~ "Foley $0.0000"
+    end
+
+    test "spend includes Foley from page music_meta", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+
+      spend = Chronicle.spend(room.id)
+      assert spend.by_role.foley.calls_count == 1
+      assert Decimal.equal?(spend.by_role.foley.total_usd, Decimal.new("0.0400"))
+      assert spend.by_role.foley.by_model["mureka-v1"].calls_count == 1
+
+      line = Chronicle.spend_line(spend)
+      assert line =~ "Foley $0.0400"
     end
 
     test "spend/0 computes all-Rooms answer with per-Room breakdown across multiple rooms", ctx do

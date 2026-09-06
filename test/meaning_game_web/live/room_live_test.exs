@@ -1296,7 +1296,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert String.starts_with?(track_path, "/media/tracks/fake-")
       refute_push_event(ctx.mara, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
@@ -1314,7 +1315,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       ctx.mara |> element("[data-role=speaker-toggle]") |> render_click()
       assert_push_event(ctx.stage, "foley:stop", %{})
-      assert_push_event(ctx.mara, "foley:page", %{path: "/audio/house-loop.mp3"})
+      assert_push_event(ctx.mara, "foley:page", %{path: mara_track_path})
+      assert mara_track_path == track_path
 
       ctx.mara |> element("[data-role=again]") |> render_click()
       await_phase(ctx.slug, :bridging)
@@ -1332,6 +1334,21 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert_push_event(ctx.mara, "foley:ending", %{kind: _})
       refute_push_event(ctx.stage, "foley:sting", %{})
       refute_push_event(ctx.stage, "foley:ending", %{})
+    end
+
+    test "toggling house-loop-only pushes house loop to speaker", ctx do
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert String.starts_with?(track_path, "/media/tracks/fake-")
+
+      # Toggle house-loop-only on
+      ctx.stage |> element("[data-role=house-loop-switch]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      refute_push_event(ctx.mara, "foley:page", %{})
     end
 
     test "leaving stage releases speaker", ctx do

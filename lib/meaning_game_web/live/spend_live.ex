@@ -82,7 +82,8 @@ defmodule MeaningGameWeb.SpendLive do
                 {role_name, role_key} <- [
                   {"Author", :author},
                   {"Assayer", :assayer},
-                  {"Scribe", :scribe}
+                  {"Scribe", :scribe},
+                  {"Foley", :foley}
                 ]
               }>
                 <% role_data = @spend.by_role[role_key] %>
@@ -116,7 +117,7 @@ defmodule MeaningGameWeb.SpendLive do
                   No model calls recorded yet.
                 </td>
               </tr>
-              <%= for {role_name, role_key} <- [{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}] do %>
+              <%= for {role_name, role_key} <- [{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}, {"Foley", :foley}] do %>
                 <% role_data = @spend.by_role[role_key] %>
                 <%= for {model, stats} <- Enum.sort_by(role_data[:by_model] || %{}, &elem(&1, 0)) do %>
                   <tr>
@@ -185,6 +186,7 @@ defmodule MeaningGameWeb.SpendLive do
                 <th class="py-3 px-4">Author</th>
                 <th class="py-3 px-4">Assayer</th>
                 <th class="py-3 px-4">Scribe</th>
+                <th class="py-3 px-4">Foley</th>
                 <th class="py-3 px-4">Unpriced</th>
               </tr>
             </thead>
@@ -207,6 +209,9 @@ defmodule MeaningGameWeb.SpendLive do
                 </td>
                 <td class="py-2.5 px-4 font-mono text-opacity-80">
                   {Chronicle.format_usd(r.by_role.scribe.total_usd)}
+                </td>
+                <td class="py-2.5 px-4 font-mono text-opacity-80">
+                  {Chronicle.format_usd(r.by_role.foley.total_usd)}
                 </td>
                 <td class="py-2.5 px-4 font-mono">{r.unpriced_count}</td>
               </tr>
