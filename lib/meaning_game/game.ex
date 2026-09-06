@@ -66,7 +66,9 @@ defmodule MeaningGame.Game do
     played: [],
     overrule: nil,
     overrules: [],
-    fairness_taps: %{}
+    fairness_taps: %{},
+    bookends_taps: %{},
+    sides_mode: false
   ]
 
   @type seat :: %{
@@ -127,7 +129,8 @@ defmodule MeaningGame.Game do
           played: [attempt()],
           overrule: map() | nil,
           overrules: [map()],
-          fairness_taps: %{String.t() => String.t()}
+          fairness_taps: %{String.t() => String.t()},
+          bookends_taps: %{String.t() => String.t()}
         }
 
   @type viewer :: String.t() | nil
@@ -178,8 +181,18 @@ defmodule MeaningGame.Game do
                required(:partner_id) => String.t()
              }}
           | {:seat_unpaired, %{required(:seat_id) => String.t()}}
+          | {:seats_paired,
+             %{
+               required(:seat_id) => String.t(),
+               required(:partner_id) => String.t() | nil
+             }}
           | {:side_verdicts_received, map()}
           | {:side_verdicts_unavailable, map()}
+          | {:bookends_tapped,
+             %{
+               required(:seat_id) => String.t(),
+               required(:label) => String.t() | atom()
+             }}
 
   @typedoc """
   What the Room is asked to do next. Effects are descriptions, never actions:
@@ -196,6 +209,7 @@ defmodule MeaningGame.Game do
           | {:chronicle, map()}
           | {:overrule, map()}
           | {:fairness_tap, map()}
+          | {:bookends_tap, map()}
 
   @type error ::
           :room_full
@@ -239,7 +253,8 @@ defmodule MeaningGame.Game do
       bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
       gives: %{},
       last_gives: %{},
-      author_failure: nil
+      author_failure: nil,
+      sides_mode: Keyword.get(opts, :sides_mode, false)
     }
   end
 
@@ -268,9 +283,23 @@ defmodule MeaningGame.Game do
     seat = seat(seat)
 
     cond do
-      seated?(state, seat.id) -> {:ok, state, []}
-      full?(state) -> {:error, :room_full}
-      true -> {:ok, %{state | seats: state.seats ++ [seat]}, []}
+      seated?(state, seat.id) ->
+        {:ok, %{state | seats: maybe_pair_seat(state.seats, seat)}, []}
+
+      full?(state) ->
+        {:error, :room_full}
+
+      true ->
+        {:ok, %{state | seats: maybe_pair_seat(state.seats ++ [seat], seat)}, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:seats_paired, %{seat_id: seat_id, partner_id: partner_id}}) do
+    if seated?(state, seat_id) and (is_nil(partner_id) or seated?(state, partner_id)) do
+      seats = pair_seats_in_list(state.seats, seat_id, partner_id)
+      {:ok, %{state | seats: seats}, []}
+    else
+      {:error, :no_such_seat}
     end
   end
 
@@ -308,7 +337,7 @@ defmodule MeaningGame.Game do
             end
           end)
 
-        {:ok, %{state | seats: updated_seats}, []}
+        {:ok, %{state | seats: updated_seats, sides_mode: true}, []}
     end
   end
 
@@ -322,7 +351,7 @@ defmodule MeaningGame.Game do
 
       true ->
         updated_seats = Enum.map(state.seats, &Map.put(&1, :partner_id, nil))
-        {:ok, %{state | seats: updated_seats}, []}
+        {:ok, %{state | seats: updated_seats, sides_mode: false}, []}
     end
   end
 
@@ -392,6 +421,7 @@ defmodule MeaningGame.Game do
              overrule: nil,
              overrules: [],
              fairness_taps: %{},
+             bookends_taps: %{},
              author_failure: nil
          }, []}
     end
@@ -464,6 +494,7 @@ defmodule MeaningGame.Game do
       reasoning: verdict.reasoning,
       quip: Map.get(verdict, :quip),
       furthest: Map.get(verdict, :furthest),
+      pairs: Map.get(verdict, :pairs),
       meta: Map.get(verdict, :meta, %{})
     })
   end
@@ -701,6 +732,46 @@ defmodule MeaningGame.Game do
     end
   end
 
+  def apply(%__MODULE__{} = state, {:bookends_tapped, %{seat_id: seat_id, label: label}}) do
+    label_str = normalize_label(label)
+
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) != :closed ->
+        {:error, :not_closed}
+
+      label_str not in ["flat", "fine", "great"] ->
+        {:error, :invalid_label}
+
+      true ->
+        meta = (state.page && state.page[:meta]) || %{}
+        arm = meta[:arm] || meta["arm"]
+        bookends = (state.page && state.page[:bookends]) || state.bookends
+
+        page_id =
+          (state.page && (state.page[:id] || state.page["id"])) ||
+            (bookends && Enum.join(bookends, "-")) || "page"
+
+        tap_effect_data = %{
+          page_id: page_id,
+          page_identifier: page_id,
+          seat_id: seat_id,
+          label: label_str,
+          bookends: bookends,
+          gives: (state.page && state.page[:gives]) || state.gives,
+          author_meta: meta,
+          arm: arm
+        }
+
+        current_taps = state.bookends_taps || %{}
+        next_state = %{state | bookends_taps: Map.put(current_taps, seat_id, label_str)}
+
+        {:ok, next_state, [{:bookends_tap, tap_effect_data}]}
+    end
+  end
+
   def apply(%__MODULE__{} = state, {:next_page, %{seat_id: seat_id}}) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- closed_page(state) do
@@ -722,6 +793,7 @@ defmodule MeaningGame.Game do
            overrule: nil,
            overrules: [],
            fairness_taps: %{},
+           bookends_taps: %{},
            author_failure: nil
        }, []}
     end
@@ -761,7 +833,7 @@ defmodule MeaningGame.Game do
       author_failure: state.author_failure,
       your_bridge: Map.get(state.bridges, viewer),
       attempt: %{number: state.attempt, of: attempt_cap()},
-      reveal: reveal(state, phase),
+      reveal: reveal(state, phase, viewer),
       # What the next attempt will hang between, so the tap that starts it can
       # say so. The carry-forward is the point of a miss; a button that named
       # neither word would hide it.
@@ -776,12 +848,14 @@ defmodule MeaningGame.Game do
       overrule: overrule_view(state, viewer),
       your_tap: Map.get(fairness_taps, viewer),
       fairness_taps: fairness_taps,
+      your_bookends_tap: Map.get(state.bookends_taps || %{}, viewer),
+      bookends_taps: state.bookends_taps || %{},
       barred_words: if(phase != :waiting, do: barred_words(state))
     }
   end
 
   @doc "Whether this Room is currently playing in Sides mode (two paired couples)."
-  def sides_mode?(%__MODULE__{seat_limit: 4, seats: seats}) when length(seats) == 4 do
+  def sides_mode?(%__MODULE__{sides_mode: true, seat_limit: 4, seats: seats}) when length(seats) == 4 do
     case sides_list(seats) do
       [side_a, side_b] ->
         length(side_a.seats) == 2 and length(side_b.seats) == 2
@@ -1085,9 +1159,10 @@ defmodule MeaningGame.Game do
   defp closed(state, _phase), do: %{because: closed_because(state), attempt: state.attempt}
 
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
-  # and the two words that landed furthest apart. Reasoning is kept in the
+  # the two words that landed furthest apart, and every pair of Seats graded
+  # alongside the one Verdict (ADR-0010, ticket 07). Reasoning is kept in the
   # Chronicle and kept off the screen.
-  defp reveal(state, phase) when phase in [:reveal, :closed] do
+  defp reveal(state, phase, viewer) when phase in [:reveal, :closed] do
     if sides_mode?(state) do
       sides_reveal_view(state)
     else
@@ -1096,25 +1171,33 @@ defmodule MeaningGame.Game do
           %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
         end)
 
-      state.verdict
-      |> verdict_view()
-      |> Map.delete(:reasoning)
-      |> Map.merge(%{
-        bridges: bridges_view(state, state.bridges),
-        furthest: furthest_view(state, chosen_furthest(state)),
-        gives: gives
-      })
+      base =
+        state.verdict
+        |> verdict_view()
+        |> Map.delete(:reasoning)
+        |> Map.merge(%{
+          bridges: bridges_view(state, state.bridges),
+          furthest: furthest_view(state, chosen_furthest(state)),
+          gives: gives
+        })
+
+      if state.verdict && state.verdict[:pairs] do
+        pairs = pairs_view(state, state.verdict[:pairs], viewer)
+        Map.put(base, :pairs, pairs)
+      else
+        base
+      end
     end
   end
 
-  defp reveal(_state, _phase), do: nil
+  defp reveal(_state, _phase, _viewer), do: nil
 
   defp sides_reveal_view(state) do
     [side_a, side_b] = sides_list(state)
-    v_a = state.side_verdicts && state.side_verdicts[:a]
-    v_b = state.side_verdicts && state.side_verdicts[:b]
+    verdict_a = state.side_verdicts && state.side_verdicts[:a]
+    verdict_b = state.side_verdicts && state.side_verdicts[:b]
 
-    closer_side = determine_closer(v_a, v_b)
+    closer_side = determine_closer(verdict_a, verdict_b)
 
     gives =
       Enum.map(state.seats, fn seat ->
@@ -1124,8 +1207,8 @@ defmodule MeaningGame.Game do
     %{
       mode: :sides,
       sides: [
-        side_verdict_view(state, side_a, v_a, closer_side == :a),
-        side_verdict_view(state, side_b, v_b, closer_side == :b)
+        side_verdict_view(state, side_a, verdict_a, closer_side == :a),
+        side_verdict_view(state, side_b, verdict_b, closer_side == :b)
       ],
       melded?: melded?(state),
       bridges: bridges_view(state, state.bridges),
@@ -1556,13 +1639,142 @@ defmodule MeaningGame.Game do
   end
 
   defp seat_view(state, seat, viewer) do
+    partner = find_partner(state, seat)
+
     %{
       id: seat.id,
       name: seat.name,
-      partner_id: Map.get(seat, :partner_id),
       you?: seat.id == viewer,
-      committed?: committed?(state, seat.id)
+      committed?: committed?(state, seat.id),
+      partner_id: partner && partner.id,
+      partner_name: partner && partner.name,
+      couple?: partner != nil
     }
+  end
+
+  defp find_partner(state, seat) do
+    if seat.partner_id do
+      find_seat(state, seat.partner_id)
+    else
+      nil
+    end
+  end
+
+  defp maybe_pair_seat(seats, %{id: id, partner_id: partner_id}) when not is_nil(partner_id) do
+    pair_seats_in_list(seats, id, partner_id)
+  end
+
+  defp maybe_pair_seat(seats, _seat), do: seats
+
+  defp pair_seats_in_list(seats, seat_id, nil) do
+    Enum.map(seats, fn s ->
+      cond do
+        s.id == seat_id -> %{s | partner_id: nil}
+        s.partner_id == seat_id -> %{s | partner_id: nil}
+        true -> s
+      end
+    end)
+  end
+
+  defp pair_seats_in_list(seats, seat_id, partner_id) do
+    Enum.map(seats, fn s ->
+      cond do
+        s.id == seat_id ->
+          %{s | partner_id: partner_id}
+
+        s.id == partner_id ->
+          %{s | partner_id: seat_id}
+
+        s.partner_id in [seat_id, partner_id] ->
+          %{s | partner_id: nil}
+
+        true ->
+          s
+      end
+    end)
+  end
+
+  defp pairs_view(state, pair_verdicts, viewer) do
+    all_pairs =
+      for {seat_a, idx} <- Enum.with_index(state.seats),
+          seat_b <- Enum.drop(state.seats, idx + 1) do
+        {seat_a, seat_b}
+      end
+
+    pairs =
+      Enum.map(all_pairs, fn {seat_a, seat_b} ->
+        pair_ids = [seat_a.id, seat_b.id]
+        names = [seat_a.name, seat_b.name]
+        bridge_a = state.bridges[seat_a.id]
+        bridge_b = state.bridges[seat_b.id]
+        bridges = [bridge_a, bridge_b]
+
+        v =
+          (pair_verdicts || [])
+          |> Enum.find(fn pv ->
+            p_ids = pv[:seat_ids] || pv["seat_ids"] || []
+            seat_a.id in p_ids and seat_b.id in p_ids
+          end)
+
+        closeness =
+          cond do
+            v && (v[:closeness] != nil || v["closeness"] != nil) ->
+              v[:closeness] || v["closeness"]
+
+            (length(state.seats) == 2 and state.verdict) && state.verdict.closeness != nil ->
+              state.verdict.closeness
+
+            true ->
+              nil
+          end
+
+        band_info = if closeness, do: Ladder.read(closeness), else: %{band: nil, melded?: false}
+        melded? = band_info.melded?
+        band = band_info.band
+
+        couple? = seat_a.partner_id == seat_b.id and not is_nil(seat_a.partner_id)
+
+        cross_couple? =
+          not is_nil(seat_a.partner_id) and not is_nil(seat_b.partner_id) and
+            seat_a.partner_id != seat_b.id
+
+        cross_couple_meld? = cross_couple? and melded?
+
+        surprise =
+          if cross_couple_meld? do
+            "#{seat_a.name} and #{seat_b.name} think alike"
+          else
+            nil
+          end
+
+        viewer_couple? = couple? and viewer in [seat_a.id, seat_b.id]
+
+        pair_data = %{
+          seat_ids: pair_ids,
+          names: names,
+          bridges: bridges,
+          closeness: closeness,
+          band: band,
+          melded?: melded?,
+          couple?: couple?,
+          cross_couple?: cross_couple?,
+          cross_couple_meld?: cross_couple_meld?,
+          surprise: surprise
+        }
+
+        {pair_data, viewer_couple?}
+      end)
+
+    pairs
+    |> Enum.sort_by(fn {p, viewer_couple?} ->
+      cond do
+        viewer_couple? -> {0, 0}
+        p.couple? -> {1, -(p.closeness || 0)}
+        p.cross_couple_meld? -> {2, -(p.closeness || 0)}
+        true -> {3, -(p.closeness || 0)}
+      end
+    end)
+    |> Enum.map(fn {p, _} -> p end)
   end
 
   defp taken_by_a_seat(state, seat_id) do

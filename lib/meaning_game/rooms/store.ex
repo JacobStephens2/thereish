@@ -92,22 +92,56 @@ defmodule MeaningGame.Rooms.Store do
   end
 
   @doc """
-  Writes a new Seat with an id the caller already minted.
+  Writes a new Seat with an id the caller already minted, optionally paired with
+  an existing Seat in the same Room.
 
   The id is the caller's because the rules decide whether the Seat may exist
   before Postgres hears about it, and the rules need something to decide about.
   """
-  @spec insert_seat(Ecto.UUID.t(), Ecto.UUID.t(), String.t(), String.t()) ::
-          {:ok, Seat.t()} | {:error, Ecto.Changeset.t()}
-  def insert_seat(room_id, id, name, device_token) do
-    %Seat{}
-    |> Seat.changeset(%{
-      id: id,
-      room_id: room_id,
-      name: name,
-      device_tokens: [device_token]
-    })
-    |> Repo.insert()
+  @spec insert_seat(
+          Ecto.UUID.t(),
+          Ecto.UUID.t(),
+          String.t(),
+          String.t(),
+          Ecto.UUID.t() | nil
+        ) ::
+          {:ok, Seat.t()} | {:error, Ecto.Changeset.t() | term()}
+  def insert_seat(room_id, id, name, device_token, partner_id \\ nil) do
+    Repo.transaction(fn ->
+      seat_attrs = %{
+        id: id,
+        room_id: room_id,
+        name: name,
+        device_tokens: [device_token],
+        partner_id: partner_id
+      }
+
+      case %Seat{} |> Seat.changeset(seat_attrs) |> Repo.insert() do
+        {:ok, seat} ->
+          if partner_id do
+            case Repo.get_by(Seat, id: partner_id, room_id: room_id) do
+              nil ->
+                Repo.rollback(:no_such_partner)
+
+              partner_seat ->
+                if partner_seat.partner_id && partner_seat.partner_id != id do
+                  clear_partner(room_id, partner_seat.partner_id)
+                end
+
+                partner_seat
+                |> Seat.pair_changeset(id)
+                |> Repo.update!()
+
+                seat
+            end
+          else
+            seat
+          end
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   @doc """
@@ -133,42 +167,64 @@ defmodule MeaningGame.Rooms.Store do
 
   @doc """
   Pairs two seats together as partners in a Side.
+  In a 4-seat room, automatically pairs the remaining two seats into the other Side.
+  If seat_id_2 is nil, unpairs seat_id_1.
   """
-  @spec pair_seats(Ecto.UUID.t(), Ecto.UUID.t(), Ecto.UUID.t()) ::
-          {:ok, [Seat.t()]} | {:error, term()}
-  def pair_seats(room_id, seat_id_1, seat_id_2) do
-    Repo.transaction(fn ->
-      from(s in Seat,
-        where: s.room_id == ^room_id and (s.partner_id == ^seat_id_1 or s.partner_id == ^seat_id_2)
-      )
-      |> Repo.update_all(set: [partner_id: nil])
+  @spec pair_seats(Ecto.UUID.t(), Ecto.UUID.t(), Ecto.UUID.t() | nil) ::
+          {:ok, term()} | {:error, term()}
+  def pair_seats(room_id, seat_id_1, seat_id_2 \\ nil) do
+    if seat_id_1 == seat_id_2 and not is_nil(seat_id_2) do
+      {:error, :cannot_pair_self}
+    else
+      Repo.transaction(fn ->
+        seat_1 = Repo.get_by(Seat, id: seat_id_1, room_id: room_id)
 
-      seat_1 = Repo.get!(Seat, seat_id_1)
-      seat_2 = Repo.get!(Seat, seat_id_2)
-
-      {:ok, updated_seat_1} = seat_1 |> Seat.changeset(%{partner_id: seat_id_2}) |> Repo.update()
-      {:ok, updated_seat_2} = seat_2 |> Seat.changeset(%{partner_id: seat_id_1}) |> Repo.update()
-
-      all_seats = Repo.all(from(s in Seat, where: s.room_id == ^room_id))
-
-      other_paired =
-        if length(all_seats) == 4 do
-          other_seats = Enum.reject(all_seats, &(&1.id in [seat_id_1, seat_id_2]))
-
-          if length(other_seats) == 2 do
-            [other_seat_1, other_seat_2] = other_seats
-            {:ok, updated_other_1} = other_seat_1 |> Seat.changeset(%{partner_id: other_seat_2.id}) |> Repo.update()
-            {:ok, updated_other_2} = other_seat_2 |> Seat.changeset(%{partner_id: other_seat_1.id}) |> Repo.update()
-            [updated_other_1, updated_other_2]
-          else
-            []
-          end
-        else
-          []
+        if is_nil(seat_1) do
+          Repo.rollback(:no_such_seat)
         end
 
-      [updated_seat_1, updated_seat_2 | other_paired]
-    end)
+        if is_nil(seat_id_2) do
+          clear_partner(room_id, seat_1.partner_id)
+
+          updated_seat_1 = seat_1 |> Seat.pair_changeset(nil) |> Repo.update!()
+          {updated_seat_1, nil}
+        else
+          seat_2 = Repo.get_by(Seat, id: seat_id_2, room_id: room_id)
+
+          if is_nil(seat_2) do
+            Repo.rollback(:no_such_seat)
+          end
+
+          from(s in Seat,
+            where: s.room_id == ^room_id and (s.partner_id == ^seat_id_1 or s.partner_id == ^seat_id_2)
+          )
+          |> Repo.update_all(set: [partner_id: nil])
+
+          {:ok, updated_seat_1} = seat_1 |> Seat.changeset(%{partner_id: seat_id_2}) |> Repo.update()
+          {:ok, updated_seat_2} = seat_2 |> Seat.changeset(%{partner_id: seat_id_1}) |> Repo.update()
+
+          all_seats = Repo.all(from(s in Seat, where: s.room_id == ^room_id))
+
+          other_paired =
+            if length(all_seats) == 4 do
+              other_seats = Enum.reject(all_seats, &(&1.id in [seat_id_1, seat_id_2]))
+
+              if length(other_seats) == 2 do
+                [other_seat_1, other_seat_2] = other_seats
+                {:ok, updated_other_1} = other_seat_1 |> Seat.changeset(%{partner_id: other_seat_2.id}) |> Repo.update()
+                {:ok, updated_other_2} = other_seat_2 |> Seat.changeset(%{partner_id: other_seat_1.id}) |> Repo.update()
+                [updated_other_1, updated_other_2]
+              else
+                []
+              end
+            else
+              []
+            end
+
+          [updated_seat_1, updated_seat_2 | other_paired]
+        end
+      end)
+    end
   end
 
   @doc """
@@ -182,5 +238,12 @@ defmodule MeaningGame.Rooms.Store do
 
       Repo.all(from(s in Seat, where: s.room_id == ^room_id))
     end)
+  end
+
+  defp clear_partner(_room_id, nil), do: :ok
+
+  defp clear_partner(room_id, partner_id) do
+    from(s in Seat, where: s.id == ^partner_id and s.room_id == ^room_id)
+    |> Repo.update_all(set: [partner_id: nil])
   end
 end

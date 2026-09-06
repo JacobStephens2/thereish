@@ -208,17 +208,32 @@ defmodule MeaningGame.Rooms do
   end
 
   @doc """
-  Takes a Seat in the Room under `name`, for the browser holding `device_token`.
+  Takes a Seat in the Room under `name`, for the browser holding `device_token`,
+  optionally declaring a partner in the Room.
 
   Returns the Seat that browser already holds if it has one, or the Seat held
   under that name if someone is coming back on a browser that forgot its token.
   Only a genuinely new player can be turned away for want of a Seat.
   """
-  @spec join(String.t(), String.t(), String.t()) ::
+  @spec join(String.t(), String.t(), String.t(), String.t() | nil) ::
           {:ok, map()} | {:error, :name_required | :name_too_long | :room_full | :could_not_join}
-  def join(slug, name, device_token) do
+  def join(slug, name, device_token, partner_id \\ nil) do
+    partner_id = if partner_id in [nil, ""], do: nil, else: partner_id
+
     with {:ok, name} <- check_name(name) do
-      call(slug, {:join, name, device_token})
+      call(slug, {:join, name, device_token, partner_id})
+    end
+  end
+
+  @doc """
+  Assigns two seats to a Side in the room before play begins, or clears Side assignment if partner_id is nil.
+  """
+  @spec pair_seats(String.t(), String.t(), String.t() | nil) :: :ok | {:error, term()}
+  def pair_seats(slug, seat_id_1, seat_id_2 \\ nil) do
+    if seat_id_2 in [nil, ""] do
+      unpair_seat(slug, seat_id_1)
+    else
+      call(slug, {:pair_seats, seat_id_1, seat_id_2})
     end
   end
 
@@ -246,12 +261,6 @@ defmodule MeaningGame.Rooms do
   @spec next_attempt(String.t(), String.t()) ::
           :ok | {:error, :not_revealed | :page_closed | :no_such_seat}
   def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
-
-  @doc """
-  Assigns two seats to a Side in the room before play begins.
-  """
-  @spec pair_seats(String.t(), String.t(), String.t()) :: :ok | {:error, term()}
-  def pair_seats(slug, seat_id, partner_id), do: call(slug, {:pair_seats, seat_id, partner_id})
 
   @doc """
   Clears Side assignment for a seat in the room.
@@ -288,6 +297,14 @@ defmodule MeaningGame.Rooms do
           :ok | {:error, term()}
   def record_fairness_tap(slug, seat_id, label),
     do: call(slug, {:record_fairness_tap, seat_id, label})
+
+  @doc """
+  Taps bookends at closed phase (flat, fine, or great).
+  """
+  @spec tap_bookends(String.t(), String.t(), String.t() | atom()) ::
+          :ok | {:error, term()}
+  def tap_bookends(code, seat_id, label),
+    do: call(code, {:tap_bookends, seat_id, label})
 
   @doc """
   "One more?" — a fresh Page in the same Room, with the same Seats.

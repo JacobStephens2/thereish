@@ -18,7 +18,7 @@ defmodule MeaningGameWeb.RoomComponents do
   def roster(assigns) do
     ~H"""
     <div data-role="roster">
-      <%= if @room[:sides_mode?] and @room[:sides] do %>
+      <%= if @room[:sides_mode?] && @room[:sides] do %>
         <div data-role="sides-roster" class="flex flex-col gap-4">
           <div
             :for={side <- @room.sides}
@@ -54,10 +54,18 @@ defmodule MeaningGameWeb.RoomComponents do
             :for={seat <- @room.seats}
             data-seat={seat.id}
             data-committed={to_string(seat.committed?)}
+            data-couple={to_string(Map.get(seat, :couple?, false))}
             class="flex items-center gap-2 text-lg"
           >
             <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
             <span>{seat.name}</span>
+            <span
+              :if={Map.get(seat, :couple?) && seat.partner_name}
+              data-role="partner"
+              class="text-sm opacity-70"
+            >
+              (with {seat.partner_name})
+            </span>
             <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
             <span :if={seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
               has written a bridge
@@ -241,6 +249,34 @@ defmodule MeaningGameWeb.RoomComponents do
         </div>
       </div>
 
+      <% own_couple = find_own_couple(@room.reveal[:pairs], @seat) %>
+      <div
+        :if={@mode in [:phone, :quiet] && own_couple}
+        data-role="own-couple-pair"
+        class="flex flex-col items-center gap-1 rounded-xl border border-primary/40 bg-primary/10 p-4 text-center w-full max-w-sm"
+      >
+        <span class="text-xs uppercase tracking-widest font-semibold text-primary">
+          Your couple: {Enum.join(own_couple.names, " & ")}
+        </span>
+        <div class="flex items-center gap-3">
+          <span data-role="couple-closeness" class="text-3xl font-black tabular-nums">
+            {own_couple.closeness}
+          </span>
+          <span class="text-sm font-bold uppercase tracking-wider opacity-80">
+            {band(own_couple.band)}
+          </span>
+        </div>
+      </div>
+
+      <div
+        :for={p <- @room.reveal[:pairs] || []}
+        :if={@mode in [:phone, :quiet] && p.cross_couple_meld?}
+        data-role="cross-couple-meld"
+        class="alert alert-info shadow-sm text-center py-2 px-4 max-w-md w-full"
+      >
+        <span class="font-medium">✨ {p.surprise}</span>
+      </div>
+
       <div
         :if={@mode != :quiet && @room.reveal.closeness}
         data-role="closeness-display"
@@ -313,6 +349,80 @@ defmodule MeaningGameWeb.RoomComponents do
         room={@room}
         seat={@seat}
       />
+
+      <section
+        :if={@mode == :stage && @room.reveal[:pairs]}
+        data-role="meld-map"
+        class="flex flex-col gap-5 w-full"
+      >
+        <div class="flex items-center justify-between border-b border-base-300 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+            <h3 class="text-sm font-semibold uppercase tracking-widest opacity-80">Meld Map</h3>
+          </div>
+          <span class="text-xs opacity-50">{length(@room.reveal.pairs)} pairs</span>
+        </div>
+
+        <div
+          :for={p <- @room.reveal.pairs}
+          :if={p.cross_couple_meld?}
+          data-role="cross-couple-meld"
+          class="alert alert-info shadow-sm text-center py-2.5 px-4 rounded-xl border border-info/40 bg-info/10"
+        >
+          <span class="font-semibold text-lg">✨ {p.surprise}</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div
+            :for={pair <- @room.reveal.pairs}
+            data-role="pair-card"
+            data-couple={to_string(pair.couple?)}
+            data-cross-couple-meld={to_string(pair.cross_couple_meld?)}
+            class={[
+              "relative flex flex-col gap-2 rounded-xl border p-4 transition-all duration-300 shadow-sm",
+              if(pair.couple?,
+                do: "border-primary/60 bg-primary/5 ring-1 ring-primary/30",
+                else: "border-base-300 bg-base-100"
+              ),
+              if(pair.cross_couple_meld?, do: "ring-2 ring-info border-info/50 bg-info/5", else: "")
+            ]}
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-base">{Enum.join(pair.names, " ⟷ ")}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span
+                  :if={pair.couple?}
+                  data-role="couple-badge"
+                  class="badge badge-primary badge-sm font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Couple
+                </span>
+                <span
+                  :if={pair.melded?}
+                  data-role="meld-badge"
+                  class="badge badge-success badge-sm font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Meld
+                </span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-sm pt-1 border-t border-base-200">
+              <span class="opacity-75 font-serif italic text-base">
+                "{hd(pair.bridges)}" ··· "{List.last(pair.bridges)}"
+              </span>
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono font-black text-lg">{pair.closeness}</span>
+                <span class="text-xs uppercase font-bold tracking-wider opacity-70">
+                  ({band(pair.band)})
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
@@ -681,6 +791,9 @@ defmodule MeaningGameWeb.RoomComponents do
   difference between an ending and an error message: the players spent five
   tries on two words and did not converge, which is the game working.
   """
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :stage
+
   def ending(assigns) do
     ~H"""
     <section :if={@room.closed} data-role="ending" class="flex flex-col items-center gap-4">
@@ -702,6 +815,77 @@ defmodule MeaningGameWeb.RoomComponents do
           <span>{attempt.closeness || "no verdict"}</span>
         </li>
       </ol>
+
+      <div
+        :if={@mode == :phone && @seat}
+        data-role="bookends-controls"
+        class="flex flex-col items-center gap-2 pt-2"
+      >
+        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+          How were these Bookends?
+        </span>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="flat"
+            data-role="tap-flat"
+            data-tap="flat"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "flat",
+                do: "btn-warning text-warning-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Flat
+          </button>
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="fine"
+            data-role="tap-fine"
+            data-tap="fine"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "fine",
+                do: "btn-primary font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Fine
+          </button>
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="great"
+            data-role="tap-great"
+            data-tap="great"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "great",
+                do: "btn-success text-success-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Great
+          </button>
+        </div>
+        <%= if tap = your_bookends_tap(@room, @seat) do %>
+          <div
+            data-role="your-bookends-tap"
+            class="flex items-center gap-1.5 text-xs text-primary font-medium"
+          >
+            <span data-role="seat-bookends-tap" class="font-semibold capitalize">
+              {tap}
+            </span>
+            recorded
+          </div>
+        <% end %>
+      </div>
     </section>
     """
   end
@@ -804,7 +988,18 @@ defmodule MeaningGameWeb.RoomComponents do
     room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])
   end
 
+  defp your_bookends_tap(room, seat) do
+    room[:your_bookends_tap] ||
+      (room[:bookends_taps] && seat && room.bookends_taps[seat.id])
+  end
+
   defp you?(seat, bridge), do: seat != nil and seat.id == bridge.seat_id
+
+  defp find_own_couple(pairs, %{id: seat_id}) when is_list(pairs) do
+    Enum.find(pairs, fn p -> p.couple? and seat_id in p.seat_ids end)
+  end
+
+  defp find_own_couple(_pairs, _seat), do: nil
 
   attr :state, :atom, default: :none, doc: ":self, :other, or :none"
 
