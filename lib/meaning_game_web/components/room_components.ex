@@ -41,7 +41,8 @@ defmodule MeaningGameWeb.RoomComponents do
                 <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
                 <span class="font-medium">{seat.name}</span>
                 <span :if={seat.you?} class="text-xs opacity-60">(you)</span>
-                <span :if={seat.committed? and mid_page?(@room)} class="text-xs opacity-60">
+                <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
+                <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-xs opacity-60">
                   has written a bridge
                 </span>
               </li>
@@ -67,7 +68,8 @@ defmodule MeaningGameWeb.RoomComponents do
               (with {seat.partner_name})
             </span>
             <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
-            <span :if={seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
+            <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
+            <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
               has written a bridge
             </span>
           </li>
@@ -345,7 +347,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
 
       <.fairness_controls
-        :if={@mode in [:phone, :quiet] && @seat && @room.reveal.closeness}
+        :if={@mode in [:phone, :quiet] && @seat && !@room[:late?] && @room.reveal.closeness}
         room={@room}
         seat={@seat}
       />
@@ -705,14 +707,14 @@ defmodule MeaningGameWeb.RoomComponents do
       data-role="overrule-banner"
       class="flex flex-col items-center gap-2 rounded-lg border border-primary/30 bg-base-200/50 p-4 text-center"
     >
-      <p :if={@seat && @room.overrule.you_proposed?} data-role="overrule-pending">
+      <p :if={@seat && !@room[:late?] && @room.overrule.you_proposed?} data-role="overrule-pending">
         {if @room.overrule[:side_id],
           do: "You proposed an overrule. Waiting for your partner to agree.",
           else: "You proposed an overrule. Waiting for everyone to agree."}
       </p>
 
       <div
-        :if={@seat && @room.overrule[:your_side?] != false && !@room.overrule.you_agreed?}
+        :if={@seat && !@room[:late?] && @room.overrule[:your_side?] != false && !@room.overrule.you_agreed?}
         data-role="overrule-vote"
         class="flex flex-col items-center gap-3"
       >
@@ -732,7 +734,7 @@ defmodule MeaningGameWeb.RoomComponents do
 
       <p
         :if={
-          @seat && @room.overrule[:your_side?] != false && @room.overrule.you_agreed? &&
+          @seat && !@room[:late?] && @room.overrule[:your_side?] != false && @room.overrule.you_agreed? &&
             !@room.overrule.you_proposed?
         }
         data-role="overrule-pending"
@@ -751,7 +753,7 @@ defmodule MeaningGameWeb.RoomComponents do
         proposed an overrule for their Side. Waiting for their partner to agree.
       </p>
 
-      <p :if={is_nil(@seat)} data-role="overrule-pending" class="opacity-80">
+      <p :if={is_nil(@seat) or @room[:late?]} data-role="overrule-pending" class="opacity-80">
         <span class="font-semibold">{@room.overrule.proposer_name}</span>
         proposed an overrule. Waiting for {if @room.overrule[:side_id],
           do: "their partner",

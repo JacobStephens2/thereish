@@ -1448,6 +1448,71 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "the Room starts when everyone is here (ticket 08)" do
+    test "Rooms.create/1 opens a count-free Room at the seat cap" do
+      assert {:ok, code} = Rooms.create(device_token())
+      on_exit(fn -> stop_room(code) end)
+
+      room = Rooms.get_room(code)
+      assert room.seat_limit == MeaningGame.Steward.seat_cap()
+    end
+
+    test "a Page starts when seats present declare gives complete and late seats wait for next Page" do
+      assert {:ok, slug} = Rooms.create(device_token())
+      on_exit(fn -> stop_room(slug) end)
+
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      :ok = Rooms.give(slug, melissa.id, "lighthouse")
+
+      # 1 give is not enough to start
+      assert {:error, :not_enough_gives} = Rooms.start_page(slug, melissa.id)
+
+      :ok = Rooms.give(slug, jacob.id, "candle")
+
+      # A third person arrives but hasn't entered a setting
+      {:ok, ada} = Rooms.join(slug, "Ada", device_token())
+
+      # Room decides to start with Melissa and Jacob's settings
+      assert :ok = Rooms.start_page(slug, melissa.id)
+
+      # Author completes and transitions to bridging
+      await_phase(slug, :bridging)
+
+      ada_view = Rooms.snapshot(slug, ada.id)
+      melissa_view = Rooms.snapshot(slug, melissa.id)
+
+      assert ada_view.late? == true
+      assert melissa_view.late? == false
+
+      # Ada cannot commit a bridge on this Page
+      assert {:error, :not_playing_page} = Rooms.commit_bridge(slug, ada.id, "shore")
+
+      # Melissa and Jacob commit bridges
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+
+      view = await_reveal(slug)
+      assert length(view.reveal.bridges) == 2
+
+      # Fast forward or overrule to close
+      :ok = Rooms.propose_overrule(slug, melissa.id)
+      :ok = Rooms.agree_overrule(slug, jacob.id)
+
+      assert Rooms.snapshot(slug, nil).phase == :closed
+
+      # Starting next page includes Ada
+      :ok = Rooms.next_page(slug, ada.id)
+
+      new_ada_view = Rooms.snapshot(slug, ada.id)
+      assert new_ada_view.phase == :giving
+      assert new_ada_view.late? == false
+
+      assert :ok = Rooms.give(slug, ada.id, "starlight")
+    end
+  end
+
   describe "Sides: couple versus couple through the Room" do
     test "pairing seats forms Sides, broadcasts, and unpairing clears them" do
       {:ok, slug} = Rooms.create(4, device_token())

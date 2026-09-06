@@ -206,6 +206,13 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  def handle_call({:start_page, seat_id}, _from, state) do
+    case Game.apply(state.game, {:start_page, %{seat_id: seat_id}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   def handle_call({:retry_author, seat_id}, _from, state) do
     case Game.apply(state.game, {:author_retried, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
