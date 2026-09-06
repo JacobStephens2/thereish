@@ -779,6 +779,110 @@ defmodule MeaningGame.ChronicleTest do
       assert unblinding.experiment_id == "bait_against_plain"
       assert Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
     end
+
+    test "author_model experiment records alternating arm assignments and bookends taps", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      # 1. Steward.assign_arm alternates arms within the room
+      assert MeaningGame.Steward.assign_arm(room.id, "P001") == :flash
+      assert MeaningGame.Steward.assign_arm(room.id, "P002") == :astra
+      assert MeaningGame.Steward.assign_arm(room.id, "P003") == :flash
+
+      assignments = Chronicle.experiment_assignments(room.id, "author_model")
+      assert length(assignments) == 3
+      assert Enum.map(assignments, & &1.arm) == ["flash", "astra", "flash"]
+
+      # 2. Record page outcomes with closing_band
+      {:ok, outcome1} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "P001",
+          experiment_id: "author_model",
+          arm: "flash",
+          melded: true,
+          closeness: 80,
+          closing_band: "meld",
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      assert outcome1.closing_band == "meld"
+      assert outcome1.taps == %{}
+
+      # 3. Record bookends taps (seats tap flat/fine/great once, replaceable)
+      tap_attrs1 = %{
+        page_identifier: "P001",
+        seat_id: ctx.mara.id,
+        label: "great",
+        bookends: ["lantern", "harbour"],
+        gives: %{ctx.mara.id => "light", ctx.jacob.id => "water"},
+        author_meta: %{"arm" => "flash"},
+        arm: "flash"
+      }
+
+      assert {:ok, tap1} = Chronicle.record_bookends_tap(room.id, tap_attrs1)
+      assert tap1.label == "great"
+      assert tap1.arm == "flash"
+
+      # Mara updates tap to fine (replaceable)
+      tap_attrs1_replaced = Map.put(tap_attrs1, :label, "fine")
+      assert {:ok, _} = Chronicle.record_bookends_tap(room.id, tap_attrs1_replaced)
+
+      # Jacob taps great
+      tap_attrs2 = %{
+        page_identifier: "P001",
+        seat_id: ctx.jacob.id,
+        label: "great",
+        bookends: ["lantern", "harbour"],
+        gives: %{ctx.mara.id => "light", ctx.jacob.id => "water"},
+        author_meta: %{"arm" => "flash"},
+        arm: "flash"
+      }
+
+      assert {:ok, _} = Chronicle.record_bookends_tap(room.id, tap_attrs2)
+
+      # Outcome taps reflect the updated taps per seat
+      [updated_outcome1] = Chronicle.experiment_outcomes(room.id, "author_model")
+      assert updated_outcome1.taps[to_string(ctx.mara.id)] == "fine"
+      assert updated_outcome1.taps[to_string(ctx.jacob.id)] == "great"
+
+      # Also test bookends_taps retrieval
+      taps = Chronicle.bookends_taps(room.id)
+      assert length(taps) == 3
+
+      # 4. Record outcome for P002 (astra)
+      {:ok, _outcome2} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "P002",
+          experiment_id: "author_model",
+          arm: "astra",
+          melded: true,
+          closeness: 90,
+          closing_band: "deep_meld",
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      {:ok, _} =
+        Chronicle.record_bookends_tap(room.id, %{
+          page_identifier: "P002",
+          seat_id: ctx.mara.id,
+          label: "great",
+          bookends: ["beacon", "tide"],
+          gives: %{},
+          author_meta: %{"arm" => "astra"},
+          arm: "astra"
+        })
+
+      # 5. Qualitative readout for author_model
+      readout = Chronicle.experiment_readout(room.id, "author_model")
+      assert readout.experiment.id == "author_model"
+      assert readout.flash.pages_count == 1
+      assert readout.astra.pages_count == 1
+      assert readout.flash.preferences_summary =~ "1 great, 1 fine"
+      assert readout.astra.preferences_summary =~ "1 great"
+      assert readout.summary_narrative =~ "Flash"
+      assert readout.summary_narrative =~ "Astra"
+    end
   end
 
   describe "the two words that landed furthest apart" do
@@ -1181,6 +1285,44 @@ defmodule MeaningGame.ChronicleTest do
       assert line =~ "Author $0.0002"
       assert line =~ "Assayer $0.0015"
       assert line =~ "Scribe $0.0025"
+      assert line =~ "Foley $0.0000"
+    end
+
+    test "spend includes Foley from page music_meta", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+
+      spend = Chronicle.spend(room.id)
+      assert spend.by_role.foley.calls_count == 1
+      assert Decimal.equal?(spend.by_role.foley.total_usd, Decimal.new("0.0400"))
+      assert spend.by_role.foley.by_model["mureka-v1"].calls_count == 1
+
+      line = Chronicle.spend_line(spend)
+      assert line =~ "Foley $0.0400"
     end
 
     test "spend/0 computes all-Rooms answer with per-Room breakdown across multiple rooms", ctx do

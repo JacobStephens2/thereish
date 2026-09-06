@@ -68,13 +68,16 @@ defmodule MeaningGame.Steward.Fake do
               "A light to see by stands opposite a shelter by the water."
             )
 
+        job = Keyword.get(opts, :job, :flash)
+        arm = Keyword.get(opts, :arm, job)
+
         {:ok,
          %{
            bookends: bookends,
            why: why,
            meta: %{
              model: "fake-author",
-             arm: :flash,
+             arm: arm,
              prompt_version: MeaningGame.Steward.Author.version(),
              cost_usd: 0.0,
              latency_ms: delay,
@@ -253,6 +256,51 @@ defmodule MeaningGame.Steward.Fake do
     end
   end
 
+  @impl true
+  def score(gives, opts \\ []) do
+    delay = music_delay_ms()
+    if delay > 0, do: Process.sleep(delay)
+
+    case music_mode() do
+      :ok ->
+        key =
+          gives
+          |> Enum.map(&to_string/1)
+          |> Enum.map(&String.trim/1)
+          |> Enum.map(&String.downcase/1)
+          |> Enum.sort()
+          |> Enum.join("-")
+
+        path =
+          Keyword.get(opts, :path) || config_get(:music_path, "/media/tracks/fake-#{key}.mp3")
+
+        {:ok,
+         %{
+           path: path,
+           duration: config_get(:music_duration, 120),
+           format: :mp3,
+           meta: %{
+             provider: "fake",
+             model: "fake-music",
+             cost_usd: 0.04,
+             latency_ms: delay
+           }
+         }}
+
+      :unavailable ->
+        {:error, :music_unavailable}
+
+      :timeout ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :raise ->
+        raise "this Foley is having a moment"
+    end
+  end
+
   # The Scribe with no model behind it writes the one true sentence about a
   # Page: who wrote what, first and last. It is a dial like the grade is — a
   # test that wants a recap naming a word writes that word as a Bridge — and it
@@ -280,6 +328,8 @@ defmodule MeaningGame.Steward.Fake do
   defp author_mode, do: config_get(:author_mode, :ok)
   defp voice_delay_ms, do: config_get(:voice_delay_ms, 0)
   defp voice_mode, do: config_get(:voice_mode, :ok)
+  defp music_delay_ms, do: config_get(:music_delay_ms, 0)
+  defp music_mode, do: config_get(:music_mode, :ok)
 
   defp config_get(key, default) do
     :meaning_game
@@ -347,7 +397,8 @@ defmodule MeaningGame.Steward.Fake do
     |> MeaningGame.Steward.Legality.normalize_bridge()
   end
 
-  defp pair_closeness([left, right]) do
+  @doc "Grades one pair of bridges based on shared prefix."
+  def pair_closeness([left, right]) do
     l_norm = normalize_bridge(left)
     r_norm = normalize_bridge(right)
     total_len = String.length(l_norm) + String.length(r_norm)

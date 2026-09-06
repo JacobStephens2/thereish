@@ -18,23 +18,64 @@ defmodule MeaningGameWeb.RoomComponents do
   def roster(assigns) do
     ~H"""
     <div data-role="roster">
-      <ul class="flex flex-col gap-2">
-        <li
-          :for={seat <- @room.seats}
-          data-seat={seat.id}
-          data-committed={to_string(seat.committed?)}
-          class="flex items-center gap-2 text-lg"
-        >
-          <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-          <span>{seat.name}</span>
-          <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
-          <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
-          <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
-            has written a bridge
-          </span>
-        </li>
-        <li :if={@room.seats == []} class="text-lg opacity-60">Nobody yet</li>
-      </ul>
+      <%= if @room[:sides_mode?] && @room[:sides] do %>
+        <div data-role="sides-roster" class="flex flex-col gap-4">
+          <div
+            :for={side <- @room.sides}
+            data-side={side.id}
+            class="flex flex-col gap-2 rounded-xl border border-base-300 bg-base-200/30 p-3"
+          >
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-primary">
+                {side.name}
+              </span>
+              <span :if={side.you?} class="text-xs font-semibold text-primary">(your side)</span>
+            </div>
+            <ul class="flex flex-col gap-1.5">
+              <li
+                :for={seat <- side.seats}
+                data-seat={seat.id}
+                data-committed={to_string(seat.committed?)}
+                class="flex items-center gap-2 text-base"
+              >
+                <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+                <span class="font-medium">{seat.name}</span>
+                <span :if={seat.you?} class="text-xs opacity-60">(you)</span>
+                <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
+                <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-xs opacity-60">
+                  has written a bridge
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      <% else %>
+        <ul class="flex flex-col gap-2">
+          <li
+            :for={seat <- @room.seats}
+            data-seat={seat.id}
+            data-committed={to_string(seat.committed?)}
+            data-couple={to_string(Map.get(seat, :couple?, false))}
+            class="flex items-center gap-2 text-lg"
+          >
+            <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+            <span>{seat.name}</span>
+            <span
+              :if={Map.get(seat, :couple?) && seat.partner_name}
+              data-role="partner"
+              class="text-sm opacity-70"
+            >
+              (with {seat.partner_name})
+            </span>
+            <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
+            <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
+            <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
+              has written a bridge
+            </span>
+          </li>
+          <li :if={@room.seats == []} class="text-lg opacity-60">Nobody yet</li>
+        </ul>
+      <% end %>
 
       <p data-role="open-seats" class="mt-3 text-sm opacity-60">{waiting(@room)}</p>
     </div>
@@ -160,6 +201,14 @@ defmodule MeaningGameWeb.RoomComponents do
   then the punchline quip.
   """
   def reveal(assigns) do
+    if assigns.room.reveal && assigns.room.reveal[:mode] == :sides do
+      sides_reveal(assigns)
+    else
+      standard_reveal(assigns)
+    end
+  end
+
+  defp standard_reveal(assigns) do
     presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
     assigns = assign(assigns, :presentation, presentation)
 
@@ -200,6 +249,34 @@ defmodule MeaningGameWeb.RoomComponents do
             {bridge.bridge}
           </span>
         </div>
+      </div>
+
+      <% own_couple = find_own_couple(@room.reveal[:pairs], @seat) %>
+      <div
+        :if={@mode in [:phone, :quiet] && own_couple}
+        data-role="own-couple-pair"
+        class="flex flex-col items-center gap-1 rounded-xl border border-primary/40 bg-primary/10 p-4 text-center w-full max-w-sm"
+      >
+        <span class="text-xs uppercase tracking-widest font-semibold text-primary">
+          Your couple: {Enum.join(own_couple.names, " & ")}
+        </span>
+        <div class="flex items-center gap-3">
+          <span data-role="couple-closeness" class="text-3xl font-black tabular-nums">
+            {own_couple.closeness}
+          </span>
+          <span class="text-sm font-bold uppercase tracking-wider opacity-80">
+            {band(own_couple.band)}
+          </span>
+        </div>
+      </div>
+
+      <div
+        :for={p <- @room.reveal[:pairs] || []}
+        :if={@mode in [:phone, :quiet] && p.cross_couple_meld?}
+        data-role="cross-couple-meld"
+        class="alert alert-info shadow-sm text-center py-2 px-4 max-w-md w-full"
+      >
+        <span class="font-medium">✨ {p.surprise}</span>
       </div>
 
       <div
@@ -269,73 +346,85 @@ defmodule MeaningGameWeb.RoomComponents do
         {@room.reveal.quip}
       </p>
 
-      <div
+      <.fairness_controls
         :if={@mode in [:phone, :quiet] && @seat && !@room[:late?] && @room.reveal.closeness}
-        data-role="fairness-controls"
-        class="flex flex-col items-center gap-2 pt-2"
+        room={@room}
+        seat={@seat}
+      />
+
+      <section
+        :if={@mode == :stage && @room.reveal[:pairs]}
+        data-role="meld-map"
+        class="flex flex-col gap-5 w-full"
       >
-        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-          Was this grade fair?
-        </span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_harsh"
-            data-role="tap-too-harsh"
-            data-tap="too_harsh"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_harsh",
-                do: "btn-warning text-warning-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too harsh
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="fair"
-            data-role="tap-fair"
-            data-tap="fair"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "fair",
-                do: "btn-primary font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Fair
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_kind"
-            data-role="tap-too-kind"
-            data-tap="too_kind"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_kind",
-                do: "btn-info text-info-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too kind
-          </button>
-        </div>
-        <%= if tap = your_fairness_tap(@room, @seat) do %>
-          <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
-            <span data-role="seat-tap" class="font-semibold capitalize">
-              {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
-            </span>
-            recorded
+        <div class="flex items-center justify-between border-b border-base-300 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+            <h3 class="text-sm font-semibold uppercase tracking-widest opacity-80">Meld Map</h3>
           </div>
-        <% end %>
-      </div>
+          <span class="text-xs opacity-50">{length(@room.reveal.pairs)} pairs</span>
+        </div>
+
+        <div
+          :for={p <- @room.reveal.pairs}
+          :if={p.cross_couple_meld?}
+          data-role="cross-couple-meld"
+          class="alert alert-info shadow-sm text-center py-2.5 px-4 rounded-xl border border-info/40 bg-info/10"
+        >
+          <span class="font-semibold text-lg">✨ {p.surprise}</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div
+            :for={pair <- @room.reveal.pairs}
+            data-role="pair-card"
+            data-couple={to_string(pair.couple?)}
+            data-cross-couple-meld={to_string(pair.cross_couple_meld?)}
+            class={[
+              "relative flex flex-col gap-2 rounded-xl border p-4 transition-all duration-300 shadow-sm",
+              if(pair.couple?,
+                do: "border-primary/60 bg-primary/5 ring-1 ring-primary/30",
+                else: "border-base-300 bg-base-100"
+              ),
+              if(pair.cross_couple_meld?, do: "ring-2 ring-info border-info/50 bg-info/5", else: "")
+            ]}
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-base">{Enum.join(pair.names, " ⟷ ")}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span
+                  :if={pair.couple?}
+                  data-role="couple-badge"
+                  class="badge badge-primary badge-sm font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Couple
+                </span>
+                <span
+                  :if={pair.melded?}
+                  data-role="meld-badge"
+                  class="badge badge-success badge-sm font-bold uppercase tracking-wider text-[10px]"
+                >
+                  Meld
+                </span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-sm pt-1 border-t border-base-200">
+              <span class="opacity-75 font-serif italic text-base">
+                "{hd(pair.bridges)}" ··· "{List.last(pair.bridges)}"
+              </span>
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono font-black text-lg">{pair.closeness}</span>
+                <span class="text-xs uppercase font-bold tracking-wider opacity-70">
+                  ({band(pair.band)})
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
@@ -384,6 +473,226 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  defp sides_reveal(assigns) do
+    ~H"""
+    <section
+      :if={@room.reveal}
+      id="reveal-performance"
+      data-role="reveal"
+      data-mode={@mode}
+      class="flex flex-col items-center gap-8 w-full max-w-2xl mx-auto"
+    >
+      <div
+        data-role="sides-comparison"
+        class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full"
+      >
+        <div
+          :for={side <- @room.reveal.sides}
+          data-role="side-card"
+          data-side={side.id}
+          data-closer={to_string(side.closer?)}
+          data-melded={to_string(side.melded?)}
+          class={[
+            "flex flex-col items-center gap-4 rounded-2xl border p-5 text-center transition-all",
+            if(side_you?(side, @seat),
+              do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
+              else: "border-base-300 bg-base-100 shadow-sm"
+            )
+          ]}
+        >
+          <div class="flex flex-wrap items-center justify-center gap-2">
+            <h3 class="text-sm font-bold uppercase tracking-wider">{side.name}</h3>
+            <span :if={side_you?(side, @seat)} class="badge badge-primary badge-xs">You</span>
+            <span
+              :if={side.closer?}
+              data-role="closer-badge"
+              class="badge badge-accent badge-xs font-semibold"
+            >Closer</span>
+            <span
+              :if={side.melded?}
+              data-role="melded-badge"
+              class="badge badge-primary badge-xs font-semibold"
+            >Melded</span>
+          </div>
+
+          <div data-role="comparison" class="flex flex-wrap items-stretch justify-center gap-2 w-full">
+            <div
+              :for={bridge <- side.bridges}
+              data-bridge={bridge.seat_id}
+              data-you={to_string(you?(@seat, bridge))}
+              class={[
+                "flex flex-1 min-w-28 flex-col items-center justify-center gap-0.5 rounded-lg border p-2 text-center",
+                if(you?(@seat, bridge),
+                  do: "border-primary/50 bg-primary/10",
+                  else: "border-base-300 bg-base-200/50"
+                )
+              ]}
+            >
+              <div class="flex items-center gap-1 text-[10px] uppercase tracking-wider opacity-60">
+                <span>{bridge.name}</span>
+                <span :if={you?(@seat, bridge)} class="font-bold text-primary">(you)</span>
+              </div>
+              <span class="text-xl sm:text-2xl font-bold tracking-tight">
+                {bridge.bridge}
+              </span>
+            </div>
+          </div>
+
+          <%= if @mode != :quiet and side.closeness do %>
+            <div
+              data-role="closeness-display"
+              class={[
+                "flex flex-col items-center justify-center rounded-xl px-6 py-4 w-full",
+                closeness_presentation(side).container_class
+              ]}
+            >
+              <span
+                data-role="closeness"
+                class={[
+                  "font-black tracking-tighter tabular-nums leading-none select-none",
+                  if(@mode == :stage, do: "text-7xl sm:text-8xl", else: "text-6xl sm:text-7xl"),
+                  closeness_presentation(side).number_class
+                ]}
+              >
+                {side.closeness}
+              </span>
+              <span
+                data-role="band"
+                class={[
+                  "mt-2 text-sm font-extrabold uppercase tracking-widest px-3 py-0.5 rounded-full",
+                  closeness_presentation(side).badge_class
+                ]}
+              >
+                {band(side.band)}
+              </span>
+            </div>
+          <% end %>
+
+          <%= if @mode != :quiet and is_nil(side.closeness) do %>
+            <div
+              data-role="no-verdict"
+              class="flex flex-col items-center gap-1 rounded-xl border border-primary/30 bg-base-200/60 p-4 text-center"
+            >
+              <p class="text-lg font-bold">No verdict</p>
+              <p class="text-xs opacity-70">The Assayer stepped aside</p>
+            </div>
+          <% end %>
+
+          <p
+            :if={@mode != :quiet and side.quip}
+            data-role="quip"
+            class="font-serif italic text-sm text-base-content/90 leading-snug"
+          >
+            "{side.quip}"
+          </p>
+
+          <span
+            :if={side[:overruled?]}
+            data-role="side-overruled"
+            class="badge badge-warning badge-sm font-semibold"
+          >
+            Overruled to Meld
+          </span>
+        </div>
+      </div>
+
+      <.fairness_controls
+        :if={@mode in [:phone, :quiet] && @seat && Enum.any?(@room.reveal.sides, & &1.closeness)}
+        room={@room}
+        seat={@seat}
+        side_mode?={true}
+      />
+
+      <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
+        The couch has the call · Use your phones to continue or overrule
+      </p>
+    </section>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :side_mode?, :boolean, default: false
+
+  def fairness_controls(assigns) do
+    ~H"""
+    <div
+      data-role="fairness-controls"
+      class="flex flex-col items-center gap-2 pt-2"
+    >
+      <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+        <%= if @side_mode? do %>
+          Was your Side's grade fair?
+        <% else %>
+          Was this grade fair?
+        <% end %>
+      </span>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="too_harsh"
+          data-role="tap-too-harsh"
+          data-tap="too_harsh"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "too_harsh",
+              do: "btn-warning text-warning-content font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Too harsh
+        </button>
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="fair"
+          data-role="tap-fair"
+          data-tap="fair"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "fair",
+              do: "btn-primary font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Fair
+        </button>
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="too_kind"
+          data-role="tap-too-kind"
+          data-tap="too_kind"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "too_kind",
+              do: "btn-info text-info-content font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Too kind
+        </button>
+      </div>
+      <%= if tap = your_fairness_tap(@room, @seat) do %>
+        <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
+          <span data-role="seat-tap" class="font-semibold capitalize">
+            {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
+          </span>
+          recorded
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp side_you?(side, seat) do
+    seat != nil and seat.id in side.seat_ids
+  end
+
   attr :room, :map, required: true
   attr :seat, :map, default: nil
 
@@ -399,17 +708,19 @@ defmodule MeaningGameWeb.RoomComponents do
       class="flex flex-col items-center gap-2 rounded-lg border border-primary/30 bg-base-200/50 p-4 text-center"
     >
       <p :if={@seat && !@room[:late?] && @room.overrule.you_proposed?} data-role="overrule-pending">
-        You proposed an overrule. Waiting for everyone to agree.
+        {if @room.overrule[:side_id],
+          do: "You proposed an overrule. Waiting for your partner to agree.",
+          else: "You proposed an overrule. Waiting for everyone to agree."}
       </p>
 
       <div
-        :if={@seat && !@room[:late?] && !@room.overrule.you_agreed?}
+        :if={@seat && !@room[:late?] && @room.overrule[:your_side?] != false && !@room.overrule.you_agreed?}
         data-role="overrule-vote"
         class="flex flex-col items-center gap-3"
       >
         <p data-role="overrule-pending">
           <span class="font-semibold">{@room.overrule.proposer_name}</span>
-          proposed overruling this grade to a Meld.
+          proposed overruling {if @room.overrule[:side_id], do: "your Side's", else: "this"} grade to a Meld.
         </p>
         <div class="flex gap-3">
           <.button phx-click="agree_overrule" data-role="agree-overrule" variant="primary">
@@ -422,20 +733,40 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p
-        :if={@seat && !@room[:late?] && @room.overrule.you_agreed? && !@room.overrule.you_proposed?}
+        :if={
+          @seat && !@room[:late?] && @room.overrule[:your_side?] != false && @room.overrule.you_agreed? &&
+            !@room.overrule.you_proposed?
+        }
         data-role="overrule-pending"
       >
-        You agreed. Waiting for everyone to agree.
+        {if @room.overrule[:side_id],
+          do: "You agreed. Waiting for your partner to agree.",
+          else: "You agreed. Waiting for everyone to agree."}
+      </p>
+
+      <p
+        :if={@seat && @room.overrule[:your_side?] == false}
+        data-role="overrule-pending"
+        class="opacity-80"
+      >
+        <span class="font-semibold">{@room.overrule.proposer_name}</span>
+        proposed an overrule for their Side. Waiting for their partner to agree.
       </p>
 
       <p :if={is_nil(@seat) or @room[:late?]} data-role="overrule-pending" class="opacity-80">
         <span class="font-semibold">{@room.overrule.proposer_name}</span>
-        proposed an overrule. Waiting for the Room to agree.
+        proposed an overrule. Waiting for {if @room.overrule[:side_id],
+          do: "their partner",
+          else: "the Room"} to agree.
       </p>
     </div>
 
     <p
-      :if={@room.reveal && @room.reveal.overruled?}
+      :if={
+        (@room.reveal && @room.reveal[:overruled?]) ||
+          (@room.reveal && @room.reveal[:mode] == :sides &&
+             Enum.any?(@room.reveal.sides, & &1[:overruled?]))
+      }
       data-role="overruled-notice"
       class="text-center text-sm font-semibold text-primary"
     >
@@ -479,6 +810,9 @@ defmodule MeaningGameWeb.RoomComponents do
   difference between an ending and an error message: the players spent five
   tries on two words and did not converge, which is the game working.
   """
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :stage
+
   def ending(assigns) do
     ~H"""
     <section :if={@room.closed} data-role="ending" class="flex flex-col items-center gap-4">
@@ -500,6 +834,77 @@ defmodule MeaningGameWeb.RoomComponents do
           <span>{attempt.closeness || "no verdict"}</span>
         </li>
       </ol>
+
+      <div
+        :if={@mode == :phone && @seat}
+        data-role="bookends-controls"
+        class="flex flex-col items-center gap-2 pt-2"
+      >
+        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+          How were these Bookends?
+        </span>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="flat"
+            data-role="tap-flat"
+            data-tap="flat"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "flat",
+                do: "btn-warning text-warning-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Flat
+          </button>
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="fine"
+            data-role="tap-fine"
+            data-tap="fine"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "fine",
+                do: "btn-primary font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Fine
+          </button>
+          <button
+            type="button"
+            phx-click="bookends_tap"
+            phx-value-label="great"
+            data-role="tap-great"
+            data-tap="great"
+            class={[
+              "btn btn-sm text-xs font-medium transition-all",
+              if(your_bookends_tap(@room, @seat) == "great",
+                do: "btn-success text-success-content font-bold shadow-sm",
+                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+              )
+            ]}
+          >
+            Great
+          </button>
+        </div>
+        <%= if tap = your_bookends_tap(@room, @seat) do %>
+          <div
+            data-role="your-bookends-tap"
+            class="flex items-center gap-1.5 text-xs text-primary font-medium"
+          >
+            <span data-role="seat-bookends-tap" class="font-semibold capitalize">
+              {tap}
+            </span>
+            recorded
+          </div>
+        <% end %>
+      </div>
     </section>
     """
   end
@@ -602,7 +1007,18 @@ defmodule MeaningGameWeb.RoomComponents do
     room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])
   end
 
+  defp your_bookends_tap(room, seat) do
+    room[:your_bookends_tap] ||
+      (room[:bookends_taps] && seat && room.bookends_taps[seat.id])
+  end
+
   defp you?(seat, bridge), do: seat != nil and seat.id == bridge.seat_id
+
+  defp find_own_couple(pairs, %{id: seat_id}) when is_list(pairs) do
+    Enum.find(pairs, fn p -> p.couple? and seat_id in p.seat_ids end)
+  end
+
+  defp find_own_couple(_pairs, _seat), do: nil
 
   attr :state, :atom, default: :none, doc: ":self, :other, or :none"
 
@@ -678,6 +1094,9 @@ defmodule MeaningGameWeb.RoomComponents do
           this.stingsBus = null
           this.voiceBus = null
           this.musicSource = null
+          this.voiceSource = null
+          this.voiceObserver = null
+          this.currentVoiceAttempt = null
           this.audioBuffers = new Map()
 
           this.initAudio = () => {
@@ -734,6 +1153,7 @@ defmodule MeaningGameWeb.RoomComponents do
             if (this.audioBuffers.has(url)) return this.audioBuffers.get(url)
             try {
               const res = await fetch(url)
+              if (!res.ok) return null
               const arrayBuf = await res.arrayBuffer()
               const audioBuf = await this.ctx.decodeAudioData(arrayBuf)
               this.audioBuffers.set(url, audioBuf)
@@ -751,6 +1171,25 @@ defmodule MeaningGameWeb.RoomComponents do
             this.musicBus.gain.setTargetAtTime(0.7, now + durationSeconds, 0.2)
           }
 
+          this.restoreMusic = () => {
+            if (!this.ctx || !this.musicBus) return
+            const now = this.ctx.currentTime
+            this.musicBus.gain.cancelScheduledValues(now)
+            this.musicBus.gain.setTargetAtTime(0.7, now, 0.1)
+          }
+
+          this.stopVoice = () => {
+            if (this.voiceObserver) {
+              this.voiceObserver.disconnect()
+              this.voiceObserver = null
+            }
+            if (this.voiceSource) {
+              try { this.voiceSource.stop() } catch (_) {}
+              this.voiceSource = null
+              this.restoreMusic()
+            }
+          }
+
           this.playEffect = async (url, bus, duckDuration = 2.0) => {
             if (this.reducedMotion) return
             await this.resumeAudio()
@@ -766,25 +1205,69 @@ defmodule MeaningGameWeb.RoomComponents do
             source.start(0)
           }
 
+          this.stopMusic = () => {
+            if (this.currentMusic) {
+              try { this.currentMusic.source.stop() } catch (_) {}
+              this.currentMusic = null
+            }
+            if (this.musicSource) {
+              try { this.musicSource.stop() } catch (_) {}
+              this.musicSource = null
+            }
+          }
+
           this.handleEvent("foley:page", async ({path}) => {
             if (this.reducedMotion) return
+            this.stopVoice()
+            this.currentVoiceAttempt = null
             await this.resumeAudio()
             if (!this.ctx) return
             const trackUrl = path || "/audio/house-loop.mp3"
+
+            if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              return
+            }
+
             const buf = await this.fetchBuffer(trackUrl)
             if (!buf) return
 
-            if (this.musicSource) {
-              try { this.musicSource.stop() } catch (_) {}
+            if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              return
             }
-            this.musicSource = this.ctx.createBufferSource()
-            this.musicSource.buffer = buf
-            this.musicSource.loop = true
-            this.musicSource.connect(this.musicBus)
-            this.musicSource.start(0)
+
+            const now = this.ctx.currentTime
+            const fadeDuration = 2.0
+
+            const newGain = this.ctx.createGain()
+            const newSource = this.ctx.createBufferSource()
+            newSource.buffer = buf
+            newSource.loop = true
+            newSource.connect(newGain)
+            newGain.connect(this.musicBus)
+
+            const oldMusic = this.currentMusic
+            if (oldMusic) {
+              newGain.gain.setValueAtTime(0.001, now)
+              newGain.gain.linearRampToValueAtTime(1.0, now + fadeDuration)
+
+              oldMusic.gain.gain.cancelScheduledValues(now)
+              oldMusic.gain.gain.setValueAtTime(oldMusic.gain.gain.value, now)
+              oldMusic.gain.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
+              setTimeout(() => {
+                try { oldMusic.source.stop() } catch (_) {}
+              }, fadeDuration * 1000 + 100)
+            } else {
+              newGain.gain.setValueAtTime(1.0, now)
+            }
+
+            newSource.start(0)
+            this.currentMusic = {source: newSource, gain: newGain, path: trackUrl}
+            this.musicSource = newSource
           })
 
           this.handleEvent("foley:beat", async () => {
+            this.stopVoice()
+            this.currentVoiceAttempt = null
             this.playEffect("/audio/beat.mp3", this.stingsBus, 2.5)
           })
 
@@ -793,23 +1276,87 @@ defmodule MeaningGameWeb.RoomComponents do
             this.playEffect(`/audio/sting-${bandName}.mp3`, this.stingsBus, 2.0)
           })
 
+          this.handleEvent("foley:voice", async ({attempt, url}) => {
+            if (this.reducedMotion) return
+            await this.resumeAudio()
+            if (!this.ctx) return
+
+            this.stopVoice()
+            this.currentVoiceAttempt = attempt
+
+            const isQuipReady = () =>
+              document.querySelector("[data-role=quip]") ||
+              document.querySelector("[data-role=fairness-controls]")
+
+            const playWhenReady = (buf) => {
+              if (!buf || !this.ctx || this.currentVoiceAttempt !== attempt) return
+              if (!isQuipReady()) return
+
+              this.stopVoice()
+              this.currentVoiceAttempt = attempt
+
+              const source = this.ctx.createBufferSource()
+              source.buffer = buf
+              source.connect(this.voiceBus)
+              this.voiceSource = source
+
+              const duration = buf.duration || 3.0
+              this.duckMusic(duration)
+
+              source.onended = () => {
+                if (this.voiceSource === source) {
+                  this.voiceSource = null
+                  this.restoreMusic()
+                }
+              }
+              source.start(0)
+            }
+
+            const voiceUrl = url
+            const bufPromise = this.fetchBuffer(voiceUrl)
+
+            if (isQuipReady()) {
+              const buf = await bufPromise
+              playWhenReady(buf)
+            } else {
+              const observer = new MutationObserver(async (_mutations, obs) => {
+                if (this.currentVoiceAttempt !== attempt) {
+                  obs.disconnect()
+                  if (this.voiceObserver === obs) this.voiceObserver = null
+                  return
+                }
+                if (isQuipReady()) {
+                  obs.disconnect()
+                  if (this.voiceObserver === obs) this.voiceObserver = null
+                  const buf = await bufPromise
+                  playWhenReady(buf)
+                }
+              })
+              this.voiceObserver = observer
+              observer.observe(document.body, { childList: true, subtree: true })
+
+              setTimeout(() => {
+                if (this.voiceObserver === observer) {
+                  observer.disconnect()
+                  this.voiceObserver = null
+                }
+              }, 15000)
+            }
+          })
+
           this.handleEvent("foley:ending", async ({kind}) => {
             const endingKind = (kind === "meld") ? "meld" : "unmelded"
             const delayMs = (kind === "meld") ? 1800 : 0
             setTimeout(() => {
               this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 0)
-              if (this.musicSource) {
-                try { this.musicSource.stop() } catch (_) {}
-                this.musicSource = null
-              }
+              this.stopMusic()
             }, delayMs)
           })
 
           this.handleEvent("foley:stop", () => {
-            if (this.musicSource) {
-              try { this.musicSource.stop() } catch (_) {}
-              this.musicSource = null
-            }
+            this.stopVoice()
+            this.currentVoiceAttempt = null
+            this.stopMusic()
           })
 
           this.updateTapForSound()
@@ -818,17 +1365,17 @@ defmodule MeaningGameWeb.RoomComponents do
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
           this.updateTapForSound()
-          if (!this.speaker && this.musicSource) {
-            try { this.musicSource.stop() } catch (_) {}
-            this.musicSource = null
+          if (!this.speaker) {
+            this.stopVoice()
+            this.currentVoiceAttempt = null
+            this.stopMusic()
           }
         },
 
         destroyed() {
-          if (this.musicSource) {
-            try { this.musicSource.stop() } catch (_) {}
-            this.musicSource = null
-          }
+          this.stopVoice()
+          this.currentVoiceAttempt = null
+          this.stopMusic()
           if (this.ctx) {
             try { this.ctx.close() } catch (_) {}
             this.ctx = null

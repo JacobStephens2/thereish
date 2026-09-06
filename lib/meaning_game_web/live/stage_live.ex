@@ -69,6 +69,10 @@ defmodule MeaningGameWeb.StageLive do
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket),
     do: {:noreply, socket}
 
+  def handle_info({:voice_ready, attempt}, socket) do
+    {:noreply, MeaningGameWeb.Foley.push_voice(socket, attempt)}
+  end
+
   # The stage holds no Seat, so it sees the Room the way anyone standing behind
   # the couch sees it.
   defp resync(socket) do

@@ -53,14 +53,25 @@ defmodule MeaningGameWeb.RoomLive do
   end
 
   @impl true
-  def handle_event("join", %{"name" => name}, socket) do
-    case Rooms.join(socket.assigns.slug, name, socket.assigns.device_token) do
+  def handle_event("join", params, socket) do
+    name = params["name"] || ""
+    partner_id = params["partner_id"]
+
+    case Rooms.join(socket.assigns.slug, name, socket.assigns.device_token, partner_id) do
       {:ok, seat} ->
         {:noreply, socket |> assign(seat: seat, error: nil) |> resync()}
 
       {:error, reason} ->
         {:noreply, assign(socket, name: name, error: message(reason))}
     end
+  end
+
+  def handle_event("pair_seat", %{"partner_id" => partner_id}, socket) do
+    if socket.assigns.seat do
+      Rooms.pair_seats(socket.assigns.slug, socket.assigns.seat.id, partner_id)
+    end
+
+    {:noreply, resync(socket)}
   end
 
   def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
@@ -88,6 +99,26 @@ defmodule MeaningGameWeb.RoomLive do
     case Rooms.commit_bridge(socket.assigns.slug, socket.assigns.seat.id, bridge) do
       :ok -> {:noreply, socket |> assign(:bridge_error, nil) |> resync()}
       {:error, reason} -> {:noreply, assign(socket, :bridge_error, message(reason))}
+    end
+  end
+
+  def handle_event("pair_partner", %{"partner_id" => partner_id}, socket) do
+    case Rooms.pair_seats(socket.assigns.slug, socket.assigns.seat.id, partner_id) do
+      :ok ->
+        {:noreply, resync(socket)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :error, message(reason))}
+    end
+  end
+
+  def handle_event("unpair_partner", _params, socket) do
+    case Rooms.unpair_seat(socket.assigns.slug, socket.assigns.seat.id) do
+      :ok ->
+        {:noreply, resync(socket)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :error, message(reason))}
     end
   end
 
@@ -131,6 +162,14 @@ defmodule MeaningGameWeb.RoomLive do
   def handle_event("fairness_tap", %{"label" => label}, socket) do
     if socket.assigns.seat do
       Rooms.record_fairness_tap(socket.assigns.slug, socket.assigns.seat.id, label)
+    end
+
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("bookends_tap", %{"label" => label}, socket) do
+    if socket.assigns.seat do
+      Rooms.tap_bookends(socket.assigns.slug, socket.assigns.seat.id, label)
     end
 
     {:noreply, resync(socket)}
@@ -207,6 +246,10 @@ defmodule MeaningGameWeb.RoomLive do
      |> assign(:stage_present?, MeaningGameWeb.Presence.stage_present?(socket.assigns.slug))}
   end
 
+  def handle_info({:voice_ready, attempt}, socket) do
+    {:noreply, MeaningGameWeb.Foley.push_voice(socket, attempt)}
+  end
+
   defp seat_for_device(slug, device_token) do
     case Rooms.rejoin(slug, device_token) do
       {:ok, seat} -> seat
@@ -218,9 +261,11 @@ defmodule MeaningGameWeb.RoomLive do
     seat_id = socket.assigns.seat && socket.assigns.seat.id
     old_room = socket.assigns[:room]
     new_room = Rooms.snapshot(socket.assigns.slug, seat_id, socket.assigns.device_token)
+    seat = (new_room && new_room.you) || socket.assigns.seat
 
     socket
     |> assign(:room, new_room)
+    |> assign(:seat, seat)
     |> assign(:stage_present?, MeaningGameWeb.Presence.stage_present?(socket.assigns.slug))
     |> MeaningGameWeb.Foley.push_foley_events(old_room, new_room)
   end
@@ -238,7 +283,24 @@ defmodule MeaningGameWeb.RoomLive do
   defp message(:not_enough_gives), do: "Need at least two settings to start."
   defp message(:not_playing_page), do: "You're watching this Page."
   defp message(:pool_exhausted), do: "That's every Page for tonight."
+  defp message(:not_sides_room), do: "Sides mode is only for 4-seat rooms."
+  defp message(:not_waiting), do: "Sides are locked once bridges are committed."
   defp message(_), do: "Something went wrong. Try again."
+
+  defp can_overrule?(nil, _seat), do: false
+  defp can_overrule?(%{reveal: nil}, _seat), do: false
+  defp can_overrule?(%{overrule: %{pending?: true}}, _seat), do: false
+
+  defp can_overrule?(%{reveal: %{mode: :sides, sides: sides}}, %{id: seat_id}) do
+    case Enum.find(sides, &(seat_id in &1.seat_ids)) do
+      %{overruled?: true} -> false
+      nil -> false
+      _ -> true
+    end
+  end
+
+  defp can_overrule?(%{reveal: %{overruled?: true}}, _seat), do: false
+  defp can_overrule?(_room, _seat), do: true
 
   defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
 
@@ -305,6 +367,17 @@ defmodule MeaningGameWeb.RoomLive do
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">
         <.input name="name" value={@name} label="Your name" autocomplete="off" autofocus />
+        <div :if={@room && @room.seats != []} class="flex flex-col gap-1">
+          <label class="text-xs uppercase tracking-wide opacity-60">Partner (optional)</label>
+          <select
+            name="partner_id"
+            data-role="partner-select"
+            class="select select-bordered select-sm w-full"
+          >
+            <option value="">No partner</option>
+            <option :for={s <- @room.seats} value={s.id}>With {s.name}</option>
+          </select>
+        </div>
         <p :if={@error} data-role="error" class="text-sm text-error">{@error}</p>
         <.button variant="primary">Join</.button>
       </form>
@@ -319,6 +392,30 @@ defmodule MeaningGameWeb.RoomLive do
           You joined mid-Page. Watching this Page — you'll play on the next one!
         </p>
       </div>
+
+      <form
+        :if={
+          @seat && !@room[:late?] && @room.phase == :waiting && is_nil(@room.you[:partner_name]) &&
+            length(@room.seats) > 1
+        }
+        phx-submit="pair_seat"
+        class="flex flex-col gap-1 border-t border-base-300 pt-3"
+      >
+        <label class="text-xs uppercase tracking-wide opacity-60">Pair with someone</label>
+        <div class="flex items-center gap-2">
+          <select
+            name="partner_id"
+            data-role="pair-select"
+            class="select select-bordered select-sm flex-1"
+          >
+            <option value="">Choose partner...</option>
+            <option :for={s <- @room.seats} :if={s.id != @seat.id} value={s.id}>
+              {s.name}
+            </option>
+          </select>
+          <.button class="btn-sm">Pair</.button>
+        </div>
+      </form>
 
       <form
         :if={@seat && !@room[:late?] && @room.phase == :giving && @room.your_give == nil}
@@ -390,6 +487,61 @@ defmodule MeaningGameWeb.RoomLive do
           <.button phx-click="reset_gives" data-role="reset-gives">New settings</.button>
         </div>
       </div>
+      <section
+        :if={
+          @seat && @room && @room.seat_limit == 4 && is_nil(@room.your_bridge) &&
+            @room.attempt.number == 1
+        }
+        data-role="partner-picker"
+        class="flex flex-col items-center gap-3 rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm text-center"
+      >
+        <p class="text-xs font-bold uppercase tracking-wider opacity-60">Couple versus Couple</p>
+        <%= if @room.sides_mode? do %>
+          <% your_partner = Enum.find(@room.seats, &(&1.id == @seat.partner_id)) %>
+          <p data-role="paired-notice" class="text-sm">
+            Playing as Sides: you're with <span class="font-semibold">{your_partner && your_partner.name}</span>.
+          </p>
+          <.button
+            phx-click="unpair_partner"
+            data-role="unpair-partner"
+            class="btn-sm btn-ghost text-xs"
+          >
+            Change sides
+          </.button>
+        <% else %>
+          <%= if @seat.partner_id do %>
+            <% your_partner = Enum.find(@room.seats, &(&1.id == @seat.partner_id)) %>
+            <p data-role="paired-notice" class="text-sm">
+              You're with <span class="font-semibold">{your_partner && your_partner.name}</span>. Waiting for the other side to form.
+            </p>
+            <.button
+              phx-click="unpair_partner"
+              data-role="unpair-partner"
+              class="btn-sm btn-ghost text-xs"
+            >
+              Change sides
+            </.button>
+          <% else %>
+            <p class="text-sm opacity-80">
+              Pick your partner to play couple versus couple:
+            </p>
+            <div class="flex flex-wrap justify-center gap-2">
+              <%= for other <- @room.seats, other.id != @seat.id, is_nil(other.partner_id) do %>
+                <.button
+                  phx-click="pair_partner"
+                  phx-value-partner_id={other.id}
+                  data-role="pair-partner"
+                  data-partner={other.id}
+                  class="btn-sm text-xs"
+                >
+                  I'm with {other.name}
+                </.button>
+              <% end %>
+            </div>
+          <% end %>
+        <% end %>
+      </section>
+
       <.attempt :if={@seat} room={@room} />
 
       <.bookends :if={@seat} room={@room} />
@@ -424,12 +576,16 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.assaying room={@room} />
 
-      <.reveal room={@room} seat={@seat} mode={if @stage_present?, do: :quiet, else: :phone} />
+      <.reveal
+        room={@room}
+        seat={@seat}
+        mode={if @stage_present? and not (@room && @room.speaker?), do: :quiet, else: :phone}
+      />
 
       <.overrule_banner room={@room} seat={@seat} />
 
       <div
-        :if={@seat && !@room[:late?] && @room.reveal && @room.overrule == nil && !@room.reveal.overruled?}
+        :if={@seat && !@room[:late?] && can_overrule?(@room, @seat)}
         class="flex justify-center"
       >
         <.button phx-click="propose_overrule" data-role="propose-overrule">
@@ -447,7 +603,7 @@ defmodule MeaningGameWeb.RoomLive do
         </.button>
       </div>
 
-      <.ending room={@room} />
+      <.ending room={@room} seat={@seat} mode={:phone} />
 
       <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>
