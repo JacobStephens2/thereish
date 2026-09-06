@@ -279,6 +279,8 @@ defmodule MeaningGame.Steward.Live do
   end
 
   @impl true
+  def name_room([], _taken_codes), do: {:error, :no_history}
+
   def name_room(digests, taken_codes) do
     role = Steward.role(:scribe, :naming)
     prompt = Naming.prompt(digests, taken_codes)
