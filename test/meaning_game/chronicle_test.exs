@@ -1048,6 +1048,7 @@ defmodule MeaningGame.ChronicleTest do
       assert line =~ "Author $0.0002"
       assert line =~ "Assayer $0.0015"
       assert line =~ "Scribe $0.0025"
+      assert line =~ "Foley $0.0000"
     end
 
     test "spend/0 computes all-Rooms answer with per-Room breakdown across multiple rooms", ctx do
