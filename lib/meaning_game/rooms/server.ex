@@ -118,10 +118,14 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
-  def handle_call({:pair_seats, seat_id_1, seat_id_2}, _from, state) do
-    with {:ok, _} <- Store.pair_seats(state.room.id, seat_id_1, seat_id_2),
+  def handle_call({:pair_seats, seat_id, nil}, from, state) do
+    handle_call({:unpair_seat, seat_id}, from, state)
+  end
+
+  def handle_call({:pair_seats, seat_id, partner_id}, _from, state) do
+    with {:ok, _seats} <- Store.pair_seats(state.room.id, seat_id, partner_id),
          {:ok, game, effects} <-
-           Game.apply(state.game, {:seats_paired, %{seat_id: seat_id_1, partner_id: seat_id_2}}) do
+           Game.apply(state.game, {:seat_paired, %{seat_id: seat_id, partner_id: partner_id}}) do
       {:reply, :ok, advance(state, game, effects)}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -145,6 +149,15 @@ defmodule MeaningGame.Rooms.Server do
   def handle_call({:next_attempt, seat_id}, _from, state) do
     case Game.apply(state.game, {:attempt_advanced, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:unpair_seat, seat_id}, _from, state) do
+    with {:ok, _seats} <- Store.unpair_seat(state.room.id, seat_id),
+         {:ok, game, effects} <- Game.apply(state.game, {:seat_unpaired, %{seat_id: seat_id}}) do
+      {:reply, :ok, advance(state, game, effects)}
+    else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -188,6 +201,13 @@ defmodule MeaningGame.Rooms.Server do
 
   def handle_call({:give, seat_id, give}, _from, state) do
     case Game.apply(state.game, {:give_committed, %{seat_id: seat_id, give: give}}) do
+      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:start_page, seat_id}, _from, state) do
+    case Game.apply(state.game, {:start_page, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -421,7 +441,14 @@ defmodule MeaningGame.Rooms.Server do
   # number and handing the ruling to the couple. A verdict that turns up
   # afterwards changes nothing: an Attempt is graded once.
   def handle_info({:escalate, :unavailable}, %{assayer: %{}} = state) do
-    {:noreply, apply_events(%{state | assayer: nil}, [{:verdict_unavailable, %{}}])}
+    event =
+      if Game.sides_mode?(state.game) do
+        {:side_verdicts_unavailable, %{}}
+      else
+        {:verdict_unavailable, %{}}
+      end
+
+    {:noreply, apply_events(%{state | assayer: nil}, [event])}
   end
 
   def handle_info({:escalate, step}, %{assayer: assayer} = state) when assayer != nil do
@@ -799,6 +826,46 @@ defmodule MeaningGame.Rooms.Server do
     waiting_on(state)
   end
 
+  defp perform({:assay_sides, request}, state) do
+    room = self()
+    arm = state[:current_arm] || :flash
+    page = state.game.page
+
+    Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
+      task_side_a = Task.async(fn -> assay(request.side_a, page, arm) end)
+      task_side_b = Task.async(fn -> assay(request.side_b, page, arm) end)
+      task_overall = Task.async(fn -> assay(request.overall, page, arm) end)
+
+      result_side_a = Task.await(task_side_a, 15_000)
+      result_side_b = Task.await(task_side_b, 15_000)
+      result_overall = Task.await(task_overall, 15_000)
+
+      event = side_verdicts_event(result_side_a, result_side_b, result_overall)
+      send(room, {:assayed, event})
+    end)
+
+    waiting_on(state)
+  end
+
+  defp side_verdicts_event({:ok, verdict_side_a}, {:ok, verdict_side_b}, result_overall) do
+    furthest =
+      case result_overall do
+        {:ok, %{furthest: [_, _] = f}} -> f
+        _ -> nil
+      end
+
+    {:side_verdicts_received,
+     %{
+       side_a: verdict_side_a,
+       side_b: verdict_side_b,
+       furthest: furthest
+     }}
+  end
+
+  defp side_verdicts_event(_result_side_a, _result_side_b, _result_overall) do
+    {:side_verdicts_unavailable, %{}}
+  end
+
   defp maybe_start_score_task(_room, _page_ref, _request, true), do: :ok
 
   defp maybe_start_score_task(room, page_ref, request, false) do
@@ -1005,6 +1072,5 @@ defmodule MeaningGame.Rooms.Server do
   defp attach_voice_meta(entry, _), do: entry
 
   # Device tokens are the browser's business and never leave this module.
-  defp public(%Seat{} = seat),
-    do: %{id: seat.id, name: seat.name, partner_id: seat.partner_id}
+  defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name, partner_id: seat.partner_id}
 end

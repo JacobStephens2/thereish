@@ -1448,6 +1448,148 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "the Room starts when everyone is here (ticket 08)" do
+    test "Rooms.create/1 opens a count-free Room at the seat cap" do
+      assert {:ok, code} = Rooms.create(device_token())
+      on_exit(fn -> stop_room(code) end)
+
+      room = Rooms.get_room(code)
+      assert room.seat_limit == MeaningGame.Steward.seat_cap()
+    end
+
+    test "a Page starts when seats present declare gives complete and late seats wait for next Page" do
+      assert {:ok, slug} = Rooms.create(device_token())
+      on_exit(fn -> stop_room(slug) end)
+
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      :ok = Rooms.give(slug, melissa.id, "lighthouse")
+
+      # 1 give is not enough to start
+      assert {:error, :not_enough_gives} = Rooms.start_page(slug, melissa.id)
+
+      :ok = Rooms.give(slug, jacob.id, "candle")
+
+      # A third person arrives but hasn't entered a setting
+      {:ok, ada} = Rooms.join(slug, "Ada", device_token())
+
+      # Room decides to start with Melissa and Jacob's settings
+      assert :ok = Rooms.start_page(slug, melissa.id)
+
+      # Author completes and transitions to bridging
+      await_phase(slug, :bridging)
+
+      ada_view = Rooms.snapshot(slug, ada.id)
+      melissa_view = Rooms.snapshot(slug, melissa.id)
+
+      assert ada_view.late? == true
+      assert melissa_view.late? == false
+
+      # Ada cannot commit a bridge on this Page
+      assert {:error, :not_playing_page} = Rooms.commit_bridge(slug, ada.id, "shore")
+
+      # Melissa and Jacob commit bridges
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+
+      view = await_reveal(slug)
+      assert length(view.reveal.bridges) == 2
+
+      # Fast forward or overrule to close
+      :ok = Rooms.propose_overrule(slug, melissa.id)
+      :ok = Rooms.agree_overrule(slug, jacob.id)
+
+      assert Rooms.snapshot(slug, nil).phase == :closed
+
+      # Starting next page includes Ada
+      :ok = Rooms.next_page(slug, ada.id)
+
+      new_ada_view = Rooms.snapshot(slug, ada.id)
+      assert new_ada_view.phase == :giving
+      assert new_ada_view.late? == false
+
+      assert :ok = Rooms.give(slug, ada.id, "starlight")
+    end
+  end
+
+  describe "Sides: couple versus couple through the Room" do
+    test "pairing seats forms Sides, broadcasts, and unpairing clears them" do
+      {:ok, slug} = Rooms.create(4, device_token())
+      Rooms.open!(slug)
+      Rooms.subscribe(slug)
+
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      {:ok, _ada} = Rooms.join(slug, "Ada", device_token())
+      {:ok, _ida} = Rooms.join(slug, "Ida", device_token())
+
+      assert :ok = Rooms.pair_seats(slug, melissa.id, jacob.id)
+      assert_receive :room_changed
+
+      view = Rooms.snapshot(slug, melissa.id)
+      assert view.sides_mode? == true
+      assert length(view.sides) == 2
+      [side_a, side_b] = view.sides
+      assert side_a.name == "Melissa & Jacob"
+      assert side_a.you? == true
+      assert side_b.name == "Ada & Ida"
+      assert side_b.you? == false
+
+      # Unpairing clears sides
+      assert :ok = Rooms.unpair_seat(slug, melissa.id)
+      assert_receive :room_changed
+      view_unpaired = Rooms.snapshot(slug, melissa.id)
+      assert view_unpaired.sides_mode? == false
+      assert view_unpaired.sides == nil
+
+      stop_room(slug)
+    end
+
+    test "playing an attempt in Sides mode reveals side-by-side verdicts" do
+      {:ok, slug} = Rooms.create(4, device_token())
+      Rooms.open!(slug)
+
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      {:ok, ada} = Rooms.join(slug, "Ada", device_token())
+      {:ok, ida} = Rooms.join(slug, "Ida", device_token())
+
+      :ok = Rooms.pair_seats(slug, melissa.id, jacob.id)
+
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      :ok = Rooms.give(slug, ada.id, "setting three")
+      :ok = Rooms.give(slug, ida.id, "setting four")
+      await_phase(slug, :bridging)
+
+      # In Fake Assayer: "cairn" and "cairns" share prefix -> closeness 91 (melded!)
+      # "wharf" and "signal" share no prefix -> closeness 0
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      :ok = Rooms.commit_bridge(slug, ada.id, "wharf")
+      :ok = Rooms.commit_bridge(slug, ida.id, "signal")
+
+      view = await_reveal(slug)
+      assert view.phase == :closed
+      assert view.reveal.mode == :sides
+      assert length(view.reveal.sides) == 2
+
+      [side_a, side_b] = view.reveal.sides
+      assert side_a.name == "Melissa & Jacob"
+      assert side_a.closeness >= 90
+      assert side_a.melded? == true
+      assert side_a.closer? == true
+
+      assert side_b.name == "Ada & Ida"
+      assert side_b.closeness == 0
+      assert side_b.melded? == false
+      assert side_b.closer? == false
+
+      stop_room(slug)
+    end
+  end
+
   describe "foley voice (the Assayer speaks)" do
     setup do
       slug = open_room()

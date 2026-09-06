@@ -74,7 +74,12 @@ defmodule MeaningGame.Rooms do
   `device_token` is the creating phone's, which is what the Scribe will read to
   name the Room after the Rooms that phone has played in. A phone with no
   history draws a random word.
+  @doc \"""
+  Opens a new count-free Room at the seat cap and returns its Code.
   """
+  @spec create(String.t() | nil) :: {:ok, String.t()} | {:error, term()}
+  def create(device_token), do: create(MeaningGame.Steward.seat_cap(), device_token)
+
   @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
   def create(player_count, device_token)
 
@@ -226,12 +231,15 @@ defmodule MeaningGame.Rooms do
   end
 
   @doc """
-  Pairs or unpairs two seats in a Room.
+  Assigns two seats to a Side in the room before play begins, or clears Side assignment if partner_id is nil.
   """
   @spec pair_seats(String.t(), String.t(), String.t() | nil) :: :ok | {:error, term()}
   def pair_seats(slug, seat_id_1, seat_id_2 \\ nil) do
-    partner_id = if seat_id_2 in [nil, ""], do: nil, else: seat_id_2
-    call(slug, {:pair_seats, seat_id_1, partner_id})
+    if seat_id_2 in [nil, ""] do
+      unpair_seat(slug, seat_id_1)
+    else
+      call(slug, {:pair_seats, seat_id_1, seat_id_2})
+    end
   end
 
   @doc """
@@ -258,6 +266,12 @@ defmodule MeaningGame.Rooms do
   @spec next_attempt(String.t(), String.t()) ::
           :ok | {:error, :not_revealed | :page_closed | :no_such_seat}
   def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
+
+  @doc """
+  Clears Side assignment for a seat in the room.
+  """
+  @spec unpair_seat(String.t(), String.t()) :: :ok | {:error, term()}
+  def unpair_seat(slug, seat_id), do: call(slug, {:unpair_seat, seat_id})
 
   @doc """
   Proposes an overrule of the current reveal from one Seat.
@@ -312,6 +326,12 @@ defmodule MeaningGame.Rooms do
   @spec give(String.t(), String.t(), String.t()) ::
           :ok | {:error, :give_required | :no_such_seat | term()}
   def give(slug, seat_id, give), do: call(slug, {:give, seat_id, give})
+
+  @doc """
+  Starts the Page with the Gives committed so far.
+  """
+  @spec start_page(String.t(), String.t()) :: :ok | {:error, term()}
+  def start_page(code, seat_id), do: call(code, {:start_page, seat_id})
 
   @doc """
   Retries writing the Page through the Author after a failure.

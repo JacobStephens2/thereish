@@ -20,6 +20,10 @@ _Avoid_: engine, state machine, logic, rules service
 A place in a Room held by a player under a name. It carries a stable id and its own Chronicle history, and may be claimed by an Account later.
 _Avoid_: player (the person), user, slot
 
+**Side**:
+A grouping of Seats within a Room that play together as a unit — two couples at a table play as two Sides on the same Bookends.
+_Avoid_: team, pair (pair is the Assayer's two Bridges), couple (informal copy only), squad
+
 **Account**:
 An identity that has claimed one or more Seats' histories, so a person's play across rooms and evenings can be read together. Never required to join a Room.
 _Avoid_: user, login, profile

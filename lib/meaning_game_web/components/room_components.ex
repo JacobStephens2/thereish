@@ -18,30 +18,70 @@ defmodule MeaningGameWeb.RoomComponents do
   def roster(assigns) do
     ~H"""
     <div data-role="roster">
-      <ul class="flex flex-col gap-2">
-        <li
-          :for={seat <- @room.seats}
-          data-seat={seat.id}
-          data-committed={to_string(seat.committed?)}
-          data-couple={to_string(seat.couple?)}
-          class="flex items-center gap-2 text-lg"
-        >
-          <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-          <span>{seat.name}</span>
-          <span
-            :if={seat.couple? && seat.partner_name}
-            data-role="partner"
-            class="text-sm opacity-70"
+      <%= if @room[:sides_mode?] && @room[:sides] do %>
+        <div data-role="sides-roster" class="flex flex-col gap-4">
+          <div
+            :for={side <- @room.sides}
+            data-side={side.id}
+            class="flex flex-col gap-2 rounded-xl border border-base-300 bg-base-200/30 p-3"
           >
-            (with {seat.partner_name})
-          </span>
-          <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
-          <span :if={seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
-            has written a bridge
-          </span>
-        </li>
-        <li :if={@room.seats == []} class="text-lg opacity-60">Nobody yet</li>
-      </ul>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-primary">
+                {side.name}
+              </span>
+              <span :if={side.you?} class="text-xs font-semibold text-primary">(your side)</span>
+            </div>
+            <ul class="flex flex-col gap-1.5">
+              <li
+                :for={seat <- side.seats}
+                data-seat={seat.id}
+                data-committed={to_string(seat.committed?)}
+                class="flex items-center gap-2 text-base"
+              >
+                <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+                <span class="font-medium">{seat.name}</span>
+                <span :if={seat.you?} class="text-xs opacity-60">(you)</span>
+                <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
+                <span
+                  :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
+                  class="text-xs opacity-60"
+                >
+                  has written a bridge
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      <% else %>
+        <ul class="flex flex-col gap-2">
+          <li
+            :for={seat <- @room.seats}
+            data-seat={seat.id}
+            data-committed={to_string(seat.committed?)}
+            data-couple={to_string(Map.get(seat, :couple?, false))}
+            class="flex items-center gap-2 text-lg"
+          >
+            <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+            <span>{seat.name}</span>
+            <span
+              :if={Map.get(seat, :couple?) && seat.partner_name}
+              data-role="partner"
+              class="text-sm opacity-70"
+            >
+              (with {seat.partner_name})
+            </span>
+            <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
+            <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
+            <span
+              :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
+              class="text-sm opacity-60"
+            >
+              has written a bridge
+            </span>
+          </li>
+          <li :if={@room.seats == []} class="text-lg opacity-60">Nobody yet</li>
+        </ul>
+      <% end %>
 
       <p data-role="open-seats" class="mt-3 text-sm opacity-60">{waiting(@room)}</p>
     </div>
@@ -167,6 +207,14 @@ defmodule MeaningGameWeb.RoomComponents do
   then the punchline quip.
   """
   def reveal(assigns) do
+    if assigns.room.reveal && assigns.room.reveal[:mode] == :sides do
+      sides_reveal(assigns)
+    else
+      standard_reveal(assigns)
+    end
+  end
+
+  defp standard_reveal(assigns) do
     presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
     assigns = assign(assigns, :presentation, presentation)
 
@@ -304,73 +352,11 @@ defmodule MeaningGameWeb.RoomComponents do
         {@room.reveal.quip}
       </p>
 
-      <div
-        :if={@mode in [:phone, :quiet] && @seat && @room.reveal.closeness}
-        data-role="fairness-controls"
-        class="flex flex-col items-center gap-2 pt-2"
-      >
-        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-          Was this grade fair?
-        </span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_harsh"
-            data-role="tap-too-harsh"
-            data-tap="too_harsh"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_harsh",
-                do: "btn-warning text-warning-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too harsh
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="fair"
-            data-role="tap-fair"
-            data-tap="fair"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "fair",
-                do: "btn-primary font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Fair
-          </button>
-          <button
-            type="button"
-            phx-click="fairness_tap"
-            phx-value-label="too_kind"
-            data-role="tap-too-kind"
-            data-tap="too_kind"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_fairness_tap(@room, @seat) == "too_kind",
-                do: "btn-info text-info-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Too kind
-          </button>
-        </div>
-        <%= if tap = your_fairness_tap(@room, @seat) do %>
-          <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
-            <span data-role="seat-tap" class="font-semibold capitalize">
-              {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
-            </span>
-            recorded
-          </div>
-        <% end %>
-      </div>
+      <.fairness_controls
+        :if={@mode in [:phone, :quiet] && @seat && !@room[:late?] && @room.reveal.closeness}
+        room={@room}
+        seat={@seat}
+      />
 
       <section
         :if={@mode == :stage && @room.reveal[:pairs]}
@@ -493,6 +479,226 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  defp sides_reveal(assigns) do
+    ~H"""
+    <section
+      :if={@room.reveal}
+      id="reveal-performance"
+      data-role="reveal"
+      data-mode={@mode}
+      class="flex flex-col items-center gap-8 w-full max-w-2xl mx-auto"
+    >
+      <div
+        data-role="sides-comparison"
+        class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full"
+      >
+        <div
+          :for={side <- @room.reveal.sides}
+          data-role="side-card"
+          data-side={side.id}
+          data-closer={to_string(side.closer?)}
+          data-melded={to_string(side.melded?)}
+          class={[
+            "flex flex-col items-center gap-4 rounded-2xl border p-5 text-center transition-all",
+            if(side_you?(side, @seat),
+              do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
+              else: "border-base-300 bg-base-100 shadow-sm"
+            )
+          ]}
+        >
+          <div class="flex flex-wrap items-center justify-center gap-2">
+            <h3 class="text-sm font-bold uppercase tracking-wider">{side.name}</h3>
+            <span :if={side_you?(side, @seat)} class="badge badge-primary badge-xs">You</span>
+            <span
+              :if={side.closer?}
+              data-role="closer-badge"
+              class="badge badge-accent badge-xs font-semibold"
+            >Closer</span>
+            <span
+              :if={side.melded?}
+              data-role="melded-badge"
+              class="badge badge-primary badge-xs font-semibold"
+            >Melded</span>
+          </div>
+
+          <div data-role="comparison" class="flex flex-wrap items-stretch justify-center gap-2 w-full">
+            <div
+              :for={bridge <- side.bridges}
+              data-bridge={bridge.seat_id}
+              data-you={to_string(you?(@seat, bridge))}
+              class={[
+                "flex flex-1 min-w-28 flex-col items-center justify-center gap-0.5 rounded-lg border p-2 text-center",
+                if(you?(@seat, bridge),
+                  do: "border-primary/50 bg-primary/10",
+                  else: "border-base-300 bg-base-200/50"
+                )
+              ]}
+            >
+              <div class="flex items-center gap-1 text-[10px] uppercase tracking-wider opacity-60">
+                <span>{bridge.name}</span>
+                <span :if={you?(@seat, bridge)} class="font-bold text-primary">(you)</span>
+              </div>
+              <span class="text-xl sm:text-2xl font-bold tracking-tight">
+                {bridge.bridge}
+              </span>
+            </div>
+          </div>
+
+          <%= if @mode != :quiet and side.closeness do %>
+            <div
+              data-role="closeness-display"
+              class={[
+                "flex flex-col items-center justify-center rounded-xl px-6 py-4 w-full",
+                closeness_presentation(side).container_class
+              ]}
+            >
+              <span
+                data-role="closeness"
+                class={[
+                  "font-black tracking-tighter tabular-nums leading-none select-none",
+                  if(@mode == :stage, do: "text-7xl sm:text-8xl", else: "text-6xl sm:text-7xl"),
+                  closeness_presentation(side).number_class
+                ]}
+              >
+                {side.closeness}
+              </span>
+              <span
+                data-role="band"
+                class={[
+                  "mt-2 text-sm font-extrabold uppercase tracking-widest px-3 py-0.5 rounded-full",
+                  closeness_presentation(side).badge_class
+                ]}
+              >
+                {band(side.band)}
+              </span>
+            </div>
+          <% end %>
+
+          <%= if @mode != :quiet and is_nil(side.closeness) do %>
+            <div
+              data-role="no-verdict"
+              class="flex flex-col items-center gap-1 rounded-xl border border-primary/30 bg-base-200/60 p-4 text-center"
+            >
+              <p class="text-lg font-bold">No verdict</p>
+              <p class="text-xs opacity-70">The Assayer stepped aside</p>
+            </div>
+          <% end %>
+
+          <p
+            :if={@mode != :quiet and side.quip}
+            data-role="quip"
+            class="font-serif italic text-sm text-base-content/90 leading-snug"
+          >
+            "{side.quip}"
+          </p>
+
+          <span
+            :if={side[:overruled?]}
+            data-role="side-overruled"
+            class="badge badge-warning badge-sm font-semibold"
+          >
+            Overruled to Meld
+          </span>
+        </div>
+      </div>
+
+      <.fairness_controls
+        :if={@mode in [:phone, :quiet] && @seat && Enum.any?(@room.reveal.sides, & &1.closeness)}
+        room={@room}
+        seat={@seat}
+        side_mode?={true}
+      />
+
+      <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
+        The couch has the call · Use your phones to continue or overrule
+      </p>
+    </section>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :side_mode?, :boolean, default: false
+
+  def fairness_controls(assigns) do
+    ~H"""
+    <div
+      data-role="fairness-controls"
+      class="flex flex-col items-center gap-2 pt-2"
+    >
+      <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+        <%= if @side_mode? do %>
+          Was your Side's grade fair?
+        <% else %>
+          Was this grade fair?
+        <% end %>
+      </span>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="too_harsh"
+          data-role="tap-too-harsh"
+          data-tap="too_harsh"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "too_harsh",
+              do: "btn-warning text-warning-content font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Too harsh
+        </button>
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="fair"
+          data-role="tap-fair"
+          data-tap="fair"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "fair",
+              do: "btn-primary font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Fair
+        </button>
+        <button
+          type="button"
+          phx-click="fairness_tap"
+          phx-value-label="too_kind"
+          data-role="tap-too-kind"
+          data-tap="too_kind"
+          class={[
+            "btn btn-sm text-xs font-medium transition-all",
+            if(your_fairness_tap(@room, @seat) == "too_kind",
+              do: "btn-info text-info-content font-bold shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          Too kind
+        </button>
+      </div>
+      <%= if tap = your_fairness_tap(@room, @seat) do %>
+        <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
+          <span data-role="seat-tap" class="font-semibold capitalize">
+            {MeaningGame.Chronicle.FairnessTap.label_human(tap)}
+          </span>
+          recorded
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp side_you?(side, seat) do
+    seat != nil and seat.id in side.seat_ids
+  end
+
   attr :room, :map, required: true
   attr :seat, :map, default: nil
 
@@ -507,18 +713,23 @@ defmodule MeaningGameWeb.RoomComponents do
       data-role="overrule-banner"
       class="flex flex-col items-center gap-2 rounded-lg border border-primary/30 bg-base-200/50 p-4 text-center"
     >
-      <p :if={@seat && @room.overrule.you_proposed?} data-role="overrule-pending">
-        You proposed an overrule. Waiting for everyone to agree.
+      <p :if={@seat && !@room[:late?] && @room.overrule.you_proposed?} data-role="overrule-pending">
+        {if @room.overrule[:side_id],
+          do: "You proposed an overrule. Waiting for your partner to agree.",
+          else: "You proposed an overrule. Waiting for everyone to agree."}
       </p>
 
       <div
-        :if={@seat && !@room.overrule.you_agreed?}
+        :if={
+          @seat && !@room[:late?] && @room.overrule[:your_side?] != false &&
+            !@room.overrule.you_agreed?
+        }
         data-role="overrule-vote"
         class="flex flex-col items-center gap-3"
       >
         <p data-role="overrule-pending">
           <span class="font-semibold">{@room.overrule.proposer_name}</span>
-          proposed overruling this grade to a Meld.
+          proposed overruling {if @room.overrule[:side_id], do: "your Side's", else: "this"} grade to a Meld.
         </p>
         <div class="flex gap-3">
           <.button phx-click="agree_overrule" data-role="agree-overrule" variant="primary">
@@ -531,20 +742,41 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p
-        :if={@seat && @room.overrule.you_agreed? && !@room.overrule.you_proposed?}
+        :if={
+          @seat && !@room[:late?] && @room.overrule[:your_side?] != false &&
+            @room.overrule.you_agreed? &&
+            !@room.overrule.you_proposed?
+        }
         data-role="overrule-pending"
       >
-        You agreed. Waiting for everyone to agree.
+        {if @room.overrule[:side_id],
+          do: "You agreed. Waiting for your partner to agree.",
+          else: "You agreed. Waiting for everyone to agree."}
       </p>
 
-      <p :if={is_nil(@seat)} data-role="overrule-pending" class="opacity-80">
+      <p
+        :if={@seat && @room.overrule[:your_side?] == false}
+        data-role="overrule-pending"
+        class="opacity-80"
+      >
         <span class="font-semibold">{@room.overrule.proposer_name}</span>
-        proposed an overrule. Waiting for the Room to agree.
+        proposed an overrule for their Side. Waiting for their partner to agree.
+      </p>
+
+      <p :if={is_nil(@seat) or @room[:late?]} data-role="overrule-pending" class="opacity-80">
+        <span class="font-semibold">{@room.overrule.proposer_name}</span>
+        proposed an overrule. Waiting for {if @room.overrule[:side_id],
+          do: "their partner",
+          else: "the Room"} to agree.
       </p>
     </div>
 
     <p
-      :if={@room.reveal && @room.reveal.overruled?}
+      :if={
+        (@room.reveal && @room.reveal[:overruled?]) ||
+          (@room.reveal && @room.reveal[:mode] == :sides &&
+             Enum.any?(@room.reveal.sides, & &1[:overruled?]))
+      }
       data-role="overruled-notice"
       class="text-center text-sm font-semibold text-primary"
     >
