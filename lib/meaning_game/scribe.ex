@@ -13,8 +13,8 @@ defmodule MeaningGame.Scribe do
   a reveal beat, and a recap is a model writing a paragraph after everyone has
   stood up. Nothing should have to wait on one to know about the other.
 
-  Naming a Room is the Scribe's other job and is not here yet
-  (`.scratch/group-play/issues/04`).
+  Naming a Room is the Scribe's other job, called through the Steward seam
+  (`MeaningGame.Steward.name_room/2`).
   """
 
   require Logger
