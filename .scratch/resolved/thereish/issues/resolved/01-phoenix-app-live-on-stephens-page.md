@@ -20,7 +20,7 @@ Nothing game-shaped is in this ticket. It is the prefactor that makes every late
 
 ## Comments
 
-**2026-09-03 — built and deployed.** Live at <https://meld.stephens.page>. The apex is already a static site with its own proxies, so the game took a subdomain; `meld` names the Mind-Meld mechanic rather than the game, which is still unnamed. Commits `9707289`, `b8d915c`, `b5a9cc9`, `dc021a0`. Deploy notes in `docs/deploy.md`.
+**2026-09-03 — built and deployed.** Live at <https://meld.stephens.page>. The apex is already a static site with its own proxies, so the game took a subdomain; `meld` names the Thereish mechanic (working title Mind-Meld) rather than the game, which is still unnamed. Commits `9707289`, `b8d915c`, `b5a9cc9`, `dc021a0`. Deploy notes in `docs/deploy.md`.
 
 Two things only deploying could have found. Phoenix 1.8's generated `config/prod.exs` sets `force_ssl: [rewrite_on: [:x_forwarded_proto]]`, and the `new_subdomain` vhost template in `~/infra` does not send that header, so every HTTPS request 301'd to the URL it was already on. And `docker compose run` reads stdin, which during a deploy is the rest of the script arriving over ssh, so it swallowed `up -d` and no container ever started.
 

@@ -321,19 +321,45 @@ defmodule MeaningGame.Rooms do
     call(slug, {:unblind_experiment, seat_id, experiment_id})
   end
 
+  @doc """
+  Claims the speaker for `device_token`.
+
+  A claim from the current speaker is a no-op.
+  """
+  @spec claim_speaker(String.t(), String.t()) :: :ok | {:error, term()}
+  def claim_speaker(code, device_token), do: call(code, {:claim_speaker, device_token})
+
+  @doc """
+  Releases the speaker.
+
+  Releasing with a token other than the current speaker is a no-op.
+  """
+  @spec release_speaker(String.t(), String.t() | nil) :: :ok | {:error, term()}
+  def release_speaker(code, device_token \\ nil), do: call(code, {:release_speaker, device_token})
+
+  @doc "Sets the voice on/off switch."
+  @spec set_voice(String.t(), boolean()) :: :ok | {:error, term()}
+  def set_voice(code, enabled), do: call(code, {:set_voice, enabled})
+
+  @doc "Sets the house-loop-only on/off switch."
+  @spec set_house_loop_only(String.t(), boolean()) :: :ok | {:error, term()}
+  def set_house_loop_only(code, enabled), do: call(code, {:set_house_loop_only, enabled})
+
   @doc "The Seat this browser already holds in the Room, without typing a name."
   @spec rejoin(String.t(), String.t()) :: {:ok, map()} | :error
   def rejoin(slug, device_token), do: call(slug, {:rejoin, device_token})
 
   @doc """
   The whole current view for one viewer — a Seat id, or `nil` for a viewer that
-  holds no Seat, such as the stage.
+  holds no Seat, such as the stage. Takes an optional `device_token` so the
+  snapshot can answer whether this viewer is the Room's speaker.
 
   This is the reconnect mechanism. A view that has been away for any reason asks
   for this and is caught up.
   """
-  @spec snapshot(String.t(), String.t() | nil) :: map()
-  def snapshot(slug, viewer), do: call(slug, {:snapshot, viewer})
+  @spec snapshot(String.t(), String.t() | nil, String.t() | nil) :: map()
+  def snapshot(slug, viewer, device_token \\ nil),
+    do: call(slug, {:snapshot, viewer, device_token})
 
   @doc """
   Subscribes the caller to this Room's messages.

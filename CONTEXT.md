@@ -1,4 +1,4 @@
-# Meaning Game
+# Thereish
 
 Shared language for a couch word game for Jacob and Melissa — two players by default, more when friends join — with a machine author-scribe. Glossary only; the design itself lives in docs/design-brief.md.
 

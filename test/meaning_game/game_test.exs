@@ -362,11 +362,21 @@ defmodule MeaningGame.GameTest do
       assert Game.view(failed_state, nil).phase == :writing
       assert Game.view(failed_state, nil).author_failure == "timed out"
 
+      # Either Seat may retry
+      assert {:ok, _retried_by_jacob, [{:author, _}]} =
+               Game.apply(failed_state, {:author_retried, %{seat_id: "seat-Jacob"}})
+
       # Retrying clears failure and owes author effect again
       assert {:ok, retried_state, [{:author, _}]} =
                Game.apply(failed_state, {:author_retried, %{seat_id: "seat-Melissa"}})
 
       assert Game.view(retried_state, nil).author_failure == nil
+
+      # Either Seat may reset gives
+      assert {:ok, reset_by_jacob, []} =
+               Game.apply(failed_state, {:gives_reset, %{seat_id: "seat-Jacob"}})
+
+      assert Game.view(reset_by_jacob, nil).phase == :giving
 
       # Resetting gives clears every Give and returns to giving
       assert {:ok, reset_state, []} =
@@ -374,6 +384,19 @@ defmodule MeaningGame.GameTest do
 
       assert Game.view(reset_state, nil).phase == :giving
       assert Game.view(reset_state, nil).gives_in == 0
+
+      # Errors when not failed, unseated, or in wrong phase
+      assert {:error, :not_failed} =
+               Game.apply(state, {:author_retried, %{seat_id: "seat-Melissa"}})
+
+      assert {:error, :no_such_seat} =
+               Game.apply(failed_state, {:author_retried, %{seat_id: "seat-Stranger"}})
+
+      assert {:error, :no_such_seat} =
+               Game.apply(failed_state, {:gives_reset, %{seat_id: "seat-Stranger"}})
+
+      assert {:error, :not_writing} =
+               Game.apply(reset_state, {:author_failed, %{reason: "error"}})
     end
 
     test "next_page clears Page and returns to giving, remembering last Give for prefill" do

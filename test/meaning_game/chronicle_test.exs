@@ -405,6 +405,9 @@ defmodule MeaningGame.ChronicleTest do
       assert markdown =~ "Corrections"
       assert markdown =~ "corrected bridge from \"cairns\" to \"cairn\""
       assert markdown =~ "Phone autocorrect"
+      assert markdown =~ "Spend: "
+      spend = Chronicle.spend(room.id)
+      assert String.ends_with?(String.trim(markdown), Chronicle.spend_line(spend))
 
       # Round-trip parse back from Markdown
       assert {:ok, parsed_evening} = Chronicle.from_markdown(markdown)
@@ -990,6 +993,139 @@ defmodule MeaningGame.ChronicleTest do
 
       assert verdict.furthest == nil
     end
+
+    test "a four-Seat Page writes four Give rows with their Seats and one Verdict row per Attempt with four Seat ids and the furthest pair" do
+      attempt_cap(1)
+      code = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: code)
+
+      seats =
+        for name <- ["Melissa", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(code, name, device_token())
+          seat
+        end
+
+      [melissa, jacob, ada, sam] = seats
+
+      assert Rooms.snapshot(code, nil).phase == :giving
+      :ok = Rooms.give(code, melissa.id, "setting one")
+      :ok = Rooms.give(code, jacob.id, "setting two")
+      :ok = Rooms.give(code, ada.id, "setting three")
+      :ok = Rooms.give(code, sam.id, "setting four")
+
+      await_phase(code, :bridging)
+
+      :ok = Rooms.commit_bridge(code, melissa.id, "beacon")
+      :ok = Rooms.commit_bridge(code, jacob.id, "cairn")
+      :ok = Rooms.commit_bridge(code, ada.id, "lamp")
+      :ok = Rooms.commit_bridge(code, sam.id, "seagull")
+
+      await_phase(code, :closed)
+
+      # 4 Give rows written with their Seats
+      [page] = Chronicle.pages(room.id)
+
+      give_rows =
+        Repo.all(
+          from(g in MeaningGame.Chronicle.Give,
+            where: g.page_id == ^page.id,
+            order_by: [asc: g.order]
+          )
+        )
+
+      assert length(give_rows) == 4
+      assert Enum.map(give_rows, & &1.seat_id) == Enum.map(seats, & &1.id)
+
+      assert Enum.map(give_rows, & &1.text) == [
+               "setting one",
+               "setting two",
+               "setting three",
+               "setting four"
+             ]
+
+      # One Verdict row per Attempt with 4 Seat ids and the furthest pair
+      verdict_rows =
+        Repo.all(
+          from(v in MeaningGame.Chronicle.Verdict,
+            join: a in assoc(v, :attempt),
+            where: a.page_id == ^page.id
+          )
+        )
+
+      assert [verdict] = verdict_rows
+      assert length(verdict.seat_ids) == 4
+      assert verdict.seat_ids == Enum.map(seats, & &1.id)
+      assert is_list(verdict.furthest) and length(verdict.furthest) == 2
+      assert Enum.all?(verdict.furthest, &(&1 in ["beacon", "cairn", "lamp", "seagull"]))
+
+      # Book view lists Gives, every Bridge, the one Verdict with reasoning, and the carried words
+      [view] = Chronicle.book(room.id)
+      assert length(view.gives) == 4
+      [attempt] = view.attempts
+      assert length(attempt.bridges) == 4
+      assert [v] = attempt.verdicts
+      assert v.reasoning != nil and v.reasoning != ""
+      assert v.furthest == verdict.furthest
+      assert attempt.carried == verdict.furthest
+
+      # Markdown export renders every Bridge, the one Verdict, and the carried words
+      markdown = Chronicle.to_markdown(room.id)
+      assert markdown =~ "Melissa: beacon"
+      assert markdown =~ "Jacob: cairn"
+      assert markdown =~ "Ada: lamp"
+      assert markdown =~ "Sam: seagull"
+      assert markdown =~ "- Reasoning: #{v.reasoning}"
+      assert markdown =~ "- Carried: #{Enum.join(verdict.furthest, " · ")}"
+
+      # Round-trip parsing from Markdown
+      assert {:ok, [parsed_page]} = Chronicle.from_markdown(markdown)
+      assert length(parsed_page.gives) == 4
+      [parsed_attempt] = parsed_page.attempts
+      assert length(parsed_attempt.bridges) == 4
+      assert parsed_attempt.carried == verdict.furthest
+    end
+
+    test "calibration export carries the Bridge list on every tap for N seats" do
+      code = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: code)
+
+      seats =
+        for name <- ["Melissa", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(code, name, device_token())
+          seat
+        end
+
+      bridges = ["beacon", "cairn", "lamp", "seagull"]
+
+      for seat <- seats do
+        Chronicle.record_fairness_tap(room.id, %{
+          seat_id: seat.id,
+          attempt_number: 1,
+          bookends: ["lantern", "harbour"],
+          bridges: bridges,
+          grade: 27,
+          band: "miss",
+          model: "gemini-3.8-flash",
+          prompt_version: "assay-3",
+          label: "fair"
+        })
+      end
+
+      dataset = Chronicle.calibration_dataset(room.id)
+      assert length(dataset) == 4
+
+      for entry <- dataset do
+        assert entry.bridges == bridges
+      end
+
+      json_export = Chronicle.export_calibration(room.id, :json)
+      {:ok, parsed_json} = Jason.decode(json_export)
+      assert length(parsed_json) == 4
+
+      for entry <- parsed_json do
+        assert entry["bridges"] == bridges
+      end
+    end
   end
 
   describe "recent_quips/2" do
@@ -1011,6 +1147,288 @@ defmodule MeaningGame.ChronicleTest do
 
       assert List.last(quips) ==
                "One brought the raw ingredient while the other rolled the meat into a tidy meatball."
+    end
+  end
+
+  describe "spend (ticket 09)" do
+    test "spend/1 for a Room with no pages returns zeros", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      spend = Chronicle.spend(room.id)
+
+      assert Decimal.equal?(spend.total_usd, 0)
+      assert spend.calls_count == 0
+      assert spend.unpriced_count == 0
+      assert spend.by_role.author.calls_count == 0
+      assert spend.by_role.assayer.calls_count == 0
+      assert spend.by_role.scribe.calls_count == 0
+      assert spend.by_model == %{}
+      assert Chronicle.spend_line(spend) =~ "Spend: $0.0000"
+    end
+
+    test "spend/1 computes totals, by role, and by model from fixture rows including unpriced calls",
+         ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{
+          "bookends" => ["desert", "oasis"],
+          author_meta: %{
+            model: "gemini-3.8-flash",
+            cost_usd: 0.0002
+          }
+        },
+        author_meta: %{
+          model: "gemini-3.8-flash",
+          cost_usd: 0.0002
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.melissa.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                bridges: ["water", "water"],
+                graded?: true,
+                closeness: 90,
+                band: :meld,
+                reasoning: "Both said water.",
+                quip: "Water in the sand.",
+                meta: %{
+                  model: "gemini-3.8-flash",
+                  cost_usd: 0.0015,
+                  prompt_version: "assay-3",
+                  latency_ms: 120
+                }
+              },
+              %{
+                seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                bridges: ["water", "water"],
+                graded?: false,
+                closeness: nil,
+                band: nil,
+                reasoning: nil,
+                quip: nil,
+                meta: %{
+                  model: "gemini-3.8-flash",
+                  cost_usd: nil,
+                  prompt_version: "assay-3",
+                  latency_ms: nil
+                }
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, page} = Chronicle.write(room.id, entry, now)
+
+      # Add a recap for this page
+      {:ok, _recap} =
+        Chronicle.record_recap(room.id, %{
+          page_id: page.id,
+          recap: "A trek through dunes to an oasis.",
+          callback: nil,
+          model: "claude-fable-5-1",
+          cost_usd: 0.0025,
+          prompt_version: "recap-2",
+          latency_ms: 2500,
+          attempts: 1
+        })
+
+      # Test querying by ID and by slug
+      spend = Chronicle.spend(room.id)
+      assert spend == Chronicle.spend(ctx.slug)
+
+      assert Decimal.equal?(spend.total_usd, Decimal.new("0.0042"))
+      assert spend.calls_count == 4
+      assert spend.unpriced_count == 1
+
+      # By role
+      assert spend.by_role.author.calls_count == 1
+      assert Decimal.equal?(spend.by_role.author.total_usd, Decimal.new("0.0002"))
+      assert spend.by_role.author.unpriced_count == 0
+
+      assert spend.by_role.assayer.calls_count == 2
+      assert Decimal.equal?(spend.by_role.assayer.total_usd, Decimal.new("0.0015"))
+      assert spend.by_role.assayer.unpriced_count == 1
+
+      assert spend.by_role.scribe.calls_count == 1
+      assert Decimal.equal?(spend.by_role.scribe.total_usd, Decimal.new("0.0025"))
+      assert spend.by_role.scribe.unpriced_count == 0
+      assert spend.by_role.scribe.by_model["claude-fable-5-1"].calls_count == 1
+
+      # By model
+      assert spend.by_model["gemini-3.8-flash"].calls_count == 3
+      assert Decimal.equal?(spend.by_model["gemini-3.8-flash"].total_usd, Decimal.new("0.0017"))
+      assert spend.by_model["gemini-3.8-flash"].unpriced_count == 1
+
+      assert spend.by_model["claude-fable-5-1"].calls_count == 1
+      assert Decimal.equal?(spend.by_model["claude-fable-5-1"].total_usd, Decimal.new("0.0025"))
+      assert spend.by_model["claude-fable-5-1"].unpriced_count == 0
+
+      # Spend line format
+      line = Chronicle.spend_line(spend)
+      assert line =~ "Spend: $0.0042"
+      assert line =~ "4 calls"
+      assert line =~ "1 unpriced"
+      assert line =~ "Author $0.0002"
+      assert line =~ "Assayer $0.0015"
+      assert line =~ "Scribe $0.0025"
+    end
+
+    test "spend/0 computes all-Rooms answer with per-Room breakdown across multiple rooms", ctx do
+      room1 = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry1 = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.melissa.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                bridges: ["water", "water"],
+                graded?: true,
+                closeness: 90,
+                band: :meld,
+                reasoning: "Both said water.",
+                quip: "Water in the sand.",
+                meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, page1} = Chronicle.write(room1.id, entry1, now)
+
+      {:ok, _recap1} =
+        Chronicle.record_recap(room1.id, %{
+          page_id: page1.id,
+          recap: "A trek through dunes to an oasis.",
+          model: "claude-fable-5-1",
+          cost_usd: 0.0030
+        })
+
+      # Create a second room with an unpriced author call
+      slug2 = open_room()
+      room2 = Repo.get_by!(Room, slug: slug2)
+      {:ok, seat_a} = Rooms.join(slug2, "Alice", device_token())
+      {:ok, seat_b} = Rooms.join(slug2, "Bob", device_token())
+
+      entry2 = %{
+        document: %{"bookends" => ["sun", "moon"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: nil},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["sun", "moon"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: seat_a.id, bridge: "sky"},
+              %{seat_id: seat_b.id, bridge: "sky"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [seat_a.id, seat_b.id],
+                bridges: ["sky", "sky"],
+                graded?: true,
+                closeness: 90,
+                band: :meld,
+                reasoning: "Both said sky.",
+                quip: "The sky.",
+                meta: %{model: "gemini-3.8-flash", cost_usd: 0.0005}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page2} = Chronicle.write(room2.id, entry2, now)
+
+      # Call spend() for all rooms
+      all_spend = Chronicle.spend()
+
+      # Total should be room1 (0.0002 + 0.0010 + 0.0030 = 0.0042) + room2 (0.0005) = 0.0047
+      assert Decimal.equal?(all_spend.total_usd, Decimal.new("0.0047"))
+      assert all_spend.calls_count == 5
+      assert all_spend.unpriced_count == 1
+
+      # By role
+      assert Decimal.equal?(all_spend.by_role.author.total_usd, Decimal.new("0.0002"))
+      assert all_spend.by_role.author.calls_count == 2
+      assert all_spend.by_role.author.unpriced_count == 1
+
+      assert Decimal.equal?(all_spend.by_role.assayer.total_usd, Decimal.new("0.0015"))
+      assert all_spend.by_role.assayer.calls_count == 2
+      assert all_spend.by_role.assayer.unpriced_count == 0
+
+      assert Decimal.equal?(all_spend.by_role.scribe.total_usd, Decimal.new("0.0030"))
+      assert all_spend.by_role.scribe.calls_count == 1
+
+      # Per-room breakdown
+      assert is_list(all_spend.rooms)
+      room1_spend = Enum.find(all_spend.rooms, &(&1.room_id == room1.id))
+      room2_spend = Enum.find(all_spend.rooms, &(&1.room_id == room2.id))
+
+      assert room1_spend != nil
+      assert Decimal.equal?(room1_spend.total_usd, Decimal.new("0.0042"))
+      assert room1_spend.calls_count == 3
+      assert room1_spend.unpriced_count == 0
+
+      assert room2_spend != nil
+      assert Decimal.equal?(room2_spend.total_usd, Decimal.new("0.0005"))
+      assert room2_spend.calls_count == 2
+      assert room2_spend.unpriced_count == 1
+    end
+
+    test "pages without author_meta do not count as Author calls or unpriced calls", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      # Write a page with no author_meta (e.g. pre-written seed or human page)
+      entry = %{
+        document: %{"bookends" => ["left", "right"]},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 85,
+        attempts: []
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+
+      spend = Chronicle.spend(room.id)
+      assert spend.calls_count == 0
+      assert spend.unpriced_count == 0
+      assert spend.by_role.author.calls_count == 0
+      assert spend.by_role.author.unpriced_count == 0
     end
   end
 end

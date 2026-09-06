@@ -787,6 +787,406 @@ defmodule MeaningGame.Chronicle do
   def from_markdown(markdown), do: MeaningGame.Chronicle.Markdown.parse(markdown)
 
   @doc """
+  Answers spend for all Rooms across Author, Assayer, and Scribe calls.
+  """
+  @spec spend() :: map()
+  def spend, do: spend(:all)
+
+  @doc """
+  Answers spend for one Room or for all Rooms across Author, Assayer, and Scribe calls.
+
+  Totals dollars, by role, and by model with call counts and unpriced call counts,
+  computed dynamically from rows (never stored as a total).
+  """
+  @spec spend(Ecto.UUID.t() | String.t() | :all) :: map()
+  def spend(:all) do
+    all_rooms = Repo.all(from(r in MeaningGame.Rooms.Room, order_by: [asc: r.slug]))
+
+    all_pages =
+      Repo.all(
+        from(p in Page,
+          select: %{
+            room_id: p.room_id,
+            author_meta: p.author_meta
+          }
+        )
+      )
+
+    all_verdicts =
+      Repo.all(
+        from(v in Verdict,
+          join: a in Attempt,
+          on: a.id == v.attempt_id,
+          join: p in Page,
+          on: p.id == a.page_id,
+          select: %{
+            room_id: p.room_id,
+            model: v.model,
+            cost_usd: v.cost_usd
+          }
+        )
+      )
+
+    all_recaps =
+      Repo.all(
+        from(r in Recap,
+          select: %{
+            room_id: r.room_id,
+            model: r.model,
+            cost_usd: r.cost_usd
+          }
+        )
+      )
+
+    pages_by_room = Enum.group_by(all_pages, & &1.room_id)
+    verdicts_by_room = Enum.group_by(all_verdicts, & &1.room_id)
+    recaps_by_room = Enum.group_by(all_recaps, & &1.room_id)
+
+    rooms_spend =
+      Enum.map(all_rooms, fn room ->
+        p_list = Map.get(pages_by_room, room.id, [])
+        v_list = Map.get(verdicts_by_room, room.id, [])
+        r_list = Map.get(recaps_by_room, room.id, [])
+
+        compute_room_spend(room, p_list, v_list, r_list)
+      end)
+
+    total_acc =
+      Enum.reduce(rooms_spend, empty_spend_acc(), fn room_spend, acc ->
+        merge_spend_acc(acc, room_spend)
+      end)
+
+    Map.put(total_acc, :rooms, rooms_spend)
+  end
+
+  def spend(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+    room = Repo.get!(MeaningGame.Rooms.Room, room_id)
+
+    pages =
+      Repo.all(
+        from(p in Page,
+          where: p.room_id == ^room.id,
+          select: %{author_meta: p.author_meta}
+        )
+      )
+
+    verdicts =
+      Repo.all(
+        from(v in Verdict,
+          join: a in Attempt,
+          on: a.id == v.attempt_id,
+          join: p in Page,
+          on: p.id == a.page_id,
+          where: p.room_id == ^room.id,
+          select: %{model: v.model, cost_usd: v.cost_usd}
+        )
+      )
+
+    recaps =
+      Repo.all(
+        from(r in Recap,
+          where: r.room_id == ^room.id,
+          select: %{model: r.model, cost_usd: r.cost_usd}
+        )
+      )
+
+    compute_room_spend(room, pages, verdicts, recaps)
+  end
+
+  @doc """
+  Formats the spend line for display in the book view and Markdown export.
+  """
+  @spec spend_line(map()) :: String.t()
+  def spend_line(spend) do
+    calls_word = if spend.calls_count == 1, do: "call", else: "calls"
+
+    unpriced_str =
+      if spend.unpriced_count > 0, do: " (#{spend.unpriced_count} unpriced)", else: ""
+
+    role_str = fn role_name, role_key ->
+      role_data =
+        get_in(spend, [:by_role, role_key]) ||
+          %{total_usd: Decimal.new(0), calls_count: 0, unpriced_count: 0}
+
+      cond do
+        role_data.calls_count == 0 ->
+          "#{role_name} $0.0000"
+
+        role_data.unpriced_count == role_data.calls_count ->
+          "#{role_name} unpriced"
+
+        role_data.unpriced_count > 0 ->
+          "#{role_name} #{format_usd(role_data.total_usd)} (#{role_data.unpriced_count} unpriced)"
+
+        true ->
+          "#{role_name} #{format_usd(role_data.total_usd)}"
+      end
+    end
+
+    roles_summary =
+      Enum.map([{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}], fn {name, key} ->
+        role_str.(name, key)
+      end)
+      |> Enum.join(", ")
+
+    "Spend: #{format_usd(spend.total_usd)} across #{spend.calls_count} #{calls_word}#{unpriced_str} (#{roles_summary})"
+  end
+
+  @doc """
+  Formats a dollar decimal or float as a 4-decimal currency string (e.g. "$0.0042").
+  """
+  @spec format_usd(Decimal.t() | number() | binary() | nil) :: String.t()
+  def format_usd(nil), do: "$0.0000"
+
+  def format_usd(%Decimal{} = dec) do
+    rounded = Decimal.round(dec, 4)
+    "$" <> Decimal.to_string(rounded, :normal)
+  end
+
+  def format_usd(val) when is_number(val) or is_binary(val) do
+    case to_decimal(val) do
+      nil -> "$0.0000"
+      dec -> format_usd(dec)
+    end
+  end
+
+  defp compute_room_spend(room, pages, verdicts, recaps) do
+    acc0 = %{
+      room_id: room.id,
+      slug: room.slug,
+      total_usd: Decimal.new(0),
+      calls_count: 0,
+      unpriced_count: 0,
+      by_role: %{
+        author: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
+        },
+        assayer: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
+        },
+        scribe: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
+        }
+      },
+      by_model: %{}
+    }
+
+    acc1 =
+      Enum.reduce(pages, acc0, fn page, acc ->
+        meta = page.author_meta
+
+        if is_map(meta) and map_size(meta) > 0 do
+          model = meta["model"] || meta[:model] || "unknown"
+          cost = to_decimal(meta["cost_usd"] || meta[:cost_usd])
+          record_call(acc, :author, model, cost)
+        else
+          acc
+        end
+      end)
+
+    acc2 =
+      Enum.reduce(verdicts, acc1, fn verdict, acc ->
+        model = verdict.model || "unknown"
+        cost = to_decimal(verdict.cost_usd)
+        record_call(acc, :assayer, model, cost)
+      end)
+
+    Enum.reduce(recaps, acc2, fn recap, acc ->
+      model = recap.model || "unknown"
+      cost = to_decimal(recap.cost_usd)
+      record_call(acc, :scribe, model, cost)
+    end)
+  end
+
+  defp empty_spend_acc do
+    %{
+      total_usd: Decimal.new(0),
+      calls_count: 0,
+      unpriced_count: 0,
+      by_role: %{
+        author: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
+        },
+        assayer: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
+        },
+        scribe: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
+        }
+      },
+      by_model: %{}
+    }
+  end
+
+  defp merge_spend_acc(acc, item) do
+    new_total = Decimal.add(acc.total_usd, item.total_usd)
+    new_calls = acc.calls_count + item.calls_count
+    new_unpriced = acc.unpriced_count + item.unpriced_count
+
+    merged_roles =
+      Enum.reduce([:author, :assayer, :scribe], acc.by_role, fn role, roles_acc ->
+        r1 =
+          Map.get(roles_acc, role, %{
+            total_usd: Decimal.new(0),
+            calls_count: 0,
+            unpriced_count: 0,
+            by_model: %{}
+          })
+
+        r2 =
+          Map.get(item.by_role, role, %{
+            total_usd: Decimal.new(0),
+            calls_count: 0,
+            unpriced_count: 0,
+            by_model: %{}
+          })
+
+        merged_role_models =
+          Enum.reduce(r2.by_model, r1.by_model, fn {m, m_stats2}, m_acc ->
+            m_stats1 =
+              Map.get(m_acc, m, %{
+                total_usd: Decimal.new(0),
+                calls_count: 0,
+                unpriced_count: 0
+              })
+
+            Map.put(m_acc, m, %{
+              total_usd: Decimal.add(m_stats1.total_usd, m_stats2.total_usd),
+              calls_count: m_stats1.calls_count + m_stats2.calls_count,
+              unpriced_count: m_stats1.unpriced_count + m_stats2.unpriced_count
+            })
+          end)
+
+        Map.put(roles_acc, role, %{
+          total_usd: Decimal.add(r1.total_usd, r2.total_usd),
+          calls_count: r1.calls_count + r2.calls_count,
+          unpriced_count: r1.unpriced_count + r2.unpriced_count,
+          by_model: merged_role_models
+        })
+      end)
+
+    merged_models =
+      Enum.reduce(item.by_model, acc.by_model, fn {model, m2}, models_acc ->
+        m1 =
+          Map.get(models_acc, model, %{
+            total_usd: Decimal.new(0),
+            calls_count: 0,
+            unpriced_count: 0
+          })
+
+        Map.put(models_acc, model, %{
+          total_usd: Decimal.add(m1.total_usd, m2.total_usd),
+          calls_count: m1.calls_count + m2.calls_count,
+          unpriced_count: m1.unpriced_count + m2.unpriced_count
+        })
+      end)
+
+    %{
+      acc
+      | total_usd: new_total,
+        calls_count: new_calls,
+        unpriced_count: new_unpriced,
+        by_role: merged_roles,
+        by_model: merged_models
+    }
+  end
+
+  defp record_call(acc, role, model, cost) do
+    {cost_dec, unpriced_delta} =
+      case cost do
+        nil -> {Decimal.new(0), 1}
+        %Decimal{} = d -> {d, 0}
+      end
+
+    new_total = Decimal.add(acc.total_usd, cost_dec)
+    new_calls = acc.calls_count + 1
+    new_unpriced = acc.unpriced_count + unpriced_delta
+
+    model_key = to_string(model || "unknown")
+
+    role_acc =
+      Map.get(acc.by_role, role, %{
+        total_usd: Decimal.new(0),
+        calls_count: 0,
+        unpriced_count: 0,
+        by_model: %{}
+      })
+
+    role_model_stats =
+      Map.get(role_acc.by_model, model_key, %{
+        total_usd: Decimal.new(0),
+        calls_count: 0,
+        unpriced_count: 0
+      })
+      |> update_stats(cost_dec, unpriced_delta)
+
+    new_role_by_model = Map.put(role_acc.by_model, model_key, role_model_stats)
+
+    role_stats =
+      role_acc
+      |> update_stats(cost_dec, unpriced_delta)
+      |> Map.put(:by_model, new_role_by_model)
+
+    model_stats =
+      Map.get(acc.by_model, model_key, %{
+        total_usd: Decimal.new(0),
+        calls_count: 0,
+        unpriced_count: 0
+      })
+      |> update_stats(cost_dec, unpriced_delta)
+
+    %{
+      acc
+      | total_usd: new_total,
+        calls_count: new_calls,
+        unpriced_count: new_unpriced,
+        by_role: Map.put(acc.by_role, role, role_stats),
+        by_model: Map.put(acc.by_model, model_key, model_stats)
+    }
+  end
+
+  defp update_stats(stats, cost_dec, unpriced_delta) do
+    %{
+      total_usd: Decimal.add(stats.total_usd, cost_dec),
+      calls_count: stats.calls_count + 1,
+      unpriced_count: stats.unpriced_count + unpriced_delta
+    }
+  end
+
+  defp to_decimal(nil), do: nil
+  defp to_decimal(%Decimal{} = d), do: d
+  defp to_decimal(f) when is_float(f), do: Decimal.from_float(f)
+  defp to_decimal(i) when is_integer(i), do: Decimal.new(i)
+
+  defp to_decimal(s) when is_binary(s) do
+    case Decimal.parse(s) do
+      {d, ""} -> d
+      _ -> nil
+    end
+  end
+
+  defp to_decimal(_), do: nil
+
+  @doc """
   Returns the last `count` quips recorded in a Room's Chronicle, in chronological order.
 
   Looks first in the database for a Room with the given Code or UUID. If not found in
@@ -1138,6 +1538,7 @@ defmodule MeaningGame.Chronicle do
           melded: attempt.melded,
           bridges: bridges,
           verdicts: verdicts,
+          carried: extract_carried(verdicts, bridges),
           overrules: Enum.map(attempt_overrules, &format_overrule/1),
           corrections: Enum.map(attempt_corrections, &format_correction/1),
           fairness_taps: Enum.map(attempt_taps, &format_fairness_tap/1)
@@ -1478,5 +1879,18 @@ defmodule MeaningGame.Chronicle do
       position: position
     })
     |> Repo.insert!()
+  end
+
+  defp extract_carried(verdicts, bridges) do
+    case List.first(verdicts) do
+      %{furthest: [_, _] = furthest} ->
+        furthest
+
+      %{graded: false} ->
+        bridges |> Enum.map(& &1.bridge) |> Enum.take(2)
+
+      _ ->
+        nil
+    end
   end
 end
