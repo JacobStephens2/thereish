@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 (Rooms are created by Code).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the role's seat in the Steward's configuration; the Scribe proper — recaps and the Vale gate — is `.scratch/scribe/issues/01`.
 
