@@ -191,6 +191,16 @@ defmodule MeaningGameWeb.RoomLive do
     end
   end
 
+  def handle_event("start_page", _params, socket) do
+    case Rooms.start_page(socket.assigns.slug, socket.assigns.seat.id) do
+      :ok ->
+        {:noreply, socket |> assign(:give_error, nil) |> resync()}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :give_error, message(reason))}
+    end
+  end
+
   def handle_event("retry_author", _params, socket) do
     Rooms.retry_author(socket.assigns.slug, socket.assigns.seat.id)
     {:noreply, resync(socket)}
@@ -270,6 +280,8 @@ defmodule MeaningGameWeb.RoomLive do
   defp message(:not_bridging), do: "Too late for this one."
   defp message(:no_such_seat), do: "You are not in this Room any more. Reload."
   defp message({:illegal_bridge, reason}), do: reason
+  defp message(:not_enough_gives), do: "Need at least two settings to start."
+  defp message(:not_playing_page), do: "You're watching this Page."
   defp message(:pool_exhausted), do: "That's every Page for tonight."
   defp message(:not_sides_room), do: "Sides mode is only for 4-seat rooms."
   defp message(:not_waiting), do: "Sides are locked once bridges are committed."
@@ -370,9 +382,20 @@ defmodule MeaningGameWeb.RoomLive do
         <.button variant="primary">Join</.button>
       </form>
 
+      <div
+        :if={@seat && @room[:late?]}
+        data-role="late-seat"
+        class="flex flex-col items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 p-4 text-center"
+      >
+        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Watching this Page</p>
+        <p class="text-sm">
+          You joined mid-Page. Watching this Page — you'll play on the next one!
+        </p>
+      </div>
+
       <form
         :if={
-          @seat && @room.phase == :waiting && is_nil(@room.you[:partner_name]) &&
+          @seat && !@room[:late?] && @room.phase == :waiting && is_nil(@room.you[:partner_name]) &&
             length(@room.seats) > 1
         }
         phx-submit="pair_seat"
@@ -395,7 +418,7 @@ defmodule MeaningGameWeb.RoomLive do
       </form>
 
       <form
-        :if={@seat && @room.phase == :giving && @room.your_give == nil}
+        :if={@seat && !@room[:late?] && @room.phase == :giving && @room.your_give == nil}
         id="setting-form"
         data-role="setting-form"
         phx-submit="submit_give"
@@ -416,17 +439,30 @@ defmodule MeaningGameWeb.RoomLive do
       </form>
 
       <div
-        :if={@seat && @room.phase == :giving && @room.your_give != nil}
+        :if={@seat && !@room[:late?] && @room.phase == :giving && @room.your_give != nil}
         data-role="your-give"
         class="flex flex-col gap-1 text-center"
       >
         <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your setting</p>
         <p class="text-xl font-semibold">{@room.your_give}</p>
         <p class="text-sm opacity-60">
-          Waiting for {length(@room.seats) - @room.gives_in} more ({@room.gives_in} of {length(
-            @room.seats
-          )} in)
+          <%= if @room.gives_in >= length(@room.seats) do %>
+            Everyone is in ({@room.gives_in} of {length(@room.seats)} in)
+          <% else %>
+            Waiting for {length(@room.seats) - @room.gives_in} more ({@room.gives_in} of {length(
+              @room.seats
+            )} in)
+          <% end %>
         </p>
+      </div>
+
+      <div
+        :if={@seat && !@room[:late?] && @room.phase == :giving && @room.your_give != nil && @room.gives_in >= 2}
+        class="flex justify-center"
+      >
+        <.button phx-click="start_page" data-role="start-page" variant="primary">
+          Start Page
+        </.button>
       </div>
 
       <div
@@ -511,7 +547,7 @@ defmodule MeaningGameWeb.RoomLive do
       <.bookends :if={@seat} room={@room} />
 
       <form
-        :if={@seat && @room.phase == :bridging && @room.your_bridge == nil}
+        :if={@seat && !@room[:late?] && @room.phase == :bridging && @room.your_bridge == nil}
         id="bridge-form"
         data-role="bridge-form"
         phx-change="validate_bridge"
@@ -531,7 +567,7 @@ defmodule MeaningGameWeb.RoomLive do
         <.button variant="primary">Commit</.button>
       </form>
 
-      <div :if={@room.your_bridge && mid_page?(@room)} class="flex flex-col gap-1">
+      <div :if={!@room[:late?] && @room.your_bridge && mid_page?(@room)} class="flex flex-col gap-1">
         <p data-role="your-bridge" class="text-lg">
           You wrote <span class="font-semibold">{@room.your_bridge}</span>.
         </p>
@@ -549,7 +585,7 @@ defmodule MeaningGameWeb.RoomLive do
       <.overrule_banner room={@room} seat={@seat} />
 
       <div
-        :if={@seat && can_overrule?(@room, @seat)}
+        :if={@seat && !@room[:late?] && can_overrule?(@room, @seat)}
         class="flex justify-center"
       >
         <.button phx-click="propose_overrule" data-role="propose-overrule">
@@ -558,7 +594,7 @@ defmodule MeaningGameWeb.RoomLive do
       </div>
 
       <div
-        :if={@seat && @room.phase == :reveal}
+        :if={@seat && !@room[:late?] && @room.phase == :reveal}
         class="flex flex-col items-center gap-2 border-t border-base-300 pt-6"
       >
         <.carry_forward room={@room} />

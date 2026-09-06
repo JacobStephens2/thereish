@@ -456,6 +456,206 @@ defmodule MeaningGame.GameTest do
     end
   end
 
+  describe "the Room starts when everyone is here (ticket 08)" do
+      test "a Page starts when the Seats present declare their Gives are in rather than waiting for Room to fill" do
+        state =
+          Game.init(
+            seat_limit: 6,
+            seats: [seat("Mara"), seat("Jacob"), seat("Ada"), seat("Bram")]
+          )
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
+
+        # Fewer than 2 gives: cannot start
+        assert {:error, :not_enough_gives} =
+                 Game.apply(state, {:start_page, %{seat_id: "seat-Mara"}})
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Ada", give: "beacon"}})
+
+        # Bram has not submitted a give yet. Seats present declare their gives are all in:
+        assert {:ok, writing_state, [{:author, request}]} =
+                 Game.apply(state, {:start_page, %{seat_id: "seat-Mara"}})
+
+        assert length(request.gives) == 3
+        assert Enum.map(request.gives, & &1.name) == ["Mara", "Jacob", "Ada"]
+        assert Game.view(writing_state, nil).phase == :writing
+
+        # Page is written
+        {:ok, bridging_state, []} =
+          Game.apply(writing_state, {:page_written, %{bookends: ["ocean", "lantern"]}})
+
+        assert Game.view(bridging_state, nil).phase == :bridging
+
+        # Only the 3 seats that gave settings are bridging
+        {:ok, s1, []} = Game.apply(bridging_state, {:bridge_committed, %{seat_id: "seat-Mara", bridge: "coast"}})
+        {:ok, s2, []} = Game.apply(s1, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "harbour"}})
+
+        # The 3rd bridge from Ada triggers assaying without waiting for Bram
+        assert {:ok, assaying_state, effects} =
+                 Game.apply(s2, {:bridge_committed, %{seat_id: "seat-Ada", bridge: "shore"}})
+
+        assert Game.view(assaying_state, nil).phase == :assaying
+        assert [:beat, {:assay, assay_req}] = effects
+        assert assay_req.bridges == ["coast", "harbour", "shore"]
+      end
+
+      test "a late Seat joining after the Page started watches this Page and plays on next Page" do
+        state =
+          Game.init(
+            seat_limit: 6,
+            seats: [seat("Mara"), seat("Jacob")]
+          )
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+        {:ok, writing_state, [{:author, _}]} =
+          Game.apply(state, {:start_page, %{seat_id: "seat-Jacob"}})
+
+        {:ok, bridging_state, []} =
+          Game.apply(writing_state, {:page_written, %{bookends: ["ocean", "lantern"]}})
+
+        # A late Seat arrives
+        {:ok, with_late, []} = Game.apply(bridging_state, {:seat_joined, seat("Ada")})
+
+        late_view = Game.view(with_late, "seat-Ada")
+        active_view = Game.view(with_late, "seat-Mara")
+
+        assert late_view.late? == true
+        assert active_view.late? == false
+
+        # Late seat cannot commit bridge for this attempt
+        assert {:error, :not_playing_page} =
+                 Game.apply(with_late, {:bridge_committed, %{seat_id: "seat-Ada", bridge: "shore"}})
+
+        # Mara and Jacob commit and reveal with non-meld verdict
+        {:ok, s1, []} = Game.apply(with_late, {:bridge_committed, %{seat_id: "seat-Mara", bridge: "coast"}})
+        {:ok, s2, _} = Game.apply(s1, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "harbour"}})
+
+        {:ok, reveal_state, _} =
+          Game.apply(s2, {:verdict_received, %{closeness: 70, reasoning: "close", quip: "quip", furthest: ["coast", "harbour"], meta: %{}}})
+
+        assert Game.view(reveal_state, nil).phase == :reveal
+        # Spectator gives are not included in reveal
+        refute Enum.any?(Game.view(reveal_state, nil).reveal.gives, &(&1.seat_id == "seat-Ada"))
+
+        # Late seat cannot advance attempt
+        assert {:error, :not_playing_page} =
+                 Game.apply(reveal_state, {:attempt_advanced, %{seat_id: "seat-Ada"}})
+
+        # Mara advances attempt
+        {:ok, attempt2_state, []} =
+          Game.apply(reveal_state, {:attempt_advanced, %{seat_id: "seat-Mara"}})
+
+        # Ada is still late in attempt 2
+        assert Game.view(attempt2_state, "seat-Ada").late? == true
+
+        # Attempt 2: Mara and Jacob commit bridges and meld
+        {:ok, a2_s1, []} = Game.apply(attempt2_state, {:bridge_committed, %{seat_id: "seat-Mara", bridge: "beacon"}})
+        {:ok, a2_s2, _} = Game.apply(a2_s1, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "beacon"}})
+
+        {:ok, closed_state, _} =
+          Game.apply(a2_s2, {:verdict_received, %{closeness: 90, reasoning: "meld", quip: "quip", furthest: ["beacon", "beacon"], meta: %{}}})
+
+        assert Game.view(closed_state, nil).phase == :closed
+
+        # Starting next page includes Ada
+        {:ok, next_page_state, []} =
+          Game.apply(closed_state, {:next_page, %{seat_id: "seat-Ada"}})
+
+        ada_next_view = Game.view(next_page_state, "seat-Ada")
+        assert ada_next_view.phase == :giving
+        assert ada_next_view.late? == false
+
+        # Ada can now give
+        assert {:ok, _, []} =
+                 Game.apply(next_page_state, {:give_committed, %{seat_id: "seat-Ada", give: "starlight"}})
+      end
+
+      test "validates start_page: seat must exist and phase must be giving" do
+        state =
+          Game.init(
+            seat_limit: 6,
+            seats: [seat("Mara"), seat("Jacob")]
+          )
+
+        assert {:error, :no_such_seat} =
+                 Game.apply(state, {:start_page, %{seat_id: "seat-Ghost"}})
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+        # A third seat arrives but hasn't entered a give; cannot start page
+        {:ok, with_third, []} = Game.apply(state, {:seat_joined, seat("Ada")})
+        assert {:error, :give_required} =
+                 Game.apply(with_third, {:start_page, %{seat_id: "seat-Ada"}})
+
+        {:ok, writing_state, [{:author, _}]} =
+          Game.apply(state, {:start_page, %{seat_id: "seat-Jacob"}})
+
+        # Once writing, cannot call start_page again
+        assert {:error, :not_giving} =
+                 Game.apply(writing_state, {:start_page, %{seat_id: "seat-Mara"}})
+      end
+
+      test "late seat cannot propose or agree to overrule, only active seats are needed for unanimity" do
+        state =
+          Game.init(
+            seat_limit: 6,
+            seats: [seat("Mara"), seat("Jacob")]
+          )
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
+
+        {:ok, state, []} =
+          Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+        {:ok, writing_state, [{:author, _}]} =
+          Game.apply(state, {:start_page, %{seat_id: "seat-Jacob"}})
+
+        {:ok, bridging_state, []} =
+          Game.apply(writing_state, {:page_written, %{bookends: ["ocean", "lantern"]}})
+
+        {:ok, with_late, []} = Game.apply(bridging_state, {:seat_joined, seat("Ada")})
+
+        {:ok, s1, []} = Game.apply(with_late, {:bridge_committed, %{seat_id: "seat-Mara", bridge: "coast"}})
+        {:ok, s2, _} = Game.apply(s1, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "harbour"}})
+
+        {:ok, reveal_state, _} =
+          Game.apply(s2, {:verdict_received, %{closeness: 75, reasoning: "close", quip: "quip", furthest: ["coast", "harbour"], meta: %{}}})
+
+        # Late seat Ada cannot propose overrule
+        assert {:error, :not_playing_page} =
+                 Game.apply(reveal_state, {:overrule_proposed, %{seat_id: "seat-Ada"}})
+
+        # Mara proposes
+        {:ok, prop_state, []} =
+          Game.apply(reveal_state, {:overrule_proposed, %{seat_id: "seat-Mara"}})
+
+        # Ada cannot agree
+        assert {:error, :not_playing_page} =
+                 Game.apply(prop_state, {:overrule_agreed, %{seat_id: "seat-Ada"}})
+
+        # When Jacob agrees, unanimity of the 2 active seats is satisfied
+        assert {:ok, overruled_state, [_overrule_effect, _chronicle_effect]} =
+                 Game.apply(prop_state, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+        assert Game.view(overruled_state, nil).reveal.closeness == 90
+      end
+    end
+
   describe "writing a Bridge" do
     test "a Seat's own Bridge is its own to see" do
       {:ok, state, []} = commit(bridging(), "Mara", "cairn")
