@@ -18,6 +18,7 @@ defmodule MeaningGame.Chronicle.Page do
   schema "chronicle_pages" do
     field :document, :map
     field :author_meta, :map
+    field :music_meta, :map
     field :closed_because, :string
     field :melded, :boolean
     field :closeness, :integer
@@ -41,6 +42,7 @@ defmodule MeaningGame.Chronicle.Page do
       :room_id,
       :document,
       :author_meta,
+      :music_meta,
       :closed_because,
       :melded,
       :closeness,

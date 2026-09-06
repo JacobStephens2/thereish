@@ -4,12 +4,12 @@
 
 **Blocked by:** 02 (One speaker, the beat and the stings); `.scratch/at-the-table/issues/02` (the Gives).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] The Steward gains `score` (one instrumental for a Page from its Gives) answering a local file (path, duration, format) and meta, or an error; Mureka is asked with `n: 1` and a fixed house-style prefix asking for an instrumental that sits under conversation
-- [ ] A track-cache table keyed by the normalized, sorted Gives holds path, duration and meta; a hit answers without a provider call; a miss downloads the track into the app's media directory on the server's volume, never relying on Mureka's thirty-day URL
-- [ ] When the Room performs the Author effect it also starts a supervised score task with the same Gives unless house-loop-only is on; `{:scored, page, track}` is kept only if the Page is still the same and then broadcast; a failure or the deadline is logged, leaves the loop, and is recorded on the Page
-- [ ] The speaking client receives `foley:page` with the track path and cross-fades from the house loop over a couple of seconds; the track keeps playing across Attempts; house-loop-only fades back to the loop and stops future score tasks for the Room
-- [ ] `music_meta` on the Page (provider, model, cost, latency, or the failure) and the spend page's Foley line
-- [ ] Steward tests for the cache, normalization and the job sequences; Room tests for a track landing on the right Page and being dropped for a Page that moved on, and for house-loop-only; a LiveView test for the push
+- [x] The Steward gains `score` (one instrumental for a Page from its Gives) answering a local file (path, duration, format) and meta, or an error; Mureka is asked with `n: 1` and a fixed house-style prefix asking for an instrumental that sits under conversation
+- [x] A track-cache table keyed by the normalized, sorted Gives holds path, duration and meta; a hit answers without a provider call; a miss downloads the track into the app's media directory on the server's volume, never relying on Mureka's thirty-day URL
+- [x] When the Room performs the Author effect it also starts a supervised score task with the same Gives unless house-loop-only is on; `{:scored, page, track}` is kept only if the Page is still the same and then broadcast; a failure or the deadline is logged, leaves the loop, and is recorded on the Page
+- [x] The speaking client receives `foley:page` with the track path and cross-fades from the house loop over a couple of seconds; the track keeps playing across Attempts; house-loop-only fades back to the loop and stops future score tasks for the Room
+- [x] `music_meta` on the Page (provider, model, cost, latency, or the failure) and the spend page's Foley line
+- [x] Steward tests for the cache, normalization and the job sequences; Room tests for a track landing on the right Page and being dropped for a Page that moved on, and for house-loop-only; a LiveView test for the push
 - [ ] Verified on the deployment: a Page's track arrives mid-Page and fades in; the switch returns to the loop

@@ -54,12 +54,13 @@ defmodule MeaningGame.Steward.Mureka do
       }
 
       with {:ok, task_id} <- start_job(prompt, model, n, key, timeout_ms),
-           {:ok, audio_url} <- poll_job(task_id, poll_opts),
-           {:ok, bytes} <- download_url(audio_url, timeout_ms) do
+           {:ok, choice} <- poll_job(task_id, poll_opts),
+           {:ok, bytes} <- download_url(choice.url, timeout_ms) do
         {:ok,
          %{
            bytes: bytes,
-           url: audio_url,
+           url: choice.url,
+           duration: choice.duration,
            model: model,
            cost_usd: Provider.track_cost(model)
          }}
@@ -120,8 +121,12 @@ defmodule MeaningGame.Steward.Mureka do
 
           case parsed["status"] do
             "succeeded" ->
-              case get_in(parsed, ["choices", Access.at(0), "url"]) do
-                url when is_binary(url) and url != "" -> {:ok, url}
+              choice = get_in(parsed, ["choices", Access.at(0)]) || %{}
+              url = choice["url"]
+              duration = choice["duration"] || parsed["duration"] || 120
+
+              case url do
+                url when is_binary(url) and url != "" -> {:ok, %{url: url, duration: duration}}
                 _ -> {:error, :no_choices}
               end
 

@@ -30,6 +30,7 @@ defmodule MeaningGameWeb.SpendLiveTest do
       entry1 = %{
         document: %{"bookends" => ["desert", "oasis"]},
         author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
         closed_because: :meld,
         melded?: true,
         closeness: 90,
@@ -120,8 +121,8 @@ defmodule MeaningGameWeb.SpendLiveTest do
 
       # Totals
       totals_text = render(element(view, "[data-role=spend-totals]"))
-      assert totals_text =~ "$0.0047"
-      assert totals_text =~ "6 calls"
+      assert totals_text =~ "$0.0447"
+      assert totals_text =~ "7 calls"
       assert totals_text =~ "2 unpriced"
 
       # By role section
@@ -130,15 +131,20 @@ defmodule MeaningGameWeb.SpendLiveTest do
       assert role_text =~ "Assayer"
       assert role_text =~ "Scribe"
       assert role_text =~ "Foley"
+      assert role_text =~ "$0.0405"
 
       # By model section
       model_text = render(element(view, "[data-role=spend-by-model]"))
       assert model_text =~ "gemini-3.8-flash"
       assert model_text =~ "claude-fable-5-1"
+      assert model_text =~ "mureka-v1"
       assert model_text =~ "octave-2"
 
       # By role and model section
       role_model_text = render(element(view, "[data-role=spend-by-role-and-model]"))
+      assert role_model_text =~ "Foley"
+      assert role_model_text =~ "mureka-v1"
+      assert role_model_text =~ "$0.0400"
       assert role_model_text =~ "Scribe"
       assert role_model_text =~ "claude-fable-5-1"
       assert role_model_text =~ "$0.0030"
@@ -150,7 +156,7 @@ defmodule MeaningGameWeb.SpendLiveTest do
       rooms_text = render(element(view, "[data-role=spend-by-room]"))
       assert rooms_text =~ slug1
       assert rooms_text =~ slug2
-      assert rooms_text =~ "$0.0047"
+      assert rooms_text =~ "$0.0447"
       assert rooms_text =~ "$0.0000"
     end
   end
