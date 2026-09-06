@@ -76,6 +76,9 @@ config :meaning_game, :steward,
       # short enough that a rejected answer can be asked for again inside the
       # budget below, which is what makes the retries real (design law 14).
       timeout_ms: 4_000,
+      # A quip request on a Precedent hit runs inside the beat (2,500 ms), so
+      # its timeout is shorter than the full grading timeout.
+      quip_timeout_ms: 2_000,
       # The whole grading's budget, retries and all. Under the ten seconds at
       # which the reveal stops waiting, so that the Steward has already said it
       # has nothing by the time the game does.
@@ -98,6 +101,14 @@ config :meaning_game, :steward,
         flash: [
           provider: MeaningGame.Steward.Gemini,
           model: "gemini-3.8-flash",
+          effort: "low",
+          max_tokens: 400,
+          timeout_ms: 5_000,
+          deadline_ms: 8_000
+        ],
+        astra: [
+          provider: MeaningGame.Steward.OpenAI,
+          model: "gpt-6-astra",
           effort: "low",
           max_tokens: 400,
           timeout_ms: 5_000,
@@ -192,6 +203,7 @@ config :meaning_game, :steward,
   # for Hume Octave 2).
   prices: %{
     "gemini-3.8-flash" => {0.75, 3.75},
+    "gpt-6-astra" => {1.0, 4.0},
     "claude-fable-5-1" => {10.0, 50.0},
     # ElevenLabs sound generation ($0.10 / 1k characters)
     "eleven_text_to_sound_v2" => 0.00010,

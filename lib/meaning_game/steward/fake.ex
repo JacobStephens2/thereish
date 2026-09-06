@@ -68,13 +68,16 @@ defmodule MeaningGame.Steward.Fake do
               "A light to see by stands opposite a shelter by the water."
             )
 
+        job = Keyword.get(opts, :job, :flash)
+        arm = Keyword.get(opts, :arm, job)
+
         {:ok,
          %{
            bookends: bookends,
            why: why,
            meta: %{
              model: "fake-author",
-             arm: :flash,
+             arm: arm,
              prompt_version: MeaningGame.Steward.Author.version(),
              cost_usd: 0.0,
              latency_ms: delay,
@@ -394,7 +397,8 @@ defmodule MeaningGame.Steward.Fake do
     |> MeaningGame.Steward.Legality.normalize_bridge()
   end
 
-  defp pair_closeness([left, right]) do
+  @doc "Grades one pair of bridges based on shared prefix."
+  def pair_closeness([left, right]) do
     l_norm = normalize_bridge(left)
     r_norm = normalize_bridge(right)
     total_len = String.length(l_norm) + String.length(r_norm)

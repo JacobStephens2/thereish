@@ -64,7 +64,7 @@ defmodule MeaningGame.Steward.Live do
 
     case Precedent.get(model, prompt_version, request) do
       {:ok, verdict} ->
-        {:ok, verdict}
+        {:ok, fresh_quip_or_fallback(role, request, verdict)}
 
       :miss ->
         with {:ok, verdict} <- grade_live(role, request, prompt_version) do
@@ -110,7 +110,7 @@ defmodule MeaningGame.Steward.Live do
            why: why,
            meta: %{
              model: answer.model,
-             arm: :flash,
+             arm: job,
              prompt_version: Map.get(role, :prompt_version, MeaningGame.Steward.Author.version()),
              cost_usd: answer.cost_usd,
              latency_ms: answer.latency_ms,
@@ -434,6 +434,49 @@ defmodule MeaningGame.Steward.Live do
         reverse: reverse.closeness,
         reasoning_reverse: reverse.reasoning
       }
+    }
+  end
+
+  defp fresh_quip_or_fallback(role, request, cached) do
+    ordering = ordering_items(request)
+    prompt = Assay.quip_prompt(request, ordering)
+    check = &Assay.check_quip/1
+
+    quip_role = Map.merge(role, %{requests: 1, retries: 0})
+
+    timeout =
+      min(
+        Map.get(quip_role, :quip_timeout_ms, 2_000),
+        Map.get(quip_role, :timeout_ms, 2_000)
+      )
+
+    start_time = System.monotonic_time(:millisecond)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        Gate.answer(quip_role, prompt, check)
+      end)
+
+    {quip, cost_usd} =
+      case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+        {:ok, {:ok, answer}} ->
+          {Assay.quip(answer.json), answer.cost_usd}
+
+        _fallback ->
+          {cached.quip, 0.0}
+      end
+
+    latency_ms = System.monotonic_time(:millisecond) - start_time
+
+    %{
+      cached
+      | quip: quip,
+        meta:
+          Map.merge(cached.meta, %{
+            precedent_hit: true,
+            cost_usd: cost_usd,
+            latency_ms: latency_ms
+          })
     }
   end
 end

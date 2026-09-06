@@ -111,7 +111,7 @@ defmodule MeaningGameWeb.SpendLive do
                 <th class="py-3 px-4">Unpriced</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-base-200 font-mono text-xs">
+            <tbody class="divide-y border-base-200 font-mono text-xs">
               <tr :if={@spend.calls_count == 0}>
                 <td colspan="5" class="py-4 px-4 font-sans text-center opacity-60">
                   No model calls recorded yet.

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# One-time server provisioning for meld.stephens.page. Runs ON the VPS, from the
-# checkout at /var/www/meld.stephens.page. Idempotent: every step checks first,
+# One-time server provisioning for thereish.app. Runs ON the VPS, from the
+# checkout at /var/www/thereish.app. Idempotent: every step checks first,
 # so re-running it is safe and is the way to repair a half-finished setup.
 #
 # Invoked from the Mac by bin/provision-server. Routine redeploys are bin/deploy,
 # which does not touch any of this.
 set -euo pipefail
 
-HOST="meld.stephens.page"
-APP_DIR="/var/www/${HOST}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/env.sh"
 DB_NAME="meaning_game"
 DB_USER="meaning_game"
 ENV_FILE="${APP_DIR}/.env"
@@ -17,6 +17,10 @@ DOCKER_SUBNET="172.17.0.0/16"
 PG_HBA="/etc/postgresql/16/main/pg_hba.conf"
 
 say() { printf '\n== %s\n' "$1"; }
+reload_apache() {
+  sudo apache2ctl configtest
+  sudo systemctl reload apache2
+}
 
 say "Postgres role and database"
 if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${DB_USER}'" | grep -q 1; then
@@ -91,8 +95,7 @@ else
   sudo a2ensite "${HOST}.conf"
   echo "installed and enabled the vhost"
 fi
-sudo apache2ctl configtest
-sudo systemctl reload apache2
+reload_apache
 
 say "TLS certificate"
 # Guarded on the vhost certbot writes rather than on the certificate, so that a
@@ -102,8 +105,16 @@ if [ -f "/etc/apache2/sites-available/${HOST}-le-ssl.conf" ]; then
   echo "TLS vhost already in place"
 else
   sudo certbot --apache --non-interactive --agree-tos --keep-until-expiring \
-    -m "${CERTBOT_EMAIL}" --redirect -d "${HOST}"
+    -m "${CERTBOT_EMAIL}" --redirect -d "${HOST}" -d "www.${HOST}"
   echo "issued the certificate and installed the TLS vhost"
+fi
+
+say "Legacy redirect (meld.stephens.page)"
+if [ -d "/etc/apache2/meld.stephens.page.d" ]; then
+  sudo rm -f "/etc/apache2/meld.stephens.page.d/proxy.conf"
+  sudo install -m 0644 "${APP_DIR}/deploy/apache/meld-redirect.conf" "/etc/apache2/meld.stephens.page.d/redirect.conf"
+  reload_apache
+  echo "synced /etc/apache2/meld.stephens.page.d/redirect.conf"
 fi
 
 say "Done. Deploy with bin/deploy from the Mac."
