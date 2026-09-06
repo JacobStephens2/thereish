@@ -17,6 +17,10 @@ DOCKER_SUBNET="172.17.0.0/16"
 PG_HBA="/etc/postgresql/16/main/pg_hba.conf"
 
 say() { printf '\n== %s\n' "$1"; }
+reload_apache() {
+  sudo apache2ctl configtest
+  sudo systemctl reload apache2
+}
 
 say "Postgres role and database"
 if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${DB_USER}'" | grep -q 1; then
@@ -91,8 +95,7 @@ else
   sudo a2ensite "${HOST}.conf"
   echo "installed and enabled the vhost"
 fi
-sudo apache2ctl configtest
-sudo systemctl reload apache2
+reload_apache
 
 say "TLS certificate"
 # Guarded on the vhost certbot writes rather than on the certificate, so that a
@@ -110,8 +113,7 @@ say "Legacy redirect (meld.stephens.page)"
 if [ -d "/etc/apache2/meld.stephens.page.d" ]; then
   sudo rm -f "/etc/apache2/meld.stephens.page.d/proxy.conf"
   sudo install -m 0644 "${APP_DIR}/deploy/apache/meld-redirect.conf" "/etc/apache2/meld.stephens.page.d/redirect.conf"
-  sudo apache2ctl configtest
-  sudo systemctl reload apache2
+  reload_apache
   echo "synced /etc/apache2/meld.stephens.page.d/redirect.conf"
 fi
 
