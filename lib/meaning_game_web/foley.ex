@@ -51,10 +51,26 @@ defmodule MeaningGameWeb.Foley do
 
     just_claimed = is_nil(old_room) or !Map.get(old_room, :speaker?)
 
-    if (new_room.phase == :bridging and entered_active_page) or (is_active_page and just_claimed) do
-      push_event(socket, "foley:page", %{path: "/audio/house-loop.mp3"})
+    track_path = resolve_track_path(new_room)
+    old_track_path = resolve_track_path(old_room)
+
+    track_changed = is_active_page and not is_nil(old_room) and track_path != old_track_path
+
+    if (new_room.phase == :bridging and entered_active_page) or (is_active_page and just_claimed) or
+         track_changed do
+      push_event(socket, "foley:page", %{path: track_path})
     else
       socket
+    end
+  end
+
+  defp resolve_track_path(nil), do: nil
+
+  defp resolve_track_path(room) do
+    cond do
+      Map.get(room, :house_loop_only, false) -> "/audio/house-loop.mp3"
+      room[:track] && room.track[:path] -> room.track.path
+      true -> "/audio/house-loop.mp3"
     end
   end
 

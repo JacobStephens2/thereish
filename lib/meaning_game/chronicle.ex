@@ -807,7 +807,8 @@ defmodule MeaningGame.Chronicle do
         from(p in Page,
           select: %{
             room_id: p.room_id,
-            author_meta: p.author_meta
+            author_meta: p.author_meta,
+            music_meta: p.music_meta
           }
         )
       )
@@ -868,7 +869,7 @@ defmodule MeaningGame.Chronicle do
       Repo.all(
         from(p in Page,
           where: p.room_id == ^room.id,
-          select: %{author_meta: p.author_meta}
+          select: %{author_meta: p.author_meta, music_meta: p.music_meta}
         )
       )
 
@@ -993,12 +994,24 @@ defmodule MeaningGame.Chronicle do
 
     acc1 =
       Enum.reduce(pages, acc0, fn page, acc ->
-        meta = page.author_meta
+        acc =
+          if is_map(page.author_meta) and map_size(page.author_meta) > 0 do
+            model = page.author_meta["model"] || page.author_meta[:model] || "unknown"
+            cost = to_decimal(page.author_meta["cost_usd"] || page.author_meta[:cost_usd])
+            record_call(acc, :author, model, cost)
+          else
+            acc
+          end
 
-        if is_map(meta) and map_size(meta) > 0 do
-          model = meta["model"] || meta[:model] || "unknown"
-          cost = to_decimal(meta["cost_usd"] || meta[:cost_usd])
-          record_call(acc, :author, model, cost)
+        music_meta = Map.get(page, :music_meta)
+
+        if is_map(music_meta) and map_size(music_meta) > 0 do
+          model =
+            music_meta["model"] || music_meta[:model] ||
+              music_meta["provider"] || music_meta[:provider] || "unknown"
+
+          cost = to_decimal(music_meta["cost_usd"] || music_meta[:cost_usd])
+          record_call(acc, :foley, model, cost)
         else
           acc
         end
@@ -1635,6 +1648,7 @@ defmodule MeaningGame.Chronicle do
       document: page.document,
       gives: formatted_gives,
       author_meta: page.author_meta,
+      music_meta: page.music_meta,
       give: page.document["give"] || page.document[:give],
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
@@ -1804,12 +1818,19 @@ defmodule MeaningGame.Chronicle do
         Map.get(entry, :author_meta) ||
         Map.get(entry, "author_meta")
 
+    music_meta =
+      Map.get(page_data, :music_meta) ||
+        Map.get(page_data, "music_meta") ||
+        Map.get(entry, :music_meta) ||
+        Map.get(entry, "music_meta")
+
     page =
       %Page{}
       |> Page.changeset(%{
         room_id: room_id,
         document: page_data,
         author_meta: author_meta,
+        music_meta: music_meta,
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,
         closeness: entry.closeness,

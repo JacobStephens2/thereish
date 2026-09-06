@@ -1439,12 +1439,12 @@ defmodule MeaningGame.RoomsTest do
       assert view_b.speaker_claimed? == true
       assert view_b.voice == true
       assert view_b.house_loop_only == true
-
       assert view_stage.speaker? == false
       assert view_stage.speaker_claimed? == true
 
       json = Jason.encode!(view_a)
       refute json =~ ctx.token_a
+      refute json =~ ctx.token_b
     end
   end
 
@@ -1727,6 +1727,160 @@ defmodule MeaningGame.RoomsTest do
 
       assert Enum.count(view.reveal.pairs, & &1.couple?) == 2
       assert Enum.count(view.reveal.pairs, & &1.cross_couple?) == 4
+    end
+  end
+
+  describe "Foley scoring and track management" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "when Author writes the Page, a score task runs and the track lands on the snapshot",
+         ctx do
+      Rooms.subscribe(ctx.slug)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "summer camp")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "viking beaches")
+
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_binary(view.track.path)
+      assert view.track.format == :mp3
+      assert view.track.meta.provider == "fake"
+    end
+
+    test "a scored track arriving for a Page that has moved on is dropped", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      # Play through to closed
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      stale_ref = make_ref()
+
+      stale_track = %{
+        path: "/media/tracks/stale.mp3",
+        duration: 100,
+        format: :mp3,
+        meta: %{provider: "fake"}
+      }
+
+      # While closed (before next_page), a late scored message is dropped and does not overwrite track
+      send(pid, {:scored, stale_ref, {:ok, stale_track}})
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track]) or view.track.path != stale_track.path
+
+      # Move to next page
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      # Send a late scored message with an old page ref directly to the Room Server
+      send(pid, {:scored, stale_ref, {:ok, stale_track}})
+
+      # The current snapshot should have no track
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+    end
+
+    test "when house_loop_only is enabled, Author does not start a score task", ctx do
+      :ok = Rooms.set_house_loop_only(ctx.slug, true)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "cabin in woods")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "desert night")
+
+      await_phase(ctx.slug, :bridging)
+
+      # Wait a bit and verify no track arrived
+      Process.sleep(50)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+    end
+
+    test "a failing score task leaves track nil and records failure in music_meta on the Chronicle page",
+         ctx do
+      fake_config = Application.get_env(:meaning_game, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          Application.get_env(:meaning_game, :steward, []),
+          :fake,
+          Keyword.put(fake_config, :music_mode, :unavailable)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :meaning_game,
+          :steward,
+          Keyword.put(Application.get_env(:meaning_game, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      # Track remains nil (leaving loop playing)
+      Process.sleep(50)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+
+      # Solve the page with a meld
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(fn ->
+        pages = MeaningGame.Chronicle.page_views(ctx.slug)
+        pages != [] and hd(pages).music_meta != nil
+      end)
+
+      [page | _] = MeaningGame.Chronicle.page_views(ctx.slug)
+      assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
+    end
+
+    test "successful score records music_meta on the closed Chronicle page", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "ancient ruins")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "starry night")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track])
+      end)
+
+      # Meld to close page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(fn ->
+        pages = MeaningGame.Chronicle.page_views(ctx.slug)
+        pages != [] and hd(pages).music_meta != nil
+      end)
+
+      [page | _] = MeaningGame.Chronicle.page_views(ctx.slug)
+      assert page.music_meta[:provider] == "fake" or page.music_meta["provider"] == "fake"
+      assert page.music_meta[:cost_usd] != nil or page.music_meta["cost_usd"] != nil
     end
   end
 
