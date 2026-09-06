@@ -327,6 +327,9 @@ defmodule MeaningGame.Game do
       phase(state) != :giving ->
         {:error, :not_giving}
 
+      not Map.has_key?(state.gives, seat_id) ->
+        {:error, :give_required}
+
       map_size(state.gives) < 2 ->
         {:error, :not_enough_gives}
 

@@ -596,6 +596,11 @@ defmodule MeaningGame.GameTest do
         {:ok, state, []} =
           Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
 
+        # A third seat arrives but hasn't entered a give; cannot start page
+        {:ok, with_third, []} = Game.apply(state, {:seat_joined, seat("Ada")})
+        assert {:error, :give_required} =
+                 Game.apply(with_third, {:start_page, %{seat_id: "seat-Ada"}})
+
         {:ok, writing_state, [{:author, _}]} =
           Game.apply(state, {:start_page, %{seat_id: "seat-Jacob"}})
 
