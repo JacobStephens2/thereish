@@ -1336,6 +1336,168 @@ defmodule MeaningGame.GameTest do
     end
   end
 
+  describe "Sides: couple versus couple" do
+    setup do
+      names = ["Melissa", "Jacob", "Ada", "Ida"]
+      seats = Enum.map(names, &seat/1)
+      state = Game.init(seat_limit: 4, seats: seats, page: @page)
+      %{state: state}
+    end
+
+    test "pairing seats forms two Sides in the view", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:seat_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}})
+
+      view = Game.view(state, "seat-Melissa")
+
+      assert view.sides_mode? == true
+      assert length(view.sides) == 2
+      [side_a, side_b] = view.sides
+      assert side_a.name == "Melissa & Jacob"
+      assert side_a.seat_ids == ["seat-Melissa", "seat-Jacob"]
+      assert side_a.you? == true
+
+      assert side_b.name == "Ada & Ida"
+      assert side_b.seat_ids == ["seat-Ada", "seat-Ida"]
+      assert side_b.you? == false
+    end
+
+    test "unpairing seats clears the Sides", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:seat_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}})
+
+      assert Game.sides_mode?(state)
+
+      {:ok, state, []} = Game.apply(state, {:seat_unpaired, %{seat_id: "seat-Melissa"}})
+      refute Game.sides_mode?(state)
+      assert Game.view(state, "seat-Melissa").sides == nil
+    end
+
+    test "committing 4 bridges in Sides mode emits assay_sides effect", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:seat_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}})
+
+      {_state, effects} =
+        commit_all(state, [
+          {"Melissa", "cairn"},
+          {"Jacob", "cairo"},
+          {"Ada", "wharf"},
+          {"Ida", "wheat"}
+        ])
+
+      assert :beat in effects
+      assert [{:assay_sides, request}] = Enum.filter(effects, &match?({:assay_sides, _}, &1))
+      assert request.side_a.bridges == ["cairn", "cairo"]
+      assert request.side_b.bridges == ["wharf", "wheat"]
+      assert request.overall.bridges == ["cairn", "cairo", "wharf", "wheat"]
+    end
+
+    test "receiving side verdicts exposes two headlines side by side in the reveal", %{
+      state: state
+    } do
+      {:ok, state, []} =
+        Game.apply(state, {:seat_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}})
+
+      {state, _effects} =
+        commit_all(state, [
+          {"Melissa", "cairn"},
+          {"Jacob", "beacon"},
+          {"Ada", "wharf"},
+          {"Ida", "signal"}
+        ])
+
+      event =
+        {:side_verdicts_received,
+         %{
+           side_a: %{closeness: 85, reasoning: "Couple A close", quip: "Quip A", meta: %{}},
+           side_b: %{closeness: 60, reasoning: "Couple B distant", quip: "Quip B", meta: %{}},
+           furthest: ["cairn", "signal"]
+         }}
+
+      {:ok, state, []} = Game.apply(state, event)
+      view = Game.view(state, "seat-Melissa")
+
+      assert view.phase == :reveal
+      assert view.reveal.mode == :sides
+      assert length(view.reveal.sides) == 2
+
+      [side_a, side_b] = view.reveal.sides
+      assert side_a.closeness == 85
+      assert side_a.quip == "Quip A"
+      assert side_a.closer? == true
+      assert side_a.melded? == false
+
+      assert side_b.closeness == 60
+      assert side_b.quip == "Quip B"
+      assert side_b.closer? == false
+      assert side_b.melded? == false
+
+      assert view.next_bookends == ["cairn", "signal"]
+    end
+
+    test "a Page closes as Meld if either Side melds", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:seat_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}})
+
+      {state, _effects} =
+        commit_all(state, [
+          {"Melissa", "cairn"},
+          {"Jacob", "cairo"},
+          {"Ada", "wharf"},
+          {"Ida", "signal"}
+        ])
+
+      event =
+        {:side_verdicts_received,
+         %{
+           side_a: %{closeness: 92, reasoning: "Meld A", quip: "Quip A", meta: %{}},
+           side_b: %{closeness: 60, reasoning: "Miss B", quip: "Quip B", meta: %{}},
+           furthest: ["cairn", "signal"]
+         }}
+
+      {:ok, state, effects} = Game.apply(state, event)
+      assert Game.view(state, "seat-Melissa").phase == :closed
+      assert Game.view(state, "seat-Melissa").closed.because == :meld
+      assert Enum.any?(effects, &match?({:chronicle, _}, &1))
+    end
+
+    test "a Side can overrule its own grade", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:seat_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}})
+
+      {state, _effects} =
+        commit_all(state, [
+          {"Melissa", "cairn"},
+          {"Jacob", "beacon"},
+          {"Ada", "wharf"},
+          {"Ida", "signal"}
+        ])
+
+      event =
+        {:side_verdicts_received,
+         %{
+           side_a: %{closeness: 85, reasoning: "Close A", quip: "Quip A", meta: %{}},
+           side_b: %{closeness: 60, reasoning: "Miss B", quip: "Quip B", meta: %{}},
+           furthest: ["cairn", "signal"]
+         }}
+
+      {:ok, state, []} = Game.apply(state, event)
+
+      # Melissa proposes overrule for her Side
+      {:ok, state, []} = Game.apply(state, {:overrule_proposed, %{seat_id: "seat-Melissa"}})
+      # Jacob agrees (unanimity for Side A)
+      {:ok, state, effects} = Game.apply(state, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+      view = Game.view(state, "seat-Melissa")
+      [side_a, side_b] = view.reveal.sides
+      assert side_a.closeness == 90
+      assert side_a.overruled? == true
+      assert side_b.closeness == 60
+      assert side_b.overruled? == false
+      assert Enum.any?(effects, &match?({:overrule, _}, &1))
+    end
+  end
+
   describe "couples and the meld map (ticket 07)" do
     test "a seat can be marked as paired with another seat in the room" do
       state =
