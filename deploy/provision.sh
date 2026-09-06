@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# One-time server provisioning for meld.stephens.page. Runs ON the VPS, from the
-# checkout at /var/www/meld.stephens.page. Idempotent: every step checks first,
+# One-time server provisioning for thereish.app. Runs ON the VPS, from the
+# checkout at /var/www/thereish.app. Idempotent: every step checks first,
 # so re-running it is safe and is the way to repair a half-finished setup.
 #
 # Invoked from the Mac by bin/provision-server. Routine redeploys are bin/deploy,
 # which does not touch any of this.
 set -euo pipefail
 
-HOST="meld.stephens.page"
+HOST="thereish.app"
 APP_DIR="/var/www/${HOST}"
 DB_NAME="meaning_game"
 DB_USER="meaning_game"
@@ -102,7 +102,7 @@ if [ -f "/etc/apache2/sites-available/${HOST}-le-ssl.conf" ]; then
   echo "TLS vhost already in place"
 else
   sudo certbot --apache --non-interactive --agree-tos --keep-until-expiring \
-    -m "${CERTBOT_EMAIL}" --redirect -d "${HOST}"
+    -m "${CERTBOT_EMAIL}" --redirect -d "${HOST}" -d "www.${HOST}"
   echo "issued the certificate and installed the TLS vhost"
 fi
 

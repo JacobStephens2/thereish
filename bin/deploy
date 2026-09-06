@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy master to meld.stephens.page. One command, from a clean master.
+# Deploy master to thereish.app. One command, from a clean master.
 #
 #   bin/deploy
 #
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SERVER="jacob@stephens.page"
-HOST="meld.stephens.page"
+HOST="thereish.app"
 APP_DIR="/var/www/${HOST}"
 COMPOSE="docker compose -f docker-compose.app.yml"
 
