@@ -855,7 +855,8 @@ defmodule MeaningGame.Game do
   end
 
   @doc "Whether this Room is currently playing in Sides mode (two paired couples)."
-  def sides_mode?(%__MODULE__{sides_mode: true, seat_limit: 4, seats: seats}) when length(seats) == 4 do
+  def sides_mode?(%__MODULE__{sides_mode: true, seat_limit: 4, seats: seats})
+      when length(seats) == 4 do
     case sides_list(seats) do
       [side_a, side_b] ->
         length(side_a.seats) == 2 and length(side_b.seats) == 2
@@ -886,8 +887,18 @@ defmodule MeaningGame.Game do
 
           if Map.get(s3, :partner_id) == s4.id and Map.get(s4, :partner_id) == s3.id do
             [
-              %{id: :a, name: "#{s1.name} & #{s2.name}", seats: [s1, s2], seat_ids: [s1.id, s2.id]},
-              %{id: :b, name: "#{s3.name} & #{s4.name}", seats: [s3, s4], seat_ids: [s3.id, s4.id]}
+              %{
+                id: :a,
+                name: "#{s1.name} & #{s2.name}",
+                seats: [s1, s2],
+                seat_ids: [s1.id, s2.id]
+              },
+              %{
+                id: :b,
+                name: "#{s3.name} & #{s4.name}",
+                seats: [s3, s4],
+                seat_ids: [s3.id, s4.id]
+              }
             ]
           else
             []
@@ -1437,7 +1448,7 @@ defmodule MeaningGame.Game do
         Enum.find(sides_list(state), &(&1.id == overrule.side_id))
       end
 
-    your_side? = is_nil(side) or (viewer in side.seat_ids)
+    your_side? = is_nil(side) or viewer in side.seat_ids
 
     %{
       pending?: true,

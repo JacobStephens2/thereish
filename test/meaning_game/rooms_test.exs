@@ -1447,6 +1447,7 @@ defmodule MeaningGame.RoomsTest do
       refute json =~ ctx.token_b
     end
   end
+
   describe "Sides: couple versus couple through the Room" do
     test "pairing seats forms Sides, broadcasts, and unpairing clears them" do
       {:ok, slug} = Rooms.create(4, device_token())

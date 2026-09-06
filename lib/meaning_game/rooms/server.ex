@@ -111,6 +111,7 @@ defmodule MeaningGame.Rooms.Server do
       nil -> take_seat(name, device_token, partner_id, state)
     end
   end
+
   def handle_call({:pair_seats, seat_id, nil}, from, state) do
     handle_call({:unpair_seat, seat_id}, from, state)
   end
@@ -145,7 +146,6 @@ defmodule MeaningGame.Rooms.Server do
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
-
 
   def handle_call({:unpair_seat, seat_id}, _from, state) do
     with {:ok, _seats} <- Store.unpair_seat(state.room.id, seat_id),

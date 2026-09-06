@@ -448,7 +448,10 @@ defmodule MeaningGameWeb.RoomLive do
         </div>
       </div>
       <section
-        :if={@seat && @room && @room.seat_limit == 4 && is_nil(@room.your_bridge) && @room.attempt.number == 1}
+        :if={
+          @seat && @room && @room.seat_limit == 4 && is_nil(@room.your_bridge) &&
+            @room.attempt.number == 1
+        }
         data-role="partner-picker"
         class="flex flex-col items-center gap-3 rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm text-center"
       >

@@ -501,8 +501,16 @@ defmodule MeaningGameWeb.RoomComponents do
           <div class="flex flex-wrap items-center justify-center gap-2">
             <h3 class="text-sm font-bold uppercase tracking-wider">{side.name}</h3>
             <span :if={side_you?(side, @seat)} class="badge badge-primary badge-xs">You</span>
-            <span :if={side.closer?} data-role="closer-badge" class="badge badge-accent badge-xs font-semibold">Closer</span>
-            <span :if={side.melded?} data-role="melded-badge" class="badge badge-primary badge-xs font-semibold">Melded</span>
+            <span
+              :if={side.closer?}
+              data-role="closer-badge"
+              class="badge badge-accent badge-xs font-semibold"
+            >Closer</span>
+            <span
+              :if={side.melded?}
+              data-role="melded-badge"
+              class="badge badge-primary badge-xs font-semibold"
+            >Melded</span>
           </div>
 
           <div data-role="comparison" class="flex flex-wrap items-stretch justify-center gap-2 w-full">
@@ -723,7 +731,10 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p
-        :if={@seat && @room.overrule[:your_side?] != false && @room.overrule.you_agreed? && !@room.overrule.you_proposed?}
+        :if={
+          @seat && @room.overrule[:your_side?] != false && @room.overrule.you_agreed? &&
+            !@room.overrule.you_proposed?
+        }
         data-role="overrule-pending"
       >
         {if @room.overrule[:side_id],
@@ -742,12 +753,18 @@ defmodule MeaningGameWeb.RoomComponents do
 
       <p :if={is_nil(@seat)} data-role="overrule-pending" class="opacity-80">
         <span class="font-semibold">{@room.overrule.proposer_name}</span>
-        proposed an overrule. Waiting for {if @room.overrule[:side_id], do: "their partner", else: "the Room"} to agree.
+        proposed an overrule. Waiting for {if @room.overrule[:side_id],
+          do: "their partner",
+          else: "the Room"} to agree.
       </p>
     </div>
 
     <p
-      :if={(@room.reveal && @room.reveal[:overruled?]) || (@room.reveal && @room.reveal[:mode] == :sides && Enum.any?(@room.reveal.sides, & &1[:overruled?]))}
+      :if={
+        (@room.reveal && @room.reveal[:overruled?]) ||
+          (@room.reveal && @room.reveal[:mode] == :sides &&
+             Enum.any?(@room.reveal.sides, & &1[:overruled?]))
+      }
       data-role="overruled-notice"
       class="text-center text-sm font-semibold text-primary"
     >

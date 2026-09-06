@@ -1335,6 +1335,7 @@ defmodule MeaningGame.GameTest do
                )
     end
   end
+
   describe "Sides: couple versus couple" do
     setup do
       names = ["Melissa", "Jacob", "Ada", "Ida"]
@@ -1391,7 +1392,9 @@ defmodule MeaningGame.GameTest do
       assert request.overall.bridges == ["cairn", "cairo", "wharf", "wheat"]
     end
 
-    test "receiving side verdicts exposes two headlines side by side in the reveal", %{state: state} do
+    test "receiving side verdicts exposes two headlines side by side in the reveal", %{
+      state: state
+    } do
       {:ok, state, []} =
         Game.apply(state, {:seat_paired, %{seat_id: "seat-Melissa", partner_id: "seat-Jacob"}})
 

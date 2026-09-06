@@ -575,10 +575,14 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       }
 
       opponent_seat = %{id: "s3", name: "Ada"}
-      opponent_html = render_component(&overrule_banner/1, room: opposing_room, seat: opponent_seat)
+
+      opponent_html =
+        render_component(&overrule_banner/1, room: opposing_room, seat: opponent_seat)
 
       refute opponent_html =~ ~s(data-role="overrule-vote")
-      assert opponent_html =~ "proposed an overrule for their Side. Waiting for their partner to agree."
+
+      assert opponent_html =~
+               "proposed an overrule for their Side. Waiting for their partner to agree."
     end
   end
 end
