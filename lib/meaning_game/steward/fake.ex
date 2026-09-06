@@ -347,7 +347,8 @@ defmodule MeaningGame.Steward.Fake do
     |> MeaningGame.Steward.Legality.normalize_bridge()
   end
 
-  defp pair_closeness([left, right]) do
+  @doc "Grades one pair of bridges based on shared prefix."
+  def pair_closeness([left, right]) do
     l_norm = normalize_bridge(left)
     r_norm = normalize_bridge(right)
     total_len = String.length(l_norm) + String.length(r_norm)

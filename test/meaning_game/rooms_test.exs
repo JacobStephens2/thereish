@@ -1407,6 +1407,100 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "couples and the meld map (ticket 07)" do
+    test "joining with a partner marks both seats as a couple and survives room restart" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), melissa.id)
+
+      view = Rooms.snapshot(slug, melissa.id)
+      melissa_seat = Enum.find(view.seats, &(&1.id == melissa.id))
+      jacob_seat = Enum.find(view.seats, &(&1.id == jacob.id))
+
+      assert melissa_seat.partner_id == jacob.id
+      assert melissa_seat.partner_name == "Jacob"
+      assert melissa_seat.couple? == true
+
+      assert jacob_seat.partner_id == melissa.id
+      assert jacob_seat.partner_name == "Melissa"
+      assert jacob_seat.couple? == true
+
+      # Survives process crash and restart
+      stop_room(slug)
+
+      once_restarted(fn ->
+        view_after = Rooms.snapshot(slug, melissa.id)
+        m = Enum.find(view_after.seats, &(&1.id == melissa.id))
+        j = Enum.find(view_after.seats, &(&1.id == jacob.id))
+
+        assert m.partner_id == jacob.id
+        assert j.partner_id == melissa.id
+      end)
+    end
+
+    test "two seats can be paired after joining via Rooms.pair_seats/3" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      assert :ok = Rooms.pair_seats(slug, melissa.id, jacob.id)
+
+      view = Rooms.snapshot(slug, melissa.id)
+      m = Enum.find(view.seats, &(&1.id == melissa.id))
+      j = Enum.find(view.seats, &(&1.id == jacob.id))
+
+      assert m.partner_id == jacob.id
+      assert j.partner_id == melissa.id
+    end
+
+    test "an Attempt commit grades all pairs alongside the one Verdict" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), melissa.id)
+      assert {:ok, bryan} = Rooms.join(slug, "Bryan", device_token())
+      assert {:ok, evelyn} = Rooms.join(slug, "Evelyn", device_token(), bryan.id)
+
+      Enum.each([melissa, jacob, bryan, evelyn], fn s ->
+        :ok = Rooms.give(slug, s.id, "setting #{s.name}")
+      end)
+
+      await_phase(slug, :bridging)
+
+      :ok = Rooms.commit_bridge(slug, melissa.id, "dock")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, bryan.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, evelyn.id, "beacon")
+
+      view = await_reveal(slug)
+
+      # The one Verdict is preserved (ADR-0010)
+      assert view.reveal.closeness != nil
+      assert view.reveal.furthest != nil
+
+      # Pairs are present: 4 choose 2 = 6 pairs
+      assert is_list(view.reveal.pairs)
+      assert length(view.reveal.pairs) == 6
+
+      # Melissa's view puts Melissa & Jacob couple first
+      melissa_view = Rooms.snapshot(slug, melissa.id)
+      [first_pair | _] = melissa_view.reveal.pairs
+      assert first_pair.names == ["Melissa", "Jacob"]
+      assert first_pair.couple? == true
+
+      # Bryan's view puts Bryan & Evelyn couple first
+      bryan_view = Rooms.snapshot(slug, bryan.id)
+      [first_pair_bryan | _] = bryan_view.reveal.pairs
+      assert first_pair_bryan.names == ["Bryan", "Evelyn"]
+      assert first_pair_bryan.couple? == true
+
+      assert Enum.count(view.reveal.pairs, & &1.couple?) == 2
+      assert Enum.count(view.reveal.pairs, & &1.cross_couple?) == 4
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do
