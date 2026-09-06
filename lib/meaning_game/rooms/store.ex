@@ -196,12 +196,16 @@ defmodule MeaningGame.Rooms.Store do
           end
 
           from(s in Seat,
-            where: s.room_id == ^room_id and (s.partner_id == ^seat_id_1 or s.partner_id == ^seat_id_2)
+            where:
+              s.room_id == ^room_id and (s.partner_id == ^seat_id_1 or s.partner_id == ^seat_id_2)
           )
           |> Repo.update_all(set: [partner_id: nil])
 
-          {:ok, updated_seat_1} = seat_1 |> Seat.changeset(%{partner_id: seat_id_2}) |> Repo.update()
-          {:ok, updated_seat_2} = seat_2 |> Seat.changeset(%{partner_id: seat_id_1}) |> Repo.update()
+          {:ok, updated_seat_1} =
+            seat_1 |> Seat.changeset(%{partner_id: seat_id_2}) |> Repo.update()
+
+          {:ok, updated_seat_2} =
+            seat_2 |> Seat.changeset(%{partner_id: seat_id_1}) |> Repo.update()
 
           all_seats = Repo.all(from(s in Seat, where: s.room_id == ^room_id))
 
@@ -211,8 +215,13 @@ defmodule MeaningGame.Rooms.Store do
 
               if length(other_seats) == 2 do
                 [other_seat_1, other_seat_2] = other_seats
-                {:ok, updated_other_1} = other_seat_1 |> Seat.changeset(%{partner_id: other_seat_2.id}) |> Repo.update()
-                {:ok, updated_other_2} = other_seat_2 |> Seat.changeset(%{partner_id: other_seat_1.id}) |> Repo.update()
+
+                {:ok, updated_other_1} =
+                  other_seat_1 |> Seat.changeset(%{partner_id: other_seat_2.id}) |> Repo.update()
+
+                {:ok, updated_other_2} =
+                  other_seat_2 |> Seat.changeset(%{partner_id: other_seat_1.id}) |> Repo.update()
+
                 [updated_other_1, updated_other_2]
               else
                 []

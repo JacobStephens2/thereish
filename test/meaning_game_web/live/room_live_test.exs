@@ -1663,6 +1663,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       end)
     end
   end
+
   describe "Sides: couple versus couple on phone and stage" do
     setup do
       beat(0)
