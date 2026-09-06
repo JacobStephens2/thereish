@@ -357,6 +357,22 @@ defmodule MeaningGame.Rooms do
   @spec set_house_loop_only(String.t(), boolean()) :: :ok | {:error, term()}
   def set_house_loop_only(code, enabled), do: call(code, {:set_house_loop_only, enabled})
 
+  @doc """
+  Fetches the voice audio bytes and format for `attempt` from the Room.
+  Answers `{:ok, audio, format}` or `{:error, :not_found}`.
+  """
+  @spec voice_audio(String.t(), integer()) ::
+          {:ok, binary(), atom() | String.t()} | {:error, :not_found}
+  def voice_audio(code, attempt) when is_integer(attempt) do
+    case ensure_started(code) do
+      {:ok, normalised, _pid} ->
+        GenServer.call(Server.via(normalised), {:voice_audio, attempt})
+
+      {:error, _} ->
+        {:error, :not_found}
+    end
+  end
+
   @doc "The Seat this browser already holds in the Room, without typing a name."
   @spec rejoin(String.t(), String.t()) :: {:ok, map()} | :error
   def rejoin(slug, device_token), do: call(slug, {:rejoin, device_token})

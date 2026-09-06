@@ -1662,6 +1662,63 @@ defmodule MeaningGameWeb.RoomLiveTest do
         is_nil(Rooms.get_room(ctx.slug).speaker)
       end)
     end
+
+    test "foley:beat, foley:sting, and foley:voice push in order to speaking view alone", ctx do
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      refute_push_event(ctx.mara, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      # Stage is speaker; enable voice switch
+      ctx.stage |> element("[data-role=voice-switch]") |> render_click()
+      assert Rooms.get_room(ctx.slug).voice == true
+
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      # Ordered push sequence: beat -> sting -> voice
+      assert_push_event(ctx.stage, "foley:beat", %{})
+      refute_push_event(ctx.mara, "foley:beat", %{})
+      refute_push_event(ctx.jacob, "foley:beat", %{})
+
+      await_reveal_on(ctx.stage)
+
+      assert_push_event(ctx.stage, "foley:sting", %{band: _})
+      refute_push_event(ctx.mara, "foley:sting", %{})
+      refute_push_event(ctx.jacob, "foley:sting", %{})
+
+      expected_stage_url = "/r/#{ctx.slug}/voice/1"
+      assert_push_event(ctx.stage, "foley:voice", %{attempt: 1, url: ^expected_stage_url})
+      refute_push_event(ctx.mara, "foley:voice", %{})
+      refute_push_event(ctx.jacob, "foley:voice", %{})
+
+      # Phone claims speaker; voice switch persists
+      ctx.mara |> element("[data-role=speaker-toggle]") |> render_click()
+      assert Rooms.get_room(ctx.slug).voice == true
+
+      ctx.mara |> element("[data-role=again]") |> render_click()
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.mara, "stone")
+      commit(ctx.jacob, "stone")
+
+      assert_push_event(ctx.mara, "foley:beat", %{})
+      refute_push_event(ctx.stage, "foley:beat", %{})
+
+      await_reveal_on(ctx.mara)
+
+      assert_push_event(ctx.mara, "foley:sting", %{band: _})
+      expected_mara_url = "/r/#{ctx.slug}/voice/2"
+      assert_push_event(ctx.mara, "foley:voice", %{attempt: 2, url: ^expected_mara_url})
+      refute_push_event(ctx.stage, "foley:sting", %{})
+      refute_push_event(ctx.stage, "foley:voice", %{})
+      refute_push_event(ctx.jacob, "foley:voice", %{})
+    end
   end
 
   describe "couples on the meld map (ticket 07)" do
