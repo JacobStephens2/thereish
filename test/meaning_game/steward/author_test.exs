@@ -144,5 +144,71 @@ defmodule MeaningGame.Steward.AuthorTest do
       # retries: 1 means 1 initial ask + 1 retry = 2 attempts total
       assert Agent.get(agent, &Map.get(&1, "author", 0)) == 2
     end
+
+    test "author role has flash and astra jobs with matching budgets and distinct providers" do
+      flash_role = Steward.role(:author, :flash)
+      astra_role = Steward.role(:author, :astra)
+
+      assert flash_role.provider == MeaningGame.Steward.Gemini
+      assert flash_role.model == "gemini-3.8-flash"
+      assert flash_role.effort == "low"
+      assert flash_role.max_tokens == 400
+      assert flash_role.timeout_ms == 5_000
+      assert flash_role.deadline_ms == 8_000
+
+      assert astra_role.provider == MeaningGame.Steward.OpenAI
+      assert astra_role.model == "gpt-6-astra"
+      assert astra_role.effort == "low"
+      assert astra_role.max_tokens == 400
+      assert astra_role.timeout_ms == 5_000
+      assert astra_role.deadline_ms == 8_000
+    end
+
+    test "Steward writes with the job named by the Page's arm" do
+      gives = [
+        %{seat_id: "s1", name: "Alice", text: "walking along the beach"},
+        %{seat_id: "s2", name: "Bob", text: "deep inside the forest"}
+      ]
+
+      recorded_author(fn conn, _body ->
+        Req.Test.json(conn, author_response(author_json(bookends: ["ocean", "woods"])))
+      end)
+
+      assert {:ok, flash_res} = Steward.author(%{gives: gives}, job: :flash)
+      assert flash_res.meta.arm == :flash
+      assert flash_res.meta.model == "gemini-3.8-flash"
+
+      Req.Test.stub(MeaningGame.Steward.OpenAI, fn conn ->
+        response_body = %{
+          "object" => "chat.completion",
+          "created" => 1_756_000_000,
+          "model" => "gpt-6-astra",
+          "choices" => [
+            %{
+              "index" => 0,
+              "finish_reason" => "stop",
+              "message" => %{
+                "role" => "assistant",
+                "content" => author_json(bookends: ["beacon", "haven"])
+              }
+            }
+          ],
+          "usage" => %{
+            "prompt_tokens" => 200,
+            "completion_tokens" => 50,
+            "total_tokens" => 250
+          }
+        }
+
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "application/json")
+        |> Plug.Conn.send_resp(200, Jason.encode!(response_body))
+      end)
+
+      assert {:ok, astra_res} = Steward.author(%{gives: gives}, job: :astra)
+      assert astra_res.meta.arm == :astra
+      assert astra_res.meta.model == "gpt-6-astra"
+      assert astra_res.bookends == ["beacon", "haven"]
+    end
   end
 end

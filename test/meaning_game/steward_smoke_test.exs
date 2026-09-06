@@ -12,7 +12,7 @@ defmodule MeaningGame.StewardSmokeTest do
   Run it by hand, with a key, after changing anything about the prompt, the
   schema, or the model:
 
-      GEMINI_API_KEY=... ANTHROPIC_API_KEY=... mix test --include live
+      GEMINI_API_KEY=... ANTHROPIC_API_KEY=... OPENAI_API_KEY=... mix test --include live
 
   One test per role, and one more for the table: the couch's grading and a
   four-word grading are the same call, but they are not the same prompt or the
@@ -33,6 +33,7 @@ defmodule MeaningGame.StewardSmokeTest do
       context[:eleven_labs] -> let_it_call_eleven_labs()
       context[:hume] -> let_it_call_hume()
       context[:anthropic] -> let_it_call_anthropic()
+      context[:openai] -> let_it_call_openai()
       true -> let_it_call_the_provider()
     end
   end
@@ -123,6 +124,32 @@ defmodule MeaningGame.StewardSmokeTest do
 
     IO.puts(
       "\n  live Author: #{left} / #{right} in #{answer.meta.latency_ms} ms " <>
+        "for $#{Float.round(answer.meta.cost_usd, 5)}" <>
+        "\n  why: #{answer.why}\n"
+    )
+  end
+
+  @tag :openai
+  test "the Author writes Bookends using OpenAI Astra (gpt-6-astra) inside the deadline" do
+    gives = [
+      %{name: "Melissa", text: "candlelit cathedral"},
+      %{name: "Jacob", text: "cyberpunk nightclub"}
+    ]
+
+    {:ok, answer} = Steward.author(%{gives: gives}, job: :astra)
+
+    assert [left, right] = answer.bookends
+    assert is_binary(left) and byte_size(left) > 0
+    assert is_binary(right) and byte_size(right) > 0
+    assert String.trim(answer.why) != ""
+
+    assert answer.meta.model =~ "gpt-6-astra"
+    assert answer.meta.arm == :astra
+    assert answer.meta.cost_usd > 0
+    assert answer.meta.latency_ms < 10_000
+
+    IO.puts(
+      "\n  live Author (Astra): #{left} / #{right} in #{answer.meta.latency_ms} ms " <>
         "for $#{Float.round(answer.meta.cost_usd, 5)}" <>
         "\n  why: #{answer.why}\n"
     )

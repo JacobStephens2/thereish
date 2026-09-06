@@ -4,12 +4,12 @@
 
 **Blocked by:** 02 (The Page is written at the table).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] An OpenAI provider satisfies the provider behaviour — JSON-schema structured output, reasoning effort, the key from `OPENAI_API_KEY` through runtime configuration, cost from the price table, which gains `gpt-6-astra` — tested against recorded answers and a recorded refusal
-- [ ] The `author` role has `flash` and `astra` jobs with the same budgets; the Steward writes with the job the Page's arm names
-- [ ] The `author_model` experiment assigns an arm per Page, alternating within a Room, recorded blind in the experiment tables as `bait_against_plain` was; the unblinding path still works
-- [ ] At the close each Seat may tap flat / fine / great once (replaceable); the rules owe a `bookends_tap` effect carrying the Bookends, Gives, author meta and arm; the Chronicle records it
-- [ ] The experiment outcome per Page carries the arc (Attempts, melded, closing band) and the taps; the qualitative readout covers `author_model`
-- [ ] Rules tests for the tap; Room tests for alternating assignment and the recorded outcome; Steward tests for the provider and job selection; one tagged live smoke test per provider
+- [x] An OpenAI provider satisfies the provider behaviour — JSON-schema structured output, reasoning effort, the key from `OPENAI_API_KEY` through runtime configuration, cost from the price table, which gains `gpt-6-astra` — tested against recorded answers and a recorded refusal
+- [x] The `author` role has `flash` and `astra` jobs with the same budgets; the Steward writes with the job the Page's arm names
+- [x] The `author_model` experiment assigns an arm per Page, alternating within a Room, recorded blind in the experiment tables as `bait_against_plain` was; the unblinding path still works
+- [x] At the close each Seat may tap flat / fine / great once (replaceable); the rules owe a `bookends_tap` effect carrying the Bookends, Gives, author meta and arm; the Chronicle records it
+- [x] The experiment outcome per Page carries the arc (Attempts, melded, closing band) and the taps; the qualitative readout covers `author_model`
+- [x] Rules tests for the tap; Room tests for alternating assignment and the recorded outcome; Steward tests for the provider and job selection; one tagged live smoke test per provider
 - [ ] Deployed; two Pages played, one per arm, and both recorded

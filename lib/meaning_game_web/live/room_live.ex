@@ -147,6 +147,14 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("bookends_tap", %{"label" => label}, socket) do
+    if socket.assigns.seat do
+      Rooms.tap_bookends(socket.assigns.slug, socket.assigns.seat.id, label)
+    end
+
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("submit_give", %{"give" => give}, socket) do
     trimmed = String.trim(give || "")
 
@@ -306,7 +314,11 @@ defmodule MeaningGameWeb.RoomLive do
         <.input name="name" value={@name} label="Your name" autocomplete="off" autofocus />
         <div :if={@room && @room.seats != []} class="flex flex-col gap-1">
           <label class="text-xs uppercase tracking-wide opacity-60">Partner (optional)</label>
-          <select name="partner_id" data-role="partner-select" class="select select-bordered select-sm w-full">
+          <select
+            name="partner_id"
+            data-role="partner-select"
+            class="select select-bordered select-sm w-full"
+          >
             <option value="">No partner</option>
             <option :for={s <- @room.seats} value={s.id}>With {s.name}</option>
           </select>
@@ -316,13 +328,20 @@ defmodule MeaningGameWeb.RoomLive do
       </form>
 
       <form
-        :if={@seat && @room.phase == :waiting && is_nil(@room.you[:partner_name]) && length(@room.seats) > 1}
+        :if={
+          @seat && @room.phase == :waiting && is_nil(@room.you[:partner_name]) &&
+            length(@room.seats) > 1
+        }
         phx-submit="pair_seat"
         class="flex flex-col gap-1 border-t border-base-300 pt-3"
       >
         <label class="text-xs uppercase tracking-wide opacity-60">Pair with someone</label>
         <div class="flex items-center gap-2">
-          <select name="partner_id" data-role="pair-select" class="select select-bordered select-sm flex-1">
+          <select
+            name="partner_id"
+            data-role="pair-select"
+            class="select select-bordered select-sm flex-1"
+          >
             <option value="">Choose partner...</option>
             <option :for={s <- @room.seats} :if={s.id != @seat.id} value={s.id}>
               {s.name}
@@ -446,7 +465,7 @@ defmodule MeaningGameWeb.RoomLive do
         </.button>
       </div>
 
-      <.ending room={@room} />
+      <.ending room={@room} seat={@seat} mode={:phone} />
 
       <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>
