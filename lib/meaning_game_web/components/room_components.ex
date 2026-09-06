@@ -864,9 +864,8 @@ defmodule MeaningGameWeb.RoomComponents do
       export default {
         mounted() {
           this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          if (this.reducedMotion) return
-
           this.speaker = this.el.dataset.speaker === "true"
+          this.canPlay = () => !this.reducedMotion && this.speaker
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -910,6 +909,7 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.resumeAudio = async () => {
+            this.reducedMotion = false
             this.initAudio()
             if (this.ctx && this.ctx.state !== "running") {
               await this.ctx.resume()
@@ -969,7 +969,7 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.playEffect = async (url, bus, duckDuration = 2.0) => {
-            if (this.reducedMotion) return
+            if (!this.canPlay()) return
             await this.resumeAudio()
             if (!this.ctx) return
             const buf = await this.fetchBuffer(url)
@@ -995,7 +995,7 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.handleEvent("foley:page", async ({path}) => {
-            if (this.reducedMotion) return
+            if (!this.canPlay()) return
             this.stopVoice()
             this.currentVoiceAttempt = null
             await this.resumeAudio()
@@ -1055,7 +1055,7 @@ defmodule MeaningGameWeb.RoomComponents do
           })
 
           this.handleEvent("foley:voice", async ({attempt, url}) => {
-            if (this.reducedMotion) return
+            if (!this.canPlay()) return
             await this.resumeAudio()
             if (!this.ctx) return
 
@@ -1141,7 +1141,6 @@ defmodule MeaningGameWeb.RoomComponents do
         },
 
         updated() {
-          if (this.reducedMotion) return
           this.speaker = this.el.dataset.speaker === "true"
           this.updateTapForSound()
           if (!this.speaker) {
@@ -1152,7 +1151,6 @@ defmodule MeaningGameWeb.RoomComponents do
         },
 
         destroyed() {
-          if (this.reducedMotion) return
           this.stopVoice()
           this.currentVoiceAttempt = null
           this.stopMusic()
