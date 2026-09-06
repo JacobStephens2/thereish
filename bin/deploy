@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy master to meld.stephens.page. One command, from a clean master.
+# Deploy master to thereish.app. One command, from a clean master.
 #
 #   bin/deploy
 #
@@ -8,9 +8,8 @@
 # page answers over TLS.
 set -euo pipefail
 
-SERVER="jacob@stephens.page"
-HOST="meld.stephens.page"
-APP_DIR="/var/www/${HOST}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../deploy/env.sh"
 COMPOSE="docker compose -f docker-compose.app.yml"
 
 # Without the fetch this compares against a possibly stale remote-tracking ref,
