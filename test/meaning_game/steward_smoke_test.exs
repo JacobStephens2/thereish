@@ -238,9 +238,8 @@ defmodule MeaningGame.StewardSmokeTest do
     alias MeaningGame.Steward.Legality
 
     digest = """
-    Page 1 (candy · cane) [Give: Christmas] — Melded on attempt 2 (closeness: 88, meld)
+    Page 1 (candy · cane) — Melded on attempt 2 (closeness: 88, meld)
       Attempt 2: Jacob bridged "hook", Mara bridged "hook". Verdict: 88 (meld)
-      Recap: Both of them wrote hook, and neither would say why.
     """
 
     taken = ["couch", "flak"]
