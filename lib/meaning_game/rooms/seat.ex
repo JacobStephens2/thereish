@@ -23,8 +23,10 @@ defmodule MeaningGame.Rooms.Seat do
   schema "seats" do
     field :name, :string
     field :device_tokens, {:array, :string}, default: []
+    field :partner_id, :binary_id
 
     belongs_to :room, MeaningGame.Rooms.Room
+    belongs_to :partner, MeaningGame.Rooms.Seat, define_field: false
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -35,11 +37,16 @@ defmodule MeaningGame.Rooms.Seat do
   @doc false
   def changeset(seat, attrs) do
     seat
-    |> cast(attrs, [:id, :room_id, :name, :device_tokens])
+    |> cast(attrs, [:id, :room_id, :name, :device_tokens, :partner_id])
     |> update_change(:name, &String.trim/1)
     |> validate_required([:room_id, :name])
     |> validate_length(:name, min: 1, max: @name_max)
     |> unique_constraint([:room_id, :name])
+  end
+
+  @doc "Updates a seat's partner."
+  def pair_changeset(seat, partner_id) do
+    change(seat, partner_id: partner_id)
   end
 
   @doc "Remembers one more browser this Seat is reachable from."
