@@ -406,7 +406,7 @@ defmodule MeaningGame.Game do
         last_gives = Map.put(state.last_gives, seat_id, trimmed)
         state = %{state | gives: gives, last_gives: last_gives}
 
-        if state.seat_limit && map_size(gives) >= state.seat_limit and
+        if (state.seat_limit && map_size(gives) >= state.seat_limit) and
              length(state.seats) >= state.seat_limit do
           participating_seat_ids = Enum.map(state.seats, & &1.id)
           state = %{state | page_seat_ids: participating_seat_ids}
@@ -884,7 +884,10 @@ defmodule MeaningGame.Game do
   def view(%__MODULE__{} = state, viewer) do
     phase = phase(state)
     fairness_taps = state.fairness_taps || %{}
-    viewer_late? = state.page_seat_ids != nil and viewer != nil and viewer not in state.page_seat_ids
+
+    viewer_late? =
+      state.page_seat_ids != nil and viewer != nil and viewer not in state.page_seat_ids
+
     sides_mode? = sides_mode?(state)
 
     %{
@@ -1219,7 +1222,8 @@ defmodule MeaningGame.Game do
         :writing
 
       state.page != nil and (state.page_seat_ids != nil or full?(state)) ->
-        seat_count = if state.page_seat_ids, do: length(state.page_seat_ids), else: length(state.seats)
+        seat_count =
+          if state.page_seat_ids, do: length(state.page_seat_ids), else: length(state.seats)
 
         cond do
           map_size(state.bridges) < seat_count -> :bridging

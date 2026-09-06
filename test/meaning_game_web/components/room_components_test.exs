@@ -419,6 +419,27 @@ defmodule MeaningGameWeb.RoomComponentsTest do
     end
   end
 
+  describe "foley components" do
+    test "foley_switches render only when holding the speaker" do
+      room_with_speaker = %{speaker?: true, voice: true, house_loop_only: false}
+      html = render_component(&foley_switches/1, room: room_with_speaker)
+      assert html =~ ~s(data-role="voice-switch")
+      assert html =~ ~s(data-role="house-loop-switch")
+      assert html =~ "Voice"
+      assert html =~ "House loop only"
+
+      room_without_speaker = %{speaker?: false, voice: true, house_loop_only: false}
+      assert render_component(&foley_switches/1, room: room_without_speaker) == ""
+    end
+
+    test "foley_hook renders hook container for colocated Foley hook" do
+      html = render_component(&foley_hook/1, speaker: true)
+      assert html =~ ~s(id="foley-container")
+      assert html =~ ~s(phx-hook="MeaningGameWeb.RoomComponents.Foley")
+      assert html =~ ~s(data-speaker="true")
+    end
+  end
+
   describe "Sides: couple versus couple components" do
     test "roster renders sides grouping when in Sides mode" do
       room = %{

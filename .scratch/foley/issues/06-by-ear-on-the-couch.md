@@ -12,3 +12,14 @@
 - [ ] Reduced-motion on a phone means no sound by default
 - [ ] Levels: the loop sits under talk; stings and voice are heard across a room from a laptop
 - [ ] What was heard is recorded here, with any level or fade changes made and the spend for the evening from `/spend`
+
+## Comments
+
+### Preparation & verification readiness (Agent check)
+- Prerequisites 01 through 05 are fully merged and automated tests are passing across the test suite (588 tests passing).
+- Resolved issue `04-the-bake-off.md` moved to `resolved/` per issue tracker conventions.
+- Bug fixed in `MeaningGameWeb.RoomComponents.Foley`: guarded `updated()` and `destroyed()` hook lifecycle methods when `prefers-reduced-motion` is active to prevent uncaught TypeError exceptions on re-render.
+- Added unit tests for `foley_switches` and `foley_hook` in `MeaningGameWeb.RoomComponentsTest`.
+- All code is formatted and compiles cleanly without warnings.
+- The ticket remains `Status: ready-for-human` for the physical listening session on the couch with laptop and phones on deployment.
+

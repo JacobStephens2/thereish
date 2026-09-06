@@ -42,7 +42,10 @@ defmodule MeaningGameWeb.RoomComponents do
                 <span class="font-medium">{seat.name}</span>
                 <span :if={seat.you?} class="text-xs opacity-60">(you)</span>
                 <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
-                <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-xs opacity-60">
+                <span
+                  :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
+                  class="text-xs opacity-60"
+                >
                   has written a bridge
                 </span>
               </li>
@@ -69,7 +72,10 @@ defmodule MeaningGameWeb.RoomComponents do
             </span>
             <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
             <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
-            <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
+            <span
+              :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
+              class="text-sm opacity-60"
+            >
               has written a bridge
             </span>
           </li>
@@ -714,7 +720,10 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
 
       <div
-        :if={@seat && !@room[:late?] && @room.overrule[:your_side?] != false && !@room.overrule.you_agreed?}
+        :if={
+          @seat && !@room[:late?] && @room.overrule[:your_side?] != false &&
+            !@room.overrule.you_agreed?
+        }
         data-role="overrule-vote"
         class="flex flex-col items-center gap-3"
       >
@@ -734,7 +743,8 @@ defmodule MeaningGameWeb.RoomComponents do
 
       <p
         :if={
-          @seat && !@room[:late?] && @room.overrule[:your_side?] != false && @room.overrule.you_agreed? &&
+          @seat && !@room[:late?] && @room.overrule[:your_side?] != false &&
+            @room.overrule.you_agreed? &&
             !@room.overrule.you_proposed?
         }
         data-role="overrule-pending"
@@ -1086,9 +1096,8 @@ defmodule MeaningGameWeb.RoomComponents do
       export default {
         mounted() {
           this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          if (this.reducedMotion) return
-
           this.speaker = this.el.dataset.speaker === "true"
+          this.canPlay = () => !this.reducedMotion && this.speaker
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -1132,6 +1141,7 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.resumeAudio = async () => {
+            this.reducedMotion = false
             this.initAudio()
             if (this.ctx && this.ctx.state !== "running") {
               await this.ctx.resume()
@@ -1191,7 +1201,7 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.playEffect = async (url, bus, duckDuration = 2.0) => {
-            if (this.reducedMotion) return
+            if (!this.canPlay()) return
             await this.resumeAudio()
             if (!this.ctx) return
             const buf = await this.fetchBuffer(url)
@@ -1217,7 +1227,7 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.handleEvent("foley:page", async ({path}) => {
-            if (this.reducedMotion) return
+            if (!this.canPlay()) return
             this.stopVoice()
             this.currentVoiceAttempt = null
             await this.resumeAudio()
@@ -1277,7 +1287,7 @@ defmodule MeaningGameWeb.RoomComponents do
           })
 
           this.handleEvent("foley:voice", async ({attempt, url}) => {
-            if (this.reducedMotion) return
+            if (!this.canPlay()) return
             await this.resumeAudio()
             if (!this.ctx) return
 
