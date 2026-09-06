@@ -20,6 +20,9 @@ defmodule MeaningGame.Rooms.Room do
   schema "rooms" do
     field :slug, :string
     field :seat_limit, :integer
+    field :speaker, :string
+    field :voice, :boolean, default: false
+    field :house_loop_only, :boolean, default: false
 
     has_many :seats, MeaningGame.Rooms.Seat
 
@@ -32,7 +35,7 @@ defmodule MeaningGame.Rooms.Room do
   @doc false
   def changeset(room, attrs) do
     room
-    |> cast(attrs, [:slug, :seat_limit])
+    |> cast(attrs, [:slug, :seat_limit, :speaker, :voice, :house_loop_only])
     |> validate_required([:slug, :seat_limit])
     |> validate_format(:slug, @slug_format)
     # Two is the smallest number of Seats that is still a Room. It is not the
@@ -48,5 +51,10 @@ defmodule MeaningGame.Rooms.Room do
       less_than_or_equal_to: MeaningGame.Steward.seat_cap()
     )
     |> unique_constraint(:slug)
+  end
+
+  @doc "Changeset for Room facts that can be changed during or across Pages."
+  def facts_changeset(room, attrs) do
+    cast(room, attrs, [:speaker, :voice, :house_loop_only])
   end
 end
