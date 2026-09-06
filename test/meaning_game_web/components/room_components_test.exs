@@ -281,4 +281,167 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ "nobody chose"
     end
   end
+
+  describe "Sides: couple versus couple components" do
+    test "roster renders sides grouping when in Sides mode" do
+      room = %{
+        seats: [
+          %{id: "s1", name: "Melissa", you?: true, committed?: false},
+          %{id: "s2", name: "Jacob", you?: false, committed?: false},
+          %{id: "s3", name: "Ada", you?: false, committed?: false},
+          %{id: "s4", name: "Sam", you?: false, committed?: false}
+        ],
+        seat_limit: 4,
+        open_seats: 0,
+        sides_mode?: true,
+        sides: [
+          %{
+            id: :side_a,
+            name: "Melissa & Jacob",
+            you?: true,
+            seat_ids: ["s1", "s2"],
+            seats: [
+              %{id: "s1", name: "Melissa", you?: true, committed?: false},
+              %{id: "s2", name: "Jacob", you?: false, committed?: false}
+            ]
+          },
+          %{
+            id: :side_b,
+            name: "Ada & Sam",
+            you?: false,
+            seat_ids: ["s3", "s4"],
+            seats: [
+              %{id: "s3", name: "Ada", you?: false, committed?: false},
+              %{id: "s4", name: "Sam", you?: false, committed?: false}
+            ]
+          }
+        ]
+      }
+
+      html = render_component(&roster/1, room: room)
+
+      assert html =~ ~s(data-role="sides-roster")
+      assert html =~ ~s(data-side="side_a")
+      assert html =~ ~s(data-side="side_b")
+      assert html =~ "Melissa &amp; Jacob"
+      assert html =~ "Ada &amp; Sam"
+      assert html =~ "(your side)"
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ ~s(data-seat="s3")
+    end
+
+    test "reveal renders two side cards side by side with Closeness, bands, and badges" do
+      room = %{
+        phase: :reveal,
+        reveal: %{
+          mode: :sides,
+          melded?: true,
+          sides: [
+            %{
+              id: :side_a,
+              name: "Melissa & Jacob",
+              seat_ids: ["s1", "s2"],
+              closer?: false,
+              melded?: false,
+              graded?: true,
+              closeness: 82,
+              band: :almost,
+              quip: "Almost touching.",
+              bridges: [
+                %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+                %{seat_id: "s2", name: "Jacob", bridge: "cairo"}
+              ]
+            },
+            %{
+              id: :side_b,
+              name: "Ada & Sam",
+              seat_ids: ["s3", "s4"],
+              closer?: true,
+              melded?: true,
+              graded?: true,
+              closeness: 91,
+              band: :meld,
+              quip: "One mind in two heads.",
+              bridges: [
+                %{seat_id: "s3", name: "Ada", bridge: "beacon"},
+                %{seat_id: "s4", name: "Sam", bridge: "lighthouse"}
+              ]
+            }
+          ],
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "cairo"},
+            %{seat_id: "s3", name: "Ada", bridge: "beacon"},
+            %{seat_id: "s4", name: "Sam", bridge: "lighthouse"}
+          ],
+          furthest: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s4", name: "Sam", bridge: "lighthouse"}
+          ]
+        }
+      }
+
+      seat = %{id: "s1", name: "Melissa"}
+      html = render_component(&reveal/1, room: room, seat: seat, mode: :phone)
+
+      assert html =~ ~s(data-role="sides-comparison")
+      assert html =~ ~s(data-side="side_a")
+      assert html =~ ~s(data-side="side_b")
+
+      # Both scores appear
+      assert html =~ "82"
+      assert html =~ "91"
+      assert html =~ "almost"
+      assert html =~ "meld"
+
+      # Badges
+      assert html =~ ~s(data-role="closer-badge")
+      assert html =~ ~s(data-role="melded-badge")
+
+      # Quips
+      assert html =~ "Almost touching."
+      assert html =~ "One mind in two heads."
+
+      # Fairness controls
+      assert html =~ ~s(data-role="fairness-controls")
+      assert html =~ "Was your Side's grade fair?"
+    end
+
+    test "overrule banner in Sides mode requires only partner agreement" do
+      room = %{
+        overrule: %{
+          pending?: true,
+          proposer_id: "s1",
+          proposer_name: "Melissa",
+          side_id: :side_a,
+          your_side?: true,
+          you_proposed?: false,
+          you_agreed?: false,
+          agreed_seat_ids: ["s1"]
+        },
+        reveal: %{mode: :sides, sides: []}
+      }
+
+      # Partner on the same side sees vote buttons
+      partner_seat = %{id: "s2", name: "Jacob"}
+      partner_html = render_component(&overrule_banner/1, room: room, seat: partner_seat)
+
+      assert partner_html =~ ~s(data-role="overrule-vote")
+      assert partner_html =~ "proposed overruling your Side&#39;s grade to a Meld"
+      assert partner_html =~ ~s(data-role="agree-overrule")
+      assert partner_html =~ ~s(data-role="decline-overrule")
+
+      # Opponent on the other side sees information notice without vote buttons
+      opposing_room = %{
+        room
+        | overrule: %{room.overrule | your_side?: false, you_proposed?: false, you_agreed?: false}
+      }
+
+      opponent_seat = %{id: "s3", name: "Ada"}
+      opponent_html = render_component(&overrule_banner/1, room: opposing_room, seat: opponent_seat)
+
+      refute opponent_html =~ ~s(data-role="overrule-vote")
+      assert opponent_html =~ "proposed an overrule for their Side. Waiting for their partner to agree."
+    end
+  end
 end

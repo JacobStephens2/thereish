@@ -248,6 +248,18 @@ defmodule MeaningGame.Rooms do
   def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
 
   @doc """
+  Pairs two seats together as a Side in the waiting lobby.
+  """
+  @spec pair_seats(String.t(), String.t(), String.t()) :: :ok | {:error, term()}
+  def pair_seats(slug, seat_id, partner_id), do: call(slug, {:pair_seats, seat_id, partner_id})
+
+  @doc """
+  Unpairs a seat in the waiting lobby.
+  """
+  @spec unpair_seat(String.t(), String.t()) :: :ok | {:error, term()}
+  def unpair_seat(slug, seat_id), do: call(slug, {:unpair_seat, seat_id})
+
+  @doc """
   Proposes an overrule of the current reveal from one Seat.
   """
   @spec propose_overrule(String.t(), String.t(), keyword()) ::
