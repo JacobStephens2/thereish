@@ -9,6 +9,7 @@ defmodule MeaningGame.RoomsTest do
 
   import MeaningGame.RoomFixtures
 
+  alias MeaningGame.Chronicle
   alias MeaningGame.Rooms
   alias MeaningGame.Rooms.Server
   alias MeaningGame.Rooms.Store
@@ -1267,6 +1268,47 @@ defmodule MeaningGame.RoomsTest do
       assert unblinding.seat_id == ctx.jacob.id
       assert unblinding.experiment_id == "bait_against_plain"
     end
+
+    test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      [asgn1] = MeaningGame.Chronicle.experiment_assignments(room.id, "author_model")
+      assert asgn1.arm == "flash"
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_phase(ctx.slug, :closed)
+
+      view1 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view1.phase == :closed
+      assert view1.your_bookends_tap == nil
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.melissa.id, "great")
+      view_m = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_m.your_bookends_tap == "great"
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.melissa.id, "fine")
+      assert Rooms.snapshot(ctx.slug, ctx.melissa.id).your_bookends_tap == "fine"
+
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.jacob.id, "flat")
+      assert Rooms.snapshot(ctx.slug, ctx.jacob.id).your_bookends_tap == "flat"
+
+      [outcome1] = MeaningGame.Chronicle.experiment_outcomes(room.id, "author_model")
+      assert outcome1.arm == "flash"
+      assert outcome1.taps[to_string(ctx.melissa.id)] == "fine"
+      assert outcome1.taps[to_string(ctx.jacob.id)] == "flat"
+      assert outcome1.closing_band == "deep_meld"
+
+      assert :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "harbour")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "lantern")
+      await_phase(ctx.slug, :bridging)
+
+      assignments = MeaningGame.Chronicle.experiment_assignments(room.id, "author_model")
+      assert length(assignments) == 2
+      assert Enum.map(assignments, & &1.arm) == ["flash", "astra"]
+    end
   end
 
   describe "speaker and switches" do
@@ -1397,7 +1439,6 @@ defmodule MeaningGame.RoomsTest do
       assert view_b.speaker_claimed? == true
       assert view_b.voice == true
       assert view_b.house_loop_only == true
-
       assert view_stage.speaker? == false
       assert view_stage.speaker_claimed? == true
 
@@ -1469,6 +1510,519 @@ defmodule MeaningGame.RoomsTest do
       assert new_ada_view.late? == false
 
       assert :ok = Rooms.give(slug, ada.id, "starlight")
+    end
+  end
+
+  describe "Sides: couple versus couple through the Room" do
+    test "pairing seats forms Sides, broadcasts, and unpairing clears them" do
+      {:ok, slug} = Rooms.create(4, device_token())
+      Rooms.open!(slug)
+      Rooms.subscribe(slug)
+
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      {:ok, _ada} = Rooms.join(slug, "Ada", device_token())
+      {:ok, _ida} = Rooms.join(slug, "Ida", device_token())
+
+      assert :ok = Rooms.pair_seats(slug, melissa.id, jacob.id)
+      assert_receive :room_changed
+
+      view = Rooms.snapshot(slug, melissa.id)
+      assert view.sides_mode? == true
+      assert length(view.sides) == 2
+      [side_a, side_b] = view.sides
+      assert side_a.name == "Melissa & Jacob"
+      assert side_a.you? == true
+      assert side_b.name == "Ada & Ida"
+      assert side_b.you? == false
+
+      # Unpairing clears sides
+      assert :ok = Rooms.unpair_seat(slug, melissa.id)
+      assert_receive :room_changed
+      view_unpaired = Rooms.snapshot(slug, melissa.id)
+      assert view_unpaired.sides_mode? == false
+      assert view_unpaired.sides == nil
+
+      stop_room(slug)
+    end
+
+    test "playing an attempt in Sides mode reveals side-by-side verdicts" do
+      {:ok, slug} = Rooms.create(4, device_token())
+      Rooms.open!(slug)
+
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      {:ok, ada} = Rooms.join(slug, "Ada", device_token())
+      {:ok, ida} = Rooms.join(slug, "Ida", device_token())
+
+      :ok = Rooms.pair_seats(slug, melissa.id, jacob.id)
+
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      :ok = Rooms.give(slug, ada.id, "setting three")
+      :ok = Rooms.give(slug, ida.id, "setting four")
+      await_phase(slug, :bridging)
+
+      # In Fake Assayer: "cairn" and "cairns" share prefix -> closeness 91 (melded!)
+      # "wharf" and "signal" share no prefix -> closeness 0
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      :ok = Rooms.commit_bridge(slug, ada.id, "wharf")
+      :ok = Rooms.commit_bridge(slug, ida.id, "signal")
+
+      view = await_reveal(slug)
+      assert view.phase == :closed
+      assert view.reveal.mode == :sides
+      assert length(view.reveal.sides) == 2
+
+      [side_a, side_b] = view.reveal.sides
+      assert side_a.name == "Melissa & Jacob"
+      assert side_a.closeness >= 90
+      assert side_a.melded? == true
+      assert side_a.closer? == true
+
+      assert side_b.name == "Ada & Ida"
+      assert side_b.closeness == 0
+      assert side_b.melded? == false
+      assert side_b.closer? == false
+
+      stop_room(slug)
+    end
+  end
+
+  describe "foley voice (the Assayer speaks)" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "when voice is on and a speaker exists, broadcasts voice_ready and holds audio for attempt",
+         ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+      assert {:ok, audio, :mp3} = Rooms.voice_audio(ctx.slug, 1)
+      assert is_binary(audio) and byte_size(audio) > 0
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 2)
+    end
+
+    test "voice is not spoken when voice switch is off or no speaker exists", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      # Voice switch off, speaker exists
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      assert Rooms.snapshot(ctx.slug, nil).voice == false
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      refute_receive {:voice_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "advancing to next attempt clears past attempt's audio and serves only new attempt's audio",
+         ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      # Attempt 1: miss
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 1)
+
+      # Advance to attempt 2
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :bridging)
+
+      # Past attempt's audio is no longer served
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 2)
+
+      # Attempt 2: meld
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "valley")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "valley")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 2}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 2)
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "failing voice synthesis is dropped and logged; reveal and rules untouched", ctx do
+      steward_env = Application.get_env(:meaning_game, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_mode, :unavailable))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      view = await_reveal(ctx.slug)
+
+      assert view.phase in [:reveal, :closed]
+      assert view.reveal.quip != nil
+
+      refute_receive {:voice_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "late voice arriving after next attempt started is dropped and logged", ctx do
+      steward_env = Application.get_env(:meaning_game, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_delay_ms, 200))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      # Attempt 1: miss
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      # Quickly advance before voice delay finishes
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :bridging)
+
+      # Wait out the delay
+      Process.sleep(250)
+
+      refute_receive {:voice_ready, 1}
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "voice_meta is recorded on the Verdict in Chronicle when Page closes", ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+
+      room = Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      pages = Chronicle.pages(room.id)
+      assert length(pages) == 1
+      page = hd(pages)
+      assert length(page.attempts) == 1
+      attempt = hd(page.attempts)
+      assert length(attempt.verdicts) == 1
+      verdict = hd(attempt.verdicts)
+
+      assert is_map(verdict.voice_meta)
+      assert verdict.voice_meta["provider"] != nil
+      assert verdict.voice_meta["voice"] != nil
+      assert verdict.voice_meta["cost"] != nil or verdict.voice_meta["cost_usd"] != nil
+      assert verdict.voice_meta["latency"] != nil or verdict.voice_meta["latency_ms"] != nil
+    end
+
+    test "voice_audio and voice_meta do not leak across next_page", ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      # Attempt 1: meld closes the page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 1)
+
+      # Next page starts; attempt resets to 1 but prior audio must be gone
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+  end
+
+  describe "couples and the meld map (ticket 07)" do
+    test "joining with a partner marks both seats as a couple and survives room restart" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), melissa.id)
+
+      view = Rooms.snapshot(slug, melissa.id)
+      melissa_seat = Enum.find(view.seats, &(&1.id == melissa.id))
+      jacob_seat = Enum.find(view.seats, &(&1.id == jacob.id))
+
+      assert melissa_seat.partner_id == jacob.id
+      assert melissa_seat.partner_name == "Jacob"
+      assert melissa_seat.couple? == true
+
+      assert jacob_seat.partner_id == melissa.id
+      assert jacob_seat.partner_name == "Melissa"
+      assert jacob_seat.couple? == true
+
+      # Survives process crash and restart
+      stop_room(slug)
+
+      once_restarted(fn ->
+        view_after = Rooms.snapshot(slug, melissa.id)
+        m = Enum.find(view_after.seats, &(&1.id == melissa.id))
+        j = Enum.find(view_after.seats, &(&1.id == jacob.id))
+
+        assert m.partner_id == jacob.id
+        assert j.partner_id == melissa.id
+      end)
+    end
+
+    test "two seats can be paired after joining via Rooms.pair_seats/3" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      assert :ok = Rooms.pair_seats(slug, melissa.id, jacob.id)
+
+      view = Rooms.snapshot(slug, melissa.id)
+      m = Enum.find(view.seats, &(&1.id == melissa.id))
+      j = Enum.find(view.seats, &(&1.id == jacob.id))
+
+      assert m.partner_id == jacob.id
+      assert j.partner_id == melissa.id
+    end
+
+    test "an Attempt commit grades all pairs alongside the one Verdict" do
+      slug = open_room(seat_limit: 4)
+
+      assert {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), melissa.id)
+      assert {:ok, bryan} = Rooms.join(slug, "Bryan", device_token())
+      assert {:ok, evelyn} = Rooms.join(slug, "Evelyn", device_token(), bryan.id)
+
+      Enum.each([melissa, jacob, bryan, evelyn], fn s ->
+        :ok = Rooms.give(slug, s.id, "setting #{s.name}")
+      end)
+
+      await_phase(slug, :bridging)
+
+      :ok = Rooms.commit_bridge(slug, melissa.id, "dock")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, bryan.id, "cairo")
+      :ok = Rooms.commit_bridge(slug, evelyn.id, "beacon")
+
+      view = await_reveal(slug)
+
+      # The one Verdict is preserved (ADR-0010)
+      assert view.reveal.closeness != nil
+      assert view.reveal.furthest != nil
+
+      # Pairs are present: 4 choose 2 = 6 pairs
+      assert is_list(view.reveal.pairs)
+      assert length(view.reveal.pairs) == 6
+
+      # Melissa's view puts Melissa & Jacob couple first
+      melissa_view = Rooms.snapshot(slug, melissa.id)
+      [first_pair | _] = melissa_view.reveal.pairs
+      assert first_pair.names == ["Melissa", "Jacob"]
+      assert first_pair.couple? == true
+
+      # Bryan's view puts Bryan & Evelyn couple first
+      bryan_view = Rooms.snapshot(slug, bryan.id)
+      [first_pair_bryan | _] = bryan_view.reveal.pairs
+      assert first_pair_bryan.names == ["Bryan", "Evelyn"]
+      assert first_pair_bryan.couple? == true
+
+      assert Enum.count(view.reveal.pairs, & &1.couple?) == 2
+      assert Enum.count(view.reveal.pairs, & &1.cross_couple?) == 4
+    end
+  end
+
+  describe "Foley scoring and track management" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "when Author writes the Page, a score task runs and the track lands on the snapshot",
+         ctx do
+      Rooms.subscribe(ctx.slug)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "summer camp")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "viking beaches")
+
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_binary(view.track.path)
+      assert view.track.format == :mp3
+      assert view.track.meta.provider == "fake"
+    end
+
+    test "a scored track arriving for a Page that has moved on is dropped", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      # Play through to closed
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      stale_ref = make_ref()
+
+      stale_track = %{
+        path: "/media/tracks/stale.mp3",
+        duration: 100,
+        format: :mp3,
+        meta: %{provider: "fake"}
+      }
+
+      # While closed (before next_page), a late scored message is dropped and does not overwrite track
+      send(pid, {:scored, stale_ref, {:ok, stale_track}})
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track]) or view.track.path != stale_track.path
+
+      # Move to next page
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      # Send a late scored message with an old page ref directly to the Room Server
+      send(pid, {:scored, stale_ref, {:ok, stale_track}})
+
+      # The current snapshot should have no track
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+    end
+
+    test "when house_loop_only is enabled, Author does not start a score task", ctx do
+      :ok = Rooms.set_house_loop_only(ctx.slug, true)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "cabin in woods")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "desert night")
+
+      await_phase(ctx.slug, :bridging)
+
+      # Wait a bit and verify no track arrived
+      Process.sleep(50)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+    end
+
+    test "a failing score task leaves track nil and records failure in music_meta on the Chronicle page",
+         ctx do
+      fake_config = Application.get_env(:meaning_game, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          Application.get_env(:meaning_game, :steward, []),
+          :fake,
+          Keyword.put(fake_config, :music_mode, :unavailable)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :meaning_game,
+          :steward,
+          Keyword.put(Application.get_env(:meaning_game, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      # Track remains nil (leaving loop playing)
+      Process.sleep(50)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+
+      # Solve the page with a meld
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(fn ->
+        pages = MeaningGame.Chronicle.page_views(ctx.slug)
+        pages != [] and hd(pages).music_meta != nil
+      end)
+
+      [page | _] = MeaningGame.Chronicle.page_views(ctx.slug)
+      assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
+    end
+
+    test "successful score records music_meta on the closed Chronicle page", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "ancient ruins")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "starry night")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track])
+      end)
+
+      # Meld to close page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(fn ->
+        pages = MeaningGame.Chronicle.page_views(ctx.slug)
+        pages != [] and hd(pages).music_meta != nil
+      end)
+
+      [page | _] = MeaningGame.Chronicle.page_views(ctx.slug)
+      assert page.music_meta[:provider] == "fake" or page.music_meta["provider"] == "fake"
+      assert page.music_meta[:cost_usd] != nil or page.music_meta["cost_usd"] != nil
     end
   end
 

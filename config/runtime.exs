@@ -42,6 +42,13 @@ if key = System.get_env("GEMINI_API_KEY") do
     ]
 end
 
+if key = System.get_env("OPENAI_API_KEY") do
+  config :meaning_game, :steward,
+    roles: [
+      author: [jobs: [astra: [api_key: key]]]
+    ]
+end
+
 if key = System.get_env("ANTHROPIC_API_KEY") do
   config :meaning_game, :steward,
     roles: [

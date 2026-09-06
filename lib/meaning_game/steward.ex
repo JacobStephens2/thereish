@@ -87,6 +87,42 @@ defmodule MeaningGame.Steward do
   @callback rank([binary() | map()], map() | String.t()) :: {:ok, [map()]} | {:error, term()}
   @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @callback score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
+  Scores one Page from its Gives, answering a local file and meta.
+
+  Measured here so latency provenance is kept by the seam.
+  """
+  @spec score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
+  def score(gives, opts \\ []) do
+    gives = Enum.map(gives, &MeaningGame.Steward.Author.give_text/1)
+    started = System.monotonic_time(:millisecond)
+
+    case adapter().score(gives, opts) do
+      {:ok, %{meta: meta} = answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, %{answer | meta: Map.put_new(meta, :latency_ms, latency)}}
+
+      {:ok, answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, Map.put(answer, :meta, %{latency_ms: latency})}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Builds failure provenance for a Foley score failure.
+  """
+  @spec score_failure(term()) :: map()
+  def score_failure(reason) do
+    %{
+      cost_usd: 0.0,
+      failure: to_string(reason)
+    }
+  end
 
   @doc """
   Generates N candidate sound effects or music tracks for a brief.
@@ -216,10 +252,41 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Assigns experiment arm for a Page. Fixed to :flash until issue 08.
+  Assigns experiment arm for a Page, strictly alternating arms within the room (:flash then :astra).
+  Records the assignment blind in the experiment tables.
   """
-  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | nil) :: :flash
-  def assign_arm(_room_id, _page), do: :flash
+  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | String.t() | integer() | nil) ::
+          :flash | :astra
+  def assign_arm(room_id, page) do
+    past_assignments = MeaningGame.Chronicle.experiment_assignments(room_id, "author_model")
+    past_arms = Enum.map(past_assignments, & &1.arm)
+    arm = MeaningGame.Experiments.assign_arm(past_arms)
+
+    page_identifier =
+      cond do
+        is_map(page) ->
+          page[:id] || page["id"] || page[:number] || "page-#{length(past_arms) + 1}"
+
+        is_binary(page) or is_integer(page) ->
+          to_string(page)
+
+        true ->
+          "page-#{length(past_arms) + 1}"
+      end
+
+    _ =
+      MeaningGame.Chronicle.record_experiment_assignment(room_id, %{
+        page_identifier: to_string(page_identifier),
+        experiment_id: "author_model",
+        arm: to_string(arm),
+        chapter: "table",
+        assigned_at: DateTime.utc_now()
+      })
+
+    arm
+  rescue
+    _ -> :flash
+  end
 
   @doc """
   Rewrites the precedent for these Bridges with the players' ruling.

@@ -819,6 +819,75 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "tapping bookends at closed (ticket 08)" do
+    setup do
+      slug = open_room()
+
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      play_to_bridging(melissa, jacob, slug)
+
+      commit(melissa, "cairn")
+      commit(jacob, "cairn")
+      await_reveal_on(melissa)
+      await_reveal_on(jacob)
+      await_phase(slug, :closed)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage}
+    end
+
+    test "each seat can tap flat, fine, or great on phone at closed, and it is replaceable",
+         ctx do
+      # Stage does NOT show bookends tap controls
+      refute has_element?(ctx.stage, "[data-role=bookends-controls]")
+
+      # Phones show bookends tap controls at closed
+      assert has_element?(ctx.melissa, "[data-role=bookends-controls]")
+      assert has_element?(ctx.melissa, "[data-role=tap-flat]")
+      assert has_element?(ctx.melissa, "[data-role=tap-fine]")
+      assert has_element?(ctx.melissa, "[data-role=tap-great]")
+
+      # Melissa taps great
+      ctx.melissa |> element("[data-role=tap-great]") |> render_click()
+
+      assert has_element?(ctx.melissa, "[data-role=tap-great].btn-success")
+      assert has_element?(ctx.melissa, "[data-role=your-bookends-tap]")
+      assert has_element?(ctx.melissa, "[data-role=seat-bookends-tap]", "great")
+      refute has_element?(ctx.jacob, "[data-role=your-bookends-tap]")
+
+      # Melissa replaces tap with fine
+      ctx.melissa |> element("[data-role=tap-fine]") |> render_click()
+
+      assert has_element?(ctx.melissa, "[data-role=tap-fine].btn-primary")
+      assert has_element?(ctx.melissa, "[data-role=seat-bookends-tap]", "fine")
+
+      # Jacob taps flat
+      ctx.jacob |> element("[data-role=tap-flat]") |> render_click()
+
+      assert has_element?(ctx.jacob, "[data-role=tap-flat].btn-warning")
+      assert has_element?(ctx.jacob, "[data-role=seat-bookends-tap]", "flat")
+
+      # Both taps recorded in Chronicle
+      room = MeaningGame.Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      taps = MeaningGame.Chronicle.bookends_taps(room.id)
+      assert length(taps) == 3
+
+      [outcome] = MeaningGame.Chronicle.experiment_outcomes(room.id, "author_model")
+      assert Map.values(outcome.taps) |> Enum.sort() == ["fine", "flat"]
+
+      seats = MeaningGame.Repo.preload(room, :seats).seats
+      melissa_seat = Enum.find(seats, &(&1.name == "Melissa"))
+      jacob_seat = Enum.find(seats, &(&1.name == "Jacob"))
+      assert outcome.taps[melissa_seat.id] == "fine"
+      assert outcome.taps[jacob_seat.id] == "flat"
+    end
+  end
+
   describe "giving settings and writing the page (ticket 02)" do
     setup do
       slug = open_room()
@@ -1548,7 +1617,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert String.starts_with?(track_path, "/media/tracks/fake-")
       refute_push_event(ctx.melissa, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
@@ -1566,7 +1636,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
       assert_push_event(ctx.stage, "foley:stop", %{})
-      assert_push_event(ctx.melissa, "foley:page", %{path: "/audio/house-loop.mp3"})
+      assert_push_event(ctx.melissa, "foley:page", %{path: melissa_track_path})
+      assert melissa_track_path == track_path
 
       ctx.melissa |> element("[data-role=again]") |> render_click()
       await_phase(ctx.slug, :bridging)
@@ -1586,6 +1657,21 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute_push_event(ctx.stage, "foley:ending", %{})
     end
 
+    test "toggling house-loop-only pushes house loop to speaker", ctx do
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert String.starts_with?(track_path, "/media/tracks/fake-")
+
+      # Toggle house-loop-only on
+      ctx.stage |> element("[data-role=house-loop-switch]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+    end
+
     test "leaving stage releases speaker", ctx do
       assert Rooms.get_room(ctx.slug).speaker != nil
 
@@ -1594,6 +1680,315 @@ defmodule MeaningGameWeb.RoomLiveTest do
       eventually(fn ->
         is_nil(Rooms.get_room(ctx.slug).speaker)
       end)
+    end
+
+    test "foley:beat, foley:sting, and foley:voice push in order to speaking view alone", ctx do
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: _})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      # Stage is speaker; enable voice switch
+      ctx.stage |> element("[data-role=voice-switch]") |> render_click()
+      assert Rooms.get_room(ctx.slug).voice == true
+
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairo")
+
+      # Ordered push sequence: beat -> sting -> voice
+      assert_push_event(ctx.stage, "foley:beat", %{})
+      refute_push_event(ctx.melissa, "foley:beat", %{})
+      refute_push_event(ctx.jacob, "foley:beat", %{})
+
+      await_reveal_on(ctx.stage)
+
+      assert_push_event(ctx.stage, "foley:sting", %{band: _})
+      refute_push_event(ctx.melissa, "foley:sting", %{})
+      refute_push_event(ctx.jacob, "foley:sting", %{})
+
+      expected_stage_url = "/r/#{ctx.slug}/voice/1"
+      assert_push_event(ctx.stage, "foley:voice", %{attempt: 1, url: ^expected_stage_url})
+      refute_push_event(ctx.melissa, "foley:voice", %{})
+      refute_push_event(ctx.jacob, "foley:voice", %{})
+
+      # Phone claims speaker; voice switch persists
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+      assert Rooms.get_room(ctx.slug).voice == true
+
+      ctx.melissa |> element("[data-role=again]") |> render_click()
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.melissa, "stone")
+      commit(ctx.jacob, "stone")
+
+      assert_push_event(ctx.melissa, "foley:beat", %{})
+      refute_push_event(ctx.stage, "foley:beat", %{})
+
+      await_reveal_on(ctx.melissa)
+
+      assert_push_event(ctx.melissa, "foley:sting", %{band: _})
+      expected_melissa_url = "/r/#{ctx.slug}/voice/2"
+      assert_push_event(ctx.melissa, "foley:voice", %{attempt: 2, url: ^expected_melissa_url})
+      refute_push_event(ctx.stage, "foley:sting", %{})
+      refute_push_event(ctx.stage, "foley:voice", %{})
+      refute_push_event(ctx.jacob, "foley:voice", %{})
+    end
+  end
+
+  describe "Sides: couple versus couple on phone and stage" do
+    setup do
+      beat(0)
+      steward(delay_ms: 0)
+      :ok
+    end
+
+    test "four players pair into Sides, see side-by-side reveal cards, and meld together" do
+      code = open_room(seat_limit: 4)
+
+      conn1 = build_conn()
+      {:ok, phone1, _} = live(conn1, ~p"/r/#{code}")
+      join(phone1, "Melissa")
+
+      conn2 = build_conn()
+      {:ok, phone2, _} = live(conn2, ~p"/r/#{code}")
+      join(phone2, "Jacob")
+
+      conn3 = build_conn()
+      {:ok, phone3, _} = live(conn3, ~p"/r/#{code}")
+      join(phone3, "Ada")
+
+      conn4 = build_conn()
+      {:ok, phone4, _} = live(conn4, ~p"/r/#{code}")
+      join(phone4, "Sam")
+
+      # Partner picker appears on all phones
+      for phone <- [phone1, phone2, phone3, phone4] do
+        assert has_element?(phone, "[data-role=partner-picker]")
+      end
+
+      # Melissa picks Jacob -> 4-seat room automatically completes both Sides
+      phone1 |> element("button", "I'm with Jacob") |> render_click()
+
+      eventually(fn ->
+        Rooms.snapshot(code, nil).sides_mode?
+      end)
+
+      # All phones see paired notice and Sides roster
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=sides-roster]") end)
+        assert has_element?(phone, "[data-role=paired-notice]")
+        assert has_element?(phone, "[data-side=a]")
+        assert has_element?(phone, "[data-side=b]")
+      end
+
+      # Test unpairing: Ada clicks Change pairs
+      phone3 |> element("[data-role=unpair-partner]") |> render_click()
+      eventually(fn -> not Rooms.snapshot(code, nil).sides_mode? end)
+
+      # Now Ada picks Sam -> both Sides active again
+      phone3 |> element("button", "I'm with Sam") |> render_click()
+      eventually(fn -> Rooms.snapshot(code, nil).sides_mode? end)
+
+      # Submit 4 settings
+      give_setting(phone1, "coastal lighthouse in storm")
+      give_setting(phone2, "old library with rolling ladders")
+      give_setting(phone3, "artisan glassblowing workshop")
+      give_setting(phone4, "mountain observatory at dusk")
+
+      await_phase(code, :bridging)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=bridge-form]") end)
+      end
+
+      # Melissa and Jacob write matching prefixes ("cairn" and "cairns" -> score 91, meld)
+      commit(phone1, "cairn")
+      commit(phone2, "cairns")
+      commit(phone3, "beacon")
+      commit(phone4, "seagull")
+
+      # Reveal lands and Page melds
+      await_phase(code, :closed)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=sides-comparison]") end)
+        assert has_element?(phone, "[data-role=side-card][data-side=a]")
+        assert has_element?(phone, "[data-role=side-card][data-side=b]")
+        assert has_element?(phone, "[data-role=closeness]", "91")
+        assert has_element?(phone, "[data-role=melded-badge]")
+        assert has_element?(phone, "[data-role=one-more]")
+      end
+
+      # Melissa taps fairness
+      phone1 |> element("[data-role=tap-fair]") |> render_click()
+      eventually(fn -> has_element?(phone1, "[data-role=seat-tap]", "fair") end)
+    end
+
+    test "an overrule in Sides mode requires only the proposing Side's partner to agree" do
+      code = open_room(seat_limit: 4)
+
+      conn1 = build_conn()
+      {:ok, phone1, _} = live(conn1, ~p"/r/#{code}")
+      join(phone1, "Melissa")
+
+      conn2 = build_conn()
+      {:ok, phone2, _} = live(conn2, ~p"/r/#{code}")
+      join(phone2, "Jacob")
+
+      conn3 = build_conn()
+      {:ok, phone3, _} = live(conn3, ~p"/r/#{code}")
+      join(phone3, "Ada")
+
+      conn4 = build_conn()
+      {:ok, phone4, _} = live(conn4, ~p"/r/#{code}")
+      join(phone4, "Sam")
+
+      # Pair into Sides: Melissa picks Jacob
+      phone1 |> element("button", "I'm with Jacob") |> render_click()
+      eventually(fn -> Rooms.snapshot(code, nil).sides_mode? end)
+
+      give_setting(phone1, "setting one")
+      give_setting(phone2, "setting two")
+      give_setting(phone3, "setting three")
+      give_setting(phone4, "setting four")
+
+      await_phase(code, :bridging)
+
+      # Bridges that do NOT meld
+      commit(phone1, "beacon")
+      commit(phone2, "pier")
+      commit(phone3, "beacon")
+      commit(phone4, "seagull")
+
+      await_reveal(code)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=propose-overrule]") end)
+      end
+
+      # Melissa proposes overrule
+      phone1 |> element("[data-role=propose-overrule]") |> render_click()
+
+      # Melissa sees waiting for partner
+      assert render(phone1) =~ "Waiting for your partner to agree"
+
+      # Jacob (partner) sees Agree / Decline buttons
+      eventually(fn -> has_element?(phone2, "[data-role=agree-overrule]") end)
+
+      # Ada and Sam (other side) do NOT see Agree / Decline buttons
+      refute has_element?(phone3, "[data-role=agree-overrule]")
+      refute has_element?(phone4, "[data-role=agree-overrule]")
+      assert render(phone3) =~ "Waiting for their partner to agree"
+      assert render(phone4) =~ "Waiting for their partner to agree"
+
+      # Jacob agrees
+      phone2 |> element("[data-role=agree-overrule]") |> render_click()
+
+      # Overrule succeeds: page closes as Meld
+      await_phase(code, :closed)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=overruled-notice]") end)
+        assert has_element?(phone, "[data-role=one-more]")
+      end
+    end
+  end
+
+  describe "couples on the meld map (ticket 07)" do
+    test "joining with a partner marks couple in roster and offers partner dropdown in join form" do
+      slug = open_room(seat_limit: 4)
+
+      {:ok, melissa, _} = live(phone(slug))
+      join(melissa, "Melissa")
+
+      # Jacob arrives and sees partner dropdown listing Melissa
+      {:ok, jacob, html} = live(phone(slug))
+      assert html =~ ~s(data-role="partner-select")
+      assert html =~ "With Melissa"
+
+      # Melissa's seat ID
+      [melissa_seat] = Rooms.snapshot(slug, nil).seats
+
+      # Jacob joins with Melissa as partner
+      jacob
+      |> form("form", %{"name" => "Jacob", "partner_id" => melissa_seat.id})
+      |> render_submit()
+
+      # Both phones and stage show the couple in the roster
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      for view <- [melissa, jacob, stage] do
+        assert has_element?(view, "[data-role=partner]", "(with Melissa)") or
+                 has_element?(view, "[data-role=partner]", "(with Jacob)")
+      end
+    end
+
+    test "reveal on phone highlights own couple score and marks cross-couple melds; stage draws meld map" do
+      slug = open_room(seat_limit: 4)
+
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, bryan, _} = live(phone(slug))
+      {:ok, evelyn, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      [melissa_seat] = Rooms.snapshot(slug, nil).seats
+
+      jacob
+      |> form("form", %{"name" => "Jacob", "partner_id" => melissa_seat.id})
+      |> render_submit()
+
+      join(bryan, "Bryan")
+      [_, _, bryan_seat] = Rooms.snapshot(slug, nil).seats
+
+      evelyn
+      |> form("form", %{"name" => "Evelyn", "partner_id" => bryan_seat.id})
+      |> render_submit()
+
+      # Submit settings for all 4 seats
+      for {v, name} <- [
+            {melissa, "setting 1"},
+            {jacob, "setting 2"},
+            {bryan, "setting 3"},
+            {evelyn, "setting 4"}
+          ] do
+        give_setting(v, name)
+      end
+
+      await_phase(slug, :bridging)
+
+      for v <- [melissa, jacob, bryan, evelyn] do
+        eventually(fn -> has_element?(v, "[data-role=bridge-form]") end)
+      end
+
+      # Melissa and Jacob meld ("cairn" and "cairn" -> 100)
+      # Bryan commits "dock"
+      # Evelyn commits "cairn" (Evelyn melds with Melissa & Jacob -> cross-couple meld!)
+      commit(melissa, "cairn")
+      commit(jacob, "cairn")
+      commit(bryan, "dock")
+      commit(evelyn, "cairn")
+
+      await_reveal_on(melissa)
+      await_reveal_on(stage)
+
+      # Melissa's phone shows her couple closeness
+      assert has_element?(melissa, "[data-role=own-couple-pair]")
+      assert has_element?(melissa, "[data-role=couple-closeness]", "100")
+
+      # Melissa's phone shows surprise cross-couple meld alert
+      assert has_element?(melissa, "[data-role=cross-couple-meld]")
+
+      # Stage draws meld map with couple badges and cross-couple meld
+      assert has_element?(stage, "[data-role=meld-map]")
+      assert has_element?(stage, "[data-role=couple-badge]")
+      assert has_element?(stage, "[data-role=cross-couple-meld]")
     end
   end
 
