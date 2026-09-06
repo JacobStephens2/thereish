@@ -108,7 +108,7 @@ defmodule MeaningGame.Steward.Live do
            why: why,
            meta: %{
              model: answer.model,
-             arm: :flash,
+             arm: job,
              prompt_version: Map.get(role, :prompt_version, MeaningGame.Steward.Author.version()),
              cost_usd: answer.cost_usd,
              latency_ms: answer.latency_ms,
