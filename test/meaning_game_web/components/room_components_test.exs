@@ -418,4 +418,25 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ "nobody chose"
     end
   end
+
+  describe "foley components" do
+    test "foley_switches render only when viewer has the speaker" do
+      speaking_room = %{speaker?: true, voice: true, house_loop_only: false}
+      html = render_component(&foley_switches/1, room: speaking_room)
+      assert html =~ ~s(data-role="voice-switch")
+      assert html =~ ~s(data-role="house-loop-switch")
+      assert html =~ "Voice"
+      assert html =~ "House loop only"
+
+      non_speaking_room = %{speaker?: false, voice: true, house_loop_only: false}
+      assert render_component(&foley_switches/1, room: non_speaking_room) == ""
+    end
+
+    test "foley_hook renders hook container for colocated Foley hook" do
+      html = render_component(&foley_hook/1, speaker: true)
+      assert html =~ ~s(id="foley-container")
+      assert html =~ ~s(phx-hook="MeaningGameWeb.RoomComponents.Foley")
+      assert html =~ ~s(data-speaker="true")
+    end
+  end
 end
