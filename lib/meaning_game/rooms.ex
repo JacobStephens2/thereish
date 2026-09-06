@@ -74,7 +74,12 @@ defmodule MeaningGame.Rooms do
   `device_token` is the creating phone's, which is what the Scribe will read to
   name the Room after the Rooms that phone has played in. A phone with no
   history draws a random word.
+  @doc """
+  Opens a new count-free Room at the seat cap and returns its Code.
   """
+  @spec create(String.t() | nil) :: {:ok, String.t()} | {:error, term()}
+  def create(device_token), do: create(MeaningGame.Steward.seat_cap(), device_token)
+
   @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
   def create(player_count, device_token)
 
@@ -292,6 +297,12 @@ defmodule MeaningGame.Rooms do
   @spec give(String.t(), String.t(), String.t()) ::
           :ok | {:error, :give_required | :no_such_seat | term()}
   def give(slug, seat_id, give), do: call(slug, {:give, seat_id, give})
+
+  @doc """
+  Starts the Page with the Gives committed so far.
+  """
+  @spec start_page(String.t(), String.t()) :: :ok | {:error, term()}
+  def start_page(code, seat_id), do: call(code, {:start_page, seat_id})
 
   @doc """
   Retries writing the Page through the Author after a failure.
