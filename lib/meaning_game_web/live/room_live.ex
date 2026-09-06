@@ -457,7 +457,10 @@ defmodule MeaningGameWeb.RoomLive do
       </div>
 
       <div
-        :if={@seat && !@room[:late?] && @room.phase == :giving && @room.your_give != nil && @room.gives_in >= 2}
+        :if={
+          @seat && !@room[:late?] && @room.phase == :giving && @room.your_give != nil &&
+            @room.gives_in >= 2
+        }
         class="flex justify-center"
       >
         <.button phx-click="start_page" data-role="start-page" variant="primary">

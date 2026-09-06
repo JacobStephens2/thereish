@@ -74,7 +74,7 @@ defmodule MeaningGame.Rooms do
   `device_token` is the creating phone's, which is what the Scribe will read to
   name the Room after the Rooms that phone has played in. A phone with no
   history draws a random word.
-  @doc """
+  @doc \"""
   Opens a new count-free Room at the seat cap and returns its Code.
   """
   @spec create(String.t() | nil) :: {:ok, String.t()} | {:error, term()}
