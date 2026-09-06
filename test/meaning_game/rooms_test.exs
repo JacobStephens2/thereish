@@ -1407,6 +1407,83 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "Sides: couple versus couple through the Room" do
+    test "pairing seats forms Sides, broadcasts, and unpairing clears them" do
+      {:ok, slug} = Rooms.create(4, device_token())
+      Rooms.open!(slug)
+      Rooms.subscribe(slug)
+
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      {:ok, _ada} = Rooms.join(slug, "Ada", device_token())
+      {:ok, _ida} = Rooms.join(slug, "Ida", device_token())
+
+      assert :ok = Rooms.pair_seats(slug, mara.id, jacob.id)
+      assert_receive :room_changed
+
+      view = Rooms.snapshot(slug, mara.id)
+      assert view.sides_mode? == true
+      assert length(view.sides) == 2
+      [side_a, side_b] = view.sides
+      assert side_a.name == "Mara & Jacob"
+      assert side_a.you? == true
+      assert side_b.name == "Ada & Ida"
+      assert side_b.you? == false
+
+      # Unpairing clears sides
+      assert :ok = Rooms.unpair_seat(slug, mara.id)
+      assert_receive :room_changed
+      view_unpaired = Rooms.snapshot(slug, mara.id)
+      assert view_unpaired.sides_mode? == false
+      assert view_unpaired.sides == nil
+
+      stop_room(slug)
+    end
+
+    test "playing an attempt in Sides mode reveals side-by-side verdicts" do
+      {:ok, slug} = Rooms.create(4, device_token())
+      Rooms.open!(slug)
+
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      {:ok, ada} = Rooms.join(slug, "Ada", device_token())
+      {:ok, ida} = Rooms.join(slug, "Ida", device_token())
+
+      :ok = Rooms.pair_seats(slug, mara.id, jacob.id)
+
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      :ok = Rooms.give(slug, ada.id, "setting three")
+      :ok = Rooms.give(slug, ida.id, "setting four")
+      await_phase(slug, :bridging)
+
+      # In Fake Assayer: "cairn" and "cairns" share prefix -> closeness 91 (melded!)
+      # "wharf" and "signal" share no prefix -> closeness 0
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      :ok = Rooms.commit_bridge(slug, ada.id, "wharf")
+      :ok = Rooms.commit_bridge(slug, ida.id, "signal")
+
+      view = await_reveal(slug)
+      assert view.phase == :closed
+      assert view.reveal.mode == :sides
+      assert length(view.reveal.sides) == 2
+
+      [side_a, side_b] = view.reveal.sides
+      assert side_a.name == "Mara & Jacob"
+      assert side_a.closeness >= 90
+      assert side_a.melded? == true
+      assert side_a.closer? == true
+
+      assert side_b.name == "Ada & Ida"
+      assert side_b.closeness == 0
+      assert side_b.melded? == false
+      assert side_b.closer? == false
+
+      stop_room(slug)
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do

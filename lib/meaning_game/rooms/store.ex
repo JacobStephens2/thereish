@@ -130,4 +130,57 @@ defmodule MeaningGame.Rooms.Store do
     |> Room.facts_changeset(attrs)
     |> Repo.update()
   end
+
+  @doc """
+  Pairs two seats together as partners in a Side.
+  """
+  @spec pair_seats(Ecto.UUID.t(), Ecto.UUID.t(), Ecto.UUID.t()) ::
+          {:ok, [Seat.t()]} | {:error, term()}
+  def pair_seats(room_id, seat_id_1, seat_id_2) do
+    Repo.transaction(fn ->
+      from(s in Seat,
+        where: s.room_id == ^room_id and (s.partner_id == ^seat_id_1 or s.partner_id == ^seat_id_2)
+      )
+      |> Repo.update_all(set: [partner_id: nil])
+
+      seat_1 = Repo.get!(Seat, seat_id_1)
+      seat_2 = Repo.get!(Seat, seat_id_2)
+
+      {:ok, s1} = seat_1 |> Seat.changeset(%{partner_id: seat_id_2}) |> Repo.update()
+      {:ok, s2} = seat_2 |> Seat.changeset(%{partner_id: seat_id_1}) |> Repo.update()
+
+      all_seats = Repo.all(from(s in Seat, where: s.room_id == ^room_id))
+
+      other_paired =
+        if length(all_seats) == 4 do
+          other_seats = Enum.reject(all_seats, &(&1.id in [seat_id_1, seat_id_2]))
+
+          if length(other_seats) == 2 do
+            [o1, o2] = other_seats
+            {:ok, u1} = o1 |> Seat.changeset(%{partner_id: o2.id}) |> Repo.update()
+            {:ok, u2} = o2 |> Seat.changeset(%{partner_id: o1.id}) |> Repo.update()
+            [u1, u2]
+          else
+            []
+          end
+        else
+          []
+        end
+
+      [s1, s2 | other_paired]
+    end)
+  end
+
+  @doc """
+  Unpairs a seat from its partner.
+  """
+  @spec unpair_seat(Ecto.UUID.t(), Ecto.UUID.t()) :: {:ok, [Seat.t()]} | {:error, term()}
+  def unpair_seat(room_id, _seat_id) do
+    Repo.transaction(fn ->
+      from(s in Seat, where: s.room_id == ^room_id)
+      |> Repo.update_all(set: [partner_id: nil])
+
+      Repo.all(from(s in Seat, where: s.room_id == ^room_id))
+    end)
+  end
 end

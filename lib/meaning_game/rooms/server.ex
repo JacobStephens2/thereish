@@ -129,6 +129,25 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  def handle_call({:pair_seats, seat_id, partner_id}, _from, state) do
+    with {:ok, _seats} <- Store.pair_seats(state.room.id, seat_id, partner_id),
+         {:ok, game, effects} <-
+           Game.apply(state.game, {:seat_paired, %{seat_id: seat_id, partner_id: partner_id}}) do
+      {:reply, :ok, advance(state, game, effects)}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:unpair_seat, seat_id}, _from, state) do
+    with {:ok, _seats} <- Store.unpair_seat(state.room.id, seat_id),
+         {:ok, game, effects} <- Game.apply(state.game, {:seat_unpaired, %{seat_id: seat_id}}) do
+      {:reply, :ok, advance(state, game, effects)}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   def handle_call({:propose_overrule, seat_id, opts}, _from, state) do
     attrs = Map.new(opts) |> Map.put(:seat_id, seat_id)
 
@@ -316,7 +335,14 @@ defmodule MeaningGame.Rooms.Server do
   # number and handing the ruling to the couple. A verdict that turns up
   # afterwards changes nothing: an Attempt is graded once.
   def handle_info({:escalate, :unavailable}, %{assayer: %{}} = state) do
-    {:noreply, apply_events(%{state | assayer: nil}, [{:verdict_unavailable, %{}}])}
+    event =
+      if Game.sides_mode?(state.game) do
+        {:side_verdicts_unavailable, %{}}
+      else
+        {:verdict_unavailable, %{}}
+      end
+
+    {:noreply, apply_events(%{state | assayer: nil}, [event])}
   end
 
   def handle_info({:escalate, step}, %{assayer: assayer} = state) when assayer != nil do
@@ -541,6 +567,46 @@ defmodule MeaningGame.Rooms.Server do
     waiting_on(state)
   end
 
+  defp perform({:assay_sides, request}, state) do
+    room = self()
+    arm = state[:current_arm] || :flash
+    page = state.game.page
+
+    Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
+      t_a = Task.async(fn -> assay(request.side_a, page, arm) end)
+      t_b = Task.async(fn -> assay(request.side_b, page, arm) end)
+      t_overall = Task.async(fn -> assay(request.overall, page, arm) end)
+
+      res_a = Task.await(t_a, 15_000)
+      res_b = Task.await(t_b, 15_000)
+      res_overall = Task.await(t_overall, 15_000)
+
+      event = side_verdicts_event(res_a, res_b, res_overall)
+      send(room, {:assayed, event})
+    end)
+
+    waiting_on(state)
+  end
+
+  defp side_verdicts_event({:ok, v_a}, {:ok, v_b}, res_overall) do
+    furthest =
+      case res_overall do
+        {:ok, %{furthest: [_, _] = f}} -> f
+        _ -> nil
+      end
+
+    {:side_verdicts_received,
+     %{
+       side_a: v_a,
+       side_b: v_b,
+       furthest: furthest
+     }}
+  end
+
+  defp side_verdicts_event(_res_a, _res_b, _res_overall) do
+    {:side_verdicts_unavailable, %{}}
+  end
+
   defp waiting_on_author(state, ref) do
     %{
       state
@@ -643,5 +709,5 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   # Device tokens are the browser's business and never leave this module.
-  defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name}
+  defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name, partner_id: seat.partner_id}
 end
