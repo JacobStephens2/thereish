@@ -65,6 +65,12 @@ defmodule MeaningGame.Rooms do
   def seat_counts, do: 2..MeaningGame.Steward.seat_cap()
 
   @doc """
+  Opens a new count-free Room at the seat cap and returns its Code.
+  """
+  @spec create(String.t() | nil) :: {:ok, String.t()} | {:error, term()}
+  def create(device_token), do: create(MeaningGame.Steward.seat_cap(), device_token)
+
+  @doc """
   Opens a new Room of `player_count` Seats and returns its Code.
 
   Rooms are created, never conjured. Nothing else in this interface brings one
@@ -74,12 +80,7 @@ defmodule MeaningGame.Rooms do
   `device_token` is the creating phone's, which is what the Scribe will read to
   name the Room after the Rooms that phone has played in. A phone with no
   history draws a random word.
-  @doc \"""
-  Opens a new count-free Room at the seat cap and returns its Code.
   """
-  @spec create(String.t() | nil) :: {:ok, String.t()} | {:error, term()}
-  def create(device_token), do: create(MeaningGame.Steward.seat_cap(), device_token)
-
   @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
   def create(player_count, device_token)
 
@@ -105,6 +106,7 @@ defmodule MeaningGame.Rooms do
   defp digests_for_device(device_token) do
     device_token
     |> Store.rooms_for_device()
+    |> Enum.uniq_by(fn %{room: room} -> room.id end)
     |> Enum.map(fn %{room: room} -> Chronicle.digest(room.id) end)
     |> Enum.reject(&String.starts_with?(&1, "Nothing yet"))
   end
@@ -114,12 +116,9 @@ defmodule MeaningGame.Rooms do
 
     case Steward.name_room(digests, taken) do
       {:ok, code} when is_binary(code) ->
-        case Store.insert_room(code, player_count) do
-          {:ok, room} ->
-            with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
-
-          {:error, _changeset} ->
-            insert_with_a_free_code(player_count, @code_draws)
+        case insert_and_start(code, player_count) do
+          {:ok, slug} -> {:ok, slug}
+          {:error, _changeset} -> insert_with_a_free_code(player_count, @code_draws)
         end
 
       _ ->
@@ -134,9 +133,9 @@ defmodule MeaningGame.Rooms do
   defp insert_with_a_free_code(_player_count, 0), do: {:error, :no_free_code}
 
   defp insert_with_a_free_code(player_count, draws_left) do
-    case Store.insert_room(Code.draw(), player_count) do
-      {:ok, room} ->
-        with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
+    case insert_and_start(Code.draw(), player_count) do
+      {:ok, slug} ->
+        {:ok, slug}
 
       {:error, changeset} ->
         if code_taken?(changeset) do
@@ -144,6 +143,16 @@ defmodule MeaningGame.Rooms do
         else
           {:error, changeset}
         end
+    end
+  end
+
+  defp insert_and_start(code, player_count) do
+    case Store.insert_room(code, player_count) do
+      {:ok, room} ->
+        with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
+
+      error ->
+        error
     end
   end
 

@@ -26,3 +26,26 @@ This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the
 - [ ] Verified on the real deployment: a Room created from Jacob's phone gets a word that nods to the couch's Chronicle
 
 **Since this was filed (2026-09-05, ADR-0011).** Nothing here changes shape. Two facts to carry: the digest the Scribe reads now includes each Seat's Gives and the Bookends the Author wrote from them, which is richer material for a nod than the old pool's Chapters; and `MeaningGame.Steward.Legality.dictionary/0` — the ENABLE list the gate and the random word draw from — stays even though player Bridges no longer pass a dictionary check, because a Code still has to be a word.
+
+## Answer
+
+1. **The Scribe Naming Role & Gate**:
+   - Added `naming` job under `scribe` role in `config/config.exs` with Gemini 3.8 Flash (`gemini-3.8-flash`), low effort, 2,500ms timeout and 5,000ms deadline.
+   - Implemented `MeaningGame.Steward.Naming` with system prompt, JSON schema, and deterministic gate validating that words are 4 letters, in the ENABLE dictionary, not profane, and not already taken.
+   - Integrated deterministic gate check in `Gate.answer` allowing one repair retry quoting the validation failure before returning an error.
+
+2. **Steward Seam & Adapters**:
+   - Added `Steward.name_room/2` callback to the `MeaningGame.Steward` behaviour.
+   - `MeaningGame.Steward.Live` prompts Gemini with the phone's Chronicle digests and taken Codes, checking answers through the gate. Guarded with an empty history clause.
+   - `MeaningGame.Steward.Fake` provides deterministic naming with dials for `:name_word`, `:name_delay_ms`, and `:name_mode` (`:ok`, `:unavailable`, `:raise`).
+   - Encapsulated concurrency and timeout handling via `Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, ...)` with early guard on empty history.
+
+3. **Room Creation by Code with Scribe Naming**:
+   - `MeaningGame.Rooms.create/2` fetches prior room digests for the creating device via `Store.rooms_for_device/1` and `Chronicle.digest/1`, deduplicating rooms by ID and ignoring empty histories.
+   - When history exists, asks `Steward.name_room/2`. If accepted, creates and starts the room with the chosen Code.
+   - If the device has no history, or if the Scribe times out, raises, or fails validation, gracefully falls back to drawing random 4-letter words from the ENABLE dictionary via `insert_with_a_free_code/2`.
+
+4. **Testing**:
+   - `MeaningGame.Steward.NamingTest`: Unit tests covering gate acceptance, rejection and retry for non-4-letter words, non-dictionary words, profanity, and taken codes, as well as double failure, deadline timeout, provider error, and empty history.
+   - `MeaningGame.RoomsTest`: Verifies Scribe word becoming the Code, no model call on empty history, and fallback to random word when Scribe raises, times out, or returns unavailable.
+   - `MeaningGame.StewardSmokeTest`: Tagged live smoke test verifying the Scribe names a Room from a real digest once by hand against the provider.
