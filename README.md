@@ -33,8 +33,9 @@ mix precommit     # compile with warnings as errors, format, test
 
 ## Deploying
 
-It runs at **https://meld.stephens.page** from the first evening, so every
-session measures the real VPS round-trips. From a clean, pushed `master`:
+It runs at **https://thereish.app** (with `meld.stephens.page` redirecting
+there), so every session measures the real VPS round-trips. From a clean,
+pushed `master`:
 
 ```sh
 bin/deploy

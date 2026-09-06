@@ -1,12 +1,13 @@
-# Deploying to meld.stephens.page
+# Deploying to thereish.app
 
-The game runs at **https://meld.stephens.page**, on the DigitalOcean droplet
+The game runs at **https://thereish.app**, on the DigitalOcean droplet
 behind Apache, from the first evening — so every session measures the real VPS
 round-trips the reveal beat has to absorb (design brief, "Couch-night hosting").
 
 The apex `stephens.page` is a static site with its own proxies, so the game took
-a subdomain. `meld` named the working-title mechanic (Mind-Meld); the game is
-now called Thereish (ADR-0008), and the move to `thereish.app` is naming issue 07.
+a subdomain originally (`meld.stephens.page`). The game is now called Thereish
+(ADR-0008), served at its own domain `https://thereish.app`, with
+`meld.stephens.page` 301-redirecting there for a season (naming issue 07).
 
 ## Continuous deployment (push to master)
 
@@ -25,7 +26,7 @@ Configured in `/etc/site-deploy/sites.toml` under `[sites.meld]`:
 1. Acquires a global and site-specific lock to prevent concurrent deploys on the VPS.
 2. Ensures the server working directory is clean and fast-forwards `master` to the target SHA (skipping build steps if incoming commits only touch `.github/`).
 3. Executes `deploy/deploy.sh` to rebuild the Docker image, run migrations, and recreate the container.
-4. Verifies the deployment healthcheck against `https://meld.stephens.page/check`.
+4. Verifies the deployment healthcheck against `https://thereish.app/check`.
 
 ## Manual deploy fallback
 
@@ -37,7 +38,7 @@ bin/deploy
 
 It fetches `master` on the VPS, rebuilds the image from the same `Dockerfile`
 used on the Mac, runs migrations, restarts the container, and does not return
-until `https://meld.stephens.page/check` actually serves the check page. An unpushed
+until `https://thereish.app/check` actually serves the check page. An unpushed
 `master` stops it before it touches the server; a dirty working tree is only a
 warning, since design docs are edited in this repo alongside the build and none
 of that reaches the server anyway.
@@ -48,7 +49,7 @@ of that reaches the server anyway.
 |---|---|---|
 | App | `mix phx.server` on `:4000` | the release image, container port 4000 published on `127.0.0.1:3530` |
 | Postgres | `docker-compose.yml`, published on `127.0.0.1:5432` | the host's own Postgres 16 cluster, database `meaning_game` |
-| TLS | none | Apache vhost + certbot, `deploy/meld.stephens.page.conf` |
+| TLS | none | Apache vhost + certbot, `deploy/thereish.app.conf` |
 
 `docker-compose.app.yml` runs the release image and is the same file in both
 places. It never contains Postgres: the container reaches whichever cluster the
@@ -83,29 +84,29 @@ building from one Dockerfile rather than one registry.
 
 ## First-time setup
 
-Already done for `meld.stephens.page`. Re-running it is safe and is how you
+Already done for `thereish.app`. Re-running it is safe and is how you
 repair a half-finished setup, or stand the whole thing up again after a rebuild:
 
 ```sh
 bin/provision-server
 ```
 
-It clones the repo to `/var/www/meld.stephens.page`, then runs
+It clones the repo to `/var/www/thereish.app`, then runs
 `deploy/provision.sh` on the server, which creates the `meaning_game` Postgres
 role and database, adds the `pg_hba.conf` rule for the docker bridge, writes
-`/var/www/meld.stephens.page/.env` with freshly generated secrets (mode 600,
+`/var/www/thereish.app/.env` with freshly generated secrets (mode 600,
 never in git), installs and enables the Apache vhost, and obtains the
-certificate with `certbot --apache --redirect`.
+certificate with `certbot --apache --redirect` covering both `thereish.app` and `www.thereish.app`.
 
 Every step checks before it acts, so it is idempotent. The one case it refuses
 to guess at is a Postgres role that exists while `.env` does not — the password
 is unrecoverable then, and it tells you how to reset it.
 
-DNS needs nothing: `*.stephens.page` already resolves to the droplet.
+DNS for `thereish.app` points at `<droplet-ip>`, the droplet.
 
 ### The websocket line
 
-`deploy/meld.stephens.page.conf` follows the proxy template in
+`deploy/thereish.app.conf` follows the proxy template in
 `~/infra/ansible/roles/new_subdomain` on the server, with one addition that
 template does not have:
 
@@ -126,8 +127,8 @@ the other secrets, on one line:
 
 ```sh
 ssh jacob@stephens.page
-sudo -e /var/www/meld.stephens.page/.env    # GEMINI_API_KEY=...
-cd /var/www/meld.stephens.page && docker compose -f docker-compose.app.yml up -d
+sudo -e /var/www/thereish.app/.env    # GEMINI_API_KEY=...
+cd /var/www/thereish.app && docker compose -f docker-compose.app.yml up -d
 ```
 
 On the Mac it goes in `.env.local` for the release image, and in the shell for
@@ -150,8 +151,8 @@ the same `.env` as the other secrets:
 
 ```sh
 ssh jacob@stephens.page
-sudo -e /var/www/meld.stephens.page/.env    # ANTHROPIC_API_KEY=...
-cd /var/www/meld.stephens.page && docker compose -f docker-compose.app.yml up -d
+sudo -e /var/www/thereish.app/.env    # ANTHROPIC_API_KEY=...
+cd /var/www/thereish.app && docker compose -f docker-compose.app.yml up -d
 ```
 
 On the Mac it goes in `.env.local` for the release image, and in the shell for
@@ -185,7 +186,7 @@ from Google, so it is measured from this machine, after any deploy that touches
 the prompt, the schema, or the model:
 
 ```sh
-ssh jacob@stephens.page 'cd /var/www/meld.stephens.page && \
+ssh jacob@stephens.page 'cd /var/www/thereish.app && \
   docker compose -f docker-compose.app.yml exec app \
   /app/bin/meaning_game eval "MeaningGame.Steward.Latency.measure()"'
 ```
@@ -198,20 +199,23 @@ spent. It costs cents.
 
 | | |
 |---|---|
-| `https://meld.stephens.page/` | the front page: a Code box, New Room, and this phone's Rooms |
-| `https://meld.stephens.page/new` | New Room: how many players, then a Code to read aloud |
-| `https://meld.stephens.page/r/couch` | a phone in the couch's Room, joined by typing a name |
-| `https://meld.stephens.page/r/couch/stage` | the laptop: the same Room as the stage |
-| `https://meld.stephens.page/check` | the deployment's proof of life |
+| `https://thereish.app/` | the front page: a Code box, New Room, and this phone's Rooms |
+| `https://thereish.app/new` | New Room: how many players, then a Code to read aloud |
+| `https://thereish.app/r/couch` | a phone in the couch's Room, joined by typing a name |
+| `https://thereish.app/r/couch/stage` | the laptop: the same Room as the stage |
+| `https://thereish.app/check` | the deployment's proof of life |
 
 Every Room lives under its Code, the couch included. The bare URL is the door a
 friend at a table opens: they were told one word, and it asks for that word. A
 Code that no Room has is a 404 — visiting a path has never created a Room since
 Rooms became things people open on purpose.
 
+`https://meld.stephens.page` 301-redirects to `https://thereish.app`, path preserved,
+so older bookmarks and "Your Rooms" links continue to land in the right Room.
+
 ## Checking it
 
-`https://meld.stephens.page/check` is `MeaningGameWeb.CheckLive`, the
+`https://thereish.app/check` is `MeaningGameWeb.CheckLive`, the
 deployment's proof of life and nothing game-shaped. It reports four things:
 
 - **Socket connected** — the server's own `connected?/1`, so it only says this
@@ -229,14 +233,14 @@ deployment's proof of life and nothing game-shaped. It reports four things:
 
 ```sh
 # logs
-ssh jacob@stephens.page 'cd /var/www/meld.stephens.page && docker compose -f docker-compose.app.yml logs --tail=100 app'
+ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-compose.app.yml logs --tail=100 app'
 
 # restart
-ssh jacob@stephens.page 'cd /var/www/meld.stephens.page && docker compose -f docker-compose.app.yml restart app'
+ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-compose.app.yml restart app'
 
 # a shell in the running release
-ssh jacob@stephens.page 'cd /var/www/meld.stephens.page && docker compose -f docker-compose.app.yml exec app /app/bin/meaning_game remote'
+ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-compose.app.yml exec app /app/bin/meaning_game remote'
 ```
 
-Secrets live only in `/var/www/meld.stephens.page/.env` on the server. They are
+Secrets live only in `/var/www/thereish.app/.env` on the server. They are
 not in git, not in the image, and not in any backup this repo controls.
