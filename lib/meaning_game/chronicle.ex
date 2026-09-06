@@ -807,7 +807,8 @@ defmodule MeaningGame.Chronicle do
         from(p in Page,
           select: %{
             room_id: p.room_id,
-            author_meta: p.author_meta
+            author_meta: p.author_meta,
+            music_meta: p.music_meta
           }
         )
       )
@@ -822,7 +823,8 @@ defmodule MeaningGame.Chronicle do
           select: %{
             room_id: p.room_id,
             model: v.model,
-            cost_usd: v.cost_usd
+            cost_usd: v.cost_usd,
+            voice_meta: v.voice_meta
           }
         )
       )
@@ -867,7 +869,7 @@ defmodule MeaningGame.Chronicle do
       Repo.all(
         from(p in Page,
           where: p.room_id == ^room.id,
-          select: %{author_meta: p.author_meta}
+          select: %{author_meta: p.author_meta, music_meta: p.music_meta}
         )
       )
 
@@ -879,7 +881,7 @@ defmodule MeaningGame.Chronicle do
           join: p in Page,
           on: p.id == a.page_id,
           where: p.room_id == ^room.id,
-          select: %{model: v.model, cost_usd: v.cost_usd}
+          select: %{model: v.model, cost_usd: v.cost_usd, voice_meta: v.voice_meta}
         )
       )
 
@@ -925,9 +927,12 @@ defmodule MeaningGame.Chronicle do
     end
 
     roles_summary =
-      Enum.map([{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}], fn {name, key} ->
-        role_str.(name, key)
-      end)
+      Enum.map(
+        [{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}, {"Foley", :foley}],
+        fn {name, key} ->
+          role_str.(name, key)
+        end
+      )
       |> Enum.join(", ")
 
     "Spend: #{format_usd(spend.total_usd)} across #{spend.calls_count} #{calls_word}#{unpriced_str} (#{roles_summary})"
@@ -976,6 +981,12 @@ defmodule MeaningGame.Chronicle do
           calls_count: 0,
           unpriced_count: 0,
           by_model: %{}
+        },
+        foley: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
         }
       },
       by_model: %{}
@@ -983,12 +994,24 @@ defmodule MeaningGame.Chronicle do
 
     acc1 =
       Enum.reduce(pages, acc0, fn page, acc ->
-        meta = page.author_meta
+        acc =
+          if is_map(page.author_meta) and map_size(page.author_meta) > 0 do
+            model = page.author_meta["model"] || page.author_meta[:model] || "unknown"
+            cost = to_decimal(page.author_meta["cost_usd"] || page.author_meta[:cost_usd])
+            record_call(acc, :author, model, cost)
+          else
+            acc
+          end
 
-        if is_map(meta) and map_size(meta) > 0 do
-          model = meta["model"] || meta[:model] || "unknown"
-          cost = to_decimal(meta["cost_usd"] || meta[:cost_usd])
-          record_call(acc, :author, model, cost)
+        music_meta = Map.get(page, :music_meta)
+
+        if is_map(music_meta) and map_size(music_meta) > 0 do
+          model =
+            music_meta["model"] || music_meta[:model] ||
+              music_meta["provider"] || music_meta[:provider] || "unknown"
+
+          cost = to_decimal(music_meta["cost_usd"] || music_meta[:cost_usd])
+          record_call(acc, :foley, model, cost)
         else
           acc
         end
@@ -998,7 +1021,24 @@ defmodule MeaningGame.Chronicle do
       Enum.reduce(verdicts, acc1, fn verdict, acc ->
         model = verdict.model || "unknown"
         cost = to_decimal(verdict.cost_usd)
-        record_call(acc, :assayer, model, cost)
+        acc = record_call(acc, :assayer, model, cost)
+
+        v_meta = verdict.voice_meta
+
+        if is_map(v_meta) and map_size(v_meta) > 0 do
+          v_model =
+            v_meta["model"] || v_meta[:model] ||
+              v_meta["voice"] || v_meta[:voice] ||
+              v_meta["voice_id"] || v_meta[:voice_id] ||
+              v_meta["provider"] || v_meta[:provider] || "unknown"
+
+          v_cost =
+            to_decimal(v_meta["cost_usd"] || v_meta[:cost_usd] || v_meta["cost"] || v_meta[:cost])
+
+          record_call(acc, :foley, to_string(v_model), v_cost)
+        else
+          acc
+        end
       end)
 
     Enum.reduce(recaps, acc2, fn recap, acc ->
@@ -1031,6 +1071,12 @@ defmodule MeaningGame.Chronicle do
           calls_count: 0,
           unpriced_count: 0,
           by_model: %{}
+        },
+        foley: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
         }
       },
       by_model: %{}
@@ -1043,7 +1089,7 @@ defmodule MeaningGame.Chronicle do
     new_unpriced = acc.unpriced_count + item.unpriced_count
 
     merged_roles =
-      Enum.reduce([:author, :assayer, :scribe], acc.by_role, fn role, roles_acc ->
+      Enum.reduce([:author, :assayer, :scribe, :foley], acc.by_role, fn role, roles_acc ->
         r1 =
           Map.get(roles_acc, role, %{
             total_usd: Decimal.new(0),
@@ -1602,6 +1648,7 @@ defmodule MeaningGame.Chronicle do
       document: page.document,
       gives: formatted_gives,
       author_meta: page.author_meta,
+      music_meta: page.music_meta,
       give: page.document["give"] || page.document[:give],
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
@@ -1771,12 +1818,19 @@ defmodule MeaningGame.Chronicle do
         Map.get(entry, :author_meta) ||
         Map.get(entry, "author_meta")
 
+    music_meta =
+      Map.get(page_data, :music_meta) ||
+        Map.get(page_data, "music_meta") ||
+        Map.get(entry, :music_meta) ||
+        Map.get(entry, "music_meta")
+
     page =
       %Page{}
       |> Page.changeset(%{
         room_id: room_id,
         document: page_data,
         author_meta: author_meta,
+        music_meta: music_meta,
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,
         closeness: entry.closeness,
@@ -1876,7 +1930,8 @@ defmodule MeaningGame.Chronicle do
       reasoning_reverse: meta[:reasoning_reverse],
       furthest: Map.get(verdict, :furthest),
       overruled: Map.get(verdict, :overruled?, false),
-      position: position
+      position: position,
+      voice_meta: Map.get(verdict, :voice_meta) || (is_map(meta) && meta[:voice_meta])
     })
     |> Repo.insert!()
   end

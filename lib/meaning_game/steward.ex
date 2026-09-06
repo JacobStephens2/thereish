@@ -87,6 +87,42 @@ defmodule MeaningGame.Steward do
   @callback rank([binary() | map()], map() | String.t()) :: {:ok, [map()]} | {:error, term()}
   @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @callback score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
+  Scores one Page from its Gives, answering a local file and meta.
+
+  Measured here so latency provenance is kept by the seam.
+  """
+  @spec score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
+  def score(gives, opts \\ []) do
+    gives = Enum.map(gives, &MeaningGame.Steward.Author.give_text/1)
+    started = System.monotonic_time(:millisecond)
+
+    case adapter().score(gives, opts) do
+      {:ok, %{meta: meta} = answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, %{answer | meta: Map.put_new(meta, :latency_ms, latency)}}
+
+      {:ok, answer} ->
+        latency = System.monotonic_time(:millisecond) - started
+        {:ok, Map.put(answer, :meta, %{latency_ms: latency})}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Builds failure provenance for a Foley score failure.
+  """
+  @spec score_failure(term()) :: map()
+  def score_failure(reason) do
+    %{
+      cost_usd: 0.0,
+      failure: to_string(reason)
+    }
+  end
 
   @doc """
   Generates N candidate sound effects or music tracks for a brief.

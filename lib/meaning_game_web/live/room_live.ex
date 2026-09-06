@@ -236,6 +236,10 @@ defmodule MeaningGameWeb.RoomLive do
      |> assign(:stage_present?, MeaningGameWeb.Presence.stage_present?(socket.assigns.slug))}
   end
 
+  def handle_info({:voice_ready, attempt}, socket) do
+    {:noreply, MeaningGameWeb.Foley.push_voice(socket, attempt)}
+  end
+
   defp seat_for_device(slug, device_token) do
     case Rooms.rejoin(slug, device_token) do
       {:ok, seat} -> seat
@@ -536,7 +540,11 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.assaying room={@room} />
 
-      <.reveal room={@room} seat={@seat} mode={if @stage_present?, do: :quiet, else: :phone} />
+      <.reveal
+        room={@room}
+        seat={@seat}
+        mode={if @stage_present? and not (@room && @room.speaker?), do: :quiet, else: :phone}
+      />
 
       <.overrule_banner room={@room} seat={@seat} />
 

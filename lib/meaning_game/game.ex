@@ -1127,9 +1127,8 @@ defmodule MeaningGame.Game do
     end
   end
 
-  # Read top to bottom, this is the Page's own order: fill the Room, write the
-  # Bridges, grade them together, show it, and end.
-  defp phase(state) do
+  @doc "Where a Page has got to (waiting, giving, writing, bridging, assaying, reveal, closed)."
+  def phase(state) do
     cond do
       not full?(state) -> :waiting
       state.page == nil and map_size(state.gives) < length(state.seats) -> :giving
