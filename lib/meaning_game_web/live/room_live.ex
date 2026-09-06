@@ -136,6 +136,14 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("bookends_tap", %{"label" => label}, socket) do
+    if socket.assigns.seat do
+      Rooms.tap_bookends(socket.assigns.slug, socket.assigns.seat.id, label)
+    end
+
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("submit_give", %{"give" => give}, socket) do
     trimmed = String.trim(give || "")
 
@@ -411,7 +419,7 @@ defmodule MeaningGameWeb.RoomLive do
         </.button>
       </div>
 
-      <.ending room={@room} />
+      <.ending room={@room} seat={@seat} mode={:phone} />
 
       <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>

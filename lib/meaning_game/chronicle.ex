@@ -21,6 +21,7 @@ defmodule MeaningGame.Chronicle do
   import Ecto.Query
 
   alias MeaningGame.Chronicle.Attempt
+  alias MeaningGame.Chronicle.BookendsTap
   alias MeaningGame.Chronicle.Bridge
   alias MeaningGame.Chronicle.Correction
   alias MeaningGame.Chronicle.ExperimentAssignment
@@ -233,9 +234,10 @@ defmodule MeaningGame.Chronicle do
   @doc """
   Records one experiment arm assignment for a Page as an append-only event (ticket 13).
   """
-  @spec record_experiment_assignment(Ecto.UUID.t(), map()) ::
+  @spec record_experiment_assignment(Ecto.UUID.t() | String.t(), map()) ::
           {:ok, ExperimentAssignment.t()} | {:error, Ecto.Changeset.t()}
   def record_experiment_assignment(room_id, attrs) do
+    room_id = resolve_room_id(room_id)
     attrs = Map.put(attrs, :room_id, room_id)
 
     %ExperimentAssignment{}
@@ -244,11 +246,100 @@ defmodule MeaningGame.Chronicle do
   end
 
   @doc """
+  Records a bookends tap (flat, fine, or great) as an append-only event.
+  Also syncs the tap into the page outcome's taps map if the outcome exists.
+  """
+  @spec record_bookends_tap(Ecto.UUID.t() | String.t(), map()) ::
+          {:ok, BookendsTap.t()} | {:error, Ecto.Changeset.t()}
+  def record_bookends_tap(room_id, attrs) do
+    room_id = resolve_room_id(room_id)
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    case %BookendsTap{} |> BookendsTap.changeset(attrs) |> Repo.insert() do
+      {:ok, tap} ->
+        sync_outcome_taps(room_id, tap)
+        {:ok, tap}
+
+      error ->
+        error
+    end
+  end
+
+  defp sync_outcome_taps(room_id, tap) do
+    identifier = tap.page_identifier
+
+    outcome =
+      cond do
+        identifier && tap.page_id ->
+          Repo.one(
+            from(o in ExperimentOutcome,
+              where:
+                o.room_id == ^room_id and
+                  (o.page_identifier == ^identifier or o.page_id == ^tap.page_id),
+              order_by: [desc: o.inserted_at],
+              limit: 1
+            )
+          )
+
+        identifier ->
+          Repo.one(
+            from(o in ExperimentOutcome,
+              where: o.room_id == ^room_id and o.page_identifier == ^identifier,
+              order_by: [desc: o.inserted_at],
+              limit: 1
+            )
+          )
+
+        tap.page_id ->
+          Repo.one(
+            from(o in ExperimentOutcome,
+              where: o.room_id == ^room_id and o.page_id == ^tap.page_id,
+              order_by: [desc: o.inserted_at],
+              limit: 1
+            )
+          )
+
+        true ->
+          nil
+      end
+
+    outcome =
+      outcome ||
+        Repo.one(
+          from(o in ExperimentOutcome,
+            where: o.room_id == ^room_id,
+            order_by: [desc: o.inserted_at],
+            limit: 1
+          )
+        )
+
+    if outcome do
+      updated_taps = Map.put(outcome.taps || %{}, to_string(tap.seat_id), to_string(tap.label))
+      outcome |> Ecto.Changeset.change(taps: updated_taps) |> Repo.update()
+    end
+  end
+
+  @doc """
+  Returns all bookends taps for a Room, oldest first.
+  """
+  @spec bookends_taps(Ecto.UUID.t() | String.t()) :: [BookendsTap.t()]
+  def bookends_taps(room_id_or_code) do
+    room_id = resolve_room_id(room_id_or_code)
+
+    from(t in BookendsTap,
+      where: t.room_id == ^room_id,
+      order_by: [asc: t.inserted_at, asc: t.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Records one experiment outcome for a Page as an append-only event (ticket 13).
   """
-  @spec record_experiment_outcome(Ecto.UUID.t(), map()) ::
+  @spec record_experiment_outcome(Ecto.UUID.t() | String.t(), map()) ::
           {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
   def record_experiment_outcome(room_id, attrs) do
+    room_id = resolve_room_id(room_id)
     attrs = Map.put(attrs, :room_id, room_id)
 
     %ExperimentOutcome{}
@@ -259,9 +350,24 @@ defmodule MeaningGame.Chronicle do
   @doc """
   Records an experiment outcome for a closed Page, extracting convergence flags and identifiers.
   """
-  @spec record_page_outcome(Ecto.UUID.t(), map(), map(), atom() | String.t(), String.t()) ::
+  @spec record_page_outcome(
+          Ecto.UUID.t() | String.t(),
+          map(),
+          map(),
+          atom() | String.t(),
+          String.t() | nil
+        ) ::
           {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
-  def record_page_outcome(room_id, page, entry, arm, experiment_id \\ "bait_against_plain") do
+  def record_page_outcome(room_id, page, entry, arm, experiment_id \\ nil) do
+    room_id = resolve_room_id(room_id)
+
+    experiment_id =
+      experiment_id ||
+        case to_string(arm) do
+          a when a in ["flash", "astra"] -> "author_model"
+          _ -> "bait_against_plain"
+        end
+
     trap_converged =
       Enum.any?(entry.attempts, fn att ->
         Enum.any?(att.verdicts, fn v ->
@@ -284,18 +390,42 @@ defmodule MeaningGame.Chronicle do
         true -> page.id
       end
 
-    record_experiment_outcome(room_id, %{
-      page_id: page.id,
-      page_identifier: to_string(page_identifier),
-      experiment_id: experiment_id,
-      arm: to_string(arm),
-      melded: entry.melded?,
-      closeness: entry.closeness,
-      attempts_count: length(entry.attempts),
-      closed_because: to_string(entry.closed_because),
-      trap_converged: trap_converged,
-      deep_converged: deep_converged
-    })
+    closing_band =
+      cond do
+        entry[:closing_band] -> to_string(entry[:closing_band])
+        entry.closeness -> to_string(MeaningGame.Ladder.read(entry.closeness).band)
+        true -> nil
+      end
+
+    result =
+      record_experiment_outcome(room_id, %{
+        page_id: page.id,
+        page_identifier: to_string(page_identifier),
+        experiment_id: experiment_id,
+        arm: to_string(arm),
+        melded: entry.melded?,
+        closeness: entry.closeness,
+        closing_band: closing_band,
+        attempts_count: length(entry.attempts),
+        closed_because: to_string(entry.closed_because),
+        trap_converged: trap_converged,
+        deep_converged: deep_converged,
+        taps: entry[:taps] || %{}
+      })
+
+    # Link page_id to the oldest unlinked assignment for this room and experiment
+    from(a in MeaningGame.Chronicle.ExperimentAssignment,
+      where: a.room_id == ^room_id and is_nil(a.page_id) and a.experiment_id == ^experiment_id,
+      order_by: [asc: a.inserted_at, asc: a.id],
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> :ok
+      assign -> assign |> Ecto.Changeset.change(page_id: page.id) |> Repo.update()
+    end
+
+    result
   end
 
   @doc """
@@ -314,59 +444,85 @@ defmodule MeaningGame.Chronicle do
   @doc """
   Returns all experiment assignments for a Room, oldest first.
   """
-  @spec experiment_assignments(Ecto.UUID.t() | String.t(), String.t()) ::
+  @spec experiment_assignments(Ecto.UUID.t() | String.t(), String.t() | nil) ::
           [ExperimentAssignment.t()]
-  def experiment_assignments(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+  def experiment_assignments(room_id_or_slug, experiment_id \\ nil) do
     room_id = resolve_room_id(room_id_or_slug)
 
-    from(a in ExperimentAssignment,
-      where: a.room_id == ^room_id and a.experiment_id == ^experiment_id,
-      order_by: [asc: a.assigned_at, asc: a.id]
-    )
-    |> Repo.all()
+    query =
+      from(a in ExperimentAssignment,
+        where: a.room_id == ^room_id,
+        order_by: [asc: a.assigned_at, asc: a.id]
+      )
+
+    query =
+      if experiment_id,
+        do: from(a in query, where: a.experiment_id == ^experiment_id),
+        else: query
+
+    Repo.all(query)
   end
 
   @doc """
   Returns all experiment outcomes for a Room, oldest first.
   """
-  @spec experiment_outcomes(Ecto.UUID.t() | String.t(), String.t()) :: [ExperimentOutcome.t()]
-  def experiment_outcomes(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+  @spec experiment_outcomes(Ecto.UUID.t() | String.t(), String.t() | nil) :: [
+          ExperimentOutcome.t()
+        ]
+  def experiment_outcomes(room_id_or_slug, experiment_id \\ nil) do
     room_id = resolve_room_id(room_id_or_slug)
 
-    from(o in ExperimentOutcome,
-      where: o.room_id == ^room_id and o.experiment_id == ^experiment_id,
-      order_by: [asc: o.inserted_at, asc: o.id]
-    )
-    |> Repo.all()
+    query =
+      from(o in ExperimentOutcome,
+        where: o.room_id == ^room_id,
+        order_by: [asc: o.inserted_at, asc: o.id]
+      )
+
+    query =
+      if experiment_id,
+        do: from(o in query, where: o.experiment_id == ^experiment_id),
+        else: query
+
+    Repo.all(query)
   end
 
   @doc """
   Returns all unblindings for a Room, oldest first.
   """
-  @spec experiment_unblindings(Ecto.UUID.t() | String.t(), String.t()) ::
+  @spec experiment_unblindings(Ecto.UUID.t() | String.t(), String.t() | nil) ::
           [ExperimentUnblinding.t()]
-  def experiment_unblindings(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+  def experiment_unblindings(room_id_or_slug, experiment_id \\ nil) do
     room_id = resolve_room_id(room_id_or_slug)
 
-    from(u in ExperimentUnblinding,
-      where: u.room_id == ^room_id and u.experiment_id == ^experiment_id,
-      order_by: [asc: u.unblinded_at, asc: u.id]
-    )
-    |> Repo.all()
+    query =
+      from(u in ExperimentUnblinding,
+        where: u.room_id == ^room_id,
+        order_by: [asc: u.unblinded_at, asc: u.id]
+      )
+
+    query =
+      if experiment_id,
+        do: from(u in query, where: u.experiment_id == ^experiment_id),
+        else: query
+
+    Repo.all(query)
   end
 
   @doc """
   Whether the given experiment has been deliberately unblinded in this Room.
   """
-  @spec experiment_unblinded?(Ecto.UUID.t() | String.t(), String.t()) :: boolean()
-  def experiment_unblinded?(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+  @spec experiment_unblinded?(Ecto.UUID.t() | String.t(), String.t() | nil) :: boolean()
+  def experiment_unblinded?(room_id_or_slug, experiment_id \\ nil) do
     room_id = resolve_room_id(room_id_or_slug)
 
-    Repo.exists?(
-      from(u in ExperimentUnblinding,
-        where: u.room_id == ^room_id and u.experiment_id == ^experiment_id
-      )
-    )
+    query = from(u in ExperimentUnblinding, where: u.room_id == ^room_id)
+
+    query =
+      if experiment_id,
+        do: from(u in query, where: u.experiment_id == ^experiment_id),
+        else: query
+
+    Repo.exists?(query)
   end
 
   @doc """
@@ -390,18 +546,67 @@ defmodule MeaningGame.Chronicle do
   Computes the qualitative readout for an experiment in a Room.
   """
   @spec experiment_readout(Ecto.UUID.t() | String.t(), String.t()) :: map()
-  def experiment_readout(room_id_or_slug, experiment_id \\ "bait_against_plain") do
+  def experiment_readout(room_id_or_slug, experiment_id \\ "author_model") do
     room_id = resolve_room_id(room_id_or_slug)
     outcomes = experiment_outcomes(room_id, experiment_id)
+
+    # Fall back to bait_against_plain if author_model has no outcomes and bait_against_plain does
+    {experiment_id, outcomes} =
+      if outcomes == [] and experiment_id == "author_model" do
+        bait_outcomes = experiment_outcomes(room_id, "bait_against_plain")
+
+        if bait_outcomes != [] do
+          {"bait_against_plain", bait_outcomes}
+        else
+          {"author_model", []}
+        end
+      else
+        {experiment_id, outcomes}
+      end
+
     views = page_views(room_id)
     taps = fairness_taps(room_id)
+    bookends_taps = bookends_taps(room_id)
     overrules = overrules(room_id)
 
-    data = summarize_experiment_data(outcomes, taps, overrules, views)
+    data =
+      summarize_experiment_data(
+        experiment_id,
+        outcomes,
+        taps,
+        bookends_taps,
+        overrules,
+        views
+      )
+
     MeaningGame.Experiments.qualitative_readout(data)
   end
 
-  defp summarize_experiment_data(outcomes, taps, overrules, views) do
+  defp summarize_experiment_data(
+         "author_model",
+         outcomes,
+         _fairness_taps,
+         _bookends_taps,
+         _overrules,
+         _views
+       ) do
+    flash_outcomes = Enum.filter(outcomes, &(&1.arm == "flash"))
+    astra_outcomes = Enum.filter(outcomes, &(&1.arm == "astra"))
+
+    %{
+      flash: summarize_author_arm_raw(flash_outcomes),
+      astra: summarize_author_arm_raw(astra_outcomes)
+    }
+  end
+
+  defp summarize_experiment_data(
+         _experiment_id,
+         outcomes,
+         taps,
+         _bookends_taps,
+         overrules,
+         views
+       ) do
     bait_outcomes = Enum.filter(outcomes, &(&1.arm == "bait"))
     plain_outcomes = Enum.filter(outcomes, &(&1.arm == "plain"))
 
@@ -462,6 +667,28 @@ defmodule MeaningGame.Chronicle do
     %{
       bait: summarize_arm_raw(bait_outcomes, taps_bait, overrules_bait_count),
       plain: summarize_arm_raw(plain_outcomes, taps_plain, overrules_plain_count)
+    }
+  end
+
+  defp summarize_author_arm_raw(outcomes) do
+    taps_list =
+      outcomes
+      |> Enum.flat_map(fn o -> (o.taps && Map.values(o.taps)) || [] end)
+      |> Enum.map(&to_string/1)
+
+    closing_bands_map =
+      outcomes
+      |> Enum.map(& &1.closing_band)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.frequencies()
+
+    %{
+      pages_count: length(outcomes),
+      melded_count: Enum.count(outcomes, & &1.melded),
+      melded_history: Enum.map(outcomes, & &1.melded),
+      attempts_to_meld: outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
+      bookends_taps: Enum.frequencies(taps_list),
+      closing_bands: closing_bands_map
     }
   end
 
