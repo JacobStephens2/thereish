@@ -349,9 +349,13 @@ defmodule MeaningGameWeb.RoomLive do
         <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your setting</p>
         <p class="text-xl font-semibold">{@room.your_give}</p>
         <p class="text-sm opacity-60">
-          Waiting for {max(0, length(@room.seats) - @room.gives_in)} more ({@room.gives_in} of {length(
-            @room.seats
-          )} in)
+          <%= if @room.gives_in >= length(@room.seats) do %>
+            Everyone is in ({@room.gives_in} of {length(@room.seats)} in)
+          <% else %>
+            Waiting for {length(@room.seats) - @room.gives_in} more ({@room.gives_in} of {length(
+              @room.seats
+            )} in)
+          <% end %>
         </p>
       </div>
 
