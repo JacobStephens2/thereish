@@ -1663,4 +1663,97 @@ defmodule MeaningGameWeb.RoomLiveTest do
       end)
     end
   end
+
+  describe "couples on the meld map (ticket 07)" do
+    test "joining with a partner marks couple in roster and offers partner dropdown in join form" do
+      slug = open_room(seat_limit: 4)
+
+      {:ok, mara, _} = live(phone(slug))
+      join(mara, "Mara")
+
+      # Jacob arrives and sees partner dropdown listing Mara
+      {:ok, jacob, html} = live(phone(slug))
+      assert html =~ ~s(data-role="partner-select")
+      assert html =~ "With Mara"
+
+      # Mara's seat ID
+      [mara_seat] = Rooms.snapshot(slug, nil).seats
+
+      # Jacob joins with Mara as partner
+      jacob
+      |> form("form", %{"name" => "Jacob", "partner_id" => mara_seat.id})
+      |> render_submit()
+
+      # Both phones and stage show the couple in the roster
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      for view <- [mara, jacob, stage] do
+        assert has_element?(view, "[data-role=partner]", "(with Mara)") or
+                 has_element?(view, "[data-role=partner]", "(with Jacob)")
+      end
+    end
+
+    test "reveal on phone highlights own couple score and marks cross-couple melds; stage draws meld map" do
+      slug = open_room(seat_limit: 4)
+
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+      {:ok, esme, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      [mara_seat] = Rooms.snapshot(slug, nil).seats
+
+      jacob
+      |> form("form", %{"name" => "Jacob", "partner_id" => mara_seat.id})
+      |> render_submit()
+
+      join(bram, "Bram")
+      [_, _, bram_seat] = Rooms.snapshot(slug, nil).seats
+
+      esme
+      |> form("form", %{"name" => "Esme", "partner_id" => bram_seat.id})
+      |> render_submit()
+
+      # Submit settings for all 4 seats
+      for {v, name} <- [
+            {mara, "setting 1"},
+            {jacob, "setting 2"},
+            {bram, "setting 3"},
+            {esme, "setting 4"}
+          ] do
+        give_setting(v, name)
+      end
+
+      await_phase(slug, :bridging)
+
+      for v <- [mara, jacob, bram, esme] do
+        eventually(fn -> has_element?(v, "[data-role=bridge-form]") end)
+      end
+
+      # Mara and Jacob meld ("cairn" and "cairn" -> 100)
+      # Bram commits "dock"
+      # Esme commits "cairn" (Esme melds with Mara & Jacob -> cross-couple meld!)
+      commit(mara, "cairn")
+      commit(jacob, "cairn")
+      commit(bram, "dock")
+      commit(esme, "cairn")
+
+      await_reveal_on(mara)
+      await_reveal_on(stage)
+
+      # Mara's phone shows her couple closeness
+      assert has_element?(mara, "[data-role=own-couple-pair]")
+      assert has_element?(mara, "[data-role=couple-closeness]", "100")
+
+      # Mara's phone shows surprise cross-couple meld alert
+      assert has_element?(mara, "[data-role=cross-couple-meld]")
+
+      # Stage draws meld map with couple badges and cross-couple meld
+      assert has_element?(stage, "[data-role=meld-map]")
+      assert has_element?(stage, "[data-role=couple-badge]")
+      assert has_element?(stage, "[data-role=cross-couple-meld]")
+    end
+  end
 end

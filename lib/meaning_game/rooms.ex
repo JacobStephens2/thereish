@@ -208,18 +208,30 @@ defmodule MeaningGame.Rooms do
   end
 
   @doc """
-  Takes a Seat in the Room under `name`, for the browser holding `device_token`.
+  Takes a Seat in the Room under `name`, for the browser holding `device_token`,
+  optionally declaring a partner in the Room.
 
   Returns the Seat that browser already holds if it has one, or the Seat held
   under that name if someone is coming back on a browser that forgot its token.
   Only a genuinely new player can be turned away for want of a Seat.
   """
-  @spec join(String.t(), String.t(), String.t()) ::
+  @spec join(String.t(), String.t(), String.t(), String.t() | nil) ::
           {:ok, map()} | {:error, :name_required | :name_too_long | :room_full | :could_not_join}
-  def join(slug, name, device_token) do
+  def join(slug, name, device_token, partner_id \\ nil) do
+    partner_id = if partner_id in [nil, ""], do: nil, else: partner_id
+
     with {:ok, name} <- check_name(name) do
-      call(slug, {:join, name, device_token})
+      call(slug, {:join, name, device_token, partner_id})
     end
+  end
+
+  @doc """
+  Pairs or unpairs two seats in a Room.
+  """
+  @spec pair_seats(String.t(), String.t(), String.t() | nil) :: :ok | {:error, term()}
+  def pair_seats(slug, seat_id_1, seat_id_2 \\ nil) do
+    partner_id = if seat_id_2 in [nil, ""], do: nil, else: seat_id_2
+    call(slug, {:pair_seats, seat_id_1, partner_id})
   end
 
   @doc """
