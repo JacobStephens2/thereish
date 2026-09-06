@@ -248,8 +248,8 @@ defmodule MeaningGameWeb.RoomLive do
   defp message(:no_such_seat), do: "You are not in this Room any more. Reload."
   defp message({:illegal_bridge, reason}), do: reason
   defp message(:pool_exhausted), do: "That's every Page for tonight."
-  defp message(:not_sides_room), do: "Sides mode is only for 4-player rooms."
-  defp message(:not_waiting), do: "Pairings are locked once bridges are committed."
+  defp message(:not_sides_room), do: "Sides mode is only for 4-seat rooms."
+  defp message(:not_waiting), do: "Sides are locked once bridges are committed."
   defp message(_), do: "Something went wrong. Try again."
 
   defp can_overrule?(nil, _seat), do: false
@@ -409,20 +409,20 @@ defmodule MeaningGameWeb.RoomLive do
             data-role="unpair-partner"
             class="btn-sm btn-ghost text-xs"
           >
-            Change pairs
+            Change sides
           </.button>
         <% else %>
           <%= if @seat.partner_id do %>
             <% your_partner = Enum.find(@room.seats, &(&1.id == @seat.partner_id)) %>
             <p data-role="paired-notice" class="text-sm">
-              You're with <span class="font-semibold">{your_partner && your_partner.name}</span>. Waiting for other players to pair up.
+              You're with <span class="font-semibold">{your_partner && your_partner.name}</span>. Waiting for the other side to form.
             </p>
             <.button
               phx-click="unpair_partner"
               data-role="unpair-partner"
               class="btn-sm btn-ghost text-xs"
             >
-              Change partner
+              Change sides
             </.button>
           <% else %>
             <p class="text-sm opacity-80">

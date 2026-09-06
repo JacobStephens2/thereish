@@ -248,13 +248,13 @@ defmodule MeaningGame.Rooms do
   def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
 
   @doc """
-  Pairs two seats together as a Side in the waiting lobby.
+  Assigns two seats to a Side in the room before play begins.
   """
   @spec pair_seats(String.t(), String.t(), String.t()) :: :ok | {:error, term()}
   def pair_seats(slug, seat_id, partner_id), do: call(slug, {:pair_seats, seat_id, partner_id})
 
   @doc """
-  Unpairs a seat in the waiting lobby.
+  Clears Side assignment for a seat in the room.
   """
   @spec unpair_seat(String.t(), String.t()) :: :ok | {:error, term()}
   def unpair_seat(slug, seat_id), do: call(slug, {:unpair_seat, seat_id})
