@@ -28,7 +28,8 @@ defmodule MeaningGameWeb.RoomComponents do
           <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
           <span>{seat.name}</span>
           <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
-          <span :if={seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
+          <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
+          <span :if={!seat[:late?] and seat.committed? and mid_page?(@room)} class="text-sm opacity-60">
             has written a bridge
           </span>
         </li>
@@ -269,7 +270,7 @@ defmodule MeaningGameWeb.RoomComponents do
       </p>
 
       <div
-        :if={@mode in [:phone, :quiet] && @seat && @room.reveal.closeness}
+        :if={@mode in [:phone, :quiet] && @seat && !@room[:late?] && @room.reveal.closeness}
         data-role="fairness-controls"
         class="flex flex-col items-center gap-2 pt-2"
       >
@@ -397,12 +398,12 @@ defmodule MeaningGameWeb.RoomComponents do
       data-role="overrule-banner"
       class="flex flex-col items-center gap-2 rounded-lg border border-primary/30 bg-base-200/50 p-4 text-center"
     >
-      <p :if={@seat && @room.overrule.you_proposed?} data-role="overrule-pending">
+      <p :if={@seat && !@room[:late?] && @room.overrule.you_proposed?} data-role="overrule-pending">
         You proposed an overrule. Waiting for everyone to agree.
       </p>
 
       <div
-        :if={@seat && !@room.overrule.you_agreed?}
+        :if={@seat && !@room[:late?] && !@room.overrule.you_agreed?}
         data-role="overrule-vote"
         class="flex flex-col items-center gap-3"
       >
@@ -421,13 +422,13 @@ defmodule MeaningGameWeb.RoomComponents do
       </div>
 
       <p
-        :if={@seat && @room.overrule.you_agreed? && !@room.overrule.you_proposed?}
+        :if={@seat && !@room[:late?] && @room.overrule.you_agreed? && !@room.overrule.you_proposed?}
         data-role="overrule-pending"
       >
         You agreed. Waiting for everyone to agree.
       </p>
 
-      <p :if={is_nil(@seat)} data-role="overrule-pending" class="opacity-80">
+      <p :if={is_nil(@seat) or @room[:late?]} data-role="overrule-pending" class="opacity-80">
         <span class="font-semibold">{@room.overrule.proposer_name}</span>
         proposed an overrule. Waiting for the Room to agree.
       </p>
