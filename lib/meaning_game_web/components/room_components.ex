@@ -1141,6 +1141,7 @@ defmodule MeaningGameWeb.RoomComponents do
         },
 
         updated() {
+          if (this.reducedMotion) return
           this.speaker = this.el.dataset.speaker === "true"
           this.updateTapForSound()
           if (!this.speaker) {
@@ -1151,6 +1152,7 @@ defmodule MeaningGameWeb.RoomComponents do
         },
 
         destroyed() {
+          if (this.reducedMotion) return
           this.stopVoice()
           this.currentVoiceAttempt = null
           this.stopMusic()
