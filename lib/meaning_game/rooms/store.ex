@@ -145,53 +145,6 @@ defmodule MeaningGame.Rooms.Store do
   end
 
   @doc """
-  Pairs or unpairs two seats in a Room.
-
-  If seat_id_2 is nil, unpairs seat_id_1 and any current partner.
-  Otherwise mutually pairs seat_id_1 and seat_id_2 and clears any previous partners.
-  """
-  @spec pair_seats(Ecto.UUID.t(), Ecto.UUID.t(), Ecto.UUID.t() | nil) ::
-          {:ok, {Seat.t(), Seat.t() | nil}} | {:error, term()}
-  def pair_seats(room_id, seat_id_1, seat_id_2 \\ nil) do
-    if seat_id_1 == seat_id_2 and not is_nil(seat_id_2) do
-      {:error, :cannot_pair_self}
-    else
-      Repo.transaction(fn ->
-        seat_1 = Repo.get_by(Seat, id: seat_id_1, room_id: room_id)
-
-        if is_nil(seat_1) do
-          Repo.rollback(:no_such_seat)
-        end
-
-        if is_nil(seat_id_2) do
-          clear_partner(room_id, seat_1.partner_id)
-
-          s1 = seat_1 |> Seat.pair_changeset(nil) |> Repo.update!()
-          {s1, nil}
-        else
-          seat_2 = Repo.get_by(Seat, id: seat_id_2, room_id: room_id)
-
-          if is_nil(seat_2) do
-            Repo.rollback(:no_such_seat)
-          end
-
-          if seat_1.partner_id && seat_1.partner_id != seat_2.id do
-            clear_partner(room_id, seat_1.partner_id)
-          end
-
-          if seat_2.partner_id && seat_2.partner_id != seat_1.id do
-            clear_partner(room_id, seat_2.partner_id)
-          end
-
-          s1 = seat_1 |> Seat.pair_changeset(seat_2.id) |> Repo.update!()
-          s2 = seat_2 |> Seat.pair_changeset(seat_1.id) |> Repo.update!()
-          {s1, s2}
-        end
-      end)
-    end
-  end
-
-  @doc """
   Adds a browser to the ones a Seat can be reached from.
 
   It adds rather than replaces, so a player coming back on a second browser
@@ -210,6 +163,90 @@ defmodule MeaningGame.Rooms.Store do
     room
     |> Room.facts_changeset(attrs)
     |> Repo.update()
+  end
+
+  @doc """
+  Pairs two seats together as partners in a Side.
+  In a 4-seat room, automatically pairs the remaining two seats into the other Side.
+  If seat_id_2 is nil, unpairs seat_id_1.
+  """
+  @spec pair_seats(Ecto.UUID.t(), Ecto.UUID.t(), Ecto.UUID.t() | nil) ::
+          {:ok, term()} | {:error, term()}
+  def pair_seats(room_id, seat_id_1, seat_id_2 \\ nil) do
+    if seat_id_1 == seat_id_2 and not is_nil(seat_id_2) do
+      {:error, :cannot_pair_self}
+    else
+      Repo.transaction(fn ->
+        seat_1 = Repo.get_by(Seat, id: seat_id_1, room_id: room_id)
+
+        if is_nil(seat_1) do
+          Repo.rollback(:no_such_seat)
+        end
+
+        if is_nil(seat_id_2) do
+          clear_partner(room_id, seat_1.partner_id)
+
+          updated_seat_1 = seat_1 |> Seat.pair_changeset(nil) |> Repo.update!()
+          {updated_seat_1, nil}
+        else
+          seat_2 = Repo.get_by(Seat, id: seat_id_2, room_id: room_id)
+
+          if is_nil(seat_2) do
+            Repo.rollback(:no_such_seat)
+          end
+
+          from(s in Seat,
+            where:
+              s.room_id == ^room_id and (s.partner_id == ^seat_id_1 or s.partner_id == ^seat_id_2)
+          )
+          |> Repo.update_all(set: [partner_id: nil])
+
+          {:ok, updated_seat_1} =
+            seat_1 |> Seat.changeset(%{partner_id: seat_id_2}) |> Repo.update()
+
+          {:ok, updated_seat_2} =
+            seat_2 |> Seat.changeset(%{partner_id: seat_id_1}) |> Repo.update()
+
+          all_seats = Repo.all(from(s in Seat, where: s.room_id == ^room_id))
+
+          other_paired =
+            if length(all_seats) == 4 do
+              other_seats = Enum.reject(all_seats, &(&1.id in [seat_id_1, seat_id_2]))
+
+              if length(other_seats) == 2 do
+                [other_seat_1, other_seat_2] = other_seats
+
+                {:ok, updated_other_1} =
+                  other_seat_1 |> Seat.changeset(%{partner_id: other_seat_2.id}) |> Repo.update()
+
+                {:ok, updated_other_2} =
+                  other_seat_2 |> Seat.changeset(%{partner_id: other_seat_1.id}) |> Repo.update()
+
+                [updated_other_1, updated_other_2]
+              else
+                []
+              end
+            else
+              []
+            end
+
+          [updated_seat_1, updated_seat_2 | other_paired]
+        end
+      end)
+    end
+  end
+
+  @doc """
+  Unpairs a seat from its partner.
+  """
+  @spec unpair_seat(Ecto.UUID.t(), Ecto.UUID.t()) :: {:ok, [Seat.t()]} | {:error, term()}
+  def unpair_seat(room_id, _seat_id) do
+    Repo.transaction(fn ->
+      from(s in Seat, where: s.room_id == ^room_id)
+      |> Repo.update_all(set: [partner_id: nil])
+
+      Repo.all(from(s in Seat, where: s.room_id == ^room_id))
+    end)
   end
 
   defp clear_partner(_room_id, nil), do: :ok

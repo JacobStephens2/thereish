@@ -1328,7 +1328,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {:ok, new_room_view, _} = live(conn1, ~p"/new")
 
       assert {:error, {:live_redirect, %{to: to}}} =
-               new_room_view |> form("form", %{"players" => "4"}) |> render_submit()
+               new_room_view |> form("form") |> render_submit()
 
       "/r/" <> code = to
       on_exit(fn -> stop_room(code) end)
@@ -1389,6 +1389,8 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       give_setting(phone3, "artisan glassblowing workshop")
       give_setting(phone4, "mountain observatory at dusk")
+
+      phone1 |> element("[data-role=start-page]") |> render_click()
 
       await_phase(code, :bridging)
 
@@ -1738,6 +1740,165 @@ defmodule MeaningGameWeb.RoomLiveTest do
     end
   end
 
+  describe "Sides: couple versus couple on phone and stage" do
+    setup do
+      beat(0)
+      steward(delay_ms: 0)
+      :ok
+    end
+
+    test "four players pair into Sides, see side-by-side reveal cards, and meld together" do
+      code = open_room(seat_limit: 4)
+
+      conn1 = build_conn()
+      {:ok, phone1, _} = live(conn1, ~p"/r/#{code}")
+      join(phone1, "Mara")
+
+      conn2 = build_conn()
+      {:ok, phone2, _} = live(conn2, ~p"/r/#{code}")
+      join(phone2, "Jacob")
+
+      conn3 = build_conn()
+      {:ok, phone3, _} = live(conn3, ~p"/r/#{code}")
+      join(phone3, "Ada")
+
+      conn4 = build_conn()
+      {:ok, phone4, _} = live(conn4, ~p"/r/#{code}")
+      join(phone4, "Sam")
+
+      # Partner picker appears on all phones
+      for phone <- [phone1, phone2, phone3, phone4] do
+        assert has_element?(phone, "[data-role=partner-picker]")
+      end
+
+      # Mara picks Jacob -> 4-seat room automatically completes both Sides
+      phone1 |> element("button", "I'm with Jacob") |> render_click()
+
+      eventually(fn ->
+        Rooms.snapshot(code, nil).sides_mode?
+      end)
+
+      # All phones see paired notice and Sides roster
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=sides-roster]") end)
+        assert has_element?(phone, "[data-role=paired-notice]")
+        assert has_element?(phone, "[data-side=a]")
+        assert has_element?(phone, "[data-side=b]")
+      end
+
+      # Test unpairing: Ada clicks Change pairs
+      phone3 |> element("[data-role=unpair-partner]") |> render_click()
+      eventually(fn -> not Rooms.snapshot(code, nil).sides_mode? end)
+
+      # Now Ada picks Sam -> both Sides active again
+      phone3 |> element("button", "I'm with Sam") |> render_click()
+      eventually(fn -> Rooms.snapshot(code, nil).sides_mode? end)
+
+      # Submit 4 settings
+      give_setting(phone1, "coastal lighthouse in storm")
+      give_setting(phone2, "old library with rolling ladders")
+      give_setting(phone3, "artisan glassblowing workshop")
+      give_setting(phone4, "mountain observatory at dusk")
+
+      await_phase(code, :bridging)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=bridge-form]") end)
+      end
+
+      # Mara and Jacob write matching prefixes ("cairn" and "cairns" -> score 91, meld)
+      commit(phone1, "cairn")
+      commit(phone2, "cairns")
+      commit(phone3, "beacon")
+      commit(phone4, "seagull")
+
+      # Reveal lands and Page melds
+      await_phase(code, :closed)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=sides-comparison]") end)
+        assert has_element?(phone, "[data-role=side-card][data-side=a]")
+        assert has_element?(phone, "[data-role=side-card][data-side=b]")
+        assert has_element?(phone, "[data-role=closeness]", "91")
+        assert has_element?(phone, "[data-role=melded-badge]")
+        assert has_element?(phone, "[data-role=one-more]")
+      end
+
+      # Mara taps fairness
+      phone1 |> element("[data-role=tap-fair]") |> render_click()
+      eventually(fn -> has_element?(phone1, "[data-role=seat-tap]", "fair") end)
+    end
+
+    test "an overrule in Sides mode requires only the proposing Side's partner to agree" do
+      code = open_room(seat_limit: 4)
+
+      conn1 = build_conn()
+      {:ok, phone1, _} = live(conn1, ~p"/r/#{code}")
+      join(phone1, "Mara")
+
+      conn2 = build_conn()
+      {:ok, phone2, _} = live(conn2, ~p"/r/#{code}")
+      join(phone2, "Jacob")
+
+      conn3 = build_conn()
+      {:ok, phone3, _} = live(conn3, ~p"/r/#{code}")
+      join(phone3, "Ada")
+
+      conn4 = build_conn()
+      {:ok, phone4, _} = live(conn4, ~p"/r/#{code}")
+      join(phone4, "Sam")
+
+      # Pair into Sides: Mara picks Jacob
+      phone1 |> element("button", "I'm with Jacob") |> render_click()
+      eventually(fn -> Rooms.snapshot(code, nil).sides_mode? end)
+
+      give_setting(phone1, "setting one")
+      give_setting(phone2, "setting two")
+      give_setting(phone3, "setting three")
+      give_setting(phone4, "setting four")
+
+      await_phase(code, :bridging)
+
+      # Bridges that do NOT meld
+      commit(phone1, "beacon")
+      commit(phone2, "pier")
+      commit(phone3, "beacon")
+      commit(phone4, "seagull")
+
+      await_reveal(code)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=propose-overrule]") end)
+      end
+
+      # Mara proposes overrule
+      phone1 |> element("[data-role=propose-overrule]") |> render_click()
+
+      # Mara sees waiting for partner
+      assert render(phone1) =~ "Waiting for your partner to agree"
+
+      # Jacob (partner) sees Agree / Decline buttons
+      eventually(fn -> has_element?(phone2, "[data-role=agree-overrule]") end)
+
+      # Ada and Sam (other side) do NOT see Agree / Decline buttons
+      refute has_element?(phone3, "[data-role=agree-overrule]")
+      refute has_element?(phone4, "[data-role=agree-overrule]")
+      assert render(phone3) =~ "Waiting for their partner to agree"
+      assert render(phone4) =~ "Waiting for their partner to agree"
+
+      # Jacob agrees
+      phone2 |> element("[data-role=agree-overrule]") |> render_click()
+
+      # Overrule succeeds: page closes as Meld
+      await_phase(code, :closed)
+
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=overruled-notice]") end)
+        assert has_element?(phone, "[data-role=one-more]")
+      end
+    end
+  end
+
   describe "couples on the meld map (ticket 07)" do
     test "joining with a partner marks couple in roster and offers partner dropdown in join form" do
       slug = open_room(seat_limit: 4)
@@ -1828,6 +1989,134 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(stage, "[data-role=meld-map]")
       assert has_element?(stage, "[data-role=couple-badge]")
       assert has_element?(stage, "[data-role=cross-couple-meld]")
+    end
+  end
+
+  describe "the Room starts when everyone is here (ticket 08)" do
+    test "count-free start with Start Page button and late seat joins next page" do
+      # 1. Front page -> New Room (no player count chosen, opens at seat cap 6)
+      conn1 = build_conn()
+      {:ok, front, _} = live(conn1, ~p"/")
+      assert has_element?(front, "[data-role=new-room]")
+
+      {:ok, new_room_view, _} = live(conn1, ~p"/new")
+      refute has_element?(new_room_view, "select[name=players]")
+
+      assert {:error, {:live_redirect, %{to: to}}} =
+               new_room_view |> form("form") |> render_submit()
+
+      "/r/" <> code = to
+      on_exit(fn -> stop_room(code) end)
+
+      assert Rooms.snapshot(code, nil).seat_limit == 6
+
+      # Phone 1 connects and joins
+      {:ok, phone1, _} = live(conn1, to)
+      join(phone1, "Mara")
+
+      # Phone 2 connects and joins
+      conn2 = build_conn()
+      {:ok, phone2, _} = live(conn2, to)
+      join(phone2, "Jacob")
+
+      # Both phones see setting form, no start page button yet (< 2 gives)
+      assert has_element?(phone1, "[data-role=setting-form]")
+      assert has_element?(phone2, "[data-role=setting-form]")
+      refute has_element?(phone1, "[data-role=start-page]")
+      refute has_element?(phone2, "[data-role=start-page]")
+
+      # Phone 1 sets give
+      give_setting(phone1, "coastal lighthouse in storm")
+      refute has_element?(phone1, "[data-role=start-page]")
+      refute has_element?(phone2, "[data-role=start-page]")
+
+      # Phone 2 sets give -> gives_in is 2, so both see Start Page button!
+      give_setting(phone2, "old library with rolling ladders")
+      eventually(fn -> has_element?(phone1, "[data-role=start-page]") end)
+      eventually(fn -> has_element?(phone2, "[data-role=start-page]") end)
+
+      # Phone 3 joins before start
+      conn3 = build_conn()
+      {:ok, phone3, _} = live(conn3, to)
+      join(phone3, "Ada")
+      assert has_element?(phone3, "[data-role=setting-form]")
+      refute has_element?(phone3, "[data-role=start-page]")
+
+      # Phone 3 gives setting too
+      give_setting(phone3, "artisan glassblowing workshop")
+      assert has_element?(phone3, "[data-role=start-page]")
+
+      # Phone 1 taps Start Page
+      phone1 |> element("[data-role=start-page]") |> render_click()
+      await_phase(code, :bridging)
+
+      # Phones 1, 2, 3 are in bridging phase with bookends and bridge forms
+      for phone <- [phone1, phone2, phone3] do
+        eventually(fn -> has_element?(phone, "[data-role=bookends]") end)
+        assert has_element?(phone, "[data-role=bridge-form]")
+        refute has_element?(phone, "[data-role=late-seat]")
+      end
+
+      # Phone 4 connects and joins late (mid-Page)
+      conn4 = build_conn()
+      {:ok, phone4, _} = live(conn4, to)
+      join(phone4, "Sam")
+
+      # Phone 4 sees late-seat notice and no bridge form
+      eventually(fn -> has_element?(phone4, "[data-role=late-seat]") end)
+      assert render(phone4) =~ "You joined mid-Page. Watching this Page"
+      refute has_element?(phone4, "[data-role=bridge-form]")
+
+      # Roster shows Sam is watching
+      assert has_element?(phone4, "[data-role=roster]", "Sam")
+      assert render(phone4) =~ "(watching)"
+
+      # Phones 1, 2, 3 commit their bridges
+      commit(phone1, "beacon")
+      commit(phone2, "cairn")
+      commit(phone3, "lamp")
+
+      # Reveal arrives on all phones
+      for phone <- [phone1, phone2, phone3, phone4] do
+        await_reveal_on(phone)
+      end
+
+      # Late seat (phone4) does NOT see propose overrule or fairness controls or again
+      refute has_element?(phone4, "[data-role=propose-overrule]")
+      refute has_element?(phone4, "[data-role=fairness-controls]")
+      refute has_element?(phone4, "[data-role=again]")
+
+      # Participating seat sees overrule button and fairness controls and again
+      assert has_element?(phone1, "[data-role=propose-overrule]")
+      assert has_element?(phone1, "[data-role=fairness-controls]")
+      assert has_element?(phone1, "[data-role=again]")
+
+      # Propose overrule: Phone 1 proposes
+      phone1 |> element("[data-role=propose-overrule]") |> render_click()
+
+      # Late seat does NOT see agree/decline buttons
+      refute has_element?(phone4, "[data-role=agree-overrule]")
+      refute has_element?(phone4, "[data-role=decline-overrule]")
+      assert render(phone4) =~ "proposed an overrule. Waiting for the Room to agree."
+
+      # Only phones 2 and 3 need to agree (unanimity among participating seats!)
+      phone2 |> element("[data-role=agree-overrule]") |> render_click()
+      refute Rooms.snapshot(code, nil).reveal.melded?
+
+      phone3 |> element("[data-role=agree-overrule]") |> render_click()
+      assert Rooms.snapshot(code, nil).phase == :closed
+
+      # Room is closed. Phone 4 (late seat) sees One more?
+      eventually(fn -> has_element?(phone4, "[data-role=one-more]") end)
+
+      # Phone 4 taps One more?
+      phone4 |> element("[data-role=one-more]") |> render_click()
+
+      # Now all four phones have fresh setting-forms for the new Page!
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=setting-form]") end)
+        refute has_element?(phone, "[data-role=late-seat]")
+      end
     end
   end
 end

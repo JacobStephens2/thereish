@@ -61,11 +61,15 @@ defmodule MeaningGame.Game do
     author_failure: nil,
     bridges: %{},
     verdict: nil,
+    side_verdicts: nil,
+    furthest: nil,
     played: [],
     overrule: nil,
     overrules: [],
     fairness_taps: %{},
-    bookends_taps: %{}
+    bookends_taps: %{},
+    sides_mode: false,
+    page_seat_ids: nil
   ]
 
   @type seat :: %{
@@ -102,6 +106,8 @@ defmodule MeaningGame.Game do
 
   @typedoc "One attempt as it was played, kept so the Chronicle can have it."
   @type attempt :: %{
+          optional(:side_verdicts) => map() | nil,
+          optional(:furthest) => [String.t()] | nil,
           number: pos_integer(),
           bookends: [String.t()],
           bridges: %{String.t() => String.t()},
@@ -119,11 +125,15 @@ defmodule MeaningGame.Game do
           author_failure: term(),
           bridges: %{String.t() => String.t()},
           verdict: verdict() | nil,
+          side_verdicts: map() | nil,
+          furthest: [String.t()] | nil,
           played: [attempt()],
           overrule: map() | nil,
           overrules: [map()],
           fairness_taps: %{String.t() => String.t()},
-          bookends_taps: %{String.t() => String.t()}
+          bookends_taps: %{String.t() => String.t()},
+          sides_mode: boolean(),
+          page_seat_ids: [String.t()] | nil
         }
 
   @type viewer :: String.t() | nil
@@ -135,6 +145,7 @@ defmodule MeaningGame.Game do
                required(:seat_id) => String.t(),
                required(:give) => String.t()
              }}
+          | {:start_page, %{required(:seat_id) => String.t()}}
           | {:page_written,
              %{
                required(:bookends) => [String.t()],
@@ -168,11 +179,19 @@ defmodule MeaningGame.Game do
                required(:seat_id) => String.t(),
                required(:label) => String.t() | atom()
              }}
+          | {:seat_paired,
+             %{
+               required(:seat_id) => String.t(),
+               required(:partner_id) => String.t()
+             }}
+          | {:seat_unpaired, %{required(:seat_id) => String.t()}}
           | {:seats_paired,
              %{
                required(:seat_id) => String.t(),
                required(:partner_id) => String.t() | nil
              }}
+          | {:side_verdicts_received, map()}
+          | {:side_verdicts_unavailable, map()}
           | {:bookends_tapped,
              %{
                required(:seat_id) => String.t(),
@@ -190,6 +209,7 @@ defmodule MeaningGame.Game do
           :beat
           | {:author, %{gives: [map()]}}
           | {:assay, %{bookends: [String.t()], bridges: [String.t()]}}
+          | {:assay_sides, map()}
           | {:chronicle, map()}
           | {:overrule, map()}
           | {:fairness_tap, map()}
@@ -197,6 +217,8 @@ defmodule MeaningGame.Game do
 
   @type error ::
           :room_full
+          | :not_waiting
+          | :cannot_pair_self
           | :not_giving
           | :not_writing
           | :give_required
@@ -215,6 +237,8 @@ defmodule MeaningGame.Game do
           | :already_overruled
           | :invalid_label
           | :no_grade_to_rate
+          | :not_enough_gives
+          | :not_playing_page
 
   @doc """
   Builds the state of a Room that holds `seat_limit` Seats, `seats` of them
@@ -227,15 +251,26 @@ defmodule MeaningGame.Game do
   @spec init(keyword()) :: t()
   def init(opts) do
     page = Keyword.get(opts, :page)
+    seat_limit = Keyword.fetch!(opts, :seat_limit)
+    seats = opts |> Keyword.get(:seats, []) |> Enum.map(&seat/1)
+
+    page_seat_ids =
+      if page != nil and length(seats) >= seat_limit do
+        Enum.map(seats, & &1.id)
+      else
+        nil
+      end
 
     %__MODULE__{
-      seat_limit: Keyword.fetch!(opts, :seat_limit),
-      seats: opts |> Keyword.get(:seats, []) |> Enum.map(&seat/1),
+      seat_limit: seat_limit,
+      seats: seats,
       page: page,
       bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
       gives: %{},
       last_gives: %{},
-      author_failure: nil
+      author_failure: nil,
+      page_seat_ids: page_seat_ids,
+      sides_mode: Keyword.get(opts, :sides_mode, false)
     }
   end
 
@@ -271,7 +306,17 @@ defmodule MeaningGame.Game do
         {:error, :room_full}
 
       true ->
-        {:ok, %{state | seats: maybe_pair_seat(state.seats ++ [seat], seat)}, []}
+        new_seats = maybe_pair_seat(state.seats ++ [seat], seat)
+
+        page_seat_ids =
+          if state.page != nil and length(new_seats) >= state.seat_limit and
+               is_nil(state.page_seat_ids) do
+            Enum.map(new_seats, & &1.id)
+          else
+            state.page_seat_ids
+          end
+
+        {:ok, %{state | seats: new_seats, page_seat_ids: page_seat_ids}, []}
     end
   end
 
@@ -281,6 +326,58 @@ defmodule MeaningGame.Game do
       {:ok, %{state | seats: seats}, []}
     else
       {:error, :no_such_seat}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:seat_paired, %{seat_id: seat_id, partner_id: partner_id}}) do
+    cond do
+      map_size(state.bridges) > 0 or state.attempt > 1 ->
+        {:error, :not_waiting}
+
+      not seated?(state, seat_id) or not seated?(state, partner_id) ->
+        {:error, :no_such_seat}
+
+      seat_id == partner_id ->
+        {:error, :cannot_pair_self}
+
+      true ->
+        other_seats = Enum.reject(state.seats, &(&1.id in [seat_id, partner_id]))
+
+        updated_seats =
+          Enum.map(state.seats, fn seat ->
+            cond do
+              seat.id == seat_id ->
+                Map.put(seat, :partner_id, partner_id)
+
+              seat.id == partner_id ->
+                Map.put(seat, :partner_id, seat_id)
+
+              length(other_seats) == 2 and seat.id == hd(other_seats).id ->
+                Map.put(seat, :partner_id, List.last(other_seats).id)
+
+              length(other_seats) == 2 and seat.id == List.last(other_seats).id ->
+                Map.put(seat, :partner_id, hd(other_seats).id)
+
+              true ->
+                Map.put(seat, :partner_id, nil)
+            end
+          end)
+
+        {:ok, %{state | seats: updated_seats, sides_mode: true}, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:seat_unpaired, %{seat_id: seat_id}}) do
+    cond do
+      map_size(state.bridges) > 0 or state.attempt > 1 ->
+        {:error, :not_waiting}
+
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      true ->
+        updated_seats = Enum.map(state.seats, &Map.put(&1, :partner_id, nil))
+        {:ok, %{state | seats: updated_seats, sides_mode: false}, []}
     end
   end
 
@@ -309,11 +406,39 @@ defmodule MeaningGame.Game do
         last_gives = Map.put(state.last_gives, seat_id, trimmed)
         state = %{state | gives: gives, last_gives: last_gives}
 
-        if map_size(gives) >= length(state.seats) do
-          {:ok, state, [{:author, author_request(state, gives)}]}
+        if (state.seat_limit && map_size(gives) >= state.seat_limit) and
+             length(state.seats) >= state.seat_limit do
+          participating_seat_ids = Enum.map(state.seats, & &1.id)
+          state = %{state | page_seat_ids: participating_seat_ids}
+          {:ok, state, [{:author, author_request(state)}]}
         else
           {:ok, state, []}
         end
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:start_page, %{seat_id: seat_id}}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      phase(state) != :giving ->
+        {:error, :not_giving}
+
+      not Map.has_key?(state.gives, seat_id) ->
+        {:error, :give_required}
+
+      map_size(state.gives) < 2 ->
+        {:error, :not_enough_gives}
+
+      true ->
+        participating_seat_ids =
+          state.seats
+          |> Enum.filter(&Map.has_key?(state.gives, &1.id))
+          |> Enum.map(& &1.id)
+
+        state = %{state | page_seat_ids: participating_seat_ids}
+        {:ok, state, [{:author, author_request(state)}]}
     end
   end
 
@@ -388,7 +513,7 @@ defmodule MeaningGame.Game do
         {:error, :not_writing}
 
       true ->
-        {:ok, %{state | gives: %{}, author_failure: nil}, []}
+        {:ok, %{state | gives: %{}, author_failure: nil, page_seat_ids: nil}, []}
     end
   end
 
@@ -401,6 +526,9 @@ defmodule MeaningGame.Game do
 
       not seated?(state, seat_id) ->
         {:error, :no_such_seat}
+
+      playing_page_seat(state, seat_id) != :ok ->
+        {:error, :not_playing_page}
 
       committed?(state, seat_id) ->
         {:error, :already_committed}
@@ -439,6 +567,54 @@ defmodule MeaningGame.Game do
     })
   end
 
+  def apply(%__MODULE__{} = state, {:side_verdicts_received, attrs}) do
+    v_a = attrs.side_a
+    v_b = attrs.side_b
+    furthest = Map.get(attrs, :furthest)
+
+    record_sides(state, %{
+      a: %{
+        graded?: Map.get(v_a, :graded?, true),
+        closeness: v_a.closeness,
+        reasoning: v_a.reasoning,
+        quip: Map.get(v_a, :quip),
+        furthest: Map.get(v_a, :furthest),
+        meta: Map.get(v_a, :meta, %{})
+      },
+      b: %{
+        graded?: Map.get(v_b, :graded?, true),
+        closeness: v_b.closeness,
+        reasoning: v_b.reasoning,
+        quip: Map.get(v_b, :quip),
+        furthest: Map.get(v_b, :furthest),
+        meta: Map.get(v_b, :meta, %{})
+      },
+      furthest: furthest
+    })
+  end
+
+  def apply(%__MODULE__{} = state, {:side_verdicts_unavailable, attrs}) do
+    record_sides(state, %{
+      a: %{
+        graded?: false,
+        closeness: nil,
+        reasoning: nil,
+        quip: nil,
+        furthest: nil,
+        meta: Map.get(attrs, :meta, %{})
+      },
+      b: %{
+        graded?: false,
+        closeness: nil,
+        reasoning: nil,
+        quip: nil,
+        furthest: nil,
+        meta: Map.get(attrs, :meta, %{})
+      },
+      furthest: nil
+    })
+  end
+
   def apply(%__MODULE__{} = state, {:overrule_proposed, %{seat_id: seat_id} = attrs}) do
     closeness = Map.get(attrs, :closeness, Ladder.meld_threshold())
 
@@ -446,20 +622,30 @@ defmodule MeaningGame.Game do
       not seated?(state, seat_id) ->
         {:error, :no_such_seat}
 
-      phase(state) not in [:reveal, :closed] or state.verdict == nil ->
+      playing_page_seat(state, seat_id) != :ok ->
+        {:error, :not_playing_page}
+
+      phase(state) not in [:reveal, :closed] or
+          (is_nil(state.verdict) and is_nil(state.side_verdicts)) ->
         {:error, :not_revealed}
 
       state.overrule != nil ->
         {:error, :proposal_pending}
 
-      already_overruled?(state) ->
+      already_overruled?(state, seat_id) ->
         {:error, :already_overruled}
 
       true ->
+        side =
+          if sides_mode?(state) do
+            Enum.find(sides_list(state), &(seat_id in &1.seat_ids))
+          end
+
         proposed_state = %{
           state
           | overrule: %{
               proposer_id: seat_id,
+              side_id: side && side.id,
               closeness: closeness,
               agreed: MapSet.new([seat_id])
             }
@@ -474,8 +660,15 @@ defmodule MeaningGame.Game do
       not seated?(state, seat_id) ->
         {:error, :no_such_seat}
 
+      playing_page_seat(state, seat_id) != :ok ->
+        {:error, :not_playing_page}
+
       state.overrule == nil ->
         {:error, :no_proposal_pending}
+
+      sides_mode?(state) and state.overrule[:side_id] != nil and
+          seat_id not in Enum.find(sides_list(state), &(&1.id == state.overrule.side_id)).seat_ids ->
+        {:error, :not_your_side}
 
       true ->
         agreed = MapSet.put(state.overrule.agreed, seat_id)
@@ -489,8 +682,15 @@ defmodule MeaningGame.Game do
       not seated?(state, seat_id) ->
         {:error, :no_such_seat}
 
+      playing_page_seat(state, seat_id) != :ok ->
+        {:error, :not_playing_page}
+
       state.overrule == nil ->
         {:error, :no_proposal_pending}
+
+      sides_mode?(state) and state.overrule[:side_id] != nil and
+          seat_id not in Enum.find(sides_list(state), &(&1.id == state.overrule.side_id)).seat_ids ->
+        {:error, :not_your_side}
 
       true ->
         {:ok, %{state | overrule: nil}, []}
@@ -498,12 +698,24 @@ defmodule MeaningGame.Game do
   end
 
   def apply(%__MODULE__{} = state, {:fairness_tapped, %{seat_id: seat_id, label: label}}) do
-    verdict = state.verdict
+    verdict =
+      if sides_mode?(state) do
+        case Enum.find(sides_list(state), &(seat_id in &1.seat_ids)) do
+          %{id: side_id} -> state.side_verdicts && state.side_verdicts[side_id]
+          _ -> nil
+        end
+      else
+        state.verdict
+      end
+
     label_str = normalize_label(label)
 
     cond do
       not seated?(state, seat_id) ->
         {:error, :no_such_seat}
+
+      playing_page_seat(state, seat_id) != :ok ->
+        {:error, :not_playing_page}
 
       phase(state) not in [:reveal, :closed] or is_nil(verdict) ->
         {:error, :not_revealed}
@@ -519,11 +731,21 @@ defmodule MeaningGame.Game do
         band = Map.get(verdict, :original_band) || (grade && Ladder.read(grade).band)
         meta = verdict.meta || %{}
 
+        bridges =
+          if sides_mode?(state) do
+            case Enum.find(sides_list(state), &(seat_id in &1.seat_ids)) do
+              %{seats: side_seats} -> Enum.map(side_seats, &state.bridges[&1.id])
+              _ -> written_bridges(state)
+            end
+          else
+            written_bridges(state)
+          end
+
         tap_effect_data = %{
           seat_id: seat_id,
           attempt_number: state.attempt,
           bookends: state.bookends,
-          bridges: written_bridges(state),
+          bridges: bridges,
           grade: grade,
           closeness: grade,
           band: band && to_string(band),
@@ -541,6 +763,7 @@ defmodule MeaningGame.Game do
 
   def apply(%__MODULE__{} = state, {:attempt_advanced, %{seat_id: seat_id}}) do
     with :ok <- taken_by_a_seat(state, seat_id),
+         :ok <- playing_page_seat(state, seat_id),
          :ok <- open_reveal(state) do
       {:ok,
        %{
@@ -549,6 +772,8 @@ defmodule MeaningGame.Game do
            attempt: state.attempt + 1,
            bridges: %{},
            verdict: nil,
+           side_verdicts: nil,
+           furthest: nil,
            played: state.played ++ [this_attempt(state)],
            overrule: nil,
            fairness_taps: %{}
@@ -567,6 +792,8 @@ defmodule MeaningGame.Game do
            attempt: 1,
            bridges: %{},
            verdict: nil,
+           side_verdicts: nil,
+           furthest: nil,
            played: [],
            overrule: nil,
            overrules: [],
@@ -630,12 +857,15 @@ defmodule MeaningGame.Game do
            last_gives: last_gives,
            bridges: %{},
            verdict: nil,
+           side_verdicts: nil,
+           furthest: nil,
            played: [],
            overrule: nil,
            overrules: [],
            fairness_taps: %{},
            bookends_taps: %{},
-           author_failure: nil
+           author_failure: nil,
+           page_seat_ids: nil
        }, []}
     end
   end
@@ -655,12 +885,20 @@ defmodule MeaningGame.Game do
     phase = phase(state)
     fairness_taps = state.fairness_taps || %{}
 
+    viewer_late? =
+      state.page_seat_ids != nil and viewer != nil and viewer not in state.page_seat_ids
+
+    sides_mode? = sides_mode?(state)
+
     %{
       phase: phase,
+      late?: viewer_late?,
       seats: Enum.map(state.seats, &seat_view(state, &1, viewer)),
       you: find_seat(state, viewer),
       seat_limit: state.seat_limit,
       open_seats: state.seat_limit - length(state.seats),
+      sides_mode?: sides_mode?,
+      sides: if(sides_mode?, do: sides_view(state, viewer)),
       bookends: bookends(state, phase),
       page_give: state.page && (state.page[:give] || state.page["give"]),
       page_chapter: state.page && (state.page[:chapter] || state.page["chapter"]),
@@ -679,7 +917,8 @@ defmodule MeaningGame.Game do
       # Whether the Assayer picked those two words or the game fell back to the
       # first two Bridges in roster order. The couple are about to spend an
       # attempt on them, so which of the two happened is theirs to know.
-      next_bookends_chosen?: if(phase == :reveal, do: chosen_furthest(state) != nil),
+      next_bookends_chosen?:
+        if(phase == :reveal, do: state.furthest != nil || chosen_furthest(state) != nil),
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
@@ -690,6 +929,68 @@ defmodule MeaningGame.Game do
       barred_words: if(phase != :waiting, do: barred_words(state))
     }
   end
+
+  @doc "Whether this Room is currently playing in Sides mode (two paired couples)."
+  def sides_mode?(%__MODULE__{sides_mode: true, seat_limit: 4, seats: seats})
+      when length(seats) == 4 do
+    case sides_list(seats) do
+      [side_a, side_b] ->
+        length(side_a.seats) == 2 and length(side_b.seats) == 2
+
+      _ ->
+        false
+    end
+  end
+
+  def sides_mode?(_), do: false
+
+  @doc "Groups seats into two Sides if fully paired."
+  def sides_list(%__MODULE__{seats: seats}), do: sides_list(seats)
+
+  def sides_list(seats) when is_list(seats) and length(seats) == 4 do
+    with_partners = Enum.filter(seats, &Map.get(&1, :partner_id))
+
+    if length(with_partners) == 4 do
+      s1 = hd(seats)
+      s1_partner_id = Map.get(s1, :partner_id)
+      s2 = Enum.find(seats, &(&1.id == s1_partner_id))
+
+      if s2 && Map.get(s2, :partner_id) == s1.id do
+        others = Enum.reject(seats, &(&1.id in [s1.id, s2.id]))
+
+        if length(others) == 2 do
+          [s3, s4] = others
+
+          if Map.get(s3, :partner_id) == s4.id and Map.get(s4, :partner_id) == s3.id do
+            [
+              %{
+                id: :a,
+                name: "#{s1.name} & #{s2.name}",
+                seats: [s1, s2],
+                seat_ids: [s1.id, s2.id]
+              },
+              %{
+                id: :b,
+                name: "#{s3.name} & #{s4.name}",
+                seats: [s3, s4],
+                seat_ids: [s3.id, s4.id]
+              }
+            ]
+          else
+            []
+          end
+        else
+          []
+        end
+      else
+        []
+      end
+    else
+      []
+    end
+  end
+
+  def sides_list(_), do: []
 
   @doc """
   All words and phrases barred from being played as a Bridge on this Page:
@@ -711,17 +1012,22 @@ defmodule MeaningGame.Game do
     |> Enum.uniq()
   end
 
-  # `init`, `apply` and `view` are the whole surface. Everything below is reached
-  # through them, including in tests — a rule that can only be seen by asking a
-  # question no player can ask is not being tested where it lives.
+  defp page_seats(state) do
+    if state.page_seat_ids do
+      Enum.filter(state.seats, &(&1.id in state.page_seat_ids))
+    else
+      state.seats
+    end
+  end
 
-  defp author_request(state, gives \\ nil) do
-    gives_map = gives || state.gives
+  defp author_request(state) do
+    seat_ids = state.page_seat_ids || Enum.map(state.seats, & &1.id)
+    participating = Enum.filter(state.seats, &(&1.id in seat_ids))
 
     %{
       gives:
-        Enum.map(state.seats, fn s ->
-          %{seat_id: s.id, name: s.name, text: gives_map[s.id], give: gives_map[s.id]}
+        Enum.map(participating, fn s ->
+          %{seat_id: s.id, name: s.name, text: state.gives[s.id], give: state.gives[s.id]}
         end)
     }
   end
@@ -731,7 +1037,11 @@ defmodule MeaningGame.Game do
   # after, so the theatre and the grading run in parallel.
   defp committed(state) do
     if phase(state) == :assaying do
-      {:ok, state, [:beat, assay(state)]}
+      if sides_mode?(state) do
+        {:ok, state, [:beat, assay_sides(state)]}
+      else
+        {:ok, state, [:beat, assay(state)]}
+      end
     else
       {:ok, state, []}
     end
@@ -749,33 +1059,75 @@ defmodule MeaningGame.Game do
   #
   # assay-3 carries Bookends, Bridges with player names in roster order, earlier
   # Attempts, and Gives.
-  defp assay(state) do
-    seat_bridges =
-      Enum.map(state.seats, fn seat ->
+  defp assay(state), do: {:assay, assay_request_overall(state)}
+
+  defp assay_sides(state) do
+    [side_a, side_b] = sides_list(state)
+
+    {:assay_sides,
+     %{
+       side_a: assay_request_for_side(state, side_a),
+       side_b: assay_request_for_side(state, side_b),
+       overall: assay_request_overall(state)
+     }}
+  end
+
+  defp assay_request_for_side(state, side) do
+    side_seat_bridges =
+      Enum.map(side.seats, fn seat ->
         %{name: seat.name, bridge: state.bridges[seat.id]}
       end)
 
-    {:assay,
-     %{
-       bookends: state.bookends,
-       bridges: written_bridges(state),
-       seat_bridges: seat_bridges,
-       player_bridges: seat_bridges,
-       earlier_attempts:
-         Enum.map(state.played, fn attempt ->
-           attempt_bridges = attempt[:bridges] || attempt.bridges || %{}
+    %{
+      bookends: state.bookends,
+      bridges: Enum.map(side.seats, &state.bridges[&1.id]),
+      seat_bridges: side_seat_bridges,
+      player_bridges: side_seat_bridges,
+      earlier_attempts:
+        Enum.map(state.played, fn attempt ->
+          attempt_bridges = attempt[:bridges] || attempt.bridges || %{}
 
-           %{
-             number: attempt[:number] || attempt.number,
-             bookends: attempt[:bookends] || attempt.bookends,
-             bridges:
-               Enum.map(state.seats, fn seat ->
-                 %{name: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
-               end)
-           }
-         end),
-       gives: gives_for_assay(state)
-     }}
+          %{
+            number: attempt[:number] || attempt.number,
+            bookends: attempt[:bookends] || attempt.bookends,
+            bridges:
+              Enum.map(side.seats, fn seat ->
+                %{name: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
+              end)
+          }
+        end),
+      gives: gives_for_assay(state)
+    }
+  end
+
+  defp assay_request_overall(state) do
+    seats = page_seats(state)
+
+    seat_bridges =
+      Enum.map(seats, fn seat ->
+        %{name: seat.name, bridge: state.bridges[seat.id]}
+      end)
+
+    %{
+      bookends: state.bookends,
+      bridges: written_bridges(state),
+      seat_bridges: seat_bridges,
+      player_bridges: seat_bridges,
+      earlier_attempts:
+        Enum.map(state.played, fn attempt ->
+          attempt_bridges = attempt[:bridges] || attempt.bridges || %{}
+
+          %{
+            number: attempt[:number] || attempt.number,
+            bookends: attempt[:bookends] || attempt.bookends,
+            bridges:
+              Enum.map(seats, fn seat ->
+                %{name: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
+              end)
+          }
+        end),
+      gives: gives_for_assay(state)
+    }
   end
 
   defp gives_for_assay(state) do
@@ -789,7 +1141,7 @@ defmodule MeaningGame.Game do
             list
 
           map when is_map(map) ->
-            Enum.map(state.seats, fn seat ->
+            Enum.map(page_seats(state), fn seat ->
               %{name: seat.name, give: map[seat.id] || map[seat.name]}
             end)
 
@@ -810,7 +1162,7 @@ defmodule MeaningGame.Game do
   end
 
   # Every Bridge of this attempt, in roster order.
-  defp written_bridges(state), do: Enum.map(state.seats, &state.bridges[&1.id])
+  defp written_bridges(state), do: Enum.map(page_seats(state), &state.bridges[&1.id])
 
   # An Attempt is graded once. The Room can deliver the same verdict twice — a
   # retry, a message that outlived the attempt it was about — and the second one
@@ -821,6 +1173,36 @@ defmodule MeaningGame.Game do
       phase(state) != :assaying -> {:error, :no_verdict_expected}
       true -> graded(%{state | verdict: verdict})
     end
+  end
+
+  defp record_sides(state, data) do
+    cond do
+      state.side_verdicts != nil ->
+        {:ok, state, []}
+
+      phase(state) != :assaying ->
+        {:error, :no_verdict_expected}
+
+      true ->
+        furthest =
+          if data[:furthest] && length(data.furthest) == 2 do
+            data.furthest
+          else
+            nil
+          end
+
+        new_state = %{
+          state
+          | side_verdicts: %{a: data.a, b: data.b},
+            furthest: furthest
+        }
+
+        graded(new_state)
+    end
+  end
+
+  defp default_sides_furthest(state) do
+    state |> written_bridges() |> Enum.take(2)
   end
 
   # The verdict that completes the reveal may also be the one that ends the
@@ -836,13 +1218,32 @@ defmodule MeaningGame.Game do
   @doc "Where a Page has got to (waiting, giving, writing, bridging, assaying, reveal, closed)."
   def phase(state) do
     cond do
-      not full?(state) -> :waiting
-      state.page == nil and map_size(state.gives) < length(state.seats) -> :giving
-      state.page == nil -> :writing
-      map_size(state.bridges) < length(state.seats) -> :bridging
-      state.verdict == nil -> :assaying
-      over?(state) -> :closed
-      true -> :reveal
+      state.page_seat_ids != nil and state.page == nil ->
+        :writing
+
+      state.page != nil and (state.page_seat_ids != nil or full?(state)) ->
+        seat_count =
+          if state.page_seat_ids, do: length(state.page_seat_ids), else: length(state.seats)
+
+        cond do
+          map_size(state.bridges) < seat_count -> :bridging
+          sides_mode?(state) and state.side_verdicts == nil -> :assaying
+          not sides_mode?(state) and state.verdict == nil -> :assaying
+          over?(state) -> :closed
+          true -> :reveal
+        end
+
+      state.page != nil and not full?(state) ->
+        :waiting
+
+      not full?(state) and length(state.seats) < 2 ->
+        :waiting
+
+      state.page == nil and full?(state) and map_size(state.gives) >= length(state.seats) ->
+        :writing
+
+      true ->
+        :giving
     end
   end
 
@@ -851,7 +1252,21 @@ defmodule MeaningGame.Game do
   # attempt ends it too, and that is an ending rather than a failure.
   defp over?(state), do: melded?(state) or state.attempt >= attempt_cap()
 
-  defp melded?(state), do: state |> headline() |> Ladder.read() |> Map.fetch!(:melded?)
+  defp melded?(state) do
+    if sides_mode?(state) do
+      case state.side_verdicts do
+        %{a: v_a, b: v_b} ->
+          (v_a && Ladder.read(v_a[:closeness]).melded?) ||
+            (v_b && Ladder.read(v_b[:closeness]).melded?) ||
+            false
+
+        _ ->
+          false
+      end
+    else
+      state |> headline() |> Ladder.read() |> Map.fetch!(:melded?)
+    end
+  end
 
   defp closed_because(state), do: if(melded?(state), do: :meld, else: :attempts_spent)
 
@@ -864,35 +1279,145 @@ defmodule MeaningGame.Game do
   # alongside the one Verdict (ADR-0010, ticket 07). Reasoning is kept in the
   # Chronicle and kept off the screen.
   defp reveal(state, phase, viewer) when phase in [:reveal, :closed] do
-    gives =
-      Enum.map(state.seats, fn seat ->
-        %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
-      end)
-
-    base =
-      state.verdict
-      |> verdict_view()
-      |> Map.delete(:reasoning)
-      |> Map.merge(%{
-        bridges: bridges_view(state, state.bridges),
-        furthest: furthest_view(state, chosen_furthest(state)),
-        gives: gives
-      })
-
-    if state.verdict && state.verdict[:pairs] do
-      pairs = pairs_view(state, state.verdict[:pairs], viewer)
-      Map.put(base, :pairs, pairs)
+    if sides_mode?(state) do
+      sides_reveal_view(state)
     else
-      base
+      gives =
+        Enum.map(page_seats(state), fn seat ->
+          %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
+        end)
+
+      base =
+        state.verdict
+        |> verdict_view()
+        |> Map.delete(:reasoning)
+        |> Map.merge(%{
+          bridges: bridges_view(state, state.bridges),
+          furthest: furthest_view(state, chosen_furthest(state)),
+          gives: gives
+        })
+
+      if state.verdict && state.verdict[:pairs] do
+        pairs = pairs_view(state, state.verdict[:pairs], viewer)
+        Map.put(base, :pairs, pairs)
+      else
+        base
+      end
     end
   end
 
   defp reveal(_state, _phase, _viewer), do: nil
 
+  defp sides_reveal_view(state) do
+    [side_a, side_b] = sides_list(state)
+    verdict_a = state.side_verdicts && state.side_verdicts[:a]
+    verdict_b = state.side_verdicts && state.side_verdicts[:b]
+
+    closer_side = determine_closer(verdict_a, verdict_b)
+
+    gives =
+      Enum.map(page_seats(state), fn seat ->
+        %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
+      end)
+
+    %{
+      mode: :sides,
+      sides: [
+        side_verdict_view(state, side_a, verdict_a, closer_side == :a),
+        side_verdict_view(state, side_b, verdict_b, closer_side == :b)
+      ],
+      melded?: melded?(state),
+      bridges: bridges_view(state, state.bridges),
+      furthest: furthest_view(state, chosen_sides_furthest(state)),
+      gives: gives
+    }
+  end
+
+  defp determine_closer(verdict_a, verdict_b) do
+    closeness_a = verdict_a && verdict_a[:closeness]
+    closeness_b = verdict_b && verdict_b[:closeness]
+
+    cond do
+      is_integer(closeness_a) and is_integer(closeness_b) and closeness_a > closeness_b -> :a
+      is_integer(closeness_a) and is_integer(closeness_b) and closeness_b > closeness_a -> :b
+      true -> nil
+    end
+  end
+
+  defp side_verdict_view(state, side, verdict, closer?) do
+    base =
+      if verdict && verdict.graded? do
+        closeness = verdict.closeness
+        ladder_data = Ladder.read(closeness)
+
+        %{
+          graded?: true,
+          closeness: closeness,
+          band: ladder_data.band,
+          melded?: ladder_data.melded?,
+          quip: verdict.quip,
+          overruled?: Map.get(verdict, :overruled?, false)
+        }
+      else
+        %{
+          graded?: false,
+          closeness: nil,
+          band: nil,
+          melded?: false,
+          quip: verdict && verdict.quip,
+          overruled?: false
+        }
+      end
+
+    side_bridges =
+      for seat <- side.seats, Map.has_key?(state.bridges, seat.id) do
+        %{seat_id: seat.id, name: seat.name, bridge: state.bridges[seat.id]}
+      end
+
+    Map.merge(base, %{
+      id: side.id,
+      name: side.name,
+      seat_ids: side.seat_ids,
+      closer?: closer?,
+      bridges: side_bridges
+    })
+  end
+
+  defp sides_view(state, viewer) do
+    for side <- sides_list(state) do
+      %{
+        id: side.id,
+        name: side.name,
+        seats: Enum.map(side.seats, &seat_view(state, &1, viewer)),
+        seat_ids: side.seat_ids,
+        you?: viewer in side.seat_ids
+      }
+    end
+  end
+
   # The Page's number is the Verdict's, and an Attempt the Assayer could not
   # grade has no number rather than a zero: "we don't know" is not "you missed".
   defp headline(%{verdict: %{graded?: true, closeness: closeness}}), do: closeness
+
+  defp headline(%{side_verdicts: side_verdicts}) when is_map(side_verdicts) do
+    best_side_closeness(side_verdicts)
+  end
+
   defp headline(_state), do: nil
+
+  defp best_side_closeness(%{a: verdict_a, b: verdict_b}) do
+    closeness_a = verdict_a && verdict_a[:graded?] && verdict_a[:closeness]
+    closeness_b = verdict_b && verdict_b[:graded?] && verdict_b[:closeness]
+
+    cond do
+      closeness_a && closeness_b -> max(closeness_a, closeness_b)
+      closeness_a -> closeness_a
+      closeness_b -> closeness_b
+      true -> nil
+    end
+  end
+
+  defp best_side_closeness(_), do: nil
 
   # Medium's carry-forward rule, written for a list of Seats: the two Bridges
   # the Assayer named as landing furthest apart become the next attempt's
@@ -907,8 +1432,18 @@ defmodule MeaningGame.Game do
   # needs an Assayer that names a word twice, and if one ever does, the next
   # attempt is a Page with one word twice rather than a crash.
   defp carried_bookends(state) do
-    chosen_furthest(state) || state |> written_bridges() |> Enum.take(2)
+    if sides_mode?(state) do
+      chosen_sides_furthest(state) || default_sides_furthest(state)
+    else
+      chosen_furthest(state) || state |> written_bridges() |> Enum.take(2)
+    end
   end
+
+  defp chosen_sides_furthest(%{furthest: [_, _] = furthest} = state) do
+    if furthest_view(state, furthest), do: furthest
+  end
+
+  defp chosen_sides_furthest(_state), do: nil
 
   # The two words the Assayer named, but only if the roster can account for both
   # of them: they are about to be Bookends, and a Bookend nobody wrote is a Page
@@ -968,6 +1503,11 @@ defmodule MeaningGame.Game do
   end
 
   defp attempt_closeness(%{verdict: %{graded?: true, closeness: closeness}}), do: closeness
+
+  defp attempt_closeness(%{side_verdicts: side_verdicts}) when is_map(side_verdicts) do
+    best_side_closeness(side_verdicts)
+  end
+
   defp attempt_closeness(_attempt), do: nil
 
   defp this_attempt(state) do
@@ -975,7 +1515,9 @@ defmodule MeaningGame.Game do
       number: state.attempt,
       bookends: state.bookends,
       bridges: state.bridges,
-      verdict: state.verdict
+      verdict: state.verdict,
+      side_verdicts: state.side_verdicts,
+      furthest: state.furthest
     }
   end
 
@@ -989,7 +1531,7 @@ defmodule MeaningGame.Game do
       page: state.page,
       bookends: state.bookends,
       gives:
-        Enum.map(state.seats, fn seat ->
+        Enum.map(page_seats(state), fn seat ->
           %{seat_id: seat.id, seat_name: seat.name, text: state.gives[seat.id] || ""}
         end),
       author_meta: state.page && (state.page[:meta] || state.page["meta"]),
@@ -1006,10 +1548,19 @@ defmodule MeaningGame.Game do
   defp overrule_view(%{overrule: overrule} = state, viewer) do
     proposer = find_seat(state, overrule.proposer_id)
 
+    side =
+      if overrule[:side_id] do
+        Enum.find(sides_list(state), &(&1.id == overrule.side_id))
+      end
+
+    your_side? = is_nil(side) or viewer in side.seat_ids
+
     %{
       pending?: true,
       proposer_id: overrule.proposer_id,
       proposer_name: proposer && proposer.name,
+      side_id: overrule[:side_id],
+      your_side?: your_side?,
       closeness: overrule.closeness,
       agreed_seat_ids: MapSet.to_list(overrule.agreed),
       you_proposed?: viewer == overrule.proposer_id,
@@ -1017,25 +1568,82 @@ defmodule MeaningGame.Game do
     }
   end
 
-  defp already_overruled?(%{verdict: %{overruled?: true}}), do: true
-  defp already_overruled?(_state), do: false
+  defp already_overruled?(state, seat_id) do
+    if sides_mode?(state) do
+      case Enum.find(sides_list(state), &(seat_id in &1.seat_ids)) do
+        %{id: side_id} ->
+          verdict = state.side_verdicts && state.side_verdicts[side_id]
+          verdict != nil and Map.get(verdict, :overruled?, false)
+
+        _ ->
+          false
+      end
+    else
+      state.verdict != nil and Map.get(state.verdict, :overruled?, false)
+    end
+  end
 
   defp resolve_overrule_unanimity(state, agreed) do
-    if MapSet.size(agreed) >= length(state.seats) do
-      agree_overrule(state)
+    if sides_mode?(state) and state.overrule[:side_id] do
+      case Enum.find(sides_list(state), &(&1.id == state.overrule.side_id)) do
+        %{seat_ids: seat_ids} = side ->
+          if Enum.all?(seat_ids, &MapSet.member?(agreed, &1)) do
+            agree_side_overrule(state, side)
+          else
+            {:ok, state, []}
+          end
+
+        _ ->
+          {:ok, state, []}
+      end
     else
-      {:ok, state, []}
+      required = state.page_seat_ids || Enum.map(state.seats, & &1.id)
+
+      if Enum.all?(required, &MapSet.member?(agreed, &1)) do
+        agree_overrule(state)
+      else
+        {:ok, state, []}
+      end
     end
   end
 
   defp agree_overrule(state) do
+    apply_agreed_overrule(
+      state,
+      state.verdict,
+      "Overruled jointly across all Seats. Recorded as precedent.",
+      written_bridges(state),
+      fn s, new_verdict -> %{s | verdict: new_verdict} end
+    )
+  end
+
+  defp agree_side_overrule(state, side) do
+    original_verdict = state.side_verdicts[side.id]
+    side_bridges = Enum.map(side.seats, &state.bridges[&1.id])
+
+    apply_agreed_overrule(
+      state,
+      original_verdict,
+      "Overruled jointly by Side #{side.name}. Recorded as precedent.",
+      side_bridges,
+      fn s, new_verdict ->
+        %{s | side_verdicts: Map.put(s.side_verdicts, side.id, new_verdict)}
+      end,
+      %{side_id: side.id}
+    )
+  end
+
+  defp apply_agreed_overrule(
+         state,
+         original_verdict,
+         couple_reasoning,
+         bridges,
+         update_verdict_fn,
+         extra_effect_fields \\ %{}
+       ) do
     previously_closed? = phase(state) == :closed
 
     %{proposer_id: proposer_id, closeness: couple_closeness} = state.overrule
-
-    original_verdict = state.verdict
-
-    couple_reasoning = "Overruled jointly across all Seats. Recorded as precedent."
     couple_quip = "House law."
 
     new_verdict =
@@ -1050,21 +1658,26 @@ defmodule MeaningGame.Game do
         original_quip: original_verdict.quip
       })
 
-    overrule_effect_data = %{
-      attempt_number: state.attempt,
-      proposer_seat_id: proposer_id,
-      bookends: state.bookends,
-      bridges: written_bridges(state),
-      machine_closeness: original_verdict.closeness,
-      machine_reasoning: original_verdict.reasoning,
-      machine_quip: original_verdict.quip,
-      couple_closeness: couple_closeness,
-      couple_reasoning: couple_reasoning,
-      couple_quip: couple_quip
-    }
+    overrule_effect_data =
+      Map.merge(
+        %{
+          attempt_number: state.attempt,
+          proposer_seat_id: proposer_id,
+          bookends: state.bookends,
+          bridges: bridges,
+          machine_closeness: original_verdict.closeness,
+          machine_reasoning: original_verdict.reasoning,
+          machine_quip: original_verdict.quip,
+          couple_closeness: couple_closeness,
+          couple_reasoning: couple_reasoning,
+          couple_quip: couple_quip
+        },
+        extra_effect_fields
+      )
 
     overrules = state.overrules ++ [overrule_effect_data]
-    state = %{state | verdict: new_verdict, overrule: nil, overrules: overrules}
+    state = update_verdict_fn.(state, new_verdict)
+    state = %{state | overrule: nil, overrules: overrules}
 
     effects = [{:overrule, overrule_effect_data}]
 
@@ -1082,11 +1695,48 @@ defmodule MeaningGame.Game do
   # keeps a list because an attempt has held more than one row before and the
   # rows are what a reader counts; today that list is one long (ADR-0010).
   defp chronicle_attempt(state, attempt) do
-    verdicts = if attempt.verdict, do: [chronicle_verdict(state, attempt)], else: []
+    verdicts =
+      cond do
+        attempt[:side_verdicts] || Map.get(attempt, :side_verdicts) ->
+          chronicle_side_verdicts(state, attempt)
+
+        attempt.verdict ->
+          [chronicle_verdict(state, attempt)]
+
+        true ->
+          []
+      end
 
     state
     |> attempt_view(attempt)
     |> Map.put(:verdicts, verdicts)
+  end
+
+  defp chronicle_side_verdicts(state, attempt) do
+    sides = sides_list(state)
+    sv = attempt[:side_verdicts] || Map.get(attempt, :side_verdicts)
+
+    Enum.flat_map(sides, fn side ->
+      case sv[side.id] do
+        nil ->
+          []
+
+        verdict ->
+          view =
+            verdict
+            |> verdict_view()
+            |> Map.merge(%{
+              side_id: side.id,
+              seat_ids: side.seat_ids,
+              names: Enum.map(side.seats, & &1.name),
+              bridges: Enum.map(side.seats, &attempt.bridges[&1.id]),
+              furthest: Map.get(verdict, :furthest),
+              meta: verdict.meta
+            })
+
+          [view]
+      end
+    end)
   end
 
   # A verdict row says which word every Seat had in it, in the same order as the
@@ -1094,19 +1744,21 @@ defmodule MeaningGame.Game do
   # and which two of those words the Assayer sent the couple to next.
   defp chronicle_verdict(state, attempt) do
     verdict = attempt.verdict
+    seats = page_seats(state)
 
     verdict
     |> verdict_view()
     |> Map.merge(%{
-      seat_ids: Enum.map(state.seats, & &1.id),
-      names: Enum.map(state.seats, & &1.name),
-      bridges: Enum.map(state.seats, &attempt.bridges[&1.id]),
+      seat_ids: Enum.map(seats, & &1.id),
+      names: Enum.map(seats, & &1.name),
+      bridges: Enum.map(seats, &attempt.bridges[&1.id]),
       furthest: Map.get(verdict, :furthest),
       meta: verdict.meta
     })
   end
 
   defp seat_view(state, seat, viewer) do
+    seat_late? = state.page_seat_ids != nil and seat.id not in state.page_seat_ids
     partner = find_partner(state, seat)
 
     %{
@@ -1114,6 +1766,7 @@ defmodule MeaningGame.Game do
       name: seat.name,
       you?: seat.id == viewer,
       committed?: committed?(state, seat.id),
+      late?: seat_late?,
       partner_id: partner && partner.id,
       partner_name: partner && partner.name,
       couple?: partner != nil
@@ -1249,6 +1902,14 @@ defmodule MeaningGame.Game do
     if seated?(state, seat_id), do: :ok, else: {:error, :no_such_seat}
   end
 
+  defp playing_page_seat(state, seat_id) do
+    if state.page_seat_ids != nil and seat_id not in state.page_seat_ids do
+      {:error, :not_playing_page}
+    else
+      :ok
+    end
+  end
+
   defp open_reveal(state) do
     case phase(state) do
       :reveal -> :ok
@@ -1281,8 +1942,9 @@ defmodule MeaningGame.Game do
 
   defp normalize_label(other), do: to_string(other)
 
-  defp seat(%{id: id, name: name} = seat),
-    do: %{id: id, name: name, partner_id: Map.get(seat, :partner_id)}
+  defp seat(%{id: id, name: name} = seat) do
+    %{id: id, name: name, partner_id: Map.get(seat, :partner_id)}
+  end
 
   defp seated?(state, seat_id), do: find_seat(state, seat_id) != nil
 end

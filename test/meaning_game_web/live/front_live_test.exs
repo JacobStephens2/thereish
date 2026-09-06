@@ -106,18 +106,15 @@ defmodule MeaningGameWeb.FrontLiveTest do
   end
 
   describe "New Room" do
-    test "opens a Room of the chosen size and lands in it with the Code shown large",
+    test "opens a count-free Room at seat cap and lands in it with the Code shown large",
          %{conn: conn} do
-      {:ok, new, html} = live(conn, ~p"/new")
+      {:ok, new, _html} = live(conn, ~p"/new")
 
-      assert html =~ "How many players?"
-      assert has_element?(new, "select[name=players] option[value=\"4\"]")
-      assert has_element?(new, "select[name=players] option[value=\"6\"]")
-      refute has_element?(new, "select[name=players] option[value=\"7\"]")
-      refute has_element?(new, "select[name=players] option[value=\"1\"]")
+      refute has_element?(new, "select[name=players]")
+      assert has_element?(new, "[data-role=open-room]")
 
       assert {:error, {:live_redirect, %{to: to}}} =
-               new |> form("form", %{"players" => "4"}) |> render_submit()
+               new |> form("form") |> render_submit()
 
       "/r/" <> code = to
       on_exit(fn -> stop_room(code) end)
@@ -126,20 +123,14 @@ defmodule MeaningGameWeb.FrontLiveTest do
 
       assert has_element?(room, "[data-role=code]", String.upcase(code))
       assert has_element?(room, "[data-role=join-url]", "/r/#{code}")
-      assert Rooms.snapshot(code, nil).seat_limit == 4
-    end
-
-    test "defaults to the couch's two", %{conn: conn} do
-      {:ok, new, _} = live(conn, ~p"/new")
-
-      assert has_element?(new, "select[name=players] option[value=\"2\"][selected]")
+      assert Rooms.snapshot(code, nil).seat_limit == MeaningGame.Steward.seat_cap()
     end
 
     test "the creator joins by name like everybody else", %{conn: conn} do
       {:ok, new, _} = live(conn, ~p"/new")
 
       assert {:error, {:live_redirect, %{to: to}}} =
-               new |> form("form", %{"players" => "2"}) |> render_submit()
+               new |> form("form") |> render_submit()
 
       "/r/" <> code = to
       on_exit(fn -> stop_room(code) end)
