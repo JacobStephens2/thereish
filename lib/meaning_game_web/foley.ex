@@ -2,6 +2,8 @@ defmodule MeaningGameWeb.Foley do
   @moduledoc """
   Coordinates pushed audio events to the speaking view.
   """
+  use MeaningGameWeb, :verified_routes
+
   import Phoenix.LiveView, only: [push_event: 3]
 
   @doc """
@@ -22,6 +24,22 @@ defmodule MeaningGameWeb.Foley do
 
       true ->
         socket
+    end
+  end
+
+  @doc """
+  Pushes a foley:voice event to the socket if this view is the speaker.
+  """
+  def push_voice(socket, attempt) do
+    room = socket.assigns[:room]
+
+    if room && Map.get(room, :speaker?) do
+      push_event(socket, "foley:voice", %{
+        attempt: attempt,
+        url: ~p"/r/#{socket.assigns.slug}/voice/#{attempt}"
+      })
+    else
+      socket
     end
   end
 

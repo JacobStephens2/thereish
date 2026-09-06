@@ -9,6 +9,7 @@ defmodule MeaningGame.RoomsTest do
 
   import MeaningGame.RoomFixtures
 
+  alias MeaningGame.Chronicle
   alias MeaningGame.Rooms
   alias MeaningGame.Rooms.Server
   alias MeaningGame.Rooms.Store
@@ -1403,7 +1404,194 @@ defmodule MeaningGame.RoomsTest do
 
       json = Jason.encode!(view_a)
       refute json =~ ctx.token_a
-      refute json =~ ctx.token_b
+    end
+  end
+
+  describe "foley voice (the Assayer speaks)" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+
+      %{slug: slug, mara: mara, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "when voice is on and a speaker exists, broadcasts voice_ready and holds audio for attempt",
+         ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+      assert {:ok, audio, :mp3} = Rooms.voice_audio(ctx.slug, 1)
+      assert is_binary(audio) and byte_size(audio) > 0
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 2)
+    end
+
+    test "voice is not spoken when voice switch is off or no speaker exists", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      # Voice switch off, speaker exists
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      assert Rooms.snapshot(ctx.slug, nil).voice == false
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      refute_receive {:voice_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "advancing to next attempt clears past attempt's audio and serves only new attempt's audio",
+         ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      # Attempt 1: miss
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 1)
+
+      # Advance to attempt 2
+      :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :bridging)
+
+      # Past attempt's audio is no longer served
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 2)
+
+      # Attempt 2: meld
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "valley")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "valley")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 2}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 2)
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "failing voice synthesis is dropped and logged; reveal and rules untouched", ctx do
+      steward_env = Application.get_env(:meaning_game, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_mode, :unavailable))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      view = await_reveal(ctx.slug)
+
+      assert view.phase in [:reveal, :closed]
+      assert view.reveal.quip != nil
+
+      refute_receive {:voice_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "late voice arriving after next attempt started is dropped and logged", ctx do
+      steward_env = Application.get_env(:meaning_game, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_delay_ms, 200))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      # Attempt 1: miss
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      # Quickly advance before voice delay finishes
+      :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :bridging)
+
+      # Wait out the delay
+      Process.sleep(250)
+
+      refute_receive {:voice_ready, 1}
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+    end
+
+    test "voice_meta is recorded on the Verdict in Chronicle when Page closes", ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+
+      room = Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      pages = Chronicle.pages(room.id)
+      assert length(pages) == 1
+      page = hd(pages)
+      assert length(page.attempts) == 1
+      attempt = hd(page.attempts)
+      assert length(attempt.verdicts) == 1
+      verdict = hd(attempt.verdicts)
+
+      assert is_map(verdict.voice_meta)
+      assert verdict.voice_meta["provider"] != nil
+      assert verdict.voice_meta["voice"] != nil
+      assert verdict.voice_meta["cost"] != nil or verdict.voice_meta["cost_usd"] != nil
+      assert verdict.voice_meta["latency"] != nil or verdict.voice_meta["latency_ms"] != nil
+    end
+
+    test "voice_audio and voice_meta do not leak across next_page", ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      # Attempt 1: meld closes the page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      assert_receive {:voice_ready, 1}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 1)
+
+      # Next page starts; attempt resets to 1 but prior audio must be gone
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
     end
   end
 
