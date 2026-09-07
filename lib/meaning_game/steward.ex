@@ -124,7 +124,7 @@ defmodule MeaningGame.Steward do
   def score_failure(reason) do
     %{
       cost_usd: 0.0,
-      failure: to_string(reason)
+      failure: if(is_binary(reason), do: reason, else: inspect(reason))
     }
   end
 
