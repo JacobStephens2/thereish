@@ -1218,6 +1218,19 @@ defmodule MeaningGameWeb.RoomComponents do
   attr :stage_present?, :boolean, default: false
 
   def local_sound_switch(assigns) do
+    {title, aria_label} =
+      if assigns.stage_present? do
+        {"Commit sound plays from the Stage while connected",
+         "Toggle commit sound on this device (commit sound plays from the Stage while connected)"}
+      else
+        {"Toggle commit sound on this device", "Toggle commit sound on this device"}
+      end
+
+    assigns =
+      assigns
+      |> assign(:title, title)
+      |> assign(:aria_label, aria_label)
+
     ~H"""
     <button
       type="button"
@@ -1225,20 +1238,8 @@ defmodule MeaningGameWeb.RoomComponents do
       phx-hook=".LocalSoundToggle"
       data-role="local-sound-toggle"
       data-sound="on"
-      aria-label={
-        if @stage_present? do
-          "Toggle commit sound on this device (commit sound plays from the Stage while connected)"
-        else
-          "Toggle commit sound on this device"
-        end
-      }
-      title={
-        if @stage_present? do
-          "Commit sound plays from the Stage while connected"
-        else
-          "Toggle commit sound on this device"
-        end
-      }
+      aria-label={@aria_label}
+      title={@title}
       class="flex items-center justify-center p-1 rounded hover:bg-base-200 transition-colors opacity-70 hover:opacity-100 cursor-pointer"
     >
       <svg

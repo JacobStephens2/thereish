@@ -43,24 +43,11 @@ defmodule MeaningGameWeb.Foley do
   Stage holds the Room. With a Stage present, the Stage sounds the commit and
   the phone stays quiet.
   """
-  def push_own_commit(socket, opts \\ []) do
-    stage_present? =
-      Keyword.get_lazy(opts, :stage_present?, fn ->
-        stage_present_for_socket?(socket)
-      end)
-
-    if stage_present? do
+  def push_own_commit(socket) do
+    if Map.get(socket.assigns, :stage_present?, false) do
       socket
     else
       push_event(socket, "foley:own-commit", %{})
-    end
-  end
-
-  defp stage_present_for_socket?(socket) do
-    if slug = socket.assigns[:slug] do
-      MeaningGameWeb.Presence.stage_present?(slug)
-    else
-      Map.get(socket.assigns, :stage_present?, false)
     end
   end
 
