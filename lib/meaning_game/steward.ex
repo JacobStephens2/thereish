@@ -315,17 +315,10 @@ defmodule MeaningGame.Steward do
   def name_room(digests, taken_codes) do
     role = role(:scribe, :naming)
 
-    task =
-      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
-        adapter().name_room(digests, taken_codes)
-      end)
-
-    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {:ok, %{word: _} = result}} -> {:ok, result}
-      {:ok, {:ok, word}} when is_binary(word) -> {:ok, %{word: word, quip: nil}}
-      {:ok, other} -> other
-      {:exit, reason} -> {:error, reason}
-      nil -> {:error, :timeout}
+    case await_task(role, fn -> adapter().name_room(digests, taken_codes) end) do
+      {:ok, %{word: _} = result} -> {:ok, result}
+      {:ok, word} when is_binary(word) -> {:ok, %{word: word, quip: nil}}
+      other -> other
     end
   end
 
@@ -335,15 +328,14 @@ defmodule MeaningGame.Steward do
   @spec quip_code(String.t()) :: {:ok, String.t() | nil} | {:error, term()}
   def quip_code(code) do
     role = role(:scribe, :naming)
+    await_task(role, fn -> adapter().quip_code(code) end)
+  end
 
-    task =
-      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
-        adapter().quip_code(code)
-      end)
+  defp await_task(role, fun) do
+    task = Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fun)
 
     case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {:ok, quip}} -> {:ok, quip}
-      {:ok, other} -> other
+      {:ok, result} -> result
       {:exit, reason} -> {:error, reason}
       nil -> {:error, :timeout}
     end

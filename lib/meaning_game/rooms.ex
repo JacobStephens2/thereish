@@ -84,7 +84,7 @@ defmodule MeaningGame.Rooms do
     create(seat_count, device_token, [])
   end
 
-  def create(_seat_count, _device_token), do: {:error, :bad_player_count}
+  def create(_seat_count, _device_token), do: {:error, :bad_seat_count}
 
   @spec create(pos_integer(), String.t() | nil, keyword()) :: {:ok, String.t()} | {:error, term()}
   def create(seat_count, device_token, opts)
@@ -112,11 +112,11 @@ defmodule MeaningGame.Rooms do
         end
       end
     else
-      {:error, :bad_player_count}
+      {:error, :bad_seat_count}
     end
   end
 
-  def create(_seat_count, _device_token, _opts), do: {:error, :bad_player_count}
+  def create(_seat_count, _device_token, _opts), do: {:error, :bad_seat_count}
 
   defp digests_for_rooms(rooms) do
     rooms
@@ -130,16 +130,10 @@ defmodule MeaningGame.Rooms do
 
     case Steward.name_room(digests, taken) do
       {:ok, %{word: code, quip: quip}} when is_binary(code) ->
-        case insert_and_start(code, seat_count, quip) do
-          {:ok, slug} -> {:ok, slug}
-          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
-        end
+        insert_or_fallback(code, seat_count, quip)
 
       {:ok, code} when is_binary(code) ->
-        case insert_and_start(code, seat_count, nil) do
-          {:ok, slug} -> {:ok, slug}
-          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
-        end
+        insert_or_fallback(code, seat_count, nil)
 
       _ ->
         insert_with_a_free_code(seat_count, @code_draws)
@@ -156,13 +150,17 @@ defmodule MeaningGame.Rooms do
             _ -> nil
           end
 
-        case insert_and_start(code, seat_count, quip) do
-          {:ok, slug} -> {:ok, slug}
-          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
-        end
+        insert_or_fallback(code, seat_count, quip)
 
       {:error, :no_free_code} ->
         {:error, :no_free_code}
+    end
+  end
+
+  defp insert_or_fallback(code, seat_count, quip) do
+    case insert_and_start(code, seat_count, quip) do
+      {:ok, code} -> {:ok, code}
+      {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
     end
   end
 
@@ -187,8 +185,8 @@ defmodule MeaningGame.Rooms do
 
   defp insert_with_a_free_code(seat_count, draws_left) do
     case insert_and_start(Code.draw(), seat_count, nil) do
-      {:ok, slug} ->
-        {:ok, slug}
+      {:ok, code} ->
+        {:ok, code}
 
       {:error, changeset} ->
         if code_taken?(changeset) do
@@ -204,7 +202,7 @@ defmodule MeaningGame.Rooms do
          {:ok, room} <- Store.insert_room(normalized, seat_count, quip) do
       case start_room(room.slug) do
         {:ok, _pid} ->
-          {:ok, room.slug}
+          {:ok, normalized}
 
         error ->
           MeaningGame.Repo.delete(room)
