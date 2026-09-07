@@ -1763,9 +1763,51 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       await_reveal_on(ctx.mara)
       assert_push_event(ctx.mara, "foley:sting", %{band: _})
-      assert_push_event(ctx.mara, "foley:ending", %{kind: _})
+      assert_push_event(ctx.mara, "foley:ending", %{kind: :deep_meld})
       refute_push_event(ctx.stage, "foley:sting", %{})
       refute_push_event(ctx.stage, "foley:ending", %{})
+    end
+
+    test "foley:ending pushes :meld when closing on a meld band", ctx do
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: _})
+
+      # cairns and cairn has shared prefix 5/11 -> closeness 91, which is in :meld band
+      commit(ctx.mara, "cairns")
+      commit(ctx.jacob, "cairn")
+
+      assert_push_event(ctx.stage, "foley:beat", %{})
+      await_reveal_on(ctx.stage)
+
+      assert_push_event(ctx.stage, "foley:sting", %{band: :meld})
+      assert_push_event(ctx.stage, "foley:ending", %{kind: :meld})
+      refute_push_event(ctx.mara, "foley:ending", %{})
+      refute_push_event(ctx.jacob, "foley:ending", %{})
+    end
+
+    test "foley:ending pushes :unmelded when closing without a meld", ctx do
+      attempt_cap(1)
+
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: _})
+
+      # cairn and beacon share 0 prefix -> closeness 0, miss
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "beacon")
+
+      assert_push_event(ctx.stage, "foley:beat", %{})
+      await_reveal_on(ctx.stage)
+
+      assert_push_event(ctx.stage, "foley:sting", %{band: :miss})
+      assert_push_event(ctx.stage, "foley:ending", %{kind: :unmelded})
+      refute_push_event(ctx.mara, "foley:ending", %{})
+      refute_push_event(ctx.jacob, "foley:ending", %{})
     end
 
     test "music control pushes off, house, and page to speaker alone", ctx do

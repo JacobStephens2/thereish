@@ -130,16 +130,40 @@ defmodule MeaningGameWeb.Foley do
         (old_room.phase == :closed or not is_nil(Map.get(old_room, :closed)))
 
     if closed_now? and not was_closed? do
-      kind =
-        if new_room[:closed] && new_room.closed[:because] == :meld do
-          :meld
-        else
-          :unmelded
-        end
-
+      kind = ending_kind(new_room)
       push_event(socket, "foley:ending", %{kind: kind})
     else
       socket
+    end
+  end
+
+  defp ending_kind(room) do
+    close_reason = room[:closed] && room.closed[:because]
+
+    if close_reason in [:meld, "meld"] do
+      case closing_band(room) do
+        band when band in [:deep_meld, "deep_meld"] -> :deep_meld
+        _ -> :meld
+      end
+    else
+      :unmelded
+    end
+  end
+
+  defp closing_band(room) do
+    cond do
+      is_nil(room[:reveal]) ->
+        nil
+
+      room.reveal[:band] ->
+        room.reveal[:band]
+
+      is_list(room.reveal[:sides]) ->
+        bands = Enum.map(room.reveal.sides, & &1[:band])
+        if :deep_meld in bands or "deep_meld" in bands, do: :deep_meld, else: :meld
+
+      true ->
+        nil
     end
   end
 

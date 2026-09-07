@@ -1214,10 +1214,15 @@ defmodule MeaningGameWeb.RoomComponents do
 
   attr :speaker, :boolean, default: false
   attr :levels, :list, default: nil
+  attr :meld_cue_delay_ms, :integer, default: nil
 
   def foley_hook(assigns) do
     levels = assigns[:levels] || MeaningGame.Steward.foley_levels()
-    assigns = assign(assigns, :levels, levels)
+
+    meld_cue_delay_ms =
+      assigns[:meld_cue_delay_ms] || MeaningGame.Steward.foley_meld_cue_delay_ms()
+
+    assigns = assigns |> assign(:levels, levels) |> assign(:meld_cue_delay_ms, meld_cue_delay_ms)
 
     ~H"""
     <div
@@ -1229,6 +1234,7 @@ defmodule MeaningGameWeb.RoomComponents do
       data-level-stings={to_string(@levels[:stings] || 1.2)}
       data-level-voice={to_string(@levels[:voice] || 1.2)}
       data-level-duck={to_string(@levels[:duck] || 0.15)}
+      data-meld-cue-delay-ms={to_string(@meld_cue_delay_ms)}
       class="hidden"
     >
     </div>
@@ -1259,6 +1265,19 @@ defmodule MeaningGameWeb.RoomComponents do
             stings: parseLevel(this.el.dataset.levelStings, 1.2),
             voice: parseLevel(this.el.dataset.levelVoice, 1.2),
             duck: parseLevel(this.el.dataset.levelDuck, 0.15)
+          }
+
+          this.parseDelay = (val, fallback) => {
+            const parsed = parseInt(val, 10)
+            return isNaN(parsed) ? fallback : parsed
+          }
+          this.meldCueDelayMs = this.parseDelay(this.el.dataset.meldCueDelayMs, 1800)
+          this.endingTimeout = null
+          this.clearEndingTimeout = () => {
+            if (this.endingTimeout) {
+              clearTimeout(this.endingTimeout)
+              this.endingTimeout = null
+            }
           }
 
           this.initAudio = () => {
@@ -1382,6 +1401,22 @@ defmodule MeaningGameWeb.RoomComponents do
             source.start(0)
           }
 
+          this.fadeMusicOut = (fadeDuration = 2.0) => {
+            if (!this.ctx || !this.musicBus) return
+            const now = this.ctx.currentTime
+            this.musicBus.gain.cancelScheduledValues(now)
+            this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
+            this.musicBus.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
+            const oldMusic = this.currentMusic
+            this.currentMusic = null
+            this.musicSource = null
+            if (oldMusic) {
+              setTimeout(() => {
+                try { oldMusic.source.stop() } catch (_) {}
+              }, fadeDuration * 1000 + 100)
+            }
+          }
+
           this.stopMusic = () => {
             if (this.currentMusic) {
               try { this.currentMusic.source.stop() } catch (_) {}
@@ -1403,17 +1438,7 @@ defmodule MeaningGameWeb.RoomComponents do
 
             if (!path) {
               this.musicOff = true
-              this.musicBus.gain.cancelScheduledValues(now)
-              this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
-              this.musicBus.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
-              const oldMusic = this.currentMusic
-              this.currentMusic = null
-              this.musicSource = null
-              if (oldMusic) {
-                setTimeout(() => {
-                  try { oldMusic.source.stop() } catch (_) {}
-                }, fadeDuration * 1000 + 100)
-              }
+              this.fadeMusicOut(fadeDuration)
               return
             }
 
@@ -1571,15 +1596,30 @@ defmodule MeaningGameWeb.RoomComponents do
           })
 
           this.handleEvent("foley:ending", async ({kind}) => {
-            const endingKind = (kind === "meld") ? "meld" : "unmelded"
-            const delayMs = (kind === "meld") ? 1800 : 0
-            setTimeout(() => {
-              this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 0)
+            this.clearEndingTimeout()
+
+            if (kind === "meld" || kind === "deep_meld") {
+              const cueUrl = (kind === "deep_meld")
+                ? "/audio/victory-deep-meld.mp3"
+                : "/audio/victory-meld.mp3"
+              const delayMs = this.meldCueDelayMs
+
+              // Prefetch buffer during the delay so playback starts instantly when the timer fires
+              this.fetchBuffer(cueUrl)
+
+              this.endingTimeout = setTimeout(() => {
+                this.playEffect(cueUrl, this.stingsBus, 0)
+                this.fadeMusicOut(2.0)
+                this.endingTimeout = null
+              }, delayMs)
+            } else {
+              this.playEffect("/audio/ending-unmelded.mp3", this.stingsBus, 0)
               this.stopMusic()
-            }, delayMs)
+            }
           })
 
           this.handleEvent("foley:stop", () => {
+            this.clearEndingTimeout()
             this.stopVoice()
             this.currentVoiceAttempt = null
             this.stopMusic()
@@ -1590,9 +1630,11 @@ defmodule MeaningGameWeb.RoomComponents do
 
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
+          this.meldCueDelayMs = (this.parseDelay || parseInt)(this.el.dataset.meldCueDelayMs, 1800)
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
           this.updateTapForSound()
           if (!this.speaker) {
+            if (this.clearEndingTimeout) this.clearEndingTimeout()
             this.stopVoice()
             this.currentVoiceAttempt = null
             this.stopMusic()
@@ -1600,6 +1642,7 @@ defmodule MeaningGameWeb.RoomComponents do
         },
 
         destroyed() {
+          if (this.clearEndingTimeout) this.clearEndingTimeout()
           if (this.onFormSubmit) document.removeEventListener("submit", this.onFormSubmit)
           if (this.onCommitClick) document.removeEventListener("click", this.onCommitClick)
           this.stopVoice()

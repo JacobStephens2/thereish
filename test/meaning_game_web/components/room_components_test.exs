@@ -469,6 +469,26 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert custom_html =~ ~s(data-level-duck="0.2")
     end
 
+    test "foley_hook renders meld cue delay and hook script handles meld, deep_meld, and unmelded" do
+      default_delay = MeaningGame.Steward.foley_meld_cue_delay_ms()
+      assert is_integer(default_delay) and default_delay > 0
+
+      html = render_component(&foley_hook/1, speaker: true)
+      assert html =~ ~s(data-meld-cue-delay-ms="#{default_delay}")
+
+      # Custom delay overrides configured one
+      custom_html = render_component(&foley_hook/1, speaker: true, meld_cue_delay_ms: 2500)
+      assert custom_html =~ ~s(data-meld-cue-delay-ms="2500")
+
+      # Script in room_components handles meld and deep_meld with victory cues and fadeMusicOut
+      hook_source = File.read!("lib/meaning_game_web/components/room_components.ex")
+      assert hook_source =~ "victory-meld.mp3"
+      assert hook_source =~ "victory-deep-meld.mp3"
+      assert hook_source =~ "ending-unmelded.mp3"
+      assert hook_source =~ "fadeMusicOut(2.0)"
+      refute hook_source =~ ~s("/audio/ending-meld.mp3")
+    end
+
     test "local_sound_switch renders button with colocated LocalSoundToggle hook and default on state" do
       html = render_component(&local_sound_switch/1, %{})
       assert html =~ ~s(id="local-sound-toggle")
