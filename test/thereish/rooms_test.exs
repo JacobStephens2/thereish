@@ -626,7 +626,10 @@ defmodule Thereish.RoomsTest do
       Process.exit(pid, :kill)
       assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
 
-      assert once_restarted(fn -> Rooms.snapshot(slug, melissa.id) end) == before
+      restarted = once_restarted(fn -> Rooms.snapshot(slug, melissa.id) end)
+      assert Map.drop(restarted, [:loop, :playing]) == Map.drop(before, [:loop, :playing])
+      assert restarted.loop != nil
+      assert restarted.playing != nil
       assert Rooms.rejoin(slug, token) == {:ok, melissa}
     end
 
@@ -2612,10 +2615,12 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
     end
 
-    test "snapshot carries the Page's loop as name and path once written, and nil before", ctx do
-      # Before a page is written (in giving), loop is nil
+    test "snapshot carries wait music / loop as name and path in giving and bridging", ctx do
+      # In giving, wait music is present
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:loop])
+      assert %{name: name, path: path} = view.loop
+      assert is_binary(name) and byte_size(name) > 0
+      assert is_binary(path)
 
       # Write page 1
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
@@ -2625,20 +2630,22 @@ defmodule Thereish.RoomsTest do
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert %{name: name, path: path} = view.loop
       assert is_binary(name) and byte_size(name) > 0
-      assert is_binary(path) and String.starts_with?(path, "/audio/house-loop")
-      assert view.loop in Thereish.Foley.Loops.all()
+      assert is_binary(path)
+      room = Store.get_room(ctx.slug)
+      assert view.loop in Thereish.Foley.Repertoire.pool(room.id)
     end
 
     test "no-immediate-repeat rule across three Pages", ctx do
-      all_loops = Thereish.Foley.Loops.all()
+      room = Store.get_room(ctx.slug)
 
       # Page 1
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting 1a")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 1b")
       await_phase(ctx.slug, :bridging)
 
+      pool1 = Thereish.Foley.Repertoire.pool(room.id)
       view1 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view1.loop in all_loops
+      assert view1.loop in pool1
       loop1 = view1.loop
 
       # Solve Page 1 to close
@@ -2653,8 +2660,9 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 2b")
       await_phase(ctx.slug, :bridging)
 
+      pool = Thereish.Foley.Repertoire.pool(room.id)
       view2 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view2.loop in all_loops
+      assert view2.loop in pool
       loop2 = view2.loop
       refute loop2 == loop1
 
@@ -2670,10 +2678,181 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 3b")
       await_phase(ctx.slug, :bridging)
 
+      pool = Thereish.Foley.Repertoire.pool(room.id)
       view3 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view3.loop in all_loops
+      assert view3.loop in pool
       loop3 = view3.loop
       refute loop3 == loop2
+    end
+  end
+
+  describe "ticket 01: The Repertoire is wait music" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "a brand-new Room's wait music is drawn from Repertoire and plays during giving and writing",
+         ctx do
+      # In giving phase
+      view_giving = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_giving.phase == :giving
+      assert view_giving.playing != nil
+      assert view_giving.playing.kind == "repertoire"
+      assert is_binary(view_giving.playing.path) and byte_size(view_giving.playing.path) > 0
+      assert is_binary(view_giving.playing.title) and byte_size(view_giving.playing.title) > 0
+
+      # Set delay on author so writing phase can be observed
+      set_fake(author_delay_ms: 100, music_delay_ms: 200)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+
+      # In writing phase
+      view_writing = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_writing.phase == :writing
+      assert view_writing.playing != nil
+      assert view_writing.playing.kind == "repertoire"
+      assert view_writing.playing.path == view_giving.playing.path
+
+      # In bridging phase before track lands: wait music still playing
+      await_phase(ctx.slug, :bridging)
+      view_bridging_wait = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_bridging_wait.playing.kind == "repertoire"
+
+      # When track lands: playing switches to track
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.melissa.id).track != nil
+      end)
+
+      view_bridging_track = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_bridging_track.playing.kind == "track"
+      assert view_bridging_track.playing.path == view_bridging_track.track.path
+      assert view_bridging_track.playing.title == view_bridging_track.track.title
+    end
+
+    test "under house, playing kind is repertoire; under off, playing is nil", ctx do
+      view_init = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_init.playing.kind == "repertoire"
+
+      :ok = Rooms.set_music(ctx.slug, "house")
+      view_house = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_house.music == "house"
+      assert view_house.playing != nil
+      assert view_house.playing.kind == "repertoire"
+      assert is_nil(view_house.track)
+
+      :ok = Rooms.set_music(ctx.slug, "off")
+      view_off = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_off.music == "off"
+      assert is_nil(view_off.playing)
+      assert is_nil(view_off.track)
+    end
+
+    test "House/Off scoring lifecycle: starts no score, keeps in-flight track without playing, plays when switched to page",
+         ctx do
+      :ok = Rooms.set_music(ctx.slug, "house")
+
+      # Give prompts to move through to bridging
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "forest path")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "misty lake")
+      await_phase(ctx.slug, :bridging)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      server_state = :sys.get_state(pid)
+
+      # Under House: no score task was started
+      refute Map.get(server_state, :score_task_running, false)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.playing.kind == "repertoire"
+      assert is_nil(view.track)
+
+      # An in-flight score arrives while under House: it finishes and is kept, not played
+      page_ref = server_state.current_page_ref
+
+      fake_track = %{
+        path: "/media/tracks/house-kept.mp3",
+        duration: 100,
+        format: :mp3,
+        title: "House Kept",
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:scored, page_ref, {:ok, fake_track}})
+
+      # Still under House: kept track is NOT played; wait music remains playing
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.playing.kind == "repertoire"
+      assert is_nil(view.track)
+
+      # Switching back to page plays the kept track immediately
+      :ok = Rooms.set_music(ctx.slug, "page")
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.playing.kind == "track"
+      assert view.playing.path == fake_track.path
+      assert view.playing.title == fake_track.title
+
+      # Under Off: bus is silenced (playing is nil)
+      :ok = Rooms.set_music(ctx.slug, "off")
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view.playing)
+
+      # Switching back to page resumes playing the kept track
+      :ok = Rooms.set_music(ctx.slug, "page")
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.playing.kind == "track"
+      assert view.playing.path == fake_track.path
+    end
+
+    test "unsettled vs settled Room draw rules", ctx do
+      # Stranger track in TrackCache
+      {:ok, _} =
+        Thereish.Steward.TrackCache.put(["glacier", "tundra"], %{
+          title: "Glacier Tundra",
+          path: "/media/tracks/glacier.mp3"
+        })
+
+      # ctx.slug has no Chronicle tracks (unsettled)
+      room = Store.get_room(ctx.slug)
+      unsettled_pool = Thereish.Foley.Repertoire.pool(room.id)
+      assert "/media/tracks/glacier.mp3" in Enum.map(unsettled_pool, & &1.path)
+
+      # Now settle ctx.slug with its own Chronicle page
+      now = DateTime.utc_now()
+
+      %Thereish.Chronicle.Page{}
+      |> Thereish.Chronicle.Page.changeset(%{
+        room_id: room.id,
+        document: %{bookends: ["glacier", "tundra"]},
+        author_meta: %{arm: "flash"},
+        music_meta: %{
+          path: "/media/tracks/our-song.mp3",
+          title: "Our Song",
+          provider: "fake"
+        },
+        closed_because: "meld",
+        melded: true,
+        closeness: 95,
+        opened_at: now,
+        closed_at: now
+      })
+      |> Repo.insert!()
+
+      assert Thereish.Foley.Repertoire.settled?(room.id)
+
+      settled_pool = Thereish.Foley.Repertoire.pool(room.id)
+      settled_paths = Enum.map(settled_pool, & &1.path)
+
+      assert "/media/tracks/our-song.mp3" in settled_paths
+      refute "/media/tracks/glacier.mp3" in settled_paths
+
+      for loop <- Thereish.Foley.Loops.all() do
+        assert loop.path in settled_paths
+      end
     end
   end
 
