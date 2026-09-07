@@ -1,0 +1,980 @@
+defmodule ThereishWeb.RoomComponentsTest do
+  use ThereishWeb.ConnCase, async: true
+
+  import Phoenix.Component
+  import Phoenix.LiveViewTest
+  import ThereishWeb.RoomComponents
+
+  describe "assaying component (the beat)" do
+    test "the 2.5s beat is visibly a beat, not a spinner" do
+      room = %{
+        phase: :assaying,
+        assayer_step: :grading,
+        provisional_band: nil
+      }
+
+      html = render_component(&assaying/1, room: room)
+
+      # Maintains the data-role and data-step expected by escalation and rooms
+      assert html =~ ~s(data-role="phase")
+      assert html =~ ~s(data-step="grading")
+
+      # Visibly a beat: includes a beat meter / cadence element
+      assert html =~ ~s(data-role="beat-meter")
+
+      # Not a spinner: must not use spinner classes or spinner elements
+      refute html =~ "loading-spinner"
+      refute html =~ "spinner"
+
+      # Theatrical wording
+      assert html =~ "Holding the breath" or html =~ "The beat" or html =~ "looking at them"
+    end
+
+    test "escalation beyond the beat displays the waiting narration" do
+      slow_room = %{
+        phase: :assaying,
+        assayer_step: :slow
+      }
+
+      html = render_component(&assaying/1, room: slow_room)
+      assert html =~ "The Assayer is still reading"
+    end
+
+    test "author_writing displays reading settings initially and still writing when slow" do
+      writing_room = %{
+        phase: :writing,
+        author_step: :writing
+      }
+
+      html = render_component(&author_writing/1, room: writing_room)
+      assert html =~ "The Author is reading your settings..."
+      assert html =~ ~s(data-role="beat-meter")
+      assert html =~ ~s(data-step="writing")
+
+      still_room = %{
+        phase: :writing,
+        author_step: :still_writing
+      }
+
+      html = render_component(&author_writing/1, room: still_room)
+      assert html =~ "The Author is still writing..."
+      assert html =~ ~s(data-step="still_writing")
+    end
+  end
+
+  describe "reveal component (the performance)" do
+    setup do
+      meld_room = %{
+        phase: :reveal,
+        reveal: %{
+          closeness: 80,
+          band: :meld,
+          melded?: true,
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "cairo"}
+          ],
+          graded?: true,
+          overruled?: false,
+          quip: "\"cairn\" and \"cairo\" walk into a bar.",
+          reasoning: "They share 4 letters.",
+          furthest: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "cairo"}
+          ]
+        }
+      }
+
+      miss_room = %{
+        phase: :reveal,
+        reveal: %{
+          closeness: 24,
+          band: :miss,
+          melded?: false,
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
+          ],
+          graded?: true,
+          overruled?: false,
+          quip: "\"cairn\" and \"beacon\" have never met.",
+          reasoning: "Different roads entirely.",
+          furthest: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
+          ]
+        }
+      }
+
+      no_verdict_room = %{
+        phase: :reveal,
+        reveal: %{
+          closeness: nil,
+          band: nil,
+          melded?: false,
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
+          ],
+          graded?: false,
+          overruled?: false,
+          quip: nil,
+          reasoning: nil,
+          furthest: nil
+        }
+      }
+
+      %{meld_room: meld_room, miss_room: miss_room, no_verdict_room: no_verdict_room}
+    end
+
+    test "both Bridges land side-by-side with comparison reading first", %{meld_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="comparison")
+      assert html =~ "cairn"
+      assert html =~ "cairo"
+      assert html =~ "Melissa"
+      assert html =~ "Jacob"
+    end
+
+    test "number arrives with climbing hook and band arrives with it", %{meld_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="closeness")
+      assert html =~ "80"
+      assert html =~ "ClimbNumber"
+      assert html =~ ~s(data-role="band")
+      assert html =~ "meld"
+    end
+
+    test "a Meld is staged as an arrival, distinct from a near miss", %{meld_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-arrival="meld")
+      assert html =~ "meld"
+      refute html =~ "One mind"
+    end
+
+    test "a harsh grade is staged as a shared joke, not a personal sting", %{miss_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-arrival="miss")
+      assert html =~ "24"
+      assert html =~ "miss"
+      # Must not look like an error state / sting
+      refute html =~ "alert-error"
+      refute html =~ "text-error"
+    end
+
+    test "close band presents without flavour line" do
+      close_room = %{
+        phase: :reveal,
+        reveal: %{
+          closeness: 60,
+          band: :close,
+          melded?: false,
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "dock"}
+          ],
+          graded?: true,
+          overruled?: false,
+          quip: "Different enough.",
+          reasoning: "Close enough.",
+          furthest: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "dock"}
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: close_room)
+
+      assert html =~ ~s(data-arrival="close")
+      assert html =~ "close"
+      assert html =~ "Different enough."
+      refute html =~ "Passable"
+      refute html =~ "Close enough."
+    end
+
+    test "the reveal renders Bridges, then the number and band, then the quip with no reasoning on screen",
+         %{meld_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      # Order: Bridges -> Closeness/Band -> Quip
+      {comp_idx, _} = :binary.match(html, ~s(data-role="comparison"))
+      {close_idx, _} = :binary.match(html, ~s(data-role="closeness-display"))
+      {quip_idx, _} = :binary.match(html, ~s(data-role="quip"))
+
+      assert comp_idx < close_idx
+      assert close_idx < quip_idx
+
+      assert html =~ ~s(data-role="quip")
+      assert html =~ "walk into a bar."
+      refute html =~ ~s(data-role="reasoning")
+      refute html =~ "The Assayer's reasoning"
+      refute html =~ "They share 4 letters."
+    end
+
+    test "the 10 second no-verdict path is staged as deliberate handover rather than broken", %{
+      no_verdict_room: room
+    } do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="no-verdict")
+      assert html =~ "No verdict"
+      assert html =~ "yours to call"
+      assert html =~ "steps aside" or html =~ "handing over" or html =~ "yields"
+    end
+
+    test "the furthest apart line is removed on phone and stage", %{miss_room: room} do
+      phone_html = render_component(&reveal/1, room: room, mode: :phone)
+      stage_html = render_component(&reveal/1, room: room, mode: :stage)
+
+      refute phone_html =~ ~s(data-role="furthest")
+      refute phone_html =~ "Furthest apart"
+      refute stage_html =~ ~s(data-role="furthest")
+      refute stage_html =~ "Furthest apart"
+    end
+
+    test "the flavour line is removed on phone and stage", %{meld_room: room} do
+      phone_html = render_component(&reveal/1, room: room, mode: :phone)
+      stage_html = render_component(&reveal/1, room: room, mode: :stage)
+
+      refute phone_html =~ "One mind"
+      refute phone_html =~ "heads"
+      refute stage_html =~ "One mind"
+      refute stage_html =~ "heads"
+    end
+
+    test "stage and phone show complementary perspectives", %{meld_room: room} do
+      seat = %{id: "s1", name: "Melissa"}
+
+      phone_html = render_component(&reveal/1, room: room, seat: seat, mode: :phone)
+      stage_html = render_component(&reveal/1, room: room, seat: nil, mode: :stage)
+
+      # Phone highlights your bridge
+      assert phone_html =~ "(you)" or phone_html =~ ~s(data-you="true")
+
+      # Stage is public theater
+      assert stage_html =~ ~s(data-mode="stage")
+      refute stage_html =~ ~s(data-you="true")
+    end
+  end
+
+  describe "roster couples" do
+    test "roster highlights couples with partner names" do
+      room = %{
+        seats: [
+          %{
+            id: "s1",
+            name: "Melissa",
+            you?: false,
+            committed?: false,
+            couple?: true,
+            partner_id: "s2",
+            partner_name: "Jacob"
+          },
+          %{
+            id: "s2",
+            name: "Jacob",
+            you?: true,
+            committed?: false,
+            couple?: true,
+            partner_id: "s1",
+            partner_name: "Melissa"
+          }
+        ],
+        open_seats: 0,
+        seat_limit: 2,
+        phase: :waiting
+      }
+
+      html = render_component(&roster/1, room: room)
+
+      assert html =~ ~s(data-role="partner")
+      assert html =~ "(with Jacob)"
+      assert html =~ "(with Melissa)"
+      assert html =~ ~s(data-couple="true")
+    end
+
+    test "roster in :stage mode renders as a compact horizontal strip" do
+      room = %{
+        seats: [
+          %{
+            id: "s1",
+            name: "Melissa",
+            you?: false,
+            committed?: true
+          },
+          %{
+            id: "s2",
+            name: "Jacob",
+            you?: false,
+            committed?: false
+          }
+        ],
+        open_seats: 0,
+        seat_limit: 2,
+        phase: :bridging
+      }
+
+      html = render_component(&roster/1, room: room, mode: :stage)
+
+      assert html =~ ~s(data-role="roster")
+      assert html =~ ~s(data-mode="stage")
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ ~s(data-committed="true")
+      assert html =~ "Melissa"
+      assert html =~ ~s(data-seat="s2")
+      assert html =~ "Jacob"
+      assert html =~ ~s(data-role="open-seats")
+    end
+  end
+
+  describe "couples on the reveal and stage meld map" do
+    setup do
+      pairs = [
+        %{
+          seat_ids: ["s1", "s2"],
+          names: ["Melissa", "Jacob"],
+          bridges: ["cairn", "cairo"],
+          closeness: 80,
+          band: :meld,
+          melded?: true,
+          couple?: true,
+          cross_couple?: false,
+          cross_couple_meld?: false,
+          surprise: nil
+        },
+        %{
+          seat_ids: ["s3", "s4"],
+          names: ["Ada", "Ida"],
+          bridges: ["wharf", "beacon"],
+          closeness: 30,
+          band: :miss,
+          melded?: false,
+          couple?: true,
+          cross_couple?: false,
+          cross_couple_meld?: false,
+          surprise: nil
+        },
+        %{
+          seat_ids: ["s1", "s4"],
+          names: ["Melissa", "Ida"],
+          bridges: ["cairn", "beacon"],
+          closeness: 85,
+          band: :meld,
+          melded?: true,
+          couple?: false,
+          cross_couple?: true,
+          cross_couple_meld?: true,
+          surprise: "Melissa and Ida think alike"
+        }
+      ]
+
+      room = %{
+        phase: :reveal,
+        reveal: %{
+          closeness: 65,
+          band: :close,
+          melded?: false,
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "cairo"},
+            %{seat_id: "s3", name: "Ada", bridge: "wharf"},
+            %{seat_id: "s4", name: "Ida", bridge: "beacon"}
+          ],
+          graded?: true,
+          overruled?: false,
+          quip: "All together now.",
+          pairs: pairs
+        }
+      }
+
+      %{room: room, pairs: pairs}
+    end
+
+    test "phone reveal puts player's own couple score first and marks cross-couple Melds", %{
+      room: room
+    } do
+      melissa_seat = %{id: "s1", name: "Melissa"}
+      html = render_component(&reveal/1, room: room, seat: melissa_seat, mode: :phone)
+
+      # Displays own couple pair closeness
+      assert html =~ ~s(data-role="own-couple-pair")
+      assert html =~ ~s(data-role="couple-closeness")
+      assert html =~ "Your couple: Melissa &amp; Jacob"
+      assert html =~ "80"
+
+      # Displays surprise cross-couple meld alert
+      assert html =~ ~s(data-role="cross-couple-meld")
+      assert html =~ "Melissa and Ida think alike"
+    end
+
+    test "stage reveal draws the meld map highlighting couples and cross-couple melds", %{
+      room: room
+    } do
+      html = render_component(&reveal/1, room: room, mode: :stage)
+
+      # Stage draws meld-map
+      assert html =~ ~s(data-role="meld-map")
+      assert html =~ "Meld Map"
+      assert html =~ "3 pairs"
+
+      # Couple badges
+      assert html =~ ~s(data-role="couple-badge")
+      assert html =~ "Couple"
+
+      # Cross-couple meld alert
+      assert html =~ ~s(data-role="cross-couple-meld")
+      assert html =~ "Melissa and Ida think alike"
+    end
+  end
+
+  describe "the carry line" do
+    test "names the two words the next attempt will hang between" do
+      room = %{phase: :reveal, next_bookends: ["cairn", "beacon"], next_bookends_chosen?: true}
+
+      html = render_component(&carry_forward/1, room: room)
+
+      assert html =~ ~s(data-role="carry-forward")
+      assert html =~ "cairn and beacon"
+      refute html =~ "nobody chose"
+    end
+
+    test "says when the Assayer did not choose them" do
+      room = %{phase: :reveal, next_bookends: ["cairn", "beacon"], next_bookends_chosen?: false}
+
+      html = render_component(&carry_forward/1, room: room)
+
+      assert html =~ "cairn and beacon"
+      assert html =~ "nobody chose"
+    end
+  end
+
+  describe "foley components" do
+    test "foley_switches renders voice switch and three-way music control on any view" do
+      room_with_speaker = %{speaker?: true, voice: true, music: "page"}
+      html = render_component(&foley_switches/1, room: room_with_speaker)
+      assert html =~ ~s(data-role="voice-switch")
+      assert html =~ ~s(data-role="music-control")
+      assert html =~ "Voice"
+      assert html =~ "Off"
+      assert html =~ "House loop"
+      assert html =~ "Written for this Page"
+
+      # Also renders on a room without speaker
+      room_without_speaker = %{speaker?: false, voice: false, music: "off"}
+      html_without = render_component(&foley_switches/1, room: room_without_speaker)
+      assert html_without =~ ~s(data-role="voice-switch")
+      assert html_without =~ ~s(data-role="music-control")
+      assert html_without =~ "Off"
+      assert html_without =~ "House loop"
+      assert html_without =~ "Written for this Page"
+    end
+
+    test "foley_hook renders hook container for colocated Foley hook with configured levels" do
+      configured = Thereish.Steward.foley_levels()
+      assert is_list(configured) and length(configured) > 0
+
+      html = render_component(&foley_hook/1, speaker: true)
+      assert html =~ ~s(id="foley-container")
+      assert html =~ ~s(phx-hook="ThereishWeb.RoomComponents.Foley")
+      assert html =~ ~s(data-speaker="true")
+      assert html =~ ~s(data-level-music="#{configured[:music]}")
+      assert html =~ ~s(data-level-stings="#{configured[:stings]}")
+      assert html =~ ~s(data-level-voice="#{configured[:voice]}")
+      assert html =~ ~s(data-level-duck="#{configured[:duck]}")
+      assert html =~ ~s(data-level-duck-stings="#{configured[:duck_stings]}")
+
+      # Redundant non-level prefixed attributes are not rendered
+      refute html =~ ~s(data-music=)
+      refute html =~ ~s(data-stings=)
+      refute html =~ ~s(data-voice=)
+      refute html =~ ~s(data-duck=)
+      refute html =~ ~s(data-duck-stings=)
+
+      # Custom levels passed explicitly override configured ones
+      custom_levels = [music: 0.8, stings: 1.5, voice: 1.0, duck: 0.2, duck_stings: 0.4]
+      custom_html = render_component(&foley_hook/1, speaker: true, levels: custom_levels)
+      assert custom_html =~ ~s(data-level-music="0.8")
+      assert custom_html =~ ~s(data-level-stings="1.5")
+      assert custom_html =~ ~s(data-level-voice="1.0")
+      assert custom_html =~ ~s(data-level-duck="0.2")
+      assert custom_html =~ ~s(data-level-duck-stings="0.4")
+    end
+
+    test "foley hook script ducks stings bus during voice, restores on end, and starts arriving cue ducked" do
+      hook_source = File.read!("lib/thereish_web/components/room_components.ex")
+
+      assert hook_source =~ "duckStings"
+      assert hook_source =~ "restoreStings"
+      assert hook_source =~ "isStingsDucked"
+      assert hook_source =~ "this.duckStings(duration)"
+      assert hook_source =~ "this.restoreStings()"
+
+      # Extract the Foley hook JS from room_components.ex and execute in Node with mock Web Audio
+      [_, js_body] =
+        Regex.run(
+          ~r/<script :type=\{Phoenix\.LiveView\.ColocatedHook\} name="\.Foley">\s*(.*?)\s*<\/script>/s,
+          hook_source
+        )
+
+      test_script = """
+      const assert = require('assert');
+
+      // Mock DOM & Web Audio
+      class MockGainNode {
+        constructor(ctx) {
+          this.ctx = ctx;
+          this.gain = {
+            value: 1.0,
+            setValueAtTime(v, t) { this.value = v; },
+            setTargetAtTime(target, startTime, timeConstant) {
+              if (startTime <= ctx.currentTime) {
+                this.value = target;
+              }
+            },
+            cancelScheduledValues(t) {},
+            linearRampToValueAtTime(v, t) { this.value = v; }
+          };
+        }
+        connect(target) {}
+      }
+
+      class MockAudioContext {
+        constructor() {
+          this.currentTime = 10.0;
+          this.state = 'running';
+          this.destination = {};
+        }
+        createGain() { return new MockGainNode(this); }
+        createBufferSource() {
+          return {
+            buffer: null,
+            connect(b) {},
+            start(t) {},
+            stop() {}
+          };
+        }
+        decodeAudioData(buf) { return Promise.resolve({ duration: 4.0 }); }
+        resume() { return Promise.resolve(); }
+      }
+
+      global.window = {
+        AudioContext: MockAudioContext,
+        matchMedia: () => ({ matches: false })
+      };
+      global.fetch = () => Promise.resolve({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(8))
+      });
+      global.document = {
+        getElementById: () => null,
+        querySelector: (sel) => (sel === "[data-role=quip]" ? {} : null),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        body: {}
+      };
+
+      // Wrap exported hook
+      const moduleCode = #{Jason.encode!(js_body)};
+      const hookExport = eval('(function() { const exports = {}; ' + moduleCode.replace('export default', 'return') + ' })()');
+
+      (async () => {
+        // 1. Voice event during a playing cue ducks stings bus and restores on end
+        {
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          // Stings bus starts at normal stings level 1.2
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+
+          // Victory cue starts playing via foley:ending event
+          await events["foley:ending"]({kind: "meld"});
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+
+          // While cue is playing, voice event arrives and quip is ready
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), true);
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+
+          // When voice ends, stings bus restores to 1.2
+          hook.voiceSource.onended();
+          assert.strictEqual(hook.isStingsDucked(), false);
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
+
+        // 2. Cue arriving during a playing voice starts ducked
+        {
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          // Voice starts playing first via foley:voice event
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), true);
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+
+          // Cue arrives during playing voice via foley:ending event
+          await events["foley:ending"]({kind: "deep_meld"});
+          // Stings bus remains ducked under the active voice
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+
+          // When voice ends, stings bus restores to 1.2
+          hook.voiceSource.onended();
+          assert.strictEqual(hook.isStingsDucked(), false);
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
+
+        console.log('HOOK_TESTS_PASSED');
+      })().catch(err => {
+        console.error(err);
+        process.exit(1);
+      });
+      """
+
+      {output, exit_code} = System.cmd("node", ["-e", test_script])
+      assert exit_code == 0
+      assert output =~ "HOOK_TESTS_PASSED"
+    end
+
+    test "foley_hook renders meld cue delay and hook script handles meld, deep_meld, and unmelded" do
+      default_delay = Thereish.Steward.foley_meld_cue_delay_ms()
+      assert is_integer(default_delay) and default_delay > 0
+
+      html = render_component(&foley_hook/1, speaker: true)
+      assert html =~ ~s(data-meld-cue-delay-ms="#{default_delay}")
+
+      # Custom delay overrides configured one
+      custom_html = render_component(&foley_hook/1, speaker: true, meld_cue_delay_ms: 2500)
+      assert custom_html =~ ~s(data-meld-cue-delay-ms="2500")
+
+      # Script in room_components handles meld and deep_meld with victory cues and fadeMusicOut
+      hook_source = File.read!("lib/thereish_web/components/room_components.ex")
+      assert hook_source =~ "victory-meld.mp3"
+      assert hook_source =~ "victory-deep-meld.mp3"
+      assert hook_source =~ "ending-unmelded.mp3"
+      assert hook_source =~ "fadeMusicOut(2.0)"
+      refute hook_source =~ ~s("/audio/ending-meld.mp3")
+    end
+
+    test "local_sound_switch renders button with colocated LocalSoundToggle hook and default on state" do
+      html = render_component(&local_sound_switch/1, %{})
+      assert html =~ ~s(id="local-sound-toggle")
+      assert html =~ ~s(phx-hook="ThereishWeb.RoomComponents.LocalSoundToggle")
+      assert html =~ ~s(data-role="local-sound-toggle")
+      assert html =~ ~s(data-sound="on")
+      assert html =~ ~s(data-state="on")
+      assert html =~ ~s(data-state="off")
+    end
+
+    test "local_sound_switch renders title and aria-label reflecting whether stage is present" do
+      html_without_stage = render_component(&local_sound_switch/1, %{stage_present?: false})
+      assert html_without_stage =~ ~s(title="Toggle commit sound on this device")
+      assert html_without_stage =~ ~s(aria-label="Toggle commit sound on this device")
+
+      html_with_stage = render_component(&local_sound_switch/1, %{stage_present?: true})
+      assert html_with_stage =~ ~s(title="Commit sound plays from the Stage while connected")
+
+      assert html_with_stage =~
+               ~s[aria-label="Toggle commit sound on this device (commit sound plays from the Stage while connected)"]
+    end
+  end
+
+  describe "Sides: couple versus couple components" do
+    test "roster renders sides grouping when in Sides mode" do
+      room = %{
+        seats: [
+          %{id: "s1", name: "Melissa", you?: true, committed?: false},
+          %{id: "s2", name: "Jacob", you?: false, committed?: false},
+          %{id: "s3", name: "Ada", you?: false, committed?: false},
+          %{id: "s4", name: "Sam", you?: false, committed?: false}
+        ],
+        seat_limit: 4,
+        open_seats: 0,
+        sides_mode?: true,
+        sides: [
+          %{
+            id: :side_a,
+            name: "Melissa & Jacob",
+            you?: true,
+            seat_ids: ["s1", "s2"],
+            seats: [
+              %{id: "s1", name: "Melissa", you?: true, committed?: false},
+              %{id: "s2", name: "Jacob", you?: false, committed?: false}
+            ]
+          },
+          %{
+            id: :side_b,
+            name: "Ada & Sam",
+            you?: false,
+            seat_ids: ["s3", "s4"],
+            seats: [
+              %{id: "s3", name: "Ada", you?: false, committed?: false},
+              %{id: "s4", name: "Sam", you?: false, committed?: false}
+            ]
+          }
+        ]
+      }
+
+      html = render_component(&roster/1, room: room)
+
+      assert html =~ ~s(data-role="sides-roster")
+      assert html =~ ~s(data-side="side_a")
+      assert html =~ ~s(data-side="side_b")
+      assert html =~ "Melissa &amp; Jacob"
+      assert html =~ "Ada &amp; Sam"
+      assert html =~ "(your side)"
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ ~s(data-seat="s3")
+    end
+
+    test "reveal renders two side cards side by side with Closeness, bands, and badges" do
+      room = %{
+        phase: :reveal,
+        reveal: %{
+          mode: :sides,
+          melded?: true,
+          sides: [
+            %{
+              id: :side_a,
+              name: "Melissa & Jacob",
+              seat_ids: ["s1", "s2"],
+              closer?: false,
+              melded?: false,
+              graded?: true,
+              closeness: 82,
+              band: :almost,
+              quip: "Almost touching.",
+              bridges: [
+                %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+                %{seat_id: "s2", name: "Jacob", bridge: "cairo"}
+              ]
+            },
+            %{
+              id: :side_b,
+              name: "Ada & Sam",
+              seat_ids: ["s3", "s4"],
+              closer?: true,
+              melded?: true,
+              graded?: true,
+              closeness: 91,
+              band: :meld,
+              quip: "One mind in two heads.",
+              bridges: [
+                %{seat_id: "s3", name: "Ada", bridge: "beacon"},
+                %{seat_id: "s4", name: "Sam", bridge: "lighthouse"}
+              ]
+            }
+          ],
+          bridges: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s2", name: "Jacob", bridge: "cairo"},
+            %{seat_id: "s3", name: "Ada", bridge: "beacon"},
+            %{seat_id: "s4", name: "Sam", bridge: "lighthouse"}
+          ],
+          furthest: [
+            %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+            %{seat_id: "s4", name: "Sam", bridge: "lighthouse"}
+          ]
+        }
+      }
+
+      seat = %{id: "s1", name: "Melissa"}
+      html = render_component(&reveal/1, room: room, seat: seat, mode: :phone)
+
+      assert html =~ ~s(data-role="sides-comparison")
+      assert html =~ ~s(data-side="side_a")
+      assert html =~ ~s(data-side="side_b")
+
+      # Both scores appear
+      assert html =~ "82"
+      assert html =~ "91"
+      assert html =~ "almost"
+      assert html =~ "meld"
+
+      # Badges
+      assert html =~ ~s(data-role="closer-badge")
+      assert html =~ ~s(data-role="melded-badge")
+
+      # Quips
+      assert html =~ "Almost touching."
+      assert html =~ "One mind in two heads."
+
+      # Fairness controls
+      assert html =~ ~s(data-role="fairness-controls")
+      assert html =~ "Was your Side's grade fair?"
+    end
+
+    test "overrule banner in Sides mode requires only partner agreement" do
+      room = %{
+        overrule: %{
+          pending?: true,
+          proposer_id: "s1",
+          proposer_name: "Melissa",
+          side_id: :side_a,
+          your_side?: true,
+          you_proposed?: false,
+          you_agreed?: false,
+          agreed_seat_ids: ["s1"]
+        },
+        reveal: %{mode: :sides, sides: []}
+      }
+
+      # Partner on the same side sees vote buttons
+      partner_seat = %{id: "s2", name: "Jacob"}
+      partner_html = render_component(&overrule_banner/1, room: room, seat: partner_seat)
+
+      assert partner_html =~ ~s(data-role="overrule-vote")
+      assert partner_html =~ "proposed overruling your Side&#39;s grade to a Meld"
+      assert partner_html =~ ~s(data-role="agree-overrule")
+      assert partner_html =~ ~s(data-role="decline-overrule")
+
+      # Opponent on the other side sees information notice without vote buttons
+      opposing_room = %{
+        room
+        | overrule: %{room.overrule | your_side?: false, you_proposed?: false, you_agreed?: false}
+      }
+
+      opponent_seat = %{id: "s3", name: "Ada"}
+
+      opponent_html =
+        render_component(&overrule_banner/1, room: opposing_room, seat: opponent_seat)
+
+      refute opponent_html =~ ~s(data-role="overrule-vote")
+
+      assert opponent_html =~
+               "proposed an overrule for their Side. Waiting for their partner to agree."
+    end
+  end
+
+  describe "bookends component" do
+    test "renders a 'Bookends' caption over the Bookends in the caption style" do
+      room = %{
+        bookends: ["lantern", "harbour"]
+      }
+
+      html = render_component(&bookends/1, room: room)
+
+      assert html =~ "Bookends"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "lantern"
+      assert html =~ "harbour"
+    end
+  end
+
+  describe "caption component" do
+    test "renders slot content with shared caption styling" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.caption data-role="test-caption" class="custom-class">
+          Test Caption Content
+        </.caption>
+        """)
+
+      assert html =~ "Test Caption Content"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "custom-class"
+      assert html =~ ~s(data-role="test-caption")
+    end
+  end
+
+  describe "now_playing component" do
+    test "renders 'Music is off' when music is off" do
+      room = %{music: "off", loop: %{name: "The Porch", path: "/audio/house-loop.mp3"}}
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Music is off"
+      refute html =~ "The Porch"
+    end
+
+    test "renders loop name and 'the house loop' under house" do
+      room = %{music: "house", loop: %{name: "Sunlit Drift", path: "/audio/house-loop-2.mp3"}}
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Sunlit Drift"
+      assert html =~ "the house loop"
+      refute html =~ "Music is off"
+    end
+
+    test "renders loop name and 'the house loop' under page before track lands" do
+      room = %{
+        music: "page",
+        loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
+        track: nil
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Morning Breeze"
+      assert html =~ "the house loop"
+    end
+
+    test "renders nothing when track has landed" do
+      room = %{
+        music: "page",
+        loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
+        track: %{path: "/audio/track-1.mp3"}
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+      refute html =~ "the house loop"
+    end
+
+    test "renders nothing when room has no loop and music is not off" do
+      room = %{music: "page", loop: nil, track: nil}
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+    end
+
+    test "renders nothing when room has no loop and music is off in lobby" do
+      room = %{music: "off", loop: nil, track: nil, phase: :waiting}
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+    end
+  end
+end

@@ -2,8 +2,8 @@
 #
 #     mix run priv/repo/seeds.exs
 #
-alias MeaningGame.Rooms
-alias MeaningGame.Rooms.Store
+alias Thereish.Rooms
+alias Thereish.Rooms.Store
 
 # The couch. Rooms are created and never conjured, so the one Room that predates
 # the New Room button has to be written down somewhere: without this, a fresh

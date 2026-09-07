@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AddSpeakerAndSwitchesToRooms do
+defmodule Thereish.Repo.Migrations.AddSpeakerAndSwitchesToRooms do
   use Ecto.Migration
 
   def change do

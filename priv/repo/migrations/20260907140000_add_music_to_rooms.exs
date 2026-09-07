@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AddMusicToRooms do
+defmodule Thereish.Repo.Migrations.AddMusicToRooms do
   use Ecto.Migration
 
   def up do

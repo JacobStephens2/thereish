@@ -1,4 +1,4 @@
-defmodule MeaningGame.StewardFixtures do
+defmodule Thereish.StewardFixtures do
   @moduledoc """
   Recorded Assayer responses, and the plug that hands them back.
 
@@ -24,7 +24,7 @@ defmodule MeaningGame.StewardFixtures do
   because most of these tests care which of the two orderings they are answering.
   """
   def recorded(answer) when is_function(answer, 2) do
-    Req.Test.stub(MeaningGame.Steward.Gemini, fn conn ->
+    Req.Test.stub(Thereish.Steward.Gemini, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
 
       answer.(conn, Jason.decode!(body))
@@ -150,14 +150,14 @@ defmodule MeaningGame.StewardFixtures do
   Configuration is global, so a test that reaches for this cannot be async.
   """
   def assayer(opts) do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     {top, role_opts} = Keyword.split(opts, [:adapter])
     steward = Keyword.merge(steward, top)
     assayer = Keyword.merge(steward[:roles][:assayer], role_opts)
 
-    Application.put_env(:meaning_game, :steward, put_in(steward[:roles][:assayer], assayer))
+    Application.put_env(:thereish, :steward, put_in(steward[:roles][:assayer], assayer))
   end
 
   @doc """
@@ -168,8 +168,8 @@ defmodule MeaningGame.StewardFixtures do
   is the only way through and it is deliberately noisy to read.
   """
   def let_it_call_the_provider do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     key =
       System.get_env("GEMINI_API_KEY") ||
@@ -177,7 +177,7 @@ defmodule MeaningGame.StewardFixtures do
 
     live =
       steward
-      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:adapter, Thereish.Steward.Live)
       |> Keyword.put(:http_options, [])
       |> put_in([:roles, :assayer, :api_key], key)
       |> put_in([:roles, :assayer, :timeout_ms], 5_000)
@@ -194,15 +194,15 @@ defmodule MeaningGame.StewardFixtures do
         openai_key -> put_in(live, [:roles, :author, :jobs, :astra, :api_key], openai_key)
       end
 
-    Application.put_env(:meaning_game, :steward, live)
+    Application.put_env(:thereish, :steward, live)
   end
 
   @doc """
   Puts the live OpenAI provider behind the seam for the smoke test.
   """
   def let_it_call_openai do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     key =
       System.get_env("OPENAI_API_KEY") ||
@@ -210,13 +210,13 @@ defmodule MeaningGame.StewardFixtures do
 
     live =
       steward
-      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:adapter, Thereish.Steward.Live)
       |> Keyword.put(:http_options, [])
       |> put_in([:roles, :author, :jobs, :astra, :api_key], key)
       |> put_in([:roles, :author, :jobs, :astra, :timeout_ms], 10_000)
       |> put_in([:roles, :author, :jobs, :astra, :deadline_ms], 15_000)
 
-    Application.put_env(:meaning_game, :steward, live)
+    Application.put_env(:thereish, :steward, live)
   end
 
   @doc """
@@ -224,8 +224,8 @@ defmodule MeaningGame.StewardFixtures do
   its way, for the smoke test that is meant to call somebody.
   """
   def let_it_call_anthropic do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     key =
       System.get_env("ANTHROPIC_API_KEY") ||
@@ -233,7 +233,7 @@ defmodule MeaningGame.StewardFixtures do
 
     live =
       steward
-      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:adapter, Thereish.Steward.Live)
       |> Keyword.put(:http_options, [])
       |> put_in([:roles, :scribe, :jobs, :recap, :api_key], key)
       # The suite's Scribe answers in two seconds because it is a recording. A
@@ -241,13 +241,13 @@ defmodule MeaningGame.StewardFixtures do
       |> put_in([:roles, :scribe, :jobs, :recap, :timeout_ms], 120_000)
       |> put_in([:roles, :scribe, :jobs, :recap, :deadline_ms], 300_000)
 
-    Application.put_env(:meaning_game, :steward, live)
+    Application.put_env(:thereish, :steward, live)
   end
 
   @doc "Puts the real ElevenLabs provider behind the seam for the smoke test."
   def let_it_call_eleven_labs do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     key =
       System.get_env("ELEVENLABS_API_KEY") ||
@@ -255,21 +255,21 @@ defmodule MeaningGame.StewardFixtures do
 
     live =
       steward
-      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:adapter, Thereish.Steward.Live)
       |> Keyword.put(:http_options, [])
       |> put_in([:roles, :foley, :elevenlabs_api_key], key)
       |> put_in([:roles, :foley, :jobs, :effects, :api_key], key)
-      |> put_in([:roles, :foley, :jobs, :voice, :provider], MeaningGame.Steward.ElevenLabs)
+      |> put_in([:roles, :foley, :jobs, :voice, :provider], Thereish.Steward.ElevenLabs)
       |> put_in([:roles, :foley, :jobs, :voice, :voice_id], "JBFqnCBsd6RMkjVDRZzb")
       |> put_in([:roles, :foley, :jobs, :voice, :timeout_ms], 5_000)
 
-    Application.put_env(:meaning_game, :steward, live)
+    Application.put_env(:thereish, :steward, live)
   end
 
   @doc "Puts the real Mureka provider behind the seam for the smoke test."
   def let_it_call_mureka do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     key =
       System.get_env("MUREKA_API_KEY") ||
@@ -280,12 +280,12 @@ defmodule MeaningGame.StewardFixtures do
       |> Keyword.put(:http_options, [])
       |> put_in([:roles, :foley, :jobs, :music, :api_key], key)
 
-    Application.put_env(:meaning_game, :steward, live)
+    Application.put_env(:thereish, :steward, live)
   end
 
   @doc "Puts a recorded response behind the Author's provider for this test."
   def recorded_author(answer) when is_function(answer, 2) do
-    Req.Test.stub(MeaningGame.Steward.Gemini, fn conn ->
+    Req.Test.stub(Thereish.Steward.Gemini, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       answer.(conn, Jason.decode!(body))
     end)
@@ -316,7 +316,7 @@ defmodule MeaningGame.StewardFixtures do
 
   @doc "Puts a recorded response behind the Scribe's provider for this test."
   def recorded_scribe(answer) when is_function(answer, 2) do
-    Req.Test.stub(MeaningGame.Steward.Anthropic, fn conn ->
+    Req.Test.stub(Thereish.Steward.Anthropic, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       answer.(conn, Jason.decode!(body))
     end)
@@ -349,18 +349,18 @@ defmodule MeaningGame.StewardFixtures do
   Configuration is global, so a test that reaches for this cannot be async.
   """
   def live_scribe(job_opts \\ []) do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     recap = Keyword.merge(steward[:roles][:scribe][:jobs][:recap], job_opts)
 
     live =
       steward
-      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:adapter, Thereish.Steward.Live)
       |> put_in([:roles, :scribe, :jobs, :recap, :api_key], "recorded-responses-need-no-key")
       |> put_in([:roles, :scribe, :jobs, :recap], recap)
 
-    Application.put_env(:meaning_game, :steward, live)
+    Application.put_env(:thereish, :steward, live)
   end
 
   @doc "A well-formed recap, as the Scribe writes it: a JSON object in a string."
@@ -397,8 +397,8 @@ defmodule MeaningGame.StewardFixtures do
   Puts the live Hume voice provider behind the seam for a live smoke test.
   """
   def let_it_call_hume do
-    steward = Application.fetch_env!(:meaning_game, :steward)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, :steward, steward) end)
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
     api_key =
       System.get_env("HUME_API_KEY") ||
@@ -408,17 +408,17 @@ defmodule MeaningGame.StewardFixtures do
 
     live =
       steward
-      |> Keyword.put(:adapter, MeaningGame.Steward.Live)
+      |> Keyword.put(:adapter, Thereish.Steward.Live)
       |> Keyword.put(:http_options, [])
       |> put_in([:roles, :foley, :hume_api_key], api_key)
       |> put_in([:roles, :foley, :hume_secret_key], secret_key)
-      |> put_in([:roles, :foley, :jobs, :voice, :provider], MeaningGame.Steward.Hume)
+      |> put_in([:roles, :foley, :jobs, :voice, :provider], Thereish.Steward.Hume)
       |> put_in(
         [:roles, :foley, :jobs, :voice, :voice_id],
         "44cb3a51-07b4-4934-83fd-9d9e8d363ce6"
       )
       |> put_in([:roles, :foley, :jobs, :voice, :timeout_ms], 5_000)
 
-    Application.put_env(:meaning_game, :steward, live)
+    Application.put_env(:thereish, :steward, live)
   end
 end

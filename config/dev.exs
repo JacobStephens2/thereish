@@ -1,7 +1,7 @@
 import Config
 
 # Configure your database
-config :meaning_game, MeaningGame.Repo,
+config :thereish, Thereish.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
@@ -16,7 +16,7 @@ config :meaning_game, MeaningGame.Repo,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
-config :meaning_game, MeaningGameWeb.Endpoint,
+config :thereish, ThereishWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {127, 0, 0, 1}],
@@ -25,8 +25,8 @@ config :meaning_game, MeaningGameWeb.Endpoint,
   debug_errors: true,
   secret_key_base: "2uhm+DHyxUE3tnIiZLllmBxJClru7Z9jaEgKs73qCkp4VfBq9XZJepjt39j8qGeT",
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:meaning_game, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:meaning_game, ~w(--watch)]}
+    esbuild: {Esbuild, :install_and_run, [:thereish, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:thereish, ~w(--watch)]}
   ]
 
 # ## SSL Support
@@ -53,12 +53,12 @@ config :meaning_game, MeaningGameWeb.Endpoint,
 # different ports.
 
 # Enable dev routes for dashboard and mailbox
-config :meaning_game, dev_routes: true
+config :thereish, dev_routes: true
 
 # Mailer configuration for development
-config :meaning_game, MeaningGame.Mailer, adapter: Swoosh.Adapters.Local
+config :thereish, Thereish.Mailer, adapter: Swoosh.Adapters.Local
 
-config :meaning_game, :notice,
+config :thereish, :notice,
   to: "operator@example.com",
   from: "notice@thereish.app"
 

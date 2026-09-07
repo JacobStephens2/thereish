@@ -2,7 +2,7 @@ defmodule Mix.Tasks.Foley.BakeoffTest do
   @moduledoc """
   Tests for `mix foley.bakeoff` (ticket 04).
   """
-  use MeaningGame.DataCase, async: false
+  use Thereish.DataCase, async: false
 
   alias Mix.Tasks.Foley.Bakeoff
 

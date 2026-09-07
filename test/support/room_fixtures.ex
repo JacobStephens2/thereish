@@ -1,4 +1,4 @@
-defmodule MeaningGame.RoomFixtures do
+defmodule Thereish.RoomFixtures do
   @moduledoc """
   Opens a Room of its own for one test.
 
@@ -8,15 +8,15 @@ defmodule MeaningGame.RoomFixtures do
   supervisor takes down at the end.
   """
 
-  alias MeaningGame.Rooms
-  alias MeaningGame.Rooms.Server
-  alias MeaningGame.Rooms.Store
+  alias Thereish.Rooms
+  alias Thereish.Rooms.Server
+  alias Thereish.Rooms.Store
 
   @doc """
   Creates a Room with a Code of its own and starts it, returning the Code.
 
   Creating before starting is the order the game itself uses: Rooms are created
-  through `MeaningGame.Rooms.create/2`, and a process is only ever started for a
+  through `Thereish.Rooms.create/2`, and a process is only ever started for a
   Room that already exists.
   """
   def open_room(opts \\ []) do
@@ -43,14 +43,14 @@ defmodule MeaningGame.RoomFixtures do
   @doc """
   Takes a Room's process down again.
 
-  For the tests that create a Room through `MeaningGame.Rooms.create/2` rather
+  For the tests that create a Room through `Thereish.Rooms.create/2` rather
   than through `open_room/1`: that Room is nobody's child but the dynamic
   supervisor's, so the test that made one puts it away itself.
   """
   def stop_room(code) do
     case GenServer.whereis(Server.via(code)) do
       nil -> :ok
-      pid -> DynamicSupervisor.terminate_child(MeaningGame.Rooms.Supervisor, pid)
+      pid -> DynamicSupervisor.terminate_child(Thereish.Rooms.Supervisor, pid)
     end
   end
 
@@ -60,7 +60,7 @@ defmodule MeaningGame.RoomFixtures do
   @doc """
   Turns the fake Assayer's dials for one test: `delay_ms` and `mode`.
 
-  See `MeaningGame.Steward.Fake` for what they do. Configuration is global, so a
+  See `Thereish.Steward.Fake` for what they do. Configuration is global, so a
   test that reaches for this cannot be async — which is true of every test that
   touches a Room anyway.
   """
@@ -68,14 +68,14 @@ defmodule MeaningGame.RoomFixtures do
     steward = restore(:steward)
     fake = Keyword.merge(Keyword.fetch!(steward, :fake), opts)
 
-    Application.put_env(:meaning_game, :steward, Keyword.put(steward, :fake, fake))
+    Application.put_env(:thereish, :steward, Keyword.put(steward, :fake, fake))
   end
 
   @doc "The reveal beat for one test, in milliseconds."
   def beat(ms) do
     restore(:reveal_beat_ms)
 
-    Application.put_env(:meaning_game, :reveal_beat_ms, ms)
+    Application.put_env(:thereish, :reveal_beat_ms, ms)
   end
 
   @doc """
@@ -89,7 +89,7 @@ defmodule MeaningGame.RoomFixtures do
   def escalation(opts) do
     steps = restore(:assayer_escalation_ms)
 
-    Application.put_env(:meaning_game, :assayer_escalation_ms, Keyword.merge(steps, opts))
+    Application.put_env(:thereish, :assayer_escalation_ms, Keyword.merge(steps, opts))
   end
 
   @doc """
@@ -99,14 +99,14 @@ defmodule MeaningGame.RoomFixtures do
   def author_escalation(opts) do
     steps = restore(:author_escalation_ms)
 
-    Application.put_env(:meaning_game, :author_escalation_ms, Keyword.merge(steps, opts))
+    Application.put_env(:thereish, :author_escalation_ms, Keyword.merge(steps, opts))
   end
 
   @doc "How many Seats a newly opened Room holds, for one test."
   def seats_per_room(seats) do
     restore(:seats_per_room)
 
-    Application.put_env(:meaning_game, :seats_per_room, seats)
+    Application.put_env(:thereish, :seats_per_room, seats)
   end
 
   @doc """
@@ -118,7 +118,7 @@ defmodule MeaningGame.RoomFixtures do
   def attempt_cap(attempts) do
     restore(:attempts_per_page)
 
-    Application.put_env(:meaning_game, :attempts_per_page, attempts)
+    Application.put_env(:thereish, :attempts_per_page, attempts)
   end
 
   @doc """
@@ -130,7 +130,7 @@ defmodule MeaningGame.RoomFixtures do
   def await_phase(slug, phase) do
     eventually(
       fn ->
-        view = MeaningGame.Rooms.snapshot(slug, nil)
+        view = Thereish.Rooms.snapshot(slug, nil)
         view.phase == phase && view
       end,
       "the Room never reached #{inspect(phase)}"
@@ -147,7 +147,7 @@ defmodule MeaningGame.RoomFixtures do
   def await_reveal(slug) do
     eventually(
       fn ->
-        view = MeaningGame.Rooms.snapshot(slug, nil)
+        view = Thereish.Rooms.snapshot(slug, nil)
         view.reveal != nil && view
       end,
       "the reveal never landed in this Room"
@@ -168,7 +168,7 @@ defmodule MeaningGame.RoomFixtures do
   """
   def await_scribe do
     eventually(
-      fn -> Task.Supervisor.children(MeaningGame.Scribe.Tasks) == [] end,
+      fn -> Task.Supervisor.children(Thereish.Scribe.Tasks) == [] end,
       "the Scribe was still writing"
     )
 
@@ -178,7 +178,7 @@ defmodule MeaningGame.RoomFixtures do
   @doc "Waits for any background notice delivery tasks to finish."
   def await_notice do
     eventually(
-      fn -> Task.Supervisor.children(MeaningGame.Notice.Tasks) == [] end,
+      fn -> Task.Supervisor.children(Thereish.Notice.Tasks) == [] end,
       "the notice was still delivering"
     )
 
@@ -215,8 +215,8 @@ defmodule MeaningGame.RoomFixtures do
   # Hands back the current value as well as putting it back afterwards, because
   # every caller wants both.
   defp restore(key) do
-    previous = Application.fetch_env!(:meaning_game, key)
-    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:meaning_game, key, previous) end)
+    previous = Application.fetch_env!(:thereish, key)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, key, previous) end)
 
     previous
   end

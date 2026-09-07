@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateTheTrackCacheAndAddMusicMeta do
+defmodule Thereish.Repo.Migrations.CreateTheTrackCacheAndAddMusicMeta do
   use Ecto.Migration
 
   def change do
