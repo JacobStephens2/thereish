@@ -133,9 +133,15 @@ config :meaning_game, :steward,
           # `claude-fable-5-1` because the Steward prototype measured it writing
           # the best recaps of the models benched, and long ones — which is what
           # the Vale gate is for rather than a reason to pick a worse writer.
+          #
+          # Effort is low because the role furthest from the table is not nine
+          # dollars in ten: the ten recaps to date were $0.71 of the $0.80 ever
+          # spent (spec, "Spend and the record").
+          # xhigh is kept as a one-line alternative if prose quality requires it:
+          # effort: "xhigh",
           provider: MeaningGame.Steward.Anthropic,
           model: "claude-fable-5-1",
-          effort: "xhigh",
+          effort: "low",
           max_tokens: 8_000,
           # Nobody is waiting. The budget is generous because a recap that takes
           # a minute is a recap, and a recap that was rushed is a paragraph the

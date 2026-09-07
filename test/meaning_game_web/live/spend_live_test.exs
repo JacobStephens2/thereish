@@ -159,5 +159,44 @@ defmodule MeaningGameWeb.SpendLiveTest do
       assert rooms_text =~ "$0.0447"
       assert rooms_text =~ "$0.0000"
     end
+
+    test "shows in-play sentence when Pages are in play, and omits it when count is zero", %{
+      conn: conn
+    } do
+      # When no rooms are in play (count = 0)
+      {:ok, view, html} = live(conn, ~p"/spend")
+      refute html =~ "not yet counted"
+      refute has_element?(view, "[data-role=in-play-count]")
+
+      # When 1 room is in play (in bridging)
+      slug1 = open_room()
+      {:ok, mara} = Rooms.join(slug1, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug1, "Jacob", device_token())
+      :ok = Rooms.give(slug1, mara.id, "setting one")
+      :ok = Rooms.give(slug1, jacob.id, "setting two")
+      await_phase(slug1, :bridging)
+
+      {:ok, view1, html1} = live(conn, ~p"/spend")
+      assert html1 =~ "1 Page in play, not yet counted"
+      assert has_element?(view1, "[data-role=in-play-count]")
+
+      assert render(element(view1, "[data-role=in-play-count]")) =~
+               "1 Page in play, not yet counted"
+
+      # When 2 rooms are in play
+      slug2 = open_room()
+      {:ok, alice} = Rooms.join(slug2, "Alice", device_token())
+      {:ok, bob} = Rooms.join(slug2, "Bob", device_token())
+      :ok = Rooms.give(slug2, alice.id, "theme one")
+      :ok = Rooms.give(slug2, bob.id, "theme two")
+      await_phase(slug2, :bridging)
+
+      {:ok, view2, html2} = live(conn, ~p"/spend")
+      assert html2 =~ "2 Pages in play, not yet counted"
+      assert has_element?(view2, "[data-role=in-play-count]")
+
+      assert render(element(view2, "[data-role=in-play-count]")) =~
+               "2 Pages in play, not yet counted"
+    end
   end
 end

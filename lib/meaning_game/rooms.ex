@@ -441,6 +441,78 @@ defmodule MeaningGame.Rooms do
   @doc false
   def topic(slug), do: "room:" <> slug
 
+  @doc """
+  Returns true if the Room process is running and its Phase is bridging, assaying, or reveal.
+  """
+  @spec in_play?(Room.t() | String.t() | pid() | any()) :: boolean()
+  def in_play?(%Room{slug: code}), do: in_play?(code)
+
+  def in_play?(code_or_id) when is_binary(code_or_id) do
+    if uuid?(code_or_id) do
+      case MeaningGame.Repo.get(Room, code_or_id) do
+        nil -> false
+        room -> in_play?(room.slug)
+      end
+    else
+      case Code.normalise(code_or_id) do
+        nil ->
+          false
+
+        normalized ->
+          case GenServer.whereis(Server.via(normalized)) do
+            pid when is_pid(pid) -> in_play?(pid)
+            nil -> false
+          end
+      end
+    end
+  end
+
+  def in_play?(pid) when is_pid(pid) do
+    try do
+      GenServer.call(pid, :in_play?, 1_000)
+    catch
+      :exit, _ -> false
+    end
+  end
+
+  def in_play?(_), do: false
+
+  @doc """
+  Counts how many Pages are in play across all running Room processes.
+  """
+  @spec in_play_count() :: non_neg_integer()
+  def in_play_count do
+    MeaningGame.Rooms.Registry
+    |> Registry.select([{{:"$1", :"$2", :"$3"}, [], [:"$2"]}])
+    |> Enum.count(&in_play?/1)
+  end
+
+  @doc """
+  Answers the count of Pages in play for one Room (0 or 1).
+  """
+  @spec in_play_count(Room.t() | Ecto.UUID.t() | String.t()) :: 0 | 1
+  def in_play_count(room_or_code_or_id) do
+    if in_play?(room_or_code_or_id), do: 1, else: 0
+  end
+
+  @doc """
+  Formats the in-play sentence for the spend page and Chronicle foot.
+  Omitted (nil) when count is 0.
+  """
+  @spec in_play_sentence(non_neg_integer()) :: String.t() | nil
+  def in_play_sentence(0), do: nil
+  def in_play_sentence(1), do: "1 Page in play, not yet counted"
+  def in_play_sentence(n) when is_integer(n) and n > 1, do: "#{n} Pages in play, not yet counted"
+
+  defp uuid?(val) when is_binary(val) do
+    Regex.match?(
+      ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      val
+    )
+  end
+
+  defp uuid?(_), do: false
+
   defp check_name(name) when is_binary(name) do
     trimmed = String.trim(name)
 
