@@ -22,7 +22,7 @@ The seam is already in place. `MeaningGameWeb.Presence.stage_present?/1` answers
 **2026-09-07.** Filed from Jacob's playtest notes (`.scratch/ideas/ideas.md`): "I want the submission / commit sounds when there is a stage to be played by the stage, not the individual phones." Heard on the third playtest, against 06 as shipped.
 
 **2026-09-07.** Implemented and verified:
-- `MeaningGameWeb.Foley.push_own_commit/2` gates pushing `foley:own-commit` on whether a Stage is present (via `MeaningGameWeb.Presence.stage_present?/1`). With a Stage present, the phone stays quiet and only the Stage receives `foley:commit`.
+- `MeaningGameWeb.Foley.push_own_commit/1` gates pushing `foley:own-commit` on whether a Stage is present (via `socket.assigns[:stage_present?]`). With a Stage present, the phone stays quiet and only the Stage receives `foley:commit`.
 - With no Stage present, 06 behavior remains unchanged: the committer's phone receives `foley:own-commit`.
 - When a Stage joins or leaves mid-Page, the tick transitions immediately for the next commit.
 - The per-device toggle button `local_sound_switch` is retained on phones when a Stage is present, updating its `title` to "Commit sound plays from the Stage while connected" and `aria-label` to "Toggle commit sound on this device (commit sound plays from the Stage while connected)", preserving local preferences when playing without a Stage.
