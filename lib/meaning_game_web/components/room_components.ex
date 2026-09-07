@@ -1368,6 +1368,9 @@ defmodule MeaningGameWeb.RoomComponents do
           (room[:loop] != nil or room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
         "Music is off"
 
+      room[:track] && room.track[:path] && room.track[:title] ->
+        "Now playing: #{room.track.title} (written for this Page)"
+
       room[:track] && room.track[:path] ->
         nil
 
