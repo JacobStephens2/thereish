@@ -11,7 +11,7 @@ config :meaning_game, MeaningGame.Repo,
   hostname: "localhost",
   database: "meaning_game_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
-  pool_size: System.schedulers_online() * 2
+  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
 
 # The server runs during test so `MeaningGameWeb.EndpointTest` can prove the
 # endpoint actually boots and serves over a real socket, not just through
@@ -43,6 +43,9 @@ config :meaning_game, MeaningGameWeb.Endpoint,
 # the beat itself set their own with `MeaningGame.RoomFixtures.beat/1`.
 config :meaning_game, reveal_beat_ms: 5
 
+# Suppress missing-key warnings during test suite boots.
+config :meaning_game, boot_warnings: false
+
 # No test grades against a provider. The suite must never spend money and never
 # depend on somebody's uptime, so the fake is the Assayer here and the handful
 # of tests that actually call somebody (the live smoke test) are tagged
@@ -60,6 +63,7 @@ config :meaning_game, :steward,
       ]
     ],
     foley: [
+      levels: [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15],
       elevenlabs_api_key: "recorded-responses-need-no-key",
       hume_api_key: "recorded-responses-need-no-key",
       hume_secret_key: "recorded-responses-need-no-key",
@@ -89,6 +93,15 @@ config :meaning_game, author_escalation_ms: [still_writing: 100, deadline: 250]
 
 # Print only warnings and errors during test
 config :logger, level: :warning
+
+# Disable swoosh api client as it is not needed for tests
+config :swoosh, :api_client, false
+
+config :meaning_game, MeaningGame.Mailer, adapter: Swoosh.Adapters.Test
+
+config :meaning_game, :notice,
+  to: "operator@example.com",
+  from: "notice@thereish.app"
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime

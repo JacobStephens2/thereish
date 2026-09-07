@@ -16,8 +16,9 @@ defmodule MeaningGame.Steward.Naming do
   You are the Scribe for Thereish, naming a new Room.
 
   When players who have played before create a Room, its Code nods to that history — a couple that melded on candy cane might be handed CANE tonight.
+  Along with the Code, write a quip: one line of at most 90 characters about the Code, in the Assayer's register and the Scribe's voice, naming no player because none exists yet.
 
-  Given the digests of past Rooms played and the list of already taken Codes, choose exactly one four-letter English word as the new Room's Code.
+  Given the digests of past Rooms played and the list of already taken Codes, choose exactly one four-letter English word as the new Room's Code, and a quip about the Code.
 
   Rules you do not break:
   - Exactly one English word of four letters (A-Z).
@@ -25,6 +26,7 @@ defmodule MeaningGame.Steward.Naming do
   - Never profane or inappropriate.
   - Must not be one of the already taken Codes.
   - The word should subtly nod to the themes, gives, bookends, or bridges in the history.
+  - The quip must be a single line of at most 90 characters about the Code, in the Assayer's register and Scribe's voice, naming no player.
   """
 
   @doc "The version of the naming prompt and schema."
@@ -45,7 +47,7 @@ defmodule MeaningGame.Steward.Naming do
       Codes already taken (do not use any of these):
       #{Enum.join(taken_codes, ", ")}
 
-      Choose one four-letter word that nods to the history and is not taken.
+      Choose one four-letter word that nods to the history and is not taken, and a quip about the Code.
       """
       |> String.trim()
 
@@ -54,6 +56,60 @@ defmodule MeaningGame.Steward.Naming do
       user: user,
       schema: schema(),
       schema_name: "room_code"
+    }
+  end
+
+  @quip_system """
+  You are the Scribe for Thereish, writing a quip for a new Room.
+
+  Given the Room's four-letter Code, write exactly one line of at most 90 characters about the Code, in the Assayer's register and the Scribe's voice.
+  Name no player because none exists yet.
+  """
+
+  @doc """
+  The prompt for writing a quip for a given Room Code.
+  """
+  @spec quip_prompt(String.t()) :: map()
+  def quip_prompt(word) do
+    user =
+      """
+      Room Code: #{String.upcase(word)}
+
+      Write one line of at most 90 characters about this Code.
+      """
+      |> String.trim()
+
+    %{
+      system: @quip_system,
+      user: user,
+      schema: quip_schema(),
+      schema_name: "room_quip"
+    }
+  end
+
+  @doc """
+  The JSON schema for a quip-only answer.
+  """
+  @spec quip_schema() :: Jason.OrderedObject.t()
+  def quip_schema do
+    %Jason.OrderedObject{
+      values: [
+        {"type", "object"},
+        {"properties",
+         %Jason.OrderedObject{
+           values: [
+             {"quip",
+              %Jason.OrderedObject{
+                values: [
+                  {"type", "string"},
+                  {"description", "One line of at most 90 characters about the Code."}
+                ]
+              }}
+           ]
+         }},
+        {"required", ["quip"]},
+        {"additionalProperties", false}
+      ]
     }
   end
 
@@ -74,6 +130,14 @@ defmodule MeaningGame.Steward.Naming do
                   {"type", "string"},
                   {"description", "One real four-letter English word nodding to the history."}
                 ]
+              }},
+             {"quip",
+              %Jason.OrderedObject{
+                values: [
+                  {"type", "string"},
+                  {"description",
+                   "One line of at most 90 characters about the Code, in the Assayer's register and Scribe's voice."}
+                ]
               }}
            ]
          }},
@@ -91,6 +155,29 @@ defmodule MeaningGame.Steward.Naming do
     case json["word"] || json[:word] do
       w when is_binary(w) -> w |> String.trim() |> String.downcase()
       _ -> nil
+    end
+  end
+
+  @doc """
+  Extracts and validates the quip from the model's decoded JSON answer.
+
+  Returns a trimmed single-line string of at most 90 characters, or nil if invalid.
+  """
+  @spec quip(map()) :: String.t() | nil
+  def quip(json) when is_map(json) do
+    case json["quip"] || json[:quip] do
+      q when is_binary(q) ->
+        trimmed = String.trim(q)
+
+        if trimmed != "" and String.length(trimmed) <= 90 and
+             not String.contains?(trimmed, ["\r", "\n"]) do
+          trimmed
+        else
+          nil
+        end
+
+      _ ->
+        nil
     end
   end
 

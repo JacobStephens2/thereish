@@ -97,6 +97,21 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  @doc """
+  Small uppercase caption, used for Attempt, Bookends, and section titles.
+  """
+  attr :class, :string, default: nil
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def caption(assigns) do
+    ~H"""
+    <p class={["text-center text-sm uppercase tracking-widest opacity-60", @class]} {@rest}>
+      {render_slot(@inner_block)}
+    </p>
+    """
+  end
+
   attr :seat, :map, required: true
   attr :room, :map, required: true
   attr :mode, :atom, default: :phone
@@ -173,6 +188,9 @@ defmodule MeaningGameWeb.RoomComponents do
         if(@mode == :stage, do: "gap-2", else: "gap-3")
       ]}
     >
+      <.caption data-role="bookends-caption">
+        Bookends
+      </.caption>
       <div
         data-role="bookends"
         class={[
@@ -208,13 +226,12 @@ defmodule MeaningGameWeb.RoomComponents do
   """
   def attempt(assigns) do
     ~H"""
-    <p
+    <.caption
       :if={@room.phase in [:bridging, :assaying, :reveal]}
       data-role="attempt"
-      class="text-center text-sm uppercase tracking-widest opacity-60"
     >
       Attempt {@room.attempt.number} of {@room.attempt.of}
-    </p>
+    </.caption>
     """
   end
 
@@ -1185,38 +1202,69 @@ defmodule MeaningGameWeb.RoomComponents do
 
   attr :room, :map, required: true
 
+  @music_options [
+    {"off", "music-off", "Off"},
+    {"house", "music-house", "House loop"},
+    {"page", "music-page", "Written for this Page"}
+  ]
+
   def foley_switches(assigns) do
+    music = to_string(assigns.room[:music] || "page")
+
+    assigns =
+      assigns
+      |> assign(:current_music, music)
+      |> assign(:music_options, @music_options)
+
     ~H"""
-    <div :if={@room[:speaker?]} class="flex items-center gap-3 text-xs opacity-80">
+    <div class="flex items-center gap-3 text-xs opacity-80">
       <label class="flex items-center gap-1.5 cursor-pointer">
         <input
           type="checkbox"
           data-role="voice-switch"
+          data-active={to_string(@room[:voice] || false)}
           checked={@room[:voice] || false}
           phx-click="toggle_voice"
           class="checkbox checkbox-xs"
         />
         <span>Voice</span>
       </label>
-      <label class="flex items-center gap-1.5 cursor-pointer">
-        <input
-          type="checkbox"
-          data-role="house-loop-switch"
-          checked={@room[:house_loop_only] || false}
-          phx-click="toggle_house_loop_only"
-          class="checkbox checkbox-xs"
-        />
-        <span>House loop only</span>
-      </label>
+      <div data-role="music-control" class="join">
+        <button
+          :for={{mode, role, label} <- @music_options}
+          type="button"
+          phx-click="set_music"
+          phx-value-music={mode}
+          data-role={role}
+          data-music={mode}
+          data-active={to_string(@current_music == mode)}
+          class={"btn btn-xs join-item " <> if(@current_music == mode, do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
+        >
+          {label}
+        </button>
+      </div>
     </div>
     """
   end
 
   attr :speaker, :boolean, default: false
+  attr :levels, :list, default: nil
 
   def foley_hook(assigns) do
+    levels = assigns[:levels] || MeaningGame.Steward.foley_levels()
+    assigns = assign(assigns, :levels, levels)
+
     ~H"""
-    <div id="foley-container" phx-hook=".Foley" data-speaker={to_string(@speaker)} class="hidden">
+    <div
+      id="foley-container"
+      phx-hook=".Foley"
+      data-speaker={to_string(@speaker)}
+      data-level-music={to_string(@levels[:music] || 0.5)}
+      data-level-stings={to_string(@levels[:stings] || 1.2)}
+      data-level-voice={to_string(@levels[:voice] || 1.2)}
+      data-level-duck={to_string(@levels[:duck] || 0.15)}
+      class="hidden"
+    >
     </div>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Foley">
       export default {
@@ -1232,7 +1280,19 @@ defmodule MeaningGameWeb.RoomComponents do
           this.voiceSource = null
           this.voiceObserver = null
           this.currentVoiceAttempt = null
+          this.musicOff = false
           this.audioBuffers = new Map()
+
+          const parseLevel = (val, fallback) => {
+            const parsed = parseFloat(val)
+            return isNaN(parsed) ? fallback : parsed
+          }
+          this.levels = {
+            music: parseLevel(this.el.dataset.levelMusic, 0.5),
+            stings: parseLevel(this.el.dataset.levelStings, 1.2),
+            voice: parseLevel(this.el.dataset.levelVoice, 1.2),
+            duck: parseLevel(this.el.dataset.levelDuck, 0.15)
+          }
 
           this.initAudio = () => {
             if (this.ctx) return
@@ -1244,9 +1304,9 @@ defmodule MeaningGameWeb.RoomComponents do
             this.stingsBus = this.ctx.createGain()
             this.voiceBus = this.ctx.createGain()
 
-            this.musicBus.gain.setValueAtTime(0.7, this.ctx.currentTime)
-            this.stingsBus.gain.setValueAtTime(1.0, this.ctx.currentTime)
-            this.voiceBus.gain.setValueAtTime(1.0, this.ctx.currentTime)
+            this.musicBus.gain.setValueAtTime(this.levels.music, this.ctx.currentTime)
+            this.stingsBus.gain.setValueAtTime(this.levels.stings, this.ctx.currentTime)
+            this.voiceBus.gain.setValueAtTime(this.levels.voice, this.ctx.currentTime)
 
             this.musicBus.connect(this.ctx.destination)
             this.stingsBus.connect(this.ctx.destination)
@@ -1300,18 +1360,18 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.duckMusic = (durationSeconds = 2.0) => {
-            if (!this.ctx || !this.musicBus) return
+            if (!this.ctx || !this.musicBus || this.musicOff) return
             const now = this.ctx.currentTime
             this.musicBus.gain.cancelScheduledValues(now)
-            this.musicBus.gain.setTargetAtTime(0.15, now, 0.05)
-            this.musicBus.gain.setTargetAtTime(0.7, now + durationSeconds, 0.2)
+            this.musicBus.gain.setTargetAtTime(this.levels.duck, now, 0.05)
+            this.musicBus.gain.setTargetAtTime(this.levels.music, now + durationSeconds, 0.2)
           }
 
           this.restoreMusic = () => {
-            if (!this.ctx || !this.musicBus) return
+            if (!this.ctx || !this.musicBus || this.musicOff) return
             const now = this.ctx.currentTime
             this.musicBus.gain.cancelScheduledValues(now)
-            this.musicBus.gain.setTargetAtTime(0.7, now, 0.1)
+            this.musicBus.gain.setTargetAtTime(this.levels.music, now, 0.1)
           }
 
           this.stopVoice = () => {
@@ -1354,13 +1414,36 @@ defmodule MeaningGameWeb.RoomComponents do
 
           this.handleEvent("foley:page", async ({path}) => {
             if (!this.canPlay()) return
-            this.stopVoice()
-            this.currentVoiceAttempt = null
             await this.resumeAudio()
             if (!this.ctx) return
-            const trackUrl = path || "/audio/house-loop.mp3"
+
+            const now = this.ctx.currentTime
+            const fadeDuration = 2.0
+
+            if (!path) {
+              this.musicOff = true
+              this.musicBus.gain.cancelScheduledValues(now)
+              this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
+              this.musicBus.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
+              const oldMusic = this.currentMusic
+              this.currentMusic = null
+              this.musicSource = null
+              if (oldMusic) {
+                setTimeout(() => {
+                  try { oldMusic.source.stop() } catch (_) {}
+                }, fadeDuration * 1000 + 100)
+              }
+              return
+            }
+
+            this.musicOff = false
+
+            const trackUrl = path
 
             if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              this.musicBus.gain.cancelScheduledValues(now)
+              this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
+              this.musicBus.gain.linearRampToValueAtTime(this.levels.music, now + 1.0)
               return
             }
 
@@ -1371,8 +1454,9 @@ defmodule MeaningGameWeb.RoomComponents do
               return
             }
 
-            const now = this.ctx.currentTime
-            const fadeDuration = 2.0
+            this.musicBus.gain.cancelScheduledValues(now)
+            this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
+            this.musicBus.gain.linearRampToValueAtTime(this.levels.music, now + fadeDuration)
 
             const newGain = this.ctx.createGain()
             const newSource = this.ctx.createBufferSource()
