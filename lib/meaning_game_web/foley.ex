@@ -51,36 +51,42 @@ defmodule MeaningGameWeb.Foley do
 
     just_claimed = is_nil(old_room) or !Map.get(old_room, :speaker?)
 
-    track_path = resolve_track_path(new_room)
-    old_track_path = resolve_track_path(old_room)
+    track_info = resolve_track(new_room)
+    old_track_info = resolve_track(old_room)
 
-    track_changed = is_active_page and not is_nil(old_room) and track_path != old_track_path
+    track_changed =
+      is_active_page and not is_nil(old_room) and track_info.path != old_track_info.path
 
     if (new_room.phase == :bridging and entered_active_page) or (is_active_page and just_claimed) or
          track_changed do
-      push_event(socket, "foley:page", %{path: track_path})
+      push_event(socket, "foley:page", track_info)
     else
       socket
     end
   end
 
-  defp resolve_track_path(nil), do: nil
+  defp resolve_track(nil), do: %{path: nil, title: nil, kind: nil}
 
-  defp resolve_track_path(room) do
+  defp resolve_track(room) do
     case to_string(Map.get(room, :music, "page")) do
       "off" ->
-        nil
+        %{path: nil, title: nil, kind: nil}
 
       "house" ->
-        "/audio/house-loop.mp3"
+        house_loop_payload(room)
 
       _ ->
         if room[:track] && room.track[:path] do
-          room.track.path
+          %{path: room.track.path}
         else
-          "/audio/house-loop.mp3"
+          house_loop_payload(room)
         end
     end
+  end
+
+  defp house_loop_payload(room) do
+    loop = room[:loop] || hd(MeaningGame.Foley.Loops.all())
+    %{path: loop.path, title: loop.name, kind: "house"}
   end
 
   defp maybe_push_beat(socket, old_room, new_room) do

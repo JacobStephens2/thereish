@@ -616,34 +616,38 @@ defmodule MeaningGameWeb.RoomLive do
     <section
       :if={@room}
       data-role="speaker-bar"
-      class="flex items-center justify-between rounded-lg border border-base-300 px-4 py-2"
+      class="flex flex-col gap-2 rounded-lg border border-base-300 px-4 py-2"
     >
-      <button
-        type="button"
-        phx-click="claim_speaker"
-        data-role="speaker-toggle"
-        data-speaker={
-          cond do
-            @room.speaker? -> "self"
-            @room.speaker_claimed? -> "other"
-            true -> "none"
-          end
-        }
-        class="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
-      >
-        <.speaker_icon state={
-          cond do
-            @room.speaker? -> :self
-            @room.speaker_claimed? -> :other
-            true -> :none
-          end
-        } />
-        <span :if={@room.speaker?} class="text-primary font-semibold">This phone is speaker</span>
-        <span :if={@room.speaker_claimed? and not @room.speaker?} class="opacity-60">Speaker elsewhere</span>
-        <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
-      </button>
+      <div class="flex items-center justify-between">
+        <button
+          type="button"
+          phx-click="claim_speaker"
+          data-role="speaker-toggle"
+          data-speaker={
+            cond do
+              @room.speaker? -> "self"
+              @room.speaker_claimed? -> "other"
+              true -> "none"
+            end
+          }
+          class="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+        >
+          <.speaker_icon state={
+            cond do
+              @room.speaker? -> :self
+              @room.speaker_claimed? -> :other
+              true -> :none
+            end
+          } />
+          <span :if={@room.speaker?} class="text-primary font-semibold">This phone is speaker</span>
+          <span :if={@room.speaker_claimed? and not @room.speaker?} class="opacity-60">Speaker elsewhere</span>
+          <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
+        </button>
 
-      <.foley_switches room={@room} />
+        <.foley_switches room={@room} />
+      </div>
+
+      <.now_playing :if={@room.speaker?} room={@room} />
     </section>
 
     <section

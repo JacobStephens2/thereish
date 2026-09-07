@@ -49,4 +49,25 @@ defmodule MeaningGame.Foley.LoopsTest do
       end
     end
   end
+
+  describe "pick/1" do
+    test "picks a loop from all loops when previous loop is nil" do
+      loop = Loops.pick()
+      assert loop in Loops.all()
+    end
+
+    test "never picks the previous loop" do
+      all_loops = Loops.all()
+
+      for prev <- all_loops do
+        for _ <- 1..50 do
+          picked = Loops.pick(prev)
+          assert picked in all_loops
+          refute picked == prev
+          refute picked.name == prev.name
+          refute picked.path == prev.path
+        end
+      end
+    end
+  end
 end
