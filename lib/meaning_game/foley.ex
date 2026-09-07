@@ -27,44 +27,17 @@ defmodule MeaningGame.Foley do
   end
 
   defp warn_music_keys do
-    music_role = MeaningGame.Steward.role(:foley, :music)
-    key = music_role[:api_key]
+    case MeaningGame.Steward.missing_keys(:foley, :music) do
+      [] ->
+        :ok
 
-    if is_nil(key) or key == "" do
-      Logger.warning("no MUREKA_API_KEY — every Page will have only the house loop")
+      [key | _] ->
+        Logger.warning("no #{key} — every Page will have only the house loop")
     end
   end
 
   defp warn_voice_keys do
-    voice_role = MeaningGame.Steward.role(:foley, :voice)
-    provider = voice_role[:provider]
-
-    missing =
-      cond do
-        provider == MeaningGame.Steward.Hume ->
-          hume_api = voice_role[:hume_api_key] || voice_role[:api_key]
-          hume_secret = voice_role[:hume_secret_key] || voice_role[:secret_key]
-
-          [
-            if(is_nil(hume_api) or hume_api == "", do: "HUME_API_KEY"),
-            if(is_nil(hume_secret) or hume_secret == "", do: "HUME_SECRET_KEY")
-          ]
-          |> Enum.reject(&is_nil/1)
-
-        provider == MeaningGame.Steward.ElevenLabs ->
-          el_api = voice_role[:elevenlabs_api_key] || voice_role[:api_key]
-
-          if is_nil(el_api) or el_api == "" do
-            ["ELEVENLABS_API_KEY"]
-          else
-            []
-          end
-
-        true ->
-          []
-      end
-
-    case missing do
+    case MeaningGame.Steward.missing_keys(:foley, :voice) do
       [] ->
         :ok
 

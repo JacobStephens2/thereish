@@ -31,6 +31,21 @@ defmodule MeaningGame.Steward.Mureka do
           cost_usd: float()
         }
 
+  @doc """
+  Returns the names of any missing API keys required by Mureka.
+  """
+  @spec missing_keys(keyword() | map()) :: [String.t()]
+  def missing_keys(opts \\ %{}) do
+    opts = if is_list(opts), do: Map.new(opts), else: opts
+    key = Map.get(opts, :api_key) || Map.get(opts, "api_key")
+
+    if is_binary(key) and key != "" do
+      []
+    else
+      ["MUREKA_API_KEY"]
+    end
+  end
+
   @spec generate(request() | keyword() | map()) :: {:ok, response()} | {:error, term()}
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
 

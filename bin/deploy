@@ -60,21 +60,17 @@ if echo "${MISSING_KEYS}" | grep -q 'MUREKA_API_KEY'; then
 fi
 
 if [ "${VOICE_PROVIDER}" = "ElevenLabs" ]; then
-  if echo "${MISSING_KEYS}" | grep -q 'ELEVENLABS_API_KEY'; then
-    echo "Note: no ELEVENLABS_API_KEY in ${APP_DIR}/.env — the voice switch will do nothing."
-    echo "      See docs/deploy.md, \"Foley's keys\"."
-  fi
+  VOICE_KEYS=("ELEVENLABS_API_KEY")
 else
-  if echo "${MISSING_KEYS}" | grep -q 'HUME_API_KEY'; then
-    echo "Note: no HUME_API_KEY in ${APP_DIR}/.env — the voice switch will do nothing."
-    echo "      See docs/deploy.md, \"Foley's keys\"."
-  fi
-
-  if echo "${MISSING_KEYS}" | grep -q 'HUME_SECRET_KEY'; then
-    echo "Note: no HUME_SECRET_KEY in ${APP_DIR}/.env — the voice switch will do nothing."
-    echo "      See docs/deploy.md, \"Foley's keys\"."
-  fi
+  VOICE_KEYS=("HUME_API_KEY" "HUME_SECRET_KEY")
 fi
+
+for key in "${VOICE_KEYS[@]}"; do
+  if echo "${MISSING_KEYS}" | grep -q "${key}"; then
+    echo "Note: no ${key} in ${APP_DIR}/.env — the voice switch will do nothing."
+    echo "      See docs/deploy.md, \"Foley's keys\"."
+  fi
+done
 
 echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"
 ssh "${SERVER}" bash -s <<REMOTE
