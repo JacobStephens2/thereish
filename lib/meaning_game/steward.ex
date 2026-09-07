@@ -102,20 +102,7 @@ defmodule MeaningGame.Steward do
   @spec title_track([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   def title_track(gives, opts \\ []) do
     gives = Enum.map(gives, &MeaningGame.Steward.Author.give_text/1)
-    started = System.monotonic_time(:millisecond)
-
-    case adapter().title_track(gives, opts) do
-      {:ok, %{meta: meta} = answer} ->
-        latency = System.monotonic_time(:millisecond) - started
-        {:ok, %{answer | meta: Map.put_new(meta, :latency_ms, latency)}}
-
-      {:ok, answer} ->
-        latency = System.monotonic_time(:millisecond) - started
-        {:ok, Map.put(answer, :meta, %{latency_ms: latency})}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    measure_call(fn -> adapter().title_track(gives, opts) end)
   end
 
   @doc """
@@ -126,36 +113,24 @@ defmodule MeaningGame.Steward do
   @spec score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   def score(gives, opts \\ []) do
     gives = Enum.map(gives, &MeaningGame.Steward.Author.give_text/1)
+    measure_call(fn -> adapter().score(gives, opts) end)
+  end
+
+  defp measure_call(fun) do
     started = System.monotonic_time(:millisecond)
 
-    case adapter().score(gives, opts) do
+    case fun.() do
       {:ok, %{meta: meta} = answer} ->
         latency = System.monotonic_time(:millisecond) - started
         {:ok, %{answer | meta: Map.put_new(meta, :latency_ms, latency)}}
 
-      {:ok, answer} ->
+      {:ok, answer} when is_map(answer) ->
         latency = System.monotonic_time(:millisecond) - started
         {:ok, Map.put(answer, :meta, %{latency_ms: latency})}
 
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  @doc """
-  Fetches a track from the track cache by Gives, if present.
-  """
-  @spec cached_track([String.t() | map()]) :: {:ok, map()} | :miss
-  def cached_track(gives) do
-    MeaningGame.Steward.TrackCache.get(gives)
-  end
-
-  @doc """
-  Caches a track by Gives.
-  """
-  @spec cache_track([String.t() | map()], map()) :: {:ok, struct()} | {:error, term()}
-  def cache_track(gives, track) do
-    MeaningGame.Steward.TrackCache.put(gives, track)
   end
 
   @doc """
