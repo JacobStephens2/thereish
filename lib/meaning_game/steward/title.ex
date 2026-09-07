@@ -19,6 +19,7 @@ defmodule MeaningGame.Steward.Title do
   - At most 40 characters.
   - Letters, digits, spaces, hyphens and apostrophes only.
   - No quotes.
+  - No "song".
   """
 
   @doc "The version of the titling prompt and schema."
@@ -41,7 +42,7 @@ defmodule MeaningGame.Steward.Title do
       """
       Settings (Gives): #{theme}
 
-      Write a title of at most five words for an instrumental track written from these settings.
+      Write a title of at most five words for an instrumental track written from these settings, no quotes, no "song".
       """
       |> String.trim()
 
@@ -69,7 +70,7 @@ defmodule MeaningGame.Steward.Title do
                 values: [
                   {"type", "string"},
                   {"description",
-                   "A title of at most five words for an instrumental track written from these settings, no quotes."}
+                   "A title of at most five words for an instrumental track written from these settings, no quotes, no \"song\"."}
                 ]
               }}
            ]
@@ -114,7 +115,8 @@ defmodule MeaningGame.Steward.Title do
 
         has_quotes? =
           String.contains?(t, ["\"", "“", "”"]) or
-            (String.starts_with?(t, "'") and String.ends_with?(t, "'"))
+            (String.starts_with?(t, "'") and String.ends_with?(t, "'")) or
+            (String.starts_with?(t, "‘") and String.ends_with?(t, "’"))
 
         cond do
           has_quotes? ->
@@ -129,7 +131,7 @@ defmodule MeaningGame.Steward.Title do
           length(words) > 5 ->
             {:error, "title must be at most 5 words"}
 
-          not Regex.match?(~r/^[\p{L}\p{N}\s'-]+$/u, t) ->
+          not Regex.match?(~r/^[\p{L}\p{N}\s'’\-]+$/u, t) ->
             {:error, "title contains invalid characters"}
 
           true ->
