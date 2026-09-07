@@ -73,8 +73,8 @@ defmodule MeaningGame.Chronicle.Markdown do
       end
 
     track_lines =
-      case page_track_title(page) do
-        title when is_binary(title) and title != "" ->
+      case Chronicle.page_track(page) do
+        %{title: title} ->
           ["- Track: #{title}"]
 
         _ ->
@@ -127,26 +127,6 @@ defmodule MeaningGame.Chronicle.Markdown do
       |> Enum.reject(&(&1 in [nil, ""]))
 
     Enum.join(sections, "\n\n")
-  end
-
-  defp page_track_title(page) do
-    case page[:music_meta] || page["music_meta"] do
-      %{} = meta ->
-        path = meta[:path] || meta["path"]
-        title = meta[:title] || meta["title"]
-
-        if is_binary(path) and path != "" and is_binary(title) and title != "" do
-          title
-        else
-          nil
-        end
-
-      _ ->
-        case page[:track] do
-          title when is_binary(title) and title != "" -> title
-          _ -> nil
-        end
-    end
   end
 
   # The Scribe's paragraph, as a blockquote at the head of the Page — which is
@@ -380,13 +360,13 @@ defmodule MeaningGame.Chronicle.Markdown do
 
     track =
       if track_line do
-        t =
+        track_title =
           track_line
           |> String.replace_prefix("- Track:", "")
           |> String.replace_prefix("Track:", "")
           |> String.trim()
 
-        if t == "", do: nil, else: t
+        if track_title == "", do: nil, else: track_title
       end
 
     attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
@@ -478,8 +458,7 @@ defmodule MeaningGame.Chronicle.Markdown do
                  "Original",
                  "Overruled",
                  "Fairness",
-                 "Carried",
-                 "Track"
+                 "Carried"
                ] ->
             if String.starts_with?(name, "By ") do
               []
