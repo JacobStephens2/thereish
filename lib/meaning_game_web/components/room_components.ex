@@ -1404,6 +1404,7 @@ defmodule MeaningGameWeb.RoomComponents do
       data-level-stings={to_string(@levels[:stings] || 1.2)}
       data-level-voice={to_string(@levels[:voice] || 1.2)}
       data-level-duck={to_string(@levels[:duck] || 0.15)}
+      data-level-duck-stings={to_string(@levels[:duck_stings] || 0.35)}
       data-meld-cue-delay-ms={to_string(@meld_cue_delay_ms)}
       class="hidden"
     >
@@ -1434,7 +1435,8 @@ defmodule MeaningGameWeb.RoomComponents do
             music: parseLevel(this.el.dataset.levelMusic, 0.5),
             stings: parseLevel(this.el.dataset.levelStings, 1.2),
             voice: parseLevel(this.el.dataset.levelVoice, 1.2),
-            duck: parseLevel(this.el.dataset.levelDuck, 0.15)
+            duck: parseLevel(this.el.dataset.levelDuck, 0.15),
+            duckStings: parseLevel(this.el.dataset.levelDuckStings, 0.35)
           }
 
           this.parseDelay = (val, fallback) => {
@@ -1550,6 +1552,27 @@ defmodule MeaningGameWeb.RoomComponents do
             return !this.musicOff && Boolean(this.duckUntil && this.ctx && this.ctx.currentTime < this.duckUntil)
           }
 
+          this.duckStings = (durationSeconds = 2.0) => {
+            if (!this.ctx || !this.stingsBus) return
+            const now = this.ctx.currentTime
+            this.stingsDuckUntil = Math.max(this.stingsDuckUntil || 0, now + durationSeconds)
+            this.stingsBus.gain.cancelScheduledValues(now)
+            this.stingsBus.gain.setTargetAtTime(this.levels.duckStings, now, 0.05)
+            this.stingsBus.gain.setTargetAtTime(this.levels.stings, this.stingsDuckUntil, 0.2)
+          }
+
+          this.restoreStings = () => {
+            if (!this.ctx || !this.stingsBus) return
+            const now = this.ctx.currentTime
+            this.stingsDuckUntil = 0
+            this.stingsBus.gain.cancelScheduledValues(now)
+            this.stingsBus.gain.setTargetAtTime(this.levels.stings, now, 0.1)
+          }
+
+          this.isStingsDucked = () => {
+            return Boolean(this.stingsDuckUntil && this.ctx && this.ctx.currentTime < this.stingsDuckUntil)
+          }
+
           this.stopVoice = () => {
             if (this.voiceObserver) {
               this.voiceObserver.disconnect()
@@ -1559,6 +1582,7 @@ defmodule MeaningGameWeb.RoomComponents do
               try { this.voiceSource.stop() } catch (_) {}
               this.voiceSource = null
               this.restoreMusic()
+              this.restoreStings()
             }
           }
 
@@ -1713,11 +1737,13 @@ defmodule MeaningGameWeb.RoomComponents do
 
               const duration = buf.duration || 3.0
               this.duckMusic(duration)
+              this.duckStings(duration)
 
               source.onended = () => {
                 if (this.voiceSource === source) {
                   this.voiceSource = null
                   this.restoreMusic()
+                  this.restoreStings()
                 }
               }
               source.start(0)

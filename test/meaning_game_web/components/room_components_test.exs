@@ -486,20 +486,191 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ ~s(data-level-stings="#{configured[:stings]}")
       assert html =~ ~s(data-level-voice="#{configured[:voice]}")
       assert html =~ ~s(data-level-duck="#{configured[:duck]}")
+      assert html =~ ~s(data-level-duck-stings="#{configured[:duck_stings]}")
 
       # Redundant non-level prefixed attributes are not rendered
       refute html =~ ~s(data-music=)
       refute html =~ ~s(data-stings=)
       refute html =~ ~s(data-voice=)
       refute html =~ ~s(data-duck=)
+      refute html =~ ~s(data-duck-stings=)
 
       # Custom levels passed explicitly override configured ones
-      custom_levels = [music: 0.8, stings: 1.5, voice: 1.0, duck: 0.2]
+      custom_levels = [music: 0.8, stings: 1.5, voice: 1.0, duck: 0.2, duck_stings: 0.4]
       custom_html = render_component(&foley_hook/1, speaker: true, levels: custom_levels)
       assert custom_html =~ ~s(data-level-music="0.8")
       assert custom_html =~ ~s(data-level-stings="1.5")
       assert custom_html =~ ~s(data-level-voice="1.0")
       assert custom_html =~ ~s(data-level-duck="0.2")
+      assert custom_html =~ ~s(data-level-duck-stings="0.4")
+    end
+
+    test "foley hook script ducks stings bus during voice, restores on end, and starts arriving cue ducked" do
+      hook_source = File.read!("lib/meaning_game_web/components/room_components.ex")
+
+      assert hook_source =~ "duckStings"
+      assert hook_source =~ "restoreStings"
+      assert hook_source =~ "isStingsDucked"
+      assert hook_source =~ "this.duckStings(duration)"
+      assert hook_source =~ "this.restoreStings()"
+
+      # Extract the Foley hook JS from room_components.ex and execute in Node with mock Web Audio
+      [_, js_body] =
+        Regex.run(
+          ~r/<script :type=\{Phoenix\.LiveView\.ColocatedHook\} name="\.Foley">\s*(.*?)\s*<\/script>/s,
+          hook_source
+        )
+
+      test_script = """
+      const assert = require('assert');
+
+      // Mock DOM & Web Audio
+      class MockGainNode {
+        constructor(ctx) {
+          this.ctx = ctx;
+          this.gain = {
+            value: 1.0,
+            setValueAtTime(v, t) { this.value = v; },
+            setTargetAtTime(target, startTime, timeConstant) {
+              if (startTime <= ctx.currentTime) {
+                this.value = target;
+              }
+            },
+            cancelScheduledValues(t) {},
+            linearRampToValueAtTime(v, t) { this.value = v; }
+          };
+        }
+        connect(target) {}
+      }
+
+      class MockAudioContext {
+        constructor() {
+          this.currentTime = 10.0;
+          this.state = 'running';
+          this.destination = {};
+        }
+        createGain() { return new MockGainNode(this); }
+        createBufferSource() {
+          return {
+            buffer: null,
+            connect(b) {},
+            start(t) {},
+            stop() {}
+          };
+        }
+        decodeAudioData(buf) { return Promise.resolve({ duration: 4.0 }); }
+        resume() { return Promise.resolve(); }
+      }
+
+      global.window = {
+        AudioContext: MockAudioContext,
+        matchMedia: () => ({ matches: false })
+      };
+      global.fetch = () => Promise.resolve({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(8))
+      });
+      global.document = {
+        getElementById: () => null,
+        querySelector: (sel) => (sel === "[data-role=quip]" ? {} : null),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        body: {}
+      };
+
+      // Wrap exported hook
+      const moduleCode = #{Jason.encode!(js_body)};
+      const hookExport = eval('(function() { const exports = {}; ' + moduleCode.replace('export default', 'return') + ' })()');
+
+      (async () => {
+        // 1. Voice event during a playing cue ducks stings bus and restores on end
+        {
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          // Stings bus starts at normal stings level 1.2
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+
+          // Victory cue starts playing via foley:ending event
+          await events["foley:ending"]({kind: "meld"});
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+
+          // While cue is playing, voice event arrives and quip is ready
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), true);
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+
+          // When voice ends, stings bus restores to 1.2
+          hook.voiceSource.onended();
+          assert.strictEqual(hook.isStingsDucked(), false);
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
+
+        // 2. Cue arriving during a playing voice starts ducked
+        {
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          // Voice starts playing first via foley:voice event
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), true);
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+
+          // Cue arrives during playing voice via foley:ending event
+          await events["foley:ending"]({kind: "deep_meld"});
+          // Stings bus remains ducked under the active voice
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+
+          // When voice ends, stings bus restores to 1.2
+          hook.voiceSource.onended();
+          assert.strictEqual(hook.isStingsDucked(), false);
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
+
+        console.log('HOOK_TESTS_PASSED');
+      })().catch(err => {
+        console.error(err);
+        process.exit(1);
+      });
+      """
+
+      {output, exit_code} = System.cmd("node", ["-e", test_script])
+      assert exit_code == 0
+      assert output =~ "HOOK_TESTS_PASSED"
     end
 
     test "foley_hook renders meld cue delay and hook script handles meld, deep_meld, and unmelded" do

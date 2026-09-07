@@ -64,7 +64,7 @@ config :meaning_game, :steward,
       ]
     ],
     foley: [
-      levels: [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15],
+      levels: [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15, duck_stings: 0.35],
       meld_cue_delay_ms: 1800,
       elevenlabs_api_key: "recorded-responses-need-no-key",
       hume_api_key: "recorded-responses-need-no-key",
