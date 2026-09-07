@@ -78,6 +78,14 @@ if key = System.get_env("MUREKA_API_KEY") do
   config :meaning_game, :steward, roles: [foley: [jobs: [music: [api_key: key]]]]
 end
 
+if script_url = System.get_env("UMAMI_SCRIPT_URL") do
+  config :meaning_game, :umami, script_url: script_url
+end
+
+if website_id = System.get_env("UMAMI_WEBSITE_ID") do
+  config :meaning_game, :umami, website_id: website_id
+end
+
 if to = System.get_env("NOTICE_TO") do
   config :meaning_game, :notice, to: to
 end
