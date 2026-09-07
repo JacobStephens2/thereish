@@ -9,7 +9,7 @@ const VIEWPORTS = [
   { width: 1366, height: 768, label: "1366x768 (Standard Laptop)" }
 ];
 
-const PAGES = [
+const PHASE_FIXTURES = [
   "giving",
   "writing",
   "bridging",
@@ -110,7 +110,7 @@ async function main() {
   const results = [];
   let allPassed = true;
 
-  for (const pageName of PAGES) {
+  for (const pageName of PHASE_FIXTURES) {
     const htmlPath = path.join(HTML_DIR, `${pageName}.html`);
     const fileUrl = `file://${htmlPath}`;
 
@@ -145,7 +145,7 @@ async function main() {
       });
 
       const metrics = evalRes.result.value;
-      const overflows = metrics.scrollHeight > vp.height || metrics.bodyScrollHeight > vp.height;
+      const overflows = metrics.scrollHeight > vp.height || metrics.bodyScrollHeight > vp.height || (metrics.mainScrollHeight && metrics.mainScrollHeight > vp.height);
 
       // Capture screenshot
       const screenshotRes = await sendCDP(pageWs, "Page.captureScreenshot", { format: "png" });
