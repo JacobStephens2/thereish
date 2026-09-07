@@ -718,6 +718,156 @@ defmodule MeaningGame.ChronicleTest do
       assert attempt.bookends == ["lantern", "harbour"]
     end
 
+    test "to_markdown writes Track: line when page has track path and title, and omits it otherwise",
+         ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      # Page 1: Has a track with path and title
+      entry1 = %{
+        document: %{"bookends" => ["lantern", "harbour"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: %{
+          provider: "mureka",
+          path: "/media/tracks/harbour-lights.mp3",
+          title: "Harbour Lights"
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 95,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["lantern", "harbour"],
+            closeness: 95,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "lighthouse"},
+              %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, _p1} = Chronicle.write(room.id, entry1, now)
+
+      # Page 2: Has failed score (music_meta has failure, no path)
+      entry2 = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, _p2} = Chronicle.write(room.id, entry2, DateTime.add(now, 60, :second))
+
+      # Page 3: Music off (music_meta is nil)
+      entry3 = %{
+        document: %{"bookends" => ["mountain", "valley"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: nil,
+        closed_because: :meld,
+        melded?: true,
+        closeness: 88,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["mountain", "valley"],
+            closeness: 88,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "ridge"},
+              %{seat_id: ctx.jacob.id, bridge: "ridge"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, _p3} = Chronicle.write(room.id, entry3, DateTime.add(now, 120, :second))
+
+      markdown = Chronicle.to_markdown(room.id)
+
+      # Page 1 has Track: Harbour Lights
+      assert markdown =~ "Page 1: lantern · harbour"
+      assert markdown =~ "- Track: Harbour Lights"
+
+      # Page 2 and Page 3 have no Track lines
+      assert markdown =~ "Page 2: desert · oasis"
+      assert markdown =~ "Page 3: mountain · valley"
+
+      # Exactly one Track: line in the entire document
+      matches = Regex.scan(~r/(?:^|\n)-? ?Track:\s*(.*)/, markdown)
+      assert length(matches) == 1
+      assert hd(matches) |> List.last() |> String.trim() == "Harbour Lights"
+
+      # Round-trip parsing from Markdown
+      assert {:ok, [parsed_p1, parsed_p2, parsed_p3]} = Chronicle.from_markdown(markdown)
+      assert parsed_p1.track == "Harbour Lights"
+      assert parsed_p2.track == nil
+      assert parsed_p3.track == nil
+    end
+
+    test "from_markdown parses Track: line and legacy exports without Track: still parse" do
+      markdown_with_track = """
+      # The Chronicle
+
+      ## Room: test-room
+
+      ### Page 1: lantern · harbour
+      - Outcome: Melded (meld)
+      - Closeness: 80 / 100
+      - Track: Midnight Beacon
+
+      #### Attempt 1
+      - Bookends: lantern · harbour
+      - Bridges:
+        - Mara: cairn
+        - Jacob: cairn
+      - Closeness: 80 / 100 (meld)
+      """
+
+      assert {:ok, [page]} = Chronicle.from_markdown(markdown_with_track)
+      assert page.track == "Midnight Beacon"
+
+      # Legacy markdown without Track: line still parses cleanly
+      legacy_markdown = """
+      # The Chronicle
+
+      ## Room: test-room
+
+      ### Page 1: lantern · harbour
+      - Outcome: Melded (meld)
+      - Closeness: 80 / 100
+
+      #### Attempt 1
+      - Bookends: lantern · harbour
+      - Bridges:
+        - Mara: cairn
+        - Jacob: cairn
+      - Closeness: 80 / 100 (meld)
+      """
+
+      assert {:ok, [legacy_page]} = Chronicle.from_markdown(legacy_markdown)
+      assert legacy_page.track == nil
+    end
+
     test "assignment and outcome are Chronicle events, blinded until unblinded", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
 

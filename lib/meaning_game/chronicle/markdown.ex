@@ -72,6 +72,15 @@ defmodule MeaningGame.Chronicle.Markdown do
           []
       end
 
+    track_lines =
+      case page_track_title(page) do
+        title when is_binary(title) and title != "" ->
+          ["- Track: #{title}"]
+
+        _ ->
+          []
+      end
+
     meta_lines =
       [
         "### Page #{index}: #{bookends_str}",
@@ -80,6 +89,7 @@ defmodule MeaningGame.Chronicle.Markdown do
         "- Closeness: #{closeness_str}"
       ] ++
         give_lines ++
+        track_lines ++
         experiment_lines ++
         [
           "- Opened: #{page.opened_at && DateTime.to_iso8601(page.opened_at)}",
@@ -117,6 +127,26 @@ defmodule MeaningGame.Chronicle.Markdown do
       |> Enum.reject(&(&1 in [nil, ""]))
 
     Enum.join(sections, "\n\n")
+  end
+
+  defp page_track_title(page) do
+    case page[:music_meta] || page["music_meta"] do
+      %{} = meta ->
+        path = meta[:path] || meta["path"]
+        title = meta[:title] || meta["title"]
+
+        if is_binary(path) and path != "" and is_binary(title) and title != "" do
+          title
+        else
+          nil
+        end
+
+      _ ->
+        case page[:track] do
+          title when is_binary(title) and title != "" -> title
+          _ -> nil
+        end
+    end
   end
 
   # The Scribe's paragraph, as a blockquote at the head of the Page — which is
@@ -342,6 +372,23 @@ defmodule MeaningGame.Chronicle.Markdown do
         |> String.trim()
       end
 
+    track_line =
+      Enum.find(
+        meta_lines,
+        &(String.starts_with?(&1, "- Track:") or String.starts_with?(&1, "Track:"))
+      )
+
+    track =
+      if track_line do
+        t =
+          track_line
+          |> String.replace_prefix("- Track:", "")
+          |> String.replace_prefix("Track:", "")
+          |> String.trim()
+
+        if t == "", do: nil, else: t
+      end
+
     attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
 
     %{
@@ -352,6 +399,7 @@ defmodule MeaningGame.Chronicle.Markdown do
       gives: gives,
       experiment: experiment,
       arm: arm,
+      track: track,
       recap: parse_recap(meta_lines),
       attempts: attempts
     }
@@ -430,7 +478,8 @@ defmodule MeaningGame.Chronicle.Markdown do
                  "Original",
                  "Overruled",
                  "Fairness",
-                 "Carried"
+                 "Carried",
+                 "Track"
                ] ->
             if String.starts_with?(name, "By ") do
               []
