@@ -581,24 +581,14 @@ defmodule MeaningGame.Rooms.Server do
     title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
     track = if title, do: Map.put(track, :title, title), else: track
 
-    music_meta =
-      (state.music_meta || track[:meta] || %{})
-      |> Map.put(:path, track.path)
-      |> Map.put("path", track.path)
+    attrs =
+      [path: track.path] ++
+        if(title, do: [title: title, title_cost_usd: title_cost], else: [])
 
-    music_meta =
-      if title do
-        music_meta
-        |> Map.put(:title, title)
-        |> Map.put(:title_cost_usd, title_cost)
-        |> Map.put("title", title)
-        |> Map.put("title_cost_usd", title_cost)
-      else
-        music_meta
-      end
+    music_meta = build_music_meta(state.music_meta || track[:meta], attrs)
 
     if not is_nil(title) and not is_nil(state[:current_gives]) do
-      Steward.cache_track(state.current_gives, track)
+      MeaningGame.Steward.TrackCache.put(state.current_gives, track)
     end
 
     %{state | current_track: track, music_meta: music_meta}
@@ -996,16 +986,14 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   defp start_music_tasks(room, page_ref, gives, state) do
-    case Steward.cached_track(gives) do
+    case MeaningGame.Steward.TrackCache.get(gives) do
       {:ok, cached_track} when not is_nil(cached_track.title) ->
         music_meta =
-          (cached_track.meta || %{})
-          |> Map.put(:title, cached_track.title)
-          |> Map.put(:path, cached_track.path)
-          |> Map.put(:title_cost_usd, 0.0)
-          |> Map.put("title", cached_track.title)
-          |> Map.put("path", cached_track.path)
-          |> Map.put("title_cost_usd", 0.0)
+          build_music_meta(cached_track.meta,
+            title: cached_track.title,
+            path: cached_track.path,
+            title_cost_usd: 0.0
+          )
 
         state
         |> Map.put(:current_track, cached_track)
@@ -1022,47 +1010,45 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   defp start_score_task(state, room, page_ref, gives) do
-    Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
-      try do
-        case Steward.score(gives) do
-          {:ok, track} ->
-            send(room, {:scored, page_ref, {:ok, track}})
-
-          {:error, reason} ->
-            send(room, {:scored, page_ref, {:error, reason}})
-        end
-      rescue
-        error ->
-          send(room, {:scored, page_ref, {:error, error}})
-      catch
-        :exit, reason ->
-          send(room, {:scored, page_ref, {:error, {:exit, reason}}})
-      end
+    start_music_task(state, room, page_ref, :score_task_running, :scored, fn ->
+      Steward.score(gives)
     end)
-
-    Map.put(state, :score_task_running, true)
   end
 
   defp start_title_task(state, room, page_ref, gives) do
+    start_music_task(state, room, page_ref, :title_task_running, :titled, fn ->
+      Steward.title_track(gives)
+    end)
+  end
+
+  defp start_music_task(state, room, page_ref, running_key, tag, fun) do
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
-        case Steward.title_track(gives) do
+        case fun.() do
           {:ok, result} ->
-            send(room, {:titled, page_ref, {:ok, result}})
+            send(room, {tag, page_ref, {:ok, result}})
 
           {:error, reason} ->
-            send(room, {:titled, page_ref, {:error, reason}})
+            send(room, {tag, page_ref, {:error, reason}})
         end
       rescue
         error ->
-          send(room, {:titled, page_ref, {:error, error}})
+          send(room, {tag, page_ref, {:error, error}})
       catch
         :exit, reason ->
-          send(room, {:titled, page_ref, {:error, {:exit, reason}}})
+          send(room, {tag, page_ref, {:error, {:exit, reason}}})
       end
     end)
 
-    Map.put(state, :title_task_running, true)
+    Map.put(state, running_key, true)
+  end
+
+  defp build_music_meta(base, pairs) do
+    Enum.reduce(pairs, base || %{}, fn {key, val}, acc ->
+      acc
+      |> Map.put(key, val)
+      |> Map.put(to_string(key), val)
+    end)
   end
 
   defp extract_give_strings(request) do
