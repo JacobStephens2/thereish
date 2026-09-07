@@ -66,7 +66,7 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "a Room too big for the Assayer to grade cannot be created" do
-      assert {:error, :bad_player_count} =
+      assert {:error, :bad_seat_count} =
                Rooms.create(MeaningGame.Steward.seat_cap() + 1, device_token())
     end
 
@@ -689,9 +689,9 @@ defmodule MeaningGame.RoomsTest do
     end
 
     test "a table smaller than two, or bigger than a phone can show, is not a Room" do
-      assert {:error, :bad_player_count} = Rooms.create(1, device_token())
-      assert {:error, :bad_player_count} = Rooms.create(0, device_token())
-      assert {:error, :bad_player_count} = Rooms.create("four", device_token())
+      assert {:error, :bad_seat_count} = Rooms.create(1, device_token())
+      assert {:error, :bad_seat_count} = Rooms.create(0, device_token())
+      assert {:error, :bad_seat_count} = Rooms.create("four", device_token())
     end
 
     test "a phone with history asks the Scribe, and the configured word becomes the Code" do
