@@ -167,6 +167,41 @@ attempted.
 When the Scribe is implemented to write Chronicle recaps post-play, it is
 planned to use `claude-fable-5-1` as well and will share this key.
 
+### Foley's keys
+
+Foley makes what the Room hears — instrumental Tracks scored live for each
+Page from its Gives, spoken Verdicts at the reveal, and sound effects for the
+forge. They use four keys that `deploy/provision.sh` cannot generate:
+
+- `MUREKA_API_KEY`: a Track for every Page (without it: the house loop only).
+- `HUME_API_KEY`: the Assayer's voice (Hume Octave 2, the bake-off winner; Hume needs both keys).
+- `HUME_SECRET_KEY`: the Assayer's voice (Hume needs both keys).
+- `ELEVENLABS_API_KEY`: the alternative voice, and the forge's effects.
+
+The one-command route to push every key from a `va` shell to the server is the wizard:
+
+```sh
+va bash -c bin/keys-to-server
+```
+
+Or by hand in the server's `.env`:
+
+```sh
+ssh jacob@stephens.page
+sudo -e /var/www/thereish.app/.env    # MUREKA_API_KEY=... HUME_API_KEY=... HUME_SECRET_KEY=...
+cd /var/www/thereish.app && docker compose -f docker-compose.app.yml up -d
+```
+
+On the Mac they go in `.env.local` for the release image, and in the shell for
+`mix phx.server`.
+
+Without them the game runs, but Foley goes quiet: missing `MUREKA_API_KEY` leaves
+every Page with only the house loop, and missing keys for the configured voice
+provider (`HUME_API_KEY` / `HUME_SECRET_KEY` today, `ELEVENLABS_API_KEY` if the
+alternative is switched in) leaves the voice switch doing nothing. `bin/deploy`
+warns when any Foley key is missing from `.env`, and the release logs the same
+warning once at boot.
+
 ### Umami
 
 Page views are counted first-party and cookieless through self-hosted Umami (ticket 11).
@@ -249,6 +284,9 @@ deployment's proof of life and nothing game-shaped. It reports four things:
 ## Operating
 
 ```sh
+# push keys to the server
+va bash -c bin/keys-to-server
+
 # logs
 ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-compose.app.yml logs --tail=100 app'
 
