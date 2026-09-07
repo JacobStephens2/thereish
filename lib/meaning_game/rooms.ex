@@ -89,7 +89,13 @@ defmodule MeaningGame.Rooms do
       case digests_for_device(device_token) do
         [] ->
           # No history: makes no model call and draws a random word
-          insert_with_a_free_code(player_count, @code_draws)
+          with {:ok, code} <- insert_with_a_free_code(player_count, @code_draws) do
+            if device_holds_no_seat_anywhere?(device_token) do
+              MeaningGame.Notice.notify_new_room(code, player_count)
+            end
+
+            {:ok, code}
+          end
 
         digests ->
           name_with_scribe_or_fallback(player_count, digests)
@@ -100,6 +106,12 @@ defmodule MeaningGame.Rooms do
   end
 
   def create(_player_count, _device_token), do: {:error, :bad_player_count}
+
+  defp device_holds_no_seat_anywhere?(nil), do: true
+
+  defp device_holds_no_seat_anywhere?(device_token) do
+    Store.rooms_for_device(device_token) == []
+  end
 
   defp digests_for_device(nil), do: []
 

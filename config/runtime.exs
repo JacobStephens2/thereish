@@ -78,6 +78,14 @@ if key = System.get_env("MUREKA_API_KEY") do
   config :meaning_game, :steward, roles: [foley: [jobs: [music: [api_key: key]]]]
 end
 
+if to = System.get_env("NOTICE_TO") do
+  config :meaning_game, :notice, to: to
+end
+
+if from = System.get_env("NOTICE_FROM") do
+  config :meaning_game, :notice, from: from
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :meaning_game, MeaningGameWeb.Endpoint,
@@ -171,4 +179,16 @@ if config_env() == :prod do
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
+
+  aws_access_key_id = System.get_env("AWS_ACCESS_KEY_ID")
+  aws_secret_access_key = System.get_env("AWS_SECRET_ACCESS_KEY")
+  aws_region = System.get_env("AWS_REGION") || "us-east-1"
+
+  if aws_access_key_id && aws_secret_access_key do
+    config :meaning_game, MeaningGame.Mailer,
+      adapter: Swoosh.Adapters.AmazonSES,
+      access_key: aws_access_key_id,
+      secret: aws_secret_access_key,
+      region: aws_region
+  end
 end

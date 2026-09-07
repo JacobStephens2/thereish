@@ -34,6 +34,7 @@ defmodule MeaningGame.RoomFixtures do
     # still talking to Postgres would be talking to a sandbox connection whose
     # owner has gone.
     ExUnit.Callbacks.on_exit(&await_scribe/0)
+    ExUnit.Callbacks.on_exit(&await_notice/0)
 
     slug
   end
@@ -168,6 +169,16 @@ defmodule MeaningGame.RoomFixtures do
     eventually(
       fn -> Task.Supervisor.children(MeaningGame.Scribe.Tasks) == [] end,
       "the Scribe was still writing"
+    )
+
+    :ok
+  end
+
+  @doc "Waits for any background notice delivery tasks to finish."
+  def await_notice do
+    eventually(
+      fn -> Task.Supervisor.children(MeaningGame.Notice.Tasks) == [] end,
+      "the notice was still delivering"
     )
 
     :ok

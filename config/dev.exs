@@ -55,6 +55,9 @@ config :meaning_game, MeaningGameWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :meaning_game, dev_routes: true
 
+# Mailer configuration for development
+config :meaning_game, MeaningGame.Mailer, adapter: Swoosh.Adapters.Local
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 
