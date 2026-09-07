@@ -218,6 +218,17 @@ On the Mac they can be set in `.env.local` for the release image, or omitted so 
 
 Without them, the game renders no analytics script tag at all. `bin/deploy` and the boot line warn when the pair is missing, and `bin/keys-to-server` can push them.
 
+### Amazon SES
+
+Notices for newly opened Rooms (and later, magic links under ADR-0007) are sent through Amazon SES (ticket 12 & 13).
+The domain identity, Easy DKIM CNAMEs, custom MAIL FROM subdomain, and DMARC records are configured and published to Porkbun DNS via the SES wizard:
+
+```sh
+va bash -c bin/ses-wizard
+```
+
+The wizard captures the IAM credentials, publishes DNS records idempotently via Porkbun's API, guides production access submission, and invokes `bin/keys-to-server` to push `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `NOTICE_TO`, and `NOTICE_FROM` directly to the server's `.env`.
+
 ### The keys on the Mac: `va`
 
 
