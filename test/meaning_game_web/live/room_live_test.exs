@@ -45,6 +45,19 @@ defmodule MeaningGameWeb.RoomLiveTest do
   # on every connection and say nothing about what the player sees.
   defp rendered_room(view), do: view |> element("#room") |> render()
 
+  defp assert_order(html, patterns) when is_list(patterns) do
+    indices =
+      Enum.map(patterns, fn pattern ->
+        case :binary.match(html, pattern) do
+          {idx, _} -> idx
+          :nomatch -> flunk("Expected to find #{inspect(pattern)} in rendered output")
+        end
+      end)
+
+    Enum.chunk_every(indices, 2, 1, :discard)
+    |> Enum.each(fn [a, b] -> assert a < b end)
+  end
+
   describe "joining" do
     test "a phone types a name and is in the Room" do
       slug = open_room()
@@ -52,11 +65,21 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       assert html =~ "Nobody yet"
 
+      # In :waiting, speaker bar and Code card render above the join form
+      assert_order(html, [
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        ~s(phx-submit="join")
+      ])
+
       html = join(mara, "Mara")
 
       assert html =~ "You are"
       assert has_element?(mara, "[data-seat]", "Mara")
       refute has_element?(mara, "form")
+
+      # After joining in :waiting, Code card renders before "In the Room"
+      assert_order(html, [~s(data-role="room-code"), "In the Room"])
     end
 
     test "two phones and a stage all show the same roster" do
@@ -197,6 +220,33 @@ defmodule MeaningGameWeb.RoomLiveTest do
         assert has_element?(view, "[data-role=bookends]", "lantern")
         assert has_element?(view, "[data-role=bookends]", "harbour")
       end
+    end
+
+    test "during bridging, the Attempt line, Bookends and Bridge form come first and speaker bar and Code card are below",
+         ctx do
+      html = render(ctx.mara)
+
+      assert_order(html, [
+        ~s(data-role="attempt"),
+        ~s(data-role="bookends"),
+        ~s(data-role="bridge-form"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room"
+      ])
+    end
+
+    test "a phone with no Seat mid-Page renders join form first, then speaker bar and Code card before In the Room",
+         ctx do
+      {:ok, onlooker, _} = live(phone(ctx.slug))
+      html = render(onlooker)
+
+      assert_order(html, [
+        ~s(phx-submit="join"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room"
+      ])
     end
 
     test "an illegal bridge is caught on the phone before commit and on commit", ctx do
@@ -667,26 +717,28 @@ defmodule MeaningGameWeb.RoomLiveTest do
         refute has_element?(view, "[data-role=furthest]")
 
         # Order within reveal: comparison -> closeness -> quip
-        {comp_idx, _} = :binary.match(html, ~s(data-role="comparison"))
-        {close_idx, _} = :binary.match(html, ~s(data-role="closeness-display"))
-        {quip_idx, _} = :binary.match(html, ~s(data-role="quip"))
-        assert comp_idx < close_idx
-        assert close_idx < quip_idx
+        assert_order(html, [
+          ~s(data-role="comparison"),
+          ~s(data-role="closeness-display"),
+          ~s(data-role="quip")
+        ])
       end
 
       # Phone distinguishes your bridge with (you)
       assert has_element?(ctx.mara, "[data-bridge][data-you=true]", "Mara")
       assert has_element?(ctx.mara, "[data-bridge][data-you=false]", "Jacob")
 
-      # Code card renders in every phase, full Room included
-      assert has_element?(ctx.mara, "[data-role=room-code]")
-      assert has_element?(ctx.jacob, "[data-role=room-code]")
-
-      # Header and "You are …" render below reveal as a footer on phone
+      # Code card renders after reveal and controls, before In the Room and footer
       phone_html = render(ctx.mara)
-      {reveal_idx, _} = :binary.match(phone_html, ~s(data-role="reveal"))
-      {footer_idx, _} = :binary.match(phone_html, "<footer")
-      assert reveal_idx < footer_idx
+
+      assert_order(phone_html, [
+        ~s(data-role="reveal"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room",
+        "<footer"
+      ])
+
       assert has_element?(ctx.mara, "footer [data-role=you]", "Mara")
       assert has_element?(ctx.mara, "footer h1", "Thereish")
       assert has_element?(ctx.mara, "footer a", "The Chronicle")
@@ -925,6 +977,15 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.stage, "[data-role=giving-stage]")
       assert render(ctx.stage) =~ "0 of 2"
 
+      # Code card and speaker bar are above setting form during giving phase
+      mara_giving_html = render(ctx.mara)
+
+      assert_order(mara_giving_html, [
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        ~s(data-role="setting-form")
+      ])
+
       # Mara gives a setting
       give_setting(ctx.mara, "candlelit cathedral")
 
@@ -945,6 +1006,16 @@ defmodule MeaningGameWeb.RoomLiveTest do
       # Beat meter pulses during writing phase
       eventually(fn -> has_element?(ctx.stage, "[data-role=writing-stage]") end)
       assert has_element?(ctx.mara, "[data-role=writing-phase]")
+
+      # From :writing on, speaker bar and Code card render after writing phase and before In the Room
+      writing_html = render(ctx.mara)
+
+      assert_order(writing_html, [
+        ~s(data-role="writing-phase"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room"
+      ])
 
       # Transitions to bridging with bookends and no setting line
       await_phase(ctx.slug, :bridging)
