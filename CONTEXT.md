@@ -61,7 +61,7 @@ The machine role that writes the Chronicle after play — records, recaps, callb
 _Avoid_: logger, narrator, historian
 
 **Foley**:
-The machine role that makes what the Room hears — the stings and the house loop, made once and shipped, and the music written for a Page's Gives while it is played. (Named for the theatre's sound artist; the stage, the beat and the reveal are already its vocabulary.)
+The machine role that makes what the Room hears — the stings, the Repertoire, and the Track written for a Page's Gives. (Named for the theatre's sound artist; the stage, the beat and the reveal are already its vocabulary.)
 _Avoid_: composer, sound designer, DJ, audio service
 
 **Speaker**:
@@ -69,8 +69,20 @@ The one device in a Room that plays what Foley makes — the Stage when one is o
 _Avoid_: audio device, output, host phone, "the sound", speakerphone
 
 **Track**:
-The instrumental Foley writes for one Page from its Gives, arriving a minute or so into play and fading in over the house loop. It is titled by the Scribe and kept, so the same Gives bring the same Track back — a song the Chronicle can remember.
-_Avoid_: song (in code), background music, BGM, soundtrack, loop (that is the house loop, which is not written for a Page)
+The instrumental Foley writes for one Page from its Gives. It is titled by the Scribe and kept, so the same Gives bring the same Track back — a song the Chronicle can remember. A Track belongs to its Page; it may still be what the Speaker is playing after that Page has closed, until the next Page's Track lands.
+_Avoid_: song (in code), background music, BGM, soundtrack, loop (a Repertoire draw is not this Page's Track)
+
+**Repertoire**:
+The instrumentals Foley may play when this night has no Track of its own on the Speaker yet — the five loops shipped with the game, and every Track that has been kept. A Room whose Chronicle already holds a Track is drawn from that Room's Tracks and the five loops; a Room with none is drawn from the whole set. The pick is a shuffle, not a fixed starter. A Room may mark a member Never so it is not drawn there again; the last remaining member cannot be.
+_Avoid_: library, catalog, playlist, pool, house book, house loop (the loops are members; the set is the Repertoire)
+
+**House**:
+Speaker occupancy that plays a shuffle from the Repertoire rather than this Page's Track. Not a verdict on the Track.
+_Avoid_: house loop (the loops are Repertoire members), "house loop only" (the earlier switch)
+
+**Never**:
+A Room's verdict that one Repertoire member will not be drawn again in that Room. The file remains for every other Room.
+_Avoid_: dismiss, hide, ban, skip (that is Next)
 
 **Bookends**:
 The two words — or two-word phrases — a Page shows; each player writes the Bridge between them. Chosen from different Gives to stand far apart.
