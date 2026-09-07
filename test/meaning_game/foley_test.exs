@@ -27,15 +27,7 @@ defmodule MeaningGame.FoleyTest do
     end
 
     test "warns when MUREKA_API_KEY is missing" do
-      steward = Application.get_env(:meaning_game, :steward)
-      roles = steward[:roles]
-      foley = roles[:foley]
-      jobs = foley[:jobs]
-      music = Keyword.put(jobs[:music], :api_key, nil)
-      jobs = Keyword.put(jobs, :music, music)
-      foley = Keyword.put(foley, :jobs, jobs)
-      roles = Keyword.put(roles, :foley, foley)
-      Application.put_env(:meaning_game, :steward, Keyword.put(steward, :roles, roles))
+      configure_foley([], music: [api_key: nil])
 
       log =
         capture_log(fn ->
@@ -47,16 +39,7 @@ defmodule MeaningGame.FoleyTest do
     end
 
     test "warns when Hume keys are missing" do
-      steward = Application.get_env(:meaning_game, :steward)
-      roles = steward[:roles]
-
-      foley =
-        roles[:foley]
-        |> Keyword.put(:hume_api_key, nil)
-        |> Keyword.put(:hume_secret_key, nil)
-
-      roles = Keyword.put(roles, :foley, foley)
-      Application.put_env(:meaning_game, :steward, Keyword.put(steward, :roles, roles))
+      configure_foley(hume_api_key: nil, hume_secret_key: nil)
 
       log =
         capture_log(fn ->
@@ -70,27 +53,10 @@ defmodule MeaningGame.FoleyTest do
     end
 
     test "voice warning follows configured voice provider (ElevenLabs)" do
-      steward = Application.get_env(:meaning_game, :steward)
-      roles = steward[:roles]
-      foley = roles[:foley]
-      jobs = foley[:jobs]
-
-      voice =
-        jobs[:voice]
-        |> Keyword.put(:provider, MeaningGame.Steward.ElevenLabs)
-
-      jobs = Keyword.put(jobs, :voice, voice)
-
-      foley =
-        foley
-        |> Keyword.put(:jobs, jobs)
-        |> Keyword.put(:elevenlabs_api_key, nil)
-        # Even if Hume keys were nil, they should not be warned about
-        |> Keyword.put(:hume_api_key, nil)
-        |> Keyword.put(:hume_secret_key, nil)
-
-      roles = Keyword.put(roles, :foley, foley)
-      Application.put_env(:meaning_game, :steward, Keyword.put(steward, :roles, roles))
+      configure_foley(
+        [elevenlabs_api_key: nil, hume_api_key: nil, hume_secret_key: nil],
+        voice: [provider: MeaningGame.Steward.ElevenLabs]
+      )
 
       log =
         capture_log(fn ->
@@ -102,21 +68,10 @@ defmodule MeaningGame.FoleyTest do
     end
 
     test "warns once per Foley job when both music and voice have no keys" do
-      steward = Application.get_env(:meaning_game, :steward)
-      roles = steward[:roles]
-      foley = roles[:foley]
-      jobs = foley[:jobs]
-      music = Keyword.put(jobs[:music], :api_key, nil)
-      jobs = Keyword.put(jobs, :music, music)
-
-      foley =
-        foley
-        |> Keyword.put(:jobs, jobs)
-        |> Keyword.put(:hume_api_key, nil)
-        |> Keyword.put(:hume_secret_key, nil)
-
-      roles = Keyword.put(roles, :foley, foley)
-      Application.put_env(:meaning_game, :steward, Keyword.put(steward, :roles, roles))
+      configure_foley(
+        [hume_api_key: nil, hume_secret_key: nil],
+        music: [api_key: nil]
+      )
 
       log =
         capture_log(fn ->
@@ -130,5 +85,24 @@ defmodule MeaningGame.FoleyTest do
       assert log =~ "HUME_API_KEY"
       assert log =~ "HUME_SECRET_KEY"
     end
+  end
+
+  defp configure_foley(foley_updates, job_updates \\ []) do
+    steward = Application.get_env(:meaning_game, :steward)
+    roles = steward[:roles]
+    foley = roles[:foley]
+
+    jobs =
+      Enum.reduce(job_updates, foley[:jobs], fn {job, updates}, acc ->
+        Keyword.update(acc, job, updates, &Keyword.merge(&1, updates))
+      end)
+
+    foley =
+      foley
+      |> Keyword.merge(foley_updates)
+      |> Keyword.put(:jobs, jobs)
+
+    roles = Keyword.put(roles, :foley, foley)
+    Application.put_env(:meaning_game, :steward, Keyword.put(steward, :roles, roles))
   end
 end
