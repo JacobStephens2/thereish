@@ -6,9 +6,9 @@
 
 **Blocked by:** None (can start immediately). 07 is the human half and this does not wait for it.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `bin/deploy` prints one note per missing Foley key naming what goes quiet and pointing at the docs section; a present key prints nothing; the two existing notes are unchanged
-- [ ] The voice warning follows the configured voice provider rather than hard-coding Hume, so switching the provider does not make the check lie
-- [ ] At application start, one warning per Foley job that has no key, in the same words, and silence when every key is present; a test covers both
-- [ ] docs/deploy.md has "Foley's keys", the same shape as the two sections beside it, listing all four names and what each one buys, and points at `bin/keys-to-server` (the wizard that pushes every key from a `va` shell) as the one-command route; the "Operating" section mentions it too
+- [x] `bin/deploy` prints one note per missing Foley key naming what goes quiet and pointing at the docs section; a present key prints nothing; the two existing notes are unchanged
+- [x] The voice warning follows the configured voice provider rather than hard-coding Hume, so switching the provider does not make the check lie
+- [x] At application start, one warning per Foley job that has no key, in the same words, and silence when every key is present; a test covers both
+- [x] docs/deploy.md has "Foley's keys", the same shape as the two sections beside it, listing all four names and what each one buys, and points at `bin/keys-to-server` (the wizard that pushes every key from a `va` shell) as the one-command route; the "Operating" section mentions it too

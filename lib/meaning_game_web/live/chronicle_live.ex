@@ -126,6 +126,7 @@ defmodule MeaningGameWeb.ChronicleLive do
     unblinded = Chronicle.experiment_unblinded?(room_id, experiment_id)
     readout = Chronicle.experiment_readout(room_id, experiment_id)
     spend = Chronicle.spend(room_id)
+    in_play_count = Rooms.in_play_count(socket.assigns.room)
 
     socket
     |> assign(:pages, pages)
@@ -133,6 +134,7 @@ defmodule MeaningGameWeb.ChronicleLive do
     |> assign(:unblinded, unblinded)
     |> assign(:readout, readout)
     |> assign(:spend, spend)
+    |> assign(:in_play_count, in_play_count)
   end
 
   defp active_experiment_id(room_id) do
@@ -673,6 +675,13 @@ defmodule MeaningGameWeb.ChronicleLive do
       >
         <p data-role="spend-line" class="font-mono text-xs opacity-75">
           {Chronicle.spend_line(@spend)}
+        </p>
+        <p
+          :if={@in_play_count > 0}
+          data-role="in-play-line"
+          class="font-mono text-xs opacity-75 mt-1"
+        >
+          {Rooms.in_play_sentence(@in_play_count)}
         </p>
       </footer>
     </main>
