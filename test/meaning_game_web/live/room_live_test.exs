@@ -587,6 +587,24 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       assert has_element?(stage, "[data-role=join-url]", "/r/#{slug}")
     end
+
+    test "heading, controls, and chronicle link share the header; join URL and roster share the foot" do
+      slug = open_room()
+      {:ok, view, _} = live(phone(slug))
+      join(view, "Mara")
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      # Header has Thereish heading and Chronicle link, but no join URL
+      assert has_element?(stage, "header h1", "Thereish")
+      assert has_element?(stage, "header a[href*='chronicle']", "The Chronicle")
+      refute has_element?(stage, "header [data-role=join-url]")
+
+      # Footer strip has join URL and roster together; no separate "In the Room" heading
+      assert has_element?(stage, "footer [data-role=join-url]", "/r/#{slug}")
+      assert has_element?(stage, "footer [data-role=roster]")
+      assert has_element?(stage, "footer [data-seat]", "Mara")
+      refute has_element?(stage, "h2", "In the Room")
+    end
   end
 
   describe "overruling from the couch" do
