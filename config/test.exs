@@ -59,7 +59,8 @@ config :meaning_game, :steward,
       api_key: "recorded-responses-need-no-key",
       jobs: [
         recap: [timeout_ms: 2_000, deadline_ms: 5_000],
-        naming: [timeout_ms: 500, deadline_ms: 1_000]
+        naming: [timeout_ms: 500, deadline_ms: 1_000],
+        title: [timeout_ms: 500, deadline_ms: 1_000]
       ]
     ],
     foley: [
