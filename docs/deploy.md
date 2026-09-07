@@ -232,7 +232,7 @@ The wizard captures the IAM credentials, publishes DNS records idempotently via 
 ### The keys on the Mac: `va`
 
 
-Every key the game reads — `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and the Foley's `MUREKA_API_KEY`, `ELEVENLABS_API_KEY`, `HUME_API_KEY` / `HUME_SECRET_KEY` — is in the Bitwarden manifest of Jacob's `vaulted-agent` launcher. A shell or harness started through it has them in the environment and nothing else does:
+Every key the game reads — `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, the Foley's `MUREKA_API_KEY`, `ELEVENLABS_API_KEY`, `HUME_API_KEY` / `HUME_SECRET_KEY`, SES's `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `NOTICE_TO`, `NOTICE_FROM`, and Umami's `UMAMI_SCRIPT_URL`, `UMAMI_WEBSITE_ID` — is in the Bitwarden manifest of Jacob's `vaulted-agent` launcher. A shell or harness started through it has them in the environment and nothing else does:
 
 ```sh
 va bash                  # a shell with the keys; then mix phx.server, or a live smoke test

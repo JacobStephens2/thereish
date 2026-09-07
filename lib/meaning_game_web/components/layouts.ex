@@ -14,7 +14,7 @@ defmodule MeaningGameWeb.Layouts do
   @doc """
   Returns the configured Umami script URL and website ID if both are present.
   """
-  defdelegate umami_config, to: MeaningGame
+  defdelegate umami_config, to: MeaningGame.Umami, as: :config
 
   @doc """
   Renders your app layout.
