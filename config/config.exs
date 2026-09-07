@@ -184,7 +184,7 @@ config :meaning_game, :steward,
           model: "gemini-3.8-flash",
           effort: "low",
           max_tokens: 1_000,
-          timeout_ms: 30_000,
+          timeout_ms: 90_000,
           api_key: nil
         ],
         # Either provider is one config line. Dungeon Master (Hume, bake-off winner) with George (ElevenLabs) as alternative.

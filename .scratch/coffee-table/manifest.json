@@ -1,0 +1,24 @@
+{
+  "house_loop": {
+    "name": "The Porch"
+  },
+  "house_loop_2": {
+    "candidate": 3,
+    "name": "Sunlit Drift"
+  },
+  "house_loop_3": {
+    "candidate": 4,
+    "name": "Morning Breeze"
+  },
+  "house_loop_4": {
+    "candidate": 4,
+    "name": "Cottage Warmth"
+  },
+  "house_loop_5": {
+    "candidate": 2,
+    "name": "Open Horizon"
+  },
+  "victory_meld": 4,
+  "victory_deep_meld": 1,
+  "commit_tick": 4
+}
