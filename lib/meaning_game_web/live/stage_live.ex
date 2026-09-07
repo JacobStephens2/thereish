@@ -52,8 +52,8 @@ defmodule MeaningGameWeb.StageLive do
     {:noreply, resync(socket)}
   end
 
-  def handle_event("toggle_house_loop_only", _params, socket) do
-    Rooms.set_house_loop_only(socket.assigns.slug, !socket.assigns.room.house_loop_only)
+  def handle_event("set_music", %{"music" => music}, socket) do
+    Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}
   end
 
@@ -81,7 +81,7 @@ defmodule MeaningGameWeb.StageLive do
 
     socket
     |> assign(:room, new_room)
-    |> MeaningGameWeb.Foley.push_foley_events(old_room, new_room)
+    |> MeaningGameWeb.Foley.push_foley_events(old_room, new_room, stage?: true)
   end
 
   defp join_url(slug), do: url(~p"/r/#{slug}")
@@ -94,31 +94,31 @@ defmodule MeaningGameWeb.StageLive do
     <main
       id="stage"
       phx-hook=".WakeLock"
-      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between px-6 py-4 sm:px-8 sm:py-5 overflow-y-auto select-none box-border"
+      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5 overflow-y-auto select-none box-border"
     >
-      <header class="flex items-center justify-between w-full shrink-0">
+      <header class="flex items-center justify-between w-full shrink-0 gap-4">
         <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3 sm:gap-4">
           <button
             :if={@room && @room.speaker?}
             type="button"
             id="tap-for-sound"
             data-role="tap-for-sound"
-            class="btn btn-outline btn-sm animate-pulse"
+            class="btn btn-outline btn-xs sm:btn-sm animate-pulse"
           >
             Tap for sound
           </button>
           <.foley_switches :if={@room} room={@room} />
           <.link
             navigate={chronicle_path(@slug)}
-            class="text-base font-medium underline opacity-70 hover:opacity-100"
+            class="text-sm sm:text-base font-medium underline opacity-70 hover:opacity-100"
           >
             The Chronicle
           </.link>
         </div>
       </header>
 
-      <div class="flex-1 flex flex-col items-center justify-center min-h-0 w-full my-auto overflow-hidden gap-[clamp(0.5rem,1.5vh,1.5rem)]">
+      <div class="flex flex-1 flex-col items-center justify-center my-auto min-h-0 w-full gap-[clamp(0.5rem,1.8vh,1.5rem)]">
         <section
           :if={@room.phase == :giving}
           data-role="giving-stage"
@@ -161,18 +161,22 @@ defmodule MeaningGameWeb.StageLive do
 
         <.carry_forward room={@room} />
 
-        <.ending room={@room} />
+        <.ending room={@room} mode={:stage} />
       </div>
 
       <footer
         data-role="stage-foot"
-        class="w-full flex flex-wrap items-center justify-between gap-3 border-t border-base-300/60 pt-2 text-sm shrink-0"
+        class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-base-content/10 pt-2 shrink-0 text-xs sm:text-sm opacity-80"
       >
-        <p class="text-sm opacity-70 shrink-0">
-          Join at <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
+        <p class="opacity-70">
+          Join at
+          <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
+          <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
         </p>
         <.roster room={@room} mode={:stage} />
       </footer>
+
+      <.now_playing :if={@room} room={@room} />
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".WakeLock">
         export default {

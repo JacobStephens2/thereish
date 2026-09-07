@@ -287,7 +287,21 @@ defmodule MeaningGame.Steward.Live do
 
     case Gate.answer(role, prompt, &Naming.check(&1, taken_codes)) do
       {:ok, answer} ->
-        {:ok, Naming.word(answer.json)}
+        {:ok, %{word: Naming.word(answer.json), quip: Naming.quip(answer.json)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl true
+  def quip_code(code) do
+    role = Steward.role(:scribe, :naming)
+    prompt = Naming.quip_prompt(code)
+
+    case Gate.answer(role, prompt, fn _json -> :ok end) do
+      {:ok, answer} ->
+        {:ok, Naming.quip(answer.json)}
 
       {:error, reason} ->
         {:error, reason}

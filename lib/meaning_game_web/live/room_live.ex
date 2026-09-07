@@ -97,8 +97,15 @@ defmodule MeaningGameWeb.RoomLive do
 
   def handle_event("commit_bridge", %{"bridge" => bridge}, socket) do
     case Rooms.commit_bridge(socket.assigns.slug, socket.assigns.seat.id, bridge) do
-      :ok -> {:noreply, socket |> assign(:bridge_error, nil) |> resync()}
-      {:error, reason} -> {:noreply, assign(socket, :bridge_error, message(reason))}
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:bridge_error, nil)
+         |> MeaningGameWeb.Foley.push_own_commit()
+         |> resync()}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :bridge_error, message(reason))}
     end
   end
 
@@ -221,8 +228,8 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
-  def handle_event("toggle_house_loop_only", _params, socket) do
-    Rooms.set_house_loop_only(socket.assigns.slug, !socket.assigns.room.house_loop_only)
+  def handle_event("set_music", %{"music" => music}, socket) do
+    Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}
   end
 
@@ -516,7 +523,7 @@ defmodule MeaningGameWeb.RoomLive do
         <.input
           name="bridge"
           value={nil}
-          label="The word between them"
+          label="Your bridge"
           autocomplete="off"
           autofocus
         />
@@ -528,7 +535,7 @@ defmodule MeaningGameWeb.RoomLive do
 
       <div :if={!@room[:late?] && @room.your_bridge && mid_page?(@room)} class="flex flex-col gap-1">
         <p data-role="your-bridge" class="text-lg">
-          You wrote <span class="font-semibold">{@room.your_bridge}</span>.
+          Your bridge: <span class="font-semibold">{@room.your_bridge}</span>
         </p>
         <p :if={@room.phase == :bridging} class="text-sm opacity-60">Waiting for the others.</p>
       </div>
@@ -616,34 +623,42 @@ defmodule MeaningGameWeb.RoomLive do
     <section
       :if={@room}
       data-role="speaker-bar"
-      class="flex items-center justify-between rounded-lg border border-base-300 px-4 py-2"
+      class="flex flex-col gap-2 rounded-lg border border-base-300 px-4 py-2"
     >
-      <button
-        type="button"
-        phx-click="claim_speaker"
-        data-role="speaker-toggle"
-        data-speaker={
-          cond do
-            @room.speaker? -> "self"
-            @room.speaker_claimed? -> "other"
-            true -> "none"
-          end
-        }
-        class="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
-      >
-        <.speaker_icon state={
-          cond do
-            @room.speaker? -> :self
-            @room.speaker_claimed? -> :other
-            true -> :none
-          end
-        } />
-        <span :if={@room.speaker?} class="text-primary font-semibold">This phone is speaker</span>
-        <span :if={@room.speaker_claimed? and not @room.speaker?} class="opacity-60">Speaker elsewhere</span>
-        <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
-      </button>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            phx-click="claim_speaker"
+            data-role="speaker-toggle"
+            data-speaker={
+              cond do
+                @room.speaker? -> "self"
+                @room.speaker_claimed? -> "other"
+                true -> "none"
+              end
+            }
+            class="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+          >
+            <.speaker_icon state={
+              cond do
+                @room.speaker? -> :self
+                @room.speaker_claimed? -> :other
+                true -> :none
+              end
+            } />
+            <span :if={@room.speaker?} class="text-primary font-semibold">This phone is speaker</span>
+            <span :if={@room.speaker_claimed? and not @room.speaker?} class="opacity-60">Speaker elsewhere</span>
+            <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
+          </button>
 
-      <.foley_switches room={@room} />
+          <.local_sound_switch />
+        </div>
+
+        <.foley_switches room={@room} />
+      </div>
+
+      <.now_playing :if={@room.speaker?} room={@room} />
     </section>
 
     <section
@@ -653,6 +668,13 @@ defmodule MeaningGameWeb.RoomLive do
       <p class="text-sm uppercase tracking-wide opacity-60">Code</p>
       <p data-role="code" class="font-mono text-5xl font-bold tracking-[0.3em]">
         {Code.shout(@code)}
+      </p>
+      <p
+        :if={@room && @room.quip}
+        data-role="code-quip"
+        class="text-center text-sm italic opacity-70"
+      >
+        {@room.quip}
       </p>
       <p class="mt-2 text-center text-sm opacity-70">
         Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.

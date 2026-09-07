@@ -8,11 +8,17 @@ defmodule MeaningGame.RoomsTest do
   use MeaningGame.DataCase, async: false
 
   import MeaningGame.RoomFixtures
+  import ExUnit.CaptureLog
 
   alias MeaningGame.Chronicle
   alias MeaningGame.Rooms
   alias MeaningGame.Rooms.Server
   alias MeaningGame.Rooms.Store
+
+  setup do
+    MeaningGame.Rooms.RateLimit.reset()
+    :ok
+  end
 
   describe "joining by name" do
     test "two players join a Room and both appear in the roster" do
@@ -700,21 +706,78 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
       await_reveal(slug)
 
-      steward(name_word: "fork")
+      steward(name_word: "fork", name_quip: "Fork in the road.")
 
       assert {:ok, "fork"} = Rooms.create(2, token)
+      assert Rooms.snapshot("fork", nil).quip == "Fork in the road."
       stop_room("fork")
       stop_room(slug)
     end
 
-    test "a phone with no history makes no model call and draws a random word" do
+    test "a phone with no history draws a random word and asks for a quip" do
       token = device_token()
-      # Even if the Scribe would raise, a phone with no history makes no call
-      steward(name_mode: :raise)
+      steward(quip_text: "A freshly minted room.")
 
       assert {:ok, code} = Rooms.create(2, token)
       assert String.length(code) == 4
+      assert Rooms.snapshot(code, nil).quip == "A freshly minted room."
       stop_room(code)
+    end
+
+    test "a phone with no history succeeds when quip is slow, raises, or unavailable" do
+      token1 = device_token()
+      steward(quip_mode: :raise)
+      assert {:ok, code1} = Rooms.create(2, token1)
+      assert Rooms.snapshot(code1, nil).quip == nil
+      stop_room(code1)
+
+      token2 = device_token()
+      steward(quip_mode: :unavailable)
+      assert {:ok, code2} = Rooms.create(2, token2)
+      assert Rooms.snapshot(code2, nil).quip == nil
+      stop_room(code2)
+
+      token3 = device_token()
+      steward(quip_delay_ms: 1_500)
+      assert {:ok, code3} = Rooms.create(2, token3)
+      assert Rooms.snapshot(code3, nil).quip == nil
+      stop_room(code3)
+    end
+
+    test "creation is rate limited per device token and per remote address" do
+      prev_config = Application.get_env(:meaning_game, :room_creation_rate_limit)
+
+      Application.put_env(:meaning_game, :room_creation_rate_limit,
+        per_device: 2,
+        per_address: 3,
+        window_seconds: 3600
+      )
+
+      on_exit(fn ->
+        if prev_config,
+          do: Application.put_env(:meaning_game, :room_creation_rate_limit, prev_config),
+          else: Application.delete_env(:meaning_game, :room_creation_rate_limit)
+
+        MeaningGame.Rooms.RateLimit.reset()
+      end)
+
+      token = device_token()
+      ip = "192.168.1.50"
+
+      assert {:ok, code1} = Rooms.create(2, token, address: ip)
+      stop_room(code1)
+
+      # 2nd creation with this token is refused (per_device is 2)
+      assert {:error, :rate_limited} = Rooms.create(2, token, address: ip)
+
+      # Different token, same IP: 2nd creation on this IP is allowed (since per_address is 3)
+      token2 = device_token()
+      assert {:ok, code2} = Rooms.create(2, token2, address: ip)
+      stop_room(code2)
+
+      # 3rd creation on this IP is refused (per_address is 3)
+      token3 = device_token()
+      assert {:error, :rate_limited} = Rooms.create(2, token3, address: ip)
     end
 
     test "a Scribe that raises or answers nothing valid falls back to a random word" do
@@ -760,6 +823,102 @@ defmodule MeaningGame.RoomsTest do
       assert String.length(code) == 4
       stop_room(code)
       stop_room(slug)
+    end
+  end
+
+  describe "the new-Room notice" do
+    defmodule FailingMailerAdapter do
+      use Swoosh.Adapter
+      def deliver(_email, _config), do: raise("SES connection failed")
+      def deliver_many(_emails, _config), do: raise("SES connection failed")
+    end
+
+    test "creating a Room from a device with no history delivers exactly one notice carrying the Code, the count, the time and a link; a device with history delivers none" do
+      # Device with no history:
+      token_new = device_token()
+      assert {:ok, code_new} = Rooms.create(2, token_new)
+
+      assert_receive {:email, email}, 1_000
+      assert email.to == [{"", "operator@example.com"}]
+      assert email.from == {"", "notice@thereish.app"}
+      assert email.subject =~ code_new
+      assert email.text_body =~ code_new
+      assert email.text_body =~ "2"
+      assert email.text_body =~ "/r/#{code_new}"
+      refute_received {:email, _}
+
+      stop_room(code_new)
+
+      # Device with history:
+      token_with_history = device_token()
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_with_history)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      await_reveal(slug)
+
+      # Clear any mailbox messages
+      receive do
+        {:email, _} -> :ok
+      after
+        0 -> :ok
+      end
+
+      assert {:ok, code_returning} = Rooms.create(2, token_with_history)
+      await_notice()
+      refute_received {:email, _}
+
+      stop_room(code_returning)
+      stop_room(slug)
+    end
+
+    test "delivery runs in a supervised task; a Mailer that raises leaves creation successful and logs" do
+      token = device_token()
+
+      previous_mailer_config = Application.get_env(:meaning_game, MeaningGame.Mailer)
+      Application.put_env(:meaning_game, MeaningGame.Mailer, adapter: FailingMailerAdapter)
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, MeaningGame.Mailer, previous_mailer_config)
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, code} = Rooms.create(2, token)
+          await_notice()
+          stop_room(code)
+        end)
+
+      assert log =~ "SES connection failed"
+    end
+
+    test "with no credentials configured the Mailer is not called" do
+      token = device_token()
+
+      previous_notice_config = Application.get_env(:meaning_game, :notice)
+      Application.put_env(:meaning_game, :notice, to: nil, from: nil)
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :notice, previous_notice_config)
+      end)
+
+      assert {:ok, code} = Rooms.create(2, token)
+      await_notice()
+      refute_received {:email, _}
+
+      stop_room(code)
+    end
+
+    test "creating a Room with nil device token delivers no notice" do
+      assert {:ok, code} = Rooms.create(2, nil)
+      await_notice()
+      refute_received {:email, _}
+
+      stop_room(code)
     end
   end
 
@@ -1322,11 +1481,99 @@ defmodule MeaningGame.RoomsTest do
       %{slug: slug, token_a: token_a, token_b: token_b, mara: mara, jacob: jacob}
     end
 
-    test "a new Room has no speaker and both switches off by default", ctx do
+    test "a new Room has no speaker, voice off, and music page by default", ctx do
       room = Store.get_room(ctx.slug)
       assert is_nil(room.speaker)
       assert room.voice == false
-      assert room.house_loop_only == false
+      assert room.music == "page"
+    end
+
+    test "migration pair converts house_loop_only true to house and drops house_loop_only" do
+      migrations_dir = Application.app_dir(:meaning_game, "priv/repo/migrations")
+      expand_file = Path.join(migrations_dir, "20260907140000_add_music_to_rooms.exs")
+
+      contract_file =
+        Path.join(migrations_dir, "20260907140001_remove_house_loop_only_from_rooms.exs")
+
+      assert File.exists?(expand_file)
+      assert File.exists?(contract_file)
+      assert File.read!(expand_file) =~ "add :music"
+
+      assert File.read!(expand_file) =~
+               "UPDATE rooms SET music = 'house' WHERE house_loop_only = true"
+
+      assert File.read!(contract_file) =~ "remove :house_loop_only"
+
+      # Verify the expand-and-contract migration pair on a table with the pre-migration shape
+      Ecto.Adapters.SQL.query!(MeaningGame.Repo, """
+      CREATE TEMP TABLE test_migration_rooms (
+        id UUID PRIMARY KEY,
+        slug VARCHAR(255),
+        seat_limit INT,
+        voice BOOLEAN DEFAULT false,
+        house_loop_only BOOLEAN DEFAULT false,
+        inserted_at TIMESTAMP,
+        updated_at TIMESTAMP
+      )
+      """)
+
+      now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "INSERT INTO test_migration_rooms (id, slug, seat_limit, voice, house_loop_only, inserted_at, updated_at) VALUES (gen_random_uuid(), 'mig-true', 2, false, true, $1, $1)",
+        [now]
+      )
+
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "INSERT INTO test_migration_rooms (id, slug, seat_limit, voice, house_loop_only, inserted_at, updated_at) VALUES (gen_random_uuid(), 'mig-false', 2, false, false, $1, $1)",
+        [now]
+      )
+
+      # Expand: add music column and backfill from house_loop_only
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "ALTER TABLE test_migration_rooms ADD COLUMN music VARCHAR(255) DEFAULT 'page' NOT NULL"
+      )
+
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "UPDATE test_migration_rooms SET music = 'house' WHERE house_loop_only = true"
+      )
+
+      res_true =
+        Ecto.Adapters.SQL.query!(
+          MeaningGame.Repo,
+          "SELECT music FROM test_migration_rooms WHERE slug = 'mig-true'",
+          []
+        )
+
+      res_false =
+        Ecto.Adapters.SQL.query!(
+          MeaningGame.Repo,
+          "SELECT music FROM test_migration_rooms WHERE slug = 'mig-false'",
+          []
+        )
+
+      assert res_true.rows == [["house"]]
+      assert res_false.rows == [["page"]]
+
+      # Contract: remove house_loop_only column
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "ALTER TABLE test_migration_rooms DROP COLUMN house_loop_only"
+      )
+
+      cols =
+        Ecto.Adapters.SQL.query!(
+          MeaningGame.Repo,
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'test_migration_rooms'"
+        ).rows
+        |> List.flatten()
+
+      assert "music" in cols
+      refute "house_loop_only" in cols
     end
 
     test "claiming the speaker updates the Room and broadcasts", ctx do
@@ -1370,26 +1617,34 @@ defmodule MeaningGame.RoomsTest do
       assert is_nil(Store.get_room(ctx.slug).speaker)
     end
 
-    test "voice and house-loop-only switches update the Room and broadcast", ctx do
+    test "voice and music switches update the Room and broadcast", ctx do
       Rooms.subscribe(ctx.slug)
 
       assert :ok = Rooms.set_voice(ctx.slug, true)
       assert_receive :room_changed
       assert Store.get_room(ctx.slug).voice == true
 
-      assert :ok = Rooms.set_house_loop_only(ctx.slug, true)
+      assert :ok = Rooms.set_music(ctx.slug, "off")
       assert_receive :room_changed
-      assert Store.get_room(ctx.slug).house_loop_only == true
+      assert Store.get_room(ctx.slug).music == "off"
+
+      assert :ok = Rooms.set_music(ctx.slug, :house)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).music == "house"
+
+      assert :ok = Rooms.set_music(ctx.slug, "page")
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).music == "page"
 
       assert :ok = Rooms.set_voice(ctx.slug, false)
       assert_receive :room_changed
       assert Store.get_room(ctx.slug).voice == false
     end
 
-    test "speaker, voice and house-loop-only survive a Room process restart", ctx do
+    test "speaker, voice and music survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       assert :ok = Rooms.set_voice(ctx.slug, true)
-      assert :ok = Rooms.set_house_loop_only(ctx.slug, true)
+      assert :ok = Rooms.set_music(ctx.slug, "off")
 
       pid = GenServer.whereis(Server.via(ctx.slug))
       ref = Process.monitor(pid)
@@ -1404,7 +1659,7 @@ defmodule MeaningGame.RoomsTest do
 
       assert room.speaker == ctx.token_a
       assert room.voice == true
-      assert room.house_loop_only == true
+      assert room.music == "off"
     end
 
     test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
@@ -1417,14 +1672,15 @@ defmodule MeaningGame.RoomsTest do
         assert view.speaker? == false
         assert view.speaker_claimed? == false
         assert view.voice == false
-        assert view.house_loop_only == false
+        assert view.music == "page"
+        refute Map.has_key?(view, :house_loop_only)
         refute Map.has_key?(view, :speaker)
         refute Map.has_key?(view, :device_token)
       end
 
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       :ok = Rooms.set_voice(ctx.slug, true)
-      :ok = Rooms.set_house_loop_only(ctx.slug, true)
+      :ok = Rooms.set_music(ctx.slug, "house")
 
       view_a = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
       view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
@@ -1433,12 +1689,12 @@ defmodule MeaningGame.RoomsTest do
       assert view_a.speaker? == true
       assert view_a.speaker_claimed? == true
       assert view_a.voice == true
-      assert view_a.house_loop_only == true
+      assert view_a.music == "house"
 
       assert view_b.speaker? == false
       assert view_b.speaker_claimed? == true
       assert view_b.voice == true
-      assert view_b.house_loop_only == true
+      assert view_b.music == "house"
       assert view_stage.speaker? == false
       assert view_stage.speaker_claimed? == true
 
@@ -1696,6 +1952,45 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
     end
 
+    test "failing voice synthesis records voice_meta with zero cost and failure on Verdict",
+         ctx do
+      steward_env = Application.get_env(:meaning_game, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_mode, :unavailable))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      room = Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      pages = Chronicle.pages(room.id)
+      assert length(pages) == 1
+      page = hd(pages)
+      assert length(page.attempts) == 1
+      attempt = hd(page.attempts)
+      assert length(attempt.verdicts) == 1
+      verdict = hd(attempt.verdicts)
+
+      assert is_map(verdict.voice_meta)
+      assert verdict.voice_meta["provider"] == "fake"
+      assert verdict.voice_meta["voice"] == "fake-voice"
+      assert verdict.voice_meta["cost_usd"] == 0.0
+      assert verdict.voice_meta["failure"] =~ "unavailable"
+    end
+
     test "late voice arriving after next attempt started is dropped and logged", ctx do
       steward_env = Application.get_env(:meaning_game, :steward, [])
       fake_env = Keyword.get(steward_env, :fake, [])
@@ -1941,18 +2236,69 @@ defmodule MeaningGame.RoomsTest do
       assert is_nil(view[:track])
     end
 
-    test "when house_loop_only is enabled, Author does not start a score task", ctx do
-      :ok = Rooms.set_house_loop_only(ctx.slug, true)
+    test "setting page mid-Page with no Track and no task running starts a score task", ctx do
+      :ok = Rooms.set_music(ctx.slug, "house")
 
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "cabin in woods")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "desert night")
 
       await_phase(ctx.slug, :bridging)
 
-      # Wait a bit and verify no track arrived
+      # Under house, no track and no task running
       Process.sleep(50)
       view = Rooms.snapshot(ctx.slug, ctx.mara.id)
       assert is_nil(view[:track])
+
+      # Switch to page mid-Page
+      Rooms.subscribe(ctx.slug)
+      assert :ok = Rooms.set_music(ctx.slug, "page")
+      assert_receive :room_changed
+
+      # Score task starts and delivers track
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        not is_nil(view[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert String.starts_with?(view.track.path, "/media/tracks/fake-")
+    end
+
+    test "under house or off, score task does not start, and late track is kept for later switch back",
+         ctx do
+      :ok = Rooms.set_music(ctx.slug, "off")
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "cabin in woods")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "desert night")
+
+      await_phase(ctx.slug, :bridging)
+
+      Process.sleep(50)
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert is_nil(view[:track])
+
+      # Under house, late answer is kept rather than played
+      :ok = Rooms.set_music(ctx.slug, "house")
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+
+      fake_track = %{
+        path: "/media/tracks/late-answer.mp3",
+        duration: 120,
+        format: :mp3,
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:scored, page_ref, {:ok, fake_track}})
+
+      # Under house, the track is NOT exposed in snapshot
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert is_nil(view[:track])
+
+      # Switch back to page: kept track is immediately exposed
+      :ok = Rooms.set_music(ctx.slug, "page")
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.track.path == "/media/tracks/late-answer.mp3"
     end
 
     test "a failing score task leaves track nil and records failure in music_meta on the Chronicle page",
@@ -2023,6 +2369,135 @@ defmodule MeaningGame.RoomsTest do
       [page | _] = MeaningGame.Chronicle.page_views(ctx.slug)
       assert page.music_meta[:provider] == "fake" or page.music_meta["provider"] == "fake"
       assert page.music_meta[:cost_usd] != nil or page.music_meta["cost_usd"] != nil
+    end
+  end
+
+  describe "in-play count (Spend stays a ledger of the record)" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      %{slug: slug, mara: mara, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "in_play_count is 1 for a Room in bridging and 0 after its Page closes", ctx do
+      room = Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+
+      # In giving, phase is not bridging/assaying/reveal
+      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
+      assert Rooms.in_play_count(ctx.slug) == 0
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "lantern")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "harbour")
+      await_phase(ctx.slug, :bridging)
+
+      assert Rooms.in_play_count(ctx.slug) == 1
+      assert Rooms.in_play_count(room.id) == 1
+      assert Rooms.in_play_count() >= 1
+
+      # Melding closes the page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(
+        fn ->
+          Rooms.snapshot(ctx.slug, nil).phase == :closed
+        end,
+        "the room never closed"
+      )
+
+      assert Rooms.in_play_count(ctx.slug) == 0
+      assert Rooms.in_play_count(room.id) == 0
+    end
+
+    test "in_play_count is 0 for an unknown or unstarted room" do
+      assert Rooms.in_play_count("nonexistent-slug") == 0
+      assert Rooms.in_play_count(Ecto.UUID.generate()) == 0
+    end
+
+    test "in_play_sentence formats the sentence and omits when zero" do
+      assert Rooms.in_play_sentence(0) == nil
+      assert Rooms.in_play_sentence(1) == "1 Page in play, not yet counted"
+      assert Rooms.in_play_sentence(2) == "2 Pages in play, not yet counted"
+      assert Rooms.in_play_sentence(10) == "10 Pages in play, not yet counted"
+    end
+  end
+
+  describe "loop rotation (ticket 03)" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      %{slug: slug, mara: mara, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "snapshot carries the Page's loop as name and path once written, and nil before", ctx do
+      # Before a page is written (in giving), loop is nil
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert is_nil(view[:loop])
+
+      # Write page 1
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert %{name: name, path: path} = view.loop
+      assert is_binary(name) and byte_size(name) > 0
+      assert is_binary(path) and String.starts_with?(path, "/audio/house-loop")
+      assert view.loop in MeaningGame.Foley.Loops.all()
+    end
+
+    test "no-immediate-repeat rule across three Pages", ctx do
+      all_loops = MeaningGame.Foley.Loops.all()
+
+      # Page 1
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting 1a")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 1b")
+      await_phase(ctx.slug, :bridging)
+
+      view1 = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view1.loop in all_loops
+      loop1 = view1.loop
+
+      # Solve Page 1 to close
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.mara.id).phase == :closed end)
+
+      # Page 2
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting 2a")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 2b")
+      await_phase(ctx.slug, :bridging)
+
+      view2 = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view2.loop in all_loops
+      loop2 = view2.loop
+      refute loop2 == loop1
+
+      # Solve Page 2 to close
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.mara.id).phase == :closed end)
+
+      # Page 3
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting 3a")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 3b")
+      await_phase(ctx.slug, :bridging)
+
+      view3 = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view3.loop in all_loops
+      loop3 = view3.loop
+      refute loop3 == loop2
     end
   end
 
