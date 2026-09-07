@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateTheChronicle do
+defmodule Thereish.Repo.Migrations.CreateTheChronicle do
   use Ecto.Migration
 
   # The Chronicle is append-only, so no table here has an `updated_at` — a row

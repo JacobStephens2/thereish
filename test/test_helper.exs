@@ -3,4 +3,4 @@
 #
 #     GEMINI_API_KEY=... mix test --include live
 ExUnit.start(exclude: [:live])
-Ecto.Adapters.SQL.Sandbox.mode(MeaningGame.Repo, :manual)
+Ecto.Adapters.SQL.Sandbox.mode(Thereish.Repo, :manual)

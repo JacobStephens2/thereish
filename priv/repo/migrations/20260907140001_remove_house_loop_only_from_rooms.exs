@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.RemoveHouseLoopOnlyFromRooms do
+defmodule Thereish.Repo.Migrations.RemoveHouseLoopOnlyFromRooms do
   use Ecto.Migration
 
   def up do

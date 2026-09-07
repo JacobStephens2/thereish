@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AddPartnerIdToSeats do
+defmodule Thereish.Repo.Migrations.AddPartnerIdToSeats do
   use Ecto.Migration
 
   def change do

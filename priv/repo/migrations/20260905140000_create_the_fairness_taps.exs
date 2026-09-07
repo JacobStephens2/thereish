@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateTheFairnessTaps do
+defmodule Thereish.Repo.Migrations.CreateTheFairnessTaps do
   use Ecto.Migration
 
   # At the reveal, each player can tap fair, too kind, or too harsh, without

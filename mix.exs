@@ -1,9 +1,9 @@
-defmodule MeaningGame.MixProject do
+defmodule Thereish.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :meaning_game,
+      app: :thereish,
       version: "0.1.0",
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -20,7 +20,7 @@ defmodule MeaningGame.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {MeaningGame.Application, []},
+      mod: {Thereish.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end
@@ -93,10 +93,10 @@ defmodule MeaningGame.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind meaning_game", "esbuild meaning_game"],
+      "assets.build": ["compile", "tailwind thereish", "esbuild thereish"],
       "assets.deploy": [
-        "tailwind meaning_game --minify",
-        "esbuild meaning_game --minify",
+        "tailwind thereish --minify",
+        "esbuild thereish --minify",
         "phx.digest"
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]

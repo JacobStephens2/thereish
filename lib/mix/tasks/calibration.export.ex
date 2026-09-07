@@ -35,7 +35,7 @@ defmodule Mix.Tasks.Calibration.Export do
         _ -> :json
       end
 
-    exported = MeaningGame.Chronicle.export_calibration(slug, format)
+    exported = Thereish.Chronicle.export_calibration(slug, format)
 
     case opts[:output] do
       nil ->

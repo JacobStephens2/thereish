@@ -2,11 +2,11 @@ defmodule Mix.Tasks.Chronicle.ExportTest do
   @moduledoc """
   Tests for `mix chronicle.export` (ticket 08, design brief).
   """
-  use MeaningGame.DataCase, async: false
+  use Thereish.DataCase, async: false
 
-  import MeaningGame.RoomFixtures
+  import Thereish.RoomFixtures
 
-  alias MeaningGame.Rooms
+  alias Thereish.Rooms
 
   setup do
     slug = open_room()

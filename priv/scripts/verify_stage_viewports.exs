@@ -1,11 +1,11 @@
-alias MeaningGame.Rooms
-alias MeaningGame.Rooms.Server
-alias MeaningGame.Rooms.Store
+alias Thereish.Rooms
+alias Thereish.Rooms.Server
+alias Thereish.Rooms.Store
 
 # Ensure Sandbox is in shared mode for external HTTP requests
-Ecto.Adapters.SQL.Sandbox.mode(MeaningGame.Repo, :manual)
-:ok = Ecto.Adapters.SQL.Sandbox.checkout(MeaningGame.Repo)
-Ecto.Adapters.SQL.Sandbox.mode(MeaningGame.Repo, {:shared, self()})
+Ecto.Adapters.SQL.Sandbox.mode(Thereish.Repo, :manual)
+:ok = Ecto.Adapters.SQL.Sandbox.checkout(Thereish.Repo)
+Ecto.Adapters.SQL.Sandbox.mode(Thereish.Repo, {:shared, self()})
 
 defmodule Helper do
   def create_room(opts) do
@@ -22,20 +22,20 @@ defmodule Helper do
   end
 
   def set_steward(opts) do
-    steward = Application.fetch_env!(:meaning_game, :steward)
+    steward = Application.fetch_env!(:thereish, :steward)
     fake = Keyword.merge(Keyword.get(steward, :fake, []), opts)
-    Application.put_env(:meaning_game, :steward, Keyword.put(steward, :fake, fake))
+    Application.put_env(:thereish, :steward, Keyword.put(steward, :fake, fake))
   end
 
   def set_author_timing(delay_ms, timeout_ms) do
-    steward = Application.fetch_env!(:meaning_game, :steward)
+    steward = Application.fetch_env!(:thereish, :steward)
     fake = Keyword.merge(Keyword.get(steward, :fake, []), author_delay_ms: delay_ms, author_mode: :ok)
     roles = Keyword.get(steward, :roles, [])
     author = Keyword.get(roles, :author, [])
     author = Keyword.merge(author, timeout_ms: timeout_ms, deadline_ms: timeout_ms)
     roles = Keyword.put(roles, :author, author)
     steward = steward |> Keyword.put(:fake, fake) |> Keyword.put(:roles, roles)
-    Application.put_env(:meaning_game, :steward, steward)
+    Application.put_env(:thereish, :steward, steward)
 
     escalation =
       if delay_ms > 0 do
@@ -44,18 +44,18 @@ defmodule Helper do
         [still_writing: 100, deadline: 250]
       end
 
-    Application.put_env(:meaning_game, :author_escalation_ms, escalation)
+    Application.put_env(:thereish, :author_escalation_ms, escalation)
   end
 
   def set_assayer_timing(delay_ms, timeout_ms) do
-    steward = Application.fetch_env!(:meaning_game, :steward)
+    steward = Application.fetch_env!(:thereish, :steward)
     fake = Keyword.merge(Keyword.get(steward, :fake, []), delay_ms: delay_ms)
     roles = Keyword.get(steward, :roles, [])
     assayer = Keyword.get(roles, :assayer, [])
     assayer = Keyword.merge(assayer, timeout_ms: timeout_ms, deadline_ms: timeout_ms)
     roles = Keyword.put(roles, :assayer, assayer)
     steward = steward |> Keyword.put(:fake, fake) |> Keyword.put(:roles, roles)
-    Application.put_env(:meaning_game, :steward, steward)
+    Application.put_env(:thereish, :steward, steward)
 
     escalation =
       if delay_ms > 0 do
@@ -64,27 +64,27 @@ defmodule Helper do
         [slow: 100, unavailable: 250]
       end
 
-    Application.put_env(:meaning_game, :assayer_escalation_ms, escalation)
+    Application.put_env(:thereish, :assayer_escalation_ms, escalation)
   end
 
   def set_beat(ms) do
-    Application.put_env(:meaning_game, :reveal_beat_ms, ms)
+    Application.put_env(:thereish, :reveal_beat_ms, ms)
   end
 
   def set_attempt_cap(cap) do
-    Application.put_env(:meaning_game, :attempts_per_page, cap)
+    Application.put_env(:thereish, :attempts_per_page, cap)
   end
 
   def await_phase(slug, phase) do
     eventually(fn ->
-      view = MeaningGame.Rooms.snapshot(slug, nil)
+      view = Thereish.Rooms.snapshot(slug, nil)
       view.phase == phase && view
     end, "the Room never reached #{inspect(phase)}")
   end
 
   def await_reveal(slug) do
     eventually(fn ->
-      view = MeaningGame.Rooms.snapshot(slug, nil)
+      view = Thereish.Rooms.snapshot(slug, nil)
       view.reveal != nil && view
     end, "the reveal never landed in this Room")
   end

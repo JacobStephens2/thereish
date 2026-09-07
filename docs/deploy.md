@@ -51,6 +51,8 @@ of that reaches the server anyway.
 | Postgres | `docker-compose.yml`, published on `127.0.0.1:5432` | the host's own Postgres 16 cluster, database `meaning_game` |
 | TLS | none | Apache vhost + certbot, `deploy/thereish.app.conf` |
 
+The OTP application is `thereish`; the database it talks to is still `meaning_game`. Renaming the database is a separate job — a failed rename here loses the Chronicle.
+
 `docker-compose.app.yml` runs the release image and is the same file in both
 places. It never contains Postgres: the container reaches whichever cluster the
 machine already has at `host.docker.internal`, and `network_mode: bridge` puts
@@ -251,7 +253,7 @@ the prompt, the schema, or the model:
 ```sh
 ssh jacob@stephens.page 'cd /var/www/thereish.app && \
   docker compose -f docker-compose.app.yml exec app \
-  /app/bin/meaning_game eval "MeaningGame.Steward.Latency.measure()"'
+  /app/bin/thereish eval "Thereish.Steward.Latency.measure()"'
 ```
 
 Twenty real grades, sequentially, on a fixed set of pairs spread across the
@@ -278,7 +280,7 @@ so older bookmarks and "Your Rooms" links continue to land in the right Room.
 
 ## Checking it
 
-`https://thereish.app/check` is `MeaningGameWeb.CheckLive`, the
+`https://thereish.app/check` is `ThereishWeb.CheckLive`, the
 deployment's proof of life and nothing game-shaped. It reports four things:
 
 - **Socket connected** — the server's own `connected?/1`, so it only says this
@@ -305,7 +307,7 @@ ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-co
 ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-compose.app.yml restart app'
 
 # a shell in the running release
-ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-compose.app.yml exec app /app/bin/meaning_game remote'
+ssh jacob@stephens.page 'cd /var/www/thereish.app && docker compose -f docker-compose.app.yml exec app /app/bin/thereish remote'
 ```
 
 Secrets live only in `/var/www/thereish.app/.env` on the server. They are
