@@ -93,4 +93,19 @@ defmodule MeaningGame.SesWizardTest do
     # Gives manual publishing instructions if not at Porkbun
     assert content =~ ~r/by hand|manual/i
   end
+
+  test "bin/ses-wizard detects conflicting CNAMEs and provides manual fallback without crashing set -e" do
+    content = File.read!(@wizard_script)
+
+    # Detects and deletes conflicting CNAMEs
+    assert content =~ ~r/conflicting.*CNAME/i
+    assert content =~ "dns/delete"
+
+    # Provides fallback manual publishing instructions on failure
+    assert content =~ "Porkbun DNS Console"
+    assert content =~ "Priority:"
+
+    # Refreshes existing records between publish steps
+    assert content =~ ~r/dns\/retrieve.*MAIL_FROM/s
+  end
 end
