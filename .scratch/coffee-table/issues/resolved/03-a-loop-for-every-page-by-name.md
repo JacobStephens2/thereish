@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 (The forge, again: seven new sounds), 02 (The music control and the levels).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Writing a Page picks a loop from the loop-names module, never the loop the Room played on its previous Page; the snapshot carries the Page's loop as name and path
-- [ ] `foley:page` under `house`, or under `page` before a Track lands, carries the loop's path, its name as `title`, and `kind: "house"`
-- [ ] A "Now playing" line renders below the fold on the Stage and on the Speaker's phone — never on a phone that is not the Speaker — naming the loop and calling it the house loop, or saying music is off
-- [ ] Room tests for the no-immediate-repeat rule across three Pages and for the snapshot's loop; LiveView tests for the line's text and for the push's title and kind
+- [x] Writing a Page picks a loop from the loop-names module, never the loop the Room played on its previous Page; the snapshot carries the Page's loop as name and path
+- [x] `foley:page` under `house`, or under `page` before a Track lands, carries the loop's path, its name as `title`, and `kind: "house"`
+- [x] A "Now playing" line renders below the fold on the Stage and on the Speaker's phone — never on a phone that is not the Speaker — naming the loop and calling it the house loop, or saying music is off
+- [x] Room tests for the no-immediate-repeat rule across three Pages and for the snapshot's loop; LiveView tests for the line's text and for the push's title and kind

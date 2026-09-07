@@ -669,4 +669,66 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ ~s(data-role="test-caption")
     end
   end
+
+  describe "now_playing component" do
+    test "renders 'Music is off' when music is off" do
+      room = %{music: "off", loop: %{name: "The Porch", path: "/audio/house-loop.mp3"}}
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Music is off"
+      refute html =~ "The Porch"
+    end
+
+    test "renders loop name and 'the house loop' under house" do
+      room = %{music: "house", loop: %{name: "Sunlit Drift", path: "/audio/house-loop-2.mp3"}}
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Sunlit Drift"
+      assert html =~ "the house loop"
+      refute html =~ "Music is off"
+    end
+
+    test "renders loop name and 'the house loop' under page before track lands" do
+      room = %{
+        music: "page",
+        loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
+        track: nil
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Morning Breeze"
+      assert html =~ "the house loop"
+    end
+
+    test "renders nothing when track has landed" do
+      room = %{
+        music: "page",
+        loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
+        track: %{path: "/audio/track-1.mp3"}
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+      refute html =~ "the house loop"
+    end
+
+    test "renders nothing when room has no loop and music is not off" do
+      room = %{music: "page", loop: nil, track: nil}
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+    end
+
+    test "renders nothing when room has no loop and music is off in lobby" do
+      room = %{music: "off", loop: nil, track: nil, phase: :waiting}
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+    end
+  end
 end

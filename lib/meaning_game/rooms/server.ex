@@ -96,6 +96,7 @@ defmodule MeaningGame.Rooms.Server do
         current_page_id: nil,
         current_page_ref: nil,
         current_track: nil,
+        current_loop: nil,
         music_meta: nil,
         voice_audio: nil,
         voice_meta: %{}
@@ -374,6 +375,7 @@ defmodule MeaningGame.Rooms.Server do
       |> Map.put(:quip, state.room.quip)
       |> Map.put(:track, if(state.room.music == "page", do: state[:current_track], else: nil))
       |> Map.put(:music_meta, state[:music_meta])
+      |> Map.put(:loop, if(state.game.page != nil, do: state[:current_loop], else: nil))
 
     {:reply, view, state}
   end
@@ -592,10 +594,14 @@ defmodule MeaningGame.Rooms.Server do
     new_state =
       Enum.reduce(events, state, fn event, state ->
         case Game.apply(state.game, event) do
-          {:ok, game, effects} -> advance(state, game, effects)
+          {:ok, game, effects} ->
+            state = maybe_handle_page_written(state, event)
+            advance(state, game, effects)
+
           # A verdict for a Page that has moved on is nothing to act on and
           # nothing to crash over.
-          {:error, _reason} -> state
+          {:error, _reason} ->
+            state
         end
       end)
 
@@ -605,6 +611,14 @@ defmodule MeaningGame.Rooms.Server do
       new_state
     end
   end
+
+  defp maybe_handle_page_written(state, event)
+       when is_tuple(event) and elem(event, 0) == :page_written do
+    loop = MeaningGame.Foley.Loops.pick(state[:current_loop])
+    %{state | current_loop: loop}
+  end
+
+  defp maybe_handle_page_written(state, _event), do: state
 
   defp advance(state, game, effects) do
     state = Enum.reduce(effects, opened(%{state | game: game}), &perform/2)
