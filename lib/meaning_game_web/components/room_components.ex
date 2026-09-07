@@ -465,7 +465,7 @@ defmodule MeaningGameWeb.RoomComponents do
         :if={@mode != :quiet && @room.reveal.quip}
         data-role="quip"
         class={[
-          "font-serif italic font-medium leading-snug max-w-prose text-center",
+          "font-serif italic font-medium leading-snug max-w-2xl text-center",
           if(@mode == :stage,
             do: "text-xl sm:text-2xl md:text-3xl text-base-content",
             else: "text-xl sm:text-2xl text-base-content/90"
@@ -482,7 +482,7 @@ defmodule MeaningGameWeb.RoomComponents do
       />
 
       <section
-        :if={@mode == :stage && @room.reveal[:pairs]}
+        :if={@mode == :stage && @room.reveal[:pairs] && Enum.any?(@room.reveal.pairs, & &1.couple?)}
         data-role="meld-map"
         class="flex flex-col gap-5 w-full"
       >
@@ -609,11 +609,17 @@ defmodule MeaningGameWeb.RoomComponents do
       id="reveal-performance"
       data-role="reveal"
       data-mode={@mode}
-      class="flex flex-col items-center gap-8 w-full max-w-2xl mx-auto"
+      class={[
+        "flex flex-col items-center w-full mx-auto",
+        if(@mode == :stage,
+          do: "gap-[clamp(0.5rem,1.5vh,1.25rem)] max-w-4xl",
+          else: "gap-8 max-w-2xl"
+        )
+      ]}
     >
       <div
         data-role="sides-comparison"
-        class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full"
+        class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full"
       >
         <div
           :for={side <- @room.reveal.sides}
@@ -622,7 +628,8 @@ defmodule MeaningGameWeb.RoomComponents do
           data-closer={to_string(side.closer?)}
           data-melded={to_string(side.melded?)}
           class={[
-            "flex flex-col items-center gap-4 rounded-2xl border p-5 text-center transition-all",
+            "flex flex-col items-center rounded-2xl border text-center transition-all",
+            if(@mode == :stage, do: "gap-3 p-3.5 sm:p-4", else: "gap-4 p-5"),
             if(side_you?(side, @seat),
               do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
               else: "border-base-300 bg-base-100 shadow-sm"
@@ -671,7 +678,8 @@ defmodule MeaningGameWeb.RoomComponents do
             <div
               data-role="closeness-display"
               class={[
-                "flex flex-col items-center justify-center rounded-xl px-6 py-4 w-full",
+                "flex flex-col items-center justify-center rounded-xl w-full",
+                if(@mode == :stage, do: "px-4 py-2 sm:py-3", else: "px-6 py-4"),
                 closeness_presentation(side).container_class
               ]}
             >
@@ -679,7 +687,7 @@ defmodule MeaningGameWeb.RoomComponents do
                 data-role="closeness"
                 class={[
                   "font-black tracking-tighter tabular-nums leading-none select-none",
-                  if(@mode == :stage, do: "text-7xl sm:text-8xl", else: "text-6xl sm:text-7xl"),
+                  if(@mode == :stage, do: "text-6xl sm:text-7xl", else: "text-6xl sm:text-7xl"),
                   closeness_presentation(side).number_class
                 ]}
               >
