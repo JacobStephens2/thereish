@@ -1,13 +1,24 @@
 defmodule MeaningGameWeb.FoleyTest do
-  use MeaningGameWeb.ConnCase, async: true
+  use ExUnit.Case, async: true
 
   alias MeaningGameWeb.Foley
+  alias Phoenix.LiveView.Socket
 
-  defp pushed_events(socket) do
-    (socket.private[:live_temp] && socket.private.live_temp[:push_events]) || []
+  defp test_socket(view \\ MeaningGameWeb.RoomLive) do
+    %Socket{
+      endpoint: MeaningGameWeb.Endpoint,
+      view: view,
+      private: %{live_temp: %{}}
+    }
   end
 
-  describe "push_foley_events/3 ending events" do
+  defp pushed_events(socket) do
+    socket
+    |> Phoenix.LiveView.Utils.get_push_events()
+    |> Enum.map(fn [event, payload | _] -> {event, payload} end)
+  end
+
+  describe "push_foley_events/4 ending events" do
     test "pushes :meld when closed because of meld with meld band" do
       old_room = %{phase: :reveal, speaker?: true}
 
@@ -18,10 +29,10 @@ defmodule MeaningGameWeb.FoleyTest do
         reveal: %{band: :meld}
       }
 
-      socket = %Phoenix.LiveView.Socket{}
+      socket = test_socket()
       result = Foley.push_foley_events(socket, old_room, new_room)
 
-      assert ["foley:ending", %{kind: :meld}] in pushed_events(result)
+      assert {"foley:ending", %{kind: :meld}} in pushed_events(result)
     end
 
     test "pushes :deep_meld when closed because of meld with deep_meld band" do
@@ -34,10 +45,10 @@ defmodule MeaningGameWeb.FoleyTest do
         reveal: %{band: :deep_meld}
       }
 
-      socket = %Phoenix.LiveView.Socket{}
+      socket = test_socket()
       result = Foley.push_foley_events(socket, old_room, new_room)
 
-      assert ["foley:ending", %{kind: :deep_meld}] in pushed_events(result)
+      assert {"foley:ending", %{kind: :deep_meld}} in pushed_events(result)
     end
 
     test "pushes :unmelded when closed because of attempts_spent" do
@@ -50,10 +61,10 @@ defmodule MeaningGameWeb.FoleyTest do
         reveal: %{band: :miss}
       }
 
-      socket = %Phoenix.LiveView.Socket{}
+      socket = test_socket()
       result = Foley.push_foley_events(socket, old_room, new_room)
 
-      assert ["foley:ending", %{kind: :unmelded}] in pushed_events(result)
+      assert {"foley:ending", %{kind: :unmelded}} in pushed_events(result)
     end
 
     test "pushes :deep_meld in sides mode when one side achieved deep_meld" do
@@ -71,10 +82,10 @@ defmodule MeaningGameWeb.FoleyTest do
         }
       }
 
-      socket = %Phoenix.LiveView.Socket{}
+      socket = test_socket()
       result = Foley.push_foley_events(socket, old_room, new_room)
 
-      assert ["foley:ending", %{kind: :deep_meld}] in pushed_events(result)
+      assert {"foley:ending", %{kind: :deep_meld}} in pushed_events(result)
     end
 
     test "does not push ending when already closed" do
@@ -87,10 +98,10 @@ defmodule MeaningGameWeb.FoleyTest do
         reveal: %{band: :meld}
       }
 
-      socket = %Phoenix.LiveView.Socket{}
+      socket = test_socket()
       result = Foley.push_foley_events(socket, old_room, new_room)
 
-      refute Enum.any?(pushed_events(result), fn [name | _] -> name == "foley:ending" end)
+      refute Enum.any?(pushed_events(result), fn {name, _} -> name == "foley:ending" end)
     end
 
     test "does not push ending to non-speaker" do
@@ -103,10 +114,160 @@ defmodule MeaningGameWeb.FoleyTest do
         reveal: %{band: :meld}
       }
 
-      socket = %Phoenix.LiveView.Socket{}
+      socket = test_socket()
       result = Foley.push_foley_events(socket, old_room, new_room)
 
-      refute Enum.any?(pushed_events(result), fn [name | _] -> name == "foley:ending" end)
+      refute Enum.any?(pushed_events(result), fn {name, _} -> name == "foley:ending" end)
+    end
+  end
+
+  describe "push_foley_events/4 commit sound" do
+    test "pushes foley:commit to stage view when count of committed seats rises" do
+      stage_socket = test_socket(MeaningGameWeb.StageLive)
+
+      old_room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: false},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      new_room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: true},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      socket = Foley.push_foley_events(stage_socket, old_room, new_room, stage?: true)
+      assert pushed_events(socket) == [{"foley:commit", %{}}]
+    end
+
+    test "pushes foley:commit to stage view when phase transitions to assaying on last commit" do
+      stage_socket = test_socket(MeaningGameWeb.StageLive)
+
+      old_room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: true},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      new_room = %{
+        phase: :assaying,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: true},
+          %{id: "s2", committed?: true}
+        ],
+        speaker?: true
+      }
+
+      socket = Foley.push_foley_events(stage_socket, old_room, new_room, stage?: true)
+      events = pushed_events(socket)
+      assert {"foley:commit", %{}} in events
+      assert {"foley:beat", %{}} in events
+    end
+
+    test "does not push foley:commit to stage when count does not rise" do
+      stage_socket = test_socket(MeaningGameWeb.StageLive)
+
+      room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: true},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      socket = Foley.push_foley_events(stage_socket, room, room, stage?: true)
+      assert pushed_events(socket) == []
+    end
+
+    test "does not push foley:commit on initial mount (nil old_room)" do
+      stage_socket = test_socket(MeaningGameWeb.StageLive)
+
+      new_room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: true},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      socket = Foley.push_foley_events(stage_socket, nil, new_room, stage?: true)
+      # On initial mount into bridging, it pushes page track, not commit
+      events = pushed_events(socket)
+      refute {"foley:commit", %{}} in events
+    end
+
+    test "does not push foley:commit across different attempts" do
+      stage_socket = test_socket(MeaningGameWeb.StageLive)
+
+      old_room = %{
+        phase: :reveal,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: true},
+          %{id: "s2", committed?: true}
+        ],
+        speaker?: true
+      }
+
+      new_room = %{
+        phase: :bridging,
+        attempt: %{number: 2, of: 5},
+        seats: [
+          %{id: "s1", committed?: false},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      socket = Foley.push_foley_events(stage_socket, old_room, new_room, stage?: true)
+      events = pushed_events(socket)
+      refute {"foley:commit", %{}} in events
+    end
+
+    test "never pushes foley:commit to phone views, even when holding speaker" do
+      phone_socket = test_socket(MeaningGameWeb.RoomLive)
+
+      old_room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: false},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      new_room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        seats: [
+          %{id: "s1", committed?: true},
+          %{id: "s2", committed?: false}
+        ],
+        speaker?: true
+      }
+
+      socket = Foley.push_foley_events(phone_socket, old_room, new_room)
+      events = pushed_events(socket)
+      refute {"foley:commit", %{}} in events
     end
   end
 end
