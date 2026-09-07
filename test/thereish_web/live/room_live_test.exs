@@ -1723,7 +1723,29 @@ defmodule ThereishWeb.RoomLiveTest do
       join(mara, "Mara")
       join(jacob, "Jacob")
 
+      # The Stage starts the house loop while waiting; later tests look at Page events.
+      assert_push_event(stage, "foley:page", %{kind: "house"})
+
       %{slug: slug, mara: mara, jacob: jacob, stage: stage}
+    end
+
+    test "waiting Stage: House loop then tap-for-sound has a foley:page to play" do
+      slug = open_room(seat_limit: 6)
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      assert has_element?(stage, "[data-role=tap-for-sound]")
+      assert has_element?(stage, "[data-role=music-house]")
+
+      assert_push_event(stage, "foley:page", %{kind: "house", path: path})
+      assert String.starts_with?(path, "/audio/house-loop")
+
+      stage |> element("[data-role=music-off]") |> render_click()
+      assert_push_event(stage, "foley:page", %{path: nil})
+
+      stage |> element("[data-role=music-house]") |> render_click()
+      assert Rooms.get_room(slug).music == "house"
+      assert_push_event(stage, "foley:page", %{kind: "house", path: house_path})
+      assert String.starts_with?(house_path, "/audio/house-loop")
     end
 
     test "stage claims speaker on mount; phone claims take it from stage and silence it", ctx do
@@ -1783,7 +1805,7 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert_push_event(ctx.stage, "foley:page", %{kind: "track", path: track_path})
       assert String.starts_with?(track_path, "/media/tracks/fake-")
       refute_push_event(ctx.mara, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
@@ -1870,7 +1892,7 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.stage, "foley:page", %{path: track_path})
+      assert_push_event(ctx.stage, "foley:page", %{kind: "track", path: track_path})
       assert String.starts_with?(track_path, "/media/tracks/fake-")
       refute_push_event(ctx.mara, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
@@ -1887,14 +1909,15 @@ defmodule ThereishWeb.RoomLiveTest do
 
       expected_loop = Rooms.snapshot(ctx.slug, nil).loop
 
+      expected_path = expected_loop.path
+      expected_title = expected_loop.name
+
       assert_push_event(ctx.stage, "foley:page", %{
-        path: expected_path,
-        title: expected_title,
+        path: ^expected_path,
+        title: ^expected_title,
         kind: "house"
       })
 
-      assert expected_path == expected_loop.path
-      assert expected_title == expected_loop.name
       refute_push_event(ctx.mara, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
