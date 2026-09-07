@@ -94,9 +94,9 @@ defmodule MeaningGameWeb.StageLive do
     <main
       id="stage"
       phx-hook=".WakeLock"
-      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5"
+      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5 overflow-y-auto select-none box-border"
     >
-      <header class="flex items-center justify-between shrink-0 gap-4">
+      <header class="flex items-center justify-between w-full shrink-0 gap-4">
         <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
         <div class="flex items-center gap-3 sm:gap-4">
           <button
@@ -164,7 +164,10 @@ defmodule MeaningGameWeb.StageLive do
         <.ending room={@room} mode={:stage} />
       </div>
 
-      <footer class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-base-content/10 pt-2 shrink-0 text-xs sm:text-sm opacity-80">
+      <footer
+        data-role="stage-foot"
+        class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-base-content/10 pt-2 shrink-0 text-xs sm:text-sm opacity-80"
+      >
         <p class="opacity-70">
           Join at
           <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>

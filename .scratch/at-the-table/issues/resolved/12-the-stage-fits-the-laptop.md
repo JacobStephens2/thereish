@@ -15,7 +15,7 @@
 ## Answer
 
 1. **Header**: Shrunk to a single line containing the "Thereish" heading, sound / foley controls, and the Chronicle link. Join URL was removed from the header.
-2. **Footer Strip**: The join URL and roster now share a single compact horizontal strip across the foot of the stage (`<footer ...>`). The separate "In the Room" section heading and vertical list were replaced by horizontal inline seat badges and open seats indicator (`mode: :stage`).
+2. **Footer Strip**: The join URL and roster now share a single compact horizontal strip across the foot of the stage (`<footer data-role="stage-foot" ...>`). The separate "In the Room" section heading and vertical list were replaced by horizontal inline seat badges and open seats indicator (`mode: :stage`).
 3. **Viewport Vertical Rhythm**: The stage layout container now uses viewport height (`h-screen max-h-screen`) and adaptive spacing (`gap-[clamp(0.5rem,1.8vh,1.5rem)]`) with centered middle content, replacing fixed margins and large gaps (`py-16`, `gap-12`).
 4. **Reveal & Typography**:
    - Comparison cards and container max-width were expanded on stage (`max-w-4xl`) with `min-w-[120px] max-w-[240px] basis-40 sm:basis-48` so 3 bridges fit side-by-side on one row and 6 bridges wrap cleanly without overflowing.
@@ -31,4 +31,4 @@
      - `reveal_3bridges_1512x908.png`, `reveal_3bridges_1366x768.png`
      - `reveal_6bridges_1512x908.png`, `reveal_6bridges_1366x768.png`
      - `closed_arc_1512x908.png`, `closed_arc_1366x768.png`
-   - All tests pass (611 tests, 0 failures).
+   - All tests pass (611+ tests, 0 failures).
