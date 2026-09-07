@@ -33,9 +33,15 @@ fi
 # the game runs without keys, it just degrades to silence or static pools. But
 # an evening where the Assayer has no verdict or the Author cannot write is a
 # missing line in a file, not a design, and this is the last moment anyone is looking.
+VOICE_PROVIDER=$(grep -E '^[[:space:]]*voice:[[:space:]]*\[' -A 5 "${SCRIPT_DIR}/../config/config.exs" | grep -v '^[[:space:]]*#' | grep -o 'provider:[[:space:]]*MeaningGame\.Steward\.[A-Za-z0-9_]*' | head -n1 | sed 's/.*\.//')
+
 MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^GEMINI_API_KEY=.' ${APP_DIR}/.env || echo 'GEMINI_API_KEY'
   grep -q '^ANTHROPIC_API_KEY=.' ${APP_DIR}/.env || echo 'ANTHROPIC_API_KEY'
+  grep -q '^MUREKA_API_KEY=.' ${APP_DIR}/.env || echo 'MUREKA_API_KEY'
+  grep -q '^HUME_API_KEY=.' ${APP_DIR}/.env || echo 'HUME_API_KEY'
+  grep -q '^HUME_SECRET_KEY=.' ${APP_DIR}/.env || echo 'HUME_SECRET_KEY'
+  grep -q '^ELEVENLABS_API_KEY=.' ${APP_DIR}/.env || echo 'ELEVENLABS_API_KEY'
 ")
 
 if echo "${MISSING_KEYS}" | grep -q 'GEMINI_API_KEY'; then
@@ -46,6 +52,28 @@ fi
 if echo "${MISSING_KEYS}" | grep -q 'ANTHROPIC_API_KEY'; then
   echo "Note: no ANTHROPIC_API_KEY in ${APP_DIR}/.env — the Author cannot write for Gives."
   echo "      See docs/deploy.md, \"The Author's key\"."
+fi
+
+if echo "${MISSING_KEYS}" | grep -q 'MUREKA_API_KEY'; then
+  echo "Note: no MUREKA_API_KEY in ${APP_DIR}/.env — every Page will have only the house loop."
+  echo "      See docs/deploy.md, \"Foley's keys\"."
+fi
+
+if [ "${VOICE_PROVIDER}" = "ElevenLabs" ]; then
+  if echo "${MISSING_KEYS}" | grep -q 'ELEVENLABS_API_KEY'; then
+    echo "Note: no ELEVENLABS_API_KEY in ${APP_DIR}/.env — the voice switch will do nothing."
+    echo "      See docs/deploy.md, \"Foley's keys\"."
+  fi
+else
+  if echo "${MISSING_KEYS}" | grep -q 'HUME_API_KEY'; then
+    echo "Note: no HUME_API_KEY in ${APP_DIR}/.env — the voice switch will do nothing."
+    echo "      See docs/deploy.md, \"Foley's keys\"."
+  fi
+
+  if echo "${MISSING_KEYS}" | grep -q 'HUME_SECRET_KEY'; then
+    echo "Note: no HUME_SECRET_KEY in ${APP_DIR}/.env — the voice switch will do nothing."
+    echo "      See docs/deploy.md, \"Foley's keys\"."
+  fi
 fi
 
 echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"
