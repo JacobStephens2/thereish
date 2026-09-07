@@ -572,7 +572,7 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       });
       global.document = {
         getElementById: () => null,
-        querySelector: () => null,
+        querySelector: (sel) => (sel === "[data-role=quip]" ? {} : null),
         addEventListener: () => {},
         removeEventListener: () => {},
         body: {}
@@ -582,78 +582,90 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       const moduleCode = #{Jason.encode!(js_body)};
       const hookExport = eval('(function() { const exports = {}; ' + moduleCode.replace('export default', 'return') + ' })()');
 
-      // 1. Voice event during a playing cue ducks stings bus and restores on end
-      {
-        const el = {
-          dataset: {
-            speaker: 'true',
-            mode: 'speaker',
-            levelMusic: '0.5',
-            levelStings: '1.2',
-            levelVoice: '1.2',
-            levelDuck: '0.15',
-            levelDuckStings: '0.35',
-            meldCueDelayMs: '1800'
-          }
-        };
+      (async () => {
+        // 1. Voice event during a playing cue ducks stings bus and restores on end
+        {
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
 
-        const hook = Object.create(hookExport);
-        hook.el = el;
-        const events = {};
-        hook.handleEvent = (name, fn) => { events[name] = fn; };
-        hook.mounted();
-        hook.initAudio();
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
 
-        // Stings bus starts at normal stings level 1.2
-        assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+          // Stings bus starts at normal stings level 1.2
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
 
-        // Simulate voice starting (duration = 4s)
-        hook.duckStings(4.0);
-        assert.strictEqual(hook.isStingsDucked(), true);
-        assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+          // Victory cue starts playing via foley:ending event
+          await events["foley:ending"]({kind: "meld"});
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
 
-        // When voice ends, stings bus restores to 1.2
-        hook.restoreStings();
-        assert.strictEqual(hook.isStingsDucked(), false);
-        assert.strictEqual(hook.stingsBus.gain.value, 1.2);
-      }
+          // While cue is playing, voice event arrives and quip is ready
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), true);
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
 
-      // 2. Cue arriving during a playing voice starts ducked
-      {
-        const el = {
-          dataset: {
-            speaker: 'true',
-            mode: 'speaker',
-            levelMusic: '0.5',
-            levelStings: '1.2',
-            levelVoice: '1.2',
-            levelDuck: '0.15',
-            levelDuckStings: '0.35',
-            meldCueDelayMs: '1800'
-          }
-        };
+          // When voice ends, stings bus restores to 1.2
+          hook.voiceSource.onended();
+          assert.strictEqual(hook.isStingsDucked(), false);
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
 
-        const hook = Object.create(hookExport);
-        hook.el = el;
-        const events = {};
-        hook.handleEvent = (name, fn) => { events[name] = fn; };
-        hook.mounted();
-        hook.initAudio();
+        // 2. Cue arriving during a playing voice starts ducked
+        {
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
 
-        // Voice is talking
-        hook.duckStings(5.0);
-        assert.strictEqual(hook.isStingsDucked(), true);
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
 
-        // Cue starts playing while voice is active
-        hook.playEffect('/audio/victory-meld.mp3', hook.stingsBus, 0);
-        // Stings bus remains ducked
-        assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+          // Voice starts playing first via foley:voice event
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), true);
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
 
-        // When voice ends, stings bus restores
-        hook.restoreStings();
-        assert.strictEqual(hook.stingsBus.gain.value, 1.2);
-      }
-      console.log('HOOK_TESTS_PASSED');
+          // Cue arrives during playing voice via foley:ending event
+          await events["foley:ending"]({kind: "deep_meld"});
+          // Stings bus remains ducked under the active voice
+          assert.strictEqual(hook.stingsBus.gain.value, 0.35);
+
+          // When voice ends, stings bus restores to 1.2
+          hook.voiceSource.onended();
+          assert.strictEqual(hook.isStingsDucked(), false);
+          assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
+
+        console.log('HOOK_TESTS_PASSED');
+      })().catch(err => {
+        console.error(err);
+        process.exit(1);
+      });
       """
 
       {output, exit_code} = System.cmd("node", ["-e", test_script])
