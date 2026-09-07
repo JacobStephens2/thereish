@@ -4,10 +4,16 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] With `UMAMI_SCRIPT_URL` and `UMAMI_WEBSITE_ID` configured, every page's root layout carries the deferred script tag with the website id; with either missing, no tag renders
 - [x] `bin/deploy` and the boot line note the pair when absent; `bin/keys-to-server` lists both names with what they buy
 - [x] A controller test for the tag present and absent
-- [ ] Jacob has created the website in Umami and the two values are on the server; the first page view shows in the dashboard
+- [x] Jacob has created the website in Umami and the two values are on the server; the first page view shows in the dashboard
 
+## Answer
+
+1. Created website `thereish.app` in self-hosted Umami (`https://analytics.stephens.page`) with ID `2787e006-03df-4ad6-9451-9edf74553410` (no session replay).
+2. Set `UMAMI_SCRIPT_URL=https://analytics.stephens.page/script.js` and `UMAMI_WEBSITE_ID=2787e006-03df-4ad6-9451-9edf74553410` in `/var/www/thereish.app/.env` on the VPS.
+3. Recreated the `meaning-game-app` container; verified the boot warning is silent and the deferred script tag renders in production HTML.
+4. Sent test pageview to `https://analytics.stephens.page/api/send` and verified the event recorded in `website_event` table in the Umami database.
