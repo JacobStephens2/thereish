@@ -24,5 +24,6 @@
 1. `OPENAI_API_KEY` was pushed to `/var/www/thereish.app/.env` via `bin/keys-to-server` and is loaded in the release container.
 2. In the production database, only two `author_model` assignments exist, and both were `page-1` (which always draws `flash`). Because neither room played to `page-2`, the alternating `astra` arm was never reached in live play.
 3. Testing the Astra call against OpenAI API from both local and server environments revealed that the account is currently out of quota (`429 credit_balance_exhausted`: "You have no credits remaining. Add credits to continue using the API").
-4. Once OpenAI credits are topped up at https://platform.openai.com/settings/organization/billing/, playing two Pages in a single Room on https://thereish.app will execute `flash` on Page 1 and `astra` on Page 2, allowing the final deployment verification box to be checked.
+4. In live testing before quota exhaustion, Astra (`gpt-6-astra` at low effort with JSON schema) clocked ~10.4s. Note that the spec budgets a 5s timeout and 8s deadline (`author_escalation_ms: [deadline: 8_000]`), so once credits land, observing whether Astra can consistently return under 8s on production will be critical.
+5. Once OpenAI credits are topped up at https://platform.openai.com/settings/organization/billing/, playing two Pages in a single Room on https://thereish.app will execute `flash` on Page 1 and `astra` on Page 2, allowing the final deployment verification box to be checked.
 
