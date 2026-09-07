@@ -29,6 +29,11 @@ defmodule MeaningGame.Rooms.Room do
     timestamps(type: :utc_datetime_usec)
   end
 
+  @music_modes ~w(off house page)
+
+  @doc "The valid music modes for a Room."
+  def music_modes, do: @music_modes
+
   @doc "The shape a slug has to have, so a mistyped URL can be turned away early."
   def slug_format, do: @slug_format
 
@@ -38,7 +43,7 @@ defmodule MeaningGame.Rooms.Room do
     |> cast(attrs, [:slug, :seat_limit, :speaker, :voice, :music])
     |> validate_required([:slug, :seat_limit])
     |> validate_format(:slug, @slug_format)
-    |> validate_inclusion(:music, ["off", "house", "page"])
+    |> validate_inclusion(:music, @music_modes)
     # Two is the smallest number of Seats that is still a Room. It is not the
     # default, which is configuration; it is the floor.
     #
@@ -58,6 +63,6 @@ defmodule MeaningGame.Rooms.Room do
   def facts_changeset(room, attrs) do
     room
     |> cast(attrs, [:speaker, :voice, :music])
-    |> validate_inclusion(:music, ["off", "house", "page"])
+    |> validate_inclusion(:music, @music_modes)
   end
 end

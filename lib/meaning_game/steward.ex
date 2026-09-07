@@ -363,15 +363,17 @@ defmodule MeaningGame.Steward do
     :meaning_game |> Application.fetch_env!(:steward) |> Keyword.fetch!(:seat_cap)
   end
 
+  @default_foley_levels [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15]
+
   @doc "Levels configured for Foley buses: music, stings, voice, duck."
   @spec foley_levels() :: keyword()
   def foley_levels do
     case settings(:foley) do
       settings when is_list(settings) ->
-        Keyword.get(settings, :levels, music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15)
+        Keyword.get(settings, :levels, @default_foley_levels)
 
       _ ->
-        [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15]
+        @default_foley_levels
     end
   end
 
