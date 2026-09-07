@@ -88,12 +88,30 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  @doc """
+  Small uppercase caption, used for Attempt, Bookends, and section titles.
+  """
+  attr :class, :string, default: nil
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def caption(assigns) do
+    ~H"""
+    <p class={["text-center text-sm uppercase tracking-widest opacity-60", @class]} {@rest}>
+      {render_slot(@inner_block)}
+    </p>
+    """
+  end
+
   attr :room, :map, required: true
 
   @doc "The two words the Page hangs between, shown to everyone at once."
   def bookends(assigns) do
     ~H"""
     <div :if={@room.bookends} class="flex flex-col items-center gap-3">
+      <.caption data-role="bookends-caption">
+        Bookends
+      </.caption>
       <div
         data-role="bookends"
         class="flex flex-wrap items-center justify-center gap-4"
@@ -120,13 +138,12 @@ defmodule MeaningGameWeb.RoomComponents do
   """
   def attempt(assigns) do
     ~H"""
-    <p
+    <.caption
       :if={@room.phase in [:bridging, :assaying, :reveal]}
       data-role="attempt"
-      class="text-center text-sm uppercase tracking-widest opacity-60"
     >
       Attempt {@room.attempt.number} of {@room.attempt.of}
-    </p>
+    </.caption>
     """
   end
 
