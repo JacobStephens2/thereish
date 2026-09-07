@@ -31,6 +31,7 @@ defmodule MeaningGame.Application do
       # Notice tasks run under their own supervisor so room creation never
       # blocks or fails on mail delivery.
       {Task.Supervisor, name: MeaningGame.Notice.Tasks},
+      MeaningGame.Rooms.RateLimit,
       # Start to serve requests, typically the last entry
       MeaningGameWeb.Endpoint
     ]

@@ -90,6 +90,9 @@ defmodule MeaningGameWeb.FrontLive do
               <span class="font-mono font-semibold tracking-widest">{Code.shout(room.slug)}</span>
               <span class="text-sm opacity-60">as {seat.name}</span>
             </.link>
+            <p :if={room.quip} data-role="rejoin-quip" class="text-sm italic opacity-70">
+              {room.quip}
+            </p>
           </li>
         </ul>
       </section>

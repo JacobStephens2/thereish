@@ -23,6 +23,7 @@ defmodule MeaningGame.Rooms.Room do
     field :speaker, :string
     field :voice, :boolean, default: false
     field :music, :string, default: "page"
+    field :quip, :string
 
     has_many :seats, MeaningGame.Rooms.Seat
 
@@ -40,7 +41,7 @@ defmodule MeaningGame.Rooms.Room do
   @doc false
   def changeset(room, attrs) do
     room
-    |> cast(attrs, [:slug, :seat_limit, :speaker, :voice, :music])
+    |> cast(attrs, [:slug, :seat_limit, :speaker, :voice, :music, :quip])
     |> validate_required([:slug, :seat_limit])
     |> validate_format(:slug, @slug_format)
     |> validate_inclusion(:music, @music_modes)

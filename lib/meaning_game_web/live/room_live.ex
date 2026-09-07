@@ -654,6 +654,13 @@ defmodule MeaningGameWeb.RoomLive do
       <p data-role="code" class="font-mono text-5xl font-bold tracking-[0.3em]">
         {Code.shout(@code)}
       </p>
+      <p
+        :if={@room && @room.quip}
+        data-role="code-quip"
+        class="text-center text-sm italic opacity-70"
+      >
+        {@room.quip}
+      </p>
       <p class="mt-2 text-center text-sm opacity-70">
         Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.
       </p>
