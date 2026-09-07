@@ -153,14 +153,14 @@ defmodule MeaningGame.Steward.AuthorTest do
       assert flash_role.model == "gemini-3.8-flash"
       assert flash_role.effort == "low"
       assert flash_role.max_tokens == 400
-      assert flash_role.timeout_ms == 5_000
+      assert flash_role.timeout_ms == 8_000
       assert flash_role.deadline_ms == 8_000
 
       assert astra_role.provider == MeaningGame.Steward.OpenAI
       assert astra_role.model == "gpt-6-astra"
       assert astra_role.effort == "low"
       assert astra_role.max_tokens == 400
-      assert astra_role.timeout_ms == 5_000
+      assert astra_role.timeout_ms == 8_000
       assert astra_role.deadline_ms == 8_000
     end
 

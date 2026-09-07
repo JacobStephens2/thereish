@@ -100,7 +100,7 @@ config :meaning_game, :steward,
       max_tokens: 400,
       requests: 1,
       retries: 1,
-      timeout_ms: 5_000,
+      timeout_ms: 8_000,
       deadline_ms: 8_000,
       api_key: nil,
       jobs: [
@@ -109,7 +109,7 @@ config :meaning_game, :steward,
           model: "gemini-3.8-flash",
           effort: "low",
           max_tokens: 400,
-          timeout_ms: 5_000,
+          timeout_ms: 8_000,
           deadline_ms: 8_000
         ],
         astra: [
@@ -117,7 +117,7 @@ config :meaning_game, :steward,
           model: "gpt-6-astra",
           effort: "low",
           max_tokens: 400,
-          timeout_ms: 5_000,
+          timeout_ms: 8_000,
           deadline_ms: 8_000
         ]
       ]
