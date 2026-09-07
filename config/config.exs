@@ -42,6 +42,11 @@ config :meaning_game,
   ladder: [
     scale: 0..100,
     bands: [miss: 0, adjacent: 30, close: 55, almost: 75, meld: 90, deep_meld: 100]
+  ],
+  # First-party cookieless analytics via Umami (ticket 11)
+  umami: [
+    script_url: nil,
+    website_id: nil
   ]
 
 # The one seam to the models. Two adapters satisfy it: the live one, which is
