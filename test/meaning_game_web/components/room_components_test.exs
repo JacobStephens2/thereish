@@ -468,6 +468,16 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert custom_html =~ ~s(data-level-voice="1.0")
       assert custom_html =~ ~s(data-level-duck="0.2")
     end
+
+    test "local_sound_switch renders button with colocated LocalSoundToggle hook and default on state" do
+      html = render_component(&local_sound_switch/1, %{})
+      assert html =~ ~s(id="local-sound-toggle")
+      assert html =~ ~s(phx-hook="MeaningGameWeb.RoomComponents.LocalSoundToggle")
+      assert html =~ ~s(data-role="local-sound-toggle")
+      assert html =~ ~s(data-sound="on")
+      assert html =~ ~s(data-state="on")
+      assert html =~ ~s(data-state="off")
+    end
   end
 
   describe "Sides: couple versus couple components" do
