@@ -397,6 +397,27 @@ defmodule MeaningGameWeb.ChronicleLive do
             </div>
           </div>
 
+          <!-- Track player if present -->
+          <div
+            :if={track = page_track(page)}
+            data-role="track"
+            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg bg-base-200/50 p-3"
+          >
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Track</span>
+              <span data-role="track-title" class="text-sm font-medium">{track.title}</span>
+            </div>
+            <audio
+              data-role="track-player"
+              controls
+              src={track.path}
+              preload="none"
+              class="h-8 max-w-full sm:max-w-xs"
+            >
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+
           <!-- Attempts list -->
           <div class="flex flex-col gap-4">
             <section
@@ -695,6 +716,8 @@ defmodule MeaningGameWeb.ChronicleLive do
   defp export_calibration_path(slug), do: ~p"/r/#{slug}/calibration.json"
 
   defp human_label(label), do: MeaningGame.Chronicle.FairnessTap.label_human(label)
+
+  defp page_track(page), do: Chronicle.page_track(page)
 
   attr :data_role, :string, required: true
   attr :title, :string, required: true

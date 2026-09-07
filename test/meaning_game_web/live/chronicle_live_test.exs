@@ -466,4 +466,158 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       refute has_element?(view2, "[data-role=in-play-line]")
     end
   end
+
+  describe "The Chronicle plays the Track (ticket 05)" do
+    test "shows Track title and audio player when page has a music path, and shows no music line otherwise",
+         %{conn: conn, slug: slug} = ctx do
+      room = Repo.get_by!(Room, slug: slug)
+      now = DateTime.utc_now()
+
+      # Page 1: Closed Page with music_meta carrying path and title
+      entry1 = %{
+        document: %{"bookends" => ["lantern", "harbour"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: %{
+          provider: "mureka",
+          path: "/media/tracks/harbour-lights.mp3",
+          title: "Harbour Lights"
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 95,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["lantern", "harbour"],
+            closeness: 95,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "lighthouse"},
+              %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, p1} = Chronicle.write(room.id, entry1, now)
+
+      # Page 2: Page with a failed score (music_meta has failure, no path)
+      entry2 = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, p2} = Chronicle.write(room.id, entry2, DateTime.add(now, 60, :second))
+
+      # Page 3: Music under Off (music_meta is nil)
+      entry3 = %{
+        document: %{"bookends" => ["mountain", "valley"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: nil,
+        closed_because: :meld,
+        melded?: true,
+        closeness: 88,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["mountain", "valley"],
+            closeness: 88,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "ridge"},
+              %{seat_id: ctx.jacob.id, bridge: "ridge"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, p3} = Chronicle.write(room.id, entry3, DateTime.add(now, 120, :second))
+
+      # Page 4: Legacy page without path (music_meta has provider/model/cost but no path)
+      entry4 = %{
+        document: %{"bookends" => ["frost", "glacier"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.04},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 85,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["frost", "glacier"],
+            closeness: 85,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "ice"},
+              %{seat_id: ctx.jacob.id, bridge: "ice"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, p4} = Chronicle.write(room.id, entry4, DateTime.add(now, 180, :second))
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      # Page 1 shows its title and player pointing at /media/tracks/...
+      assert has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=track])
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] audio[src="/media/tracks/harbour-lights.mp3"])
+             )
+
+      assert render(
+               element(
+                 view,
+                 ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=track])
+               )
+             ) =~ "Harbour Lights"
+
+      # Pages without a path show no music line at all rather than an empty player
+      refute has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p2.id}"] [data-role=track])
+             )
+
+      refute has_element?(view, ~s([data-role=chronicle-page][data-page-id="#{p2.id}"] audio))
+
+      refute has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p3.id}"] [data-role=track])
+             )
+
+      refute has_element?(view, ~s([data-role=chronicle-page][data-page-id="#{p3.id}"] audio))
+
+      refute has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p4.id}"] [data-role=track])
+             )
+
+      refute has_element?(view, ~s([data-role=chronicle-page][data-page-id="#{p4.id}"] audio))
+    end
+  end
 end

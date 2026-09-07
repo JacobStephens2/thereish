@@ -72,6 +72,15 @@ defmodule MeaningGame.Chronicle.Markdown do
           []
       end
 
+    track_lines =
+      case Chronicle.page_track(page) do
+        %{title: title} ->
+          ["- Track: #{title}"]
+
+        _ ->
+          []
+      end
+
     meta_lines =
       [
         "### Page #{index}: #{bookends_str}",
@@ -80,6 +89,7 @@ defmodule MeaningGame.Chronicle.Markdown do
         "- Closeness: #{closeness_str}"
       ] ++
         give_lines ++
+        track_lines ++
         experiment_lines ++
         [
           "- Opened: #{page.opened_at && DateTime.to_iso8601(page.opened_at)}",
@@ -342,6 +352,23 @@ defmodule MeaningGame.Chronicle.Markdown do
         |> String.trim()
       end
 
+    track_line =
+      Enum.find(
+        meta_lines,
+        &(String.starts_with?(&1, "- Track:") or String.starts_with?(&1, "Track:"))
+      )
+
+    track =
+      if track_line do
+        track_title =
+          track_line
+          |> String.replace_prefix("- Track:", "")
+          |> String.replace_prefix("Track:", "")
+          |> String.trim()
+
+        if track_title == "", do: nil, else: track_title
+      end
+
     attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
 
     %{
@@ -352,6 +379,7 @@ defmodule MeaningGame.Chronicle.Markdown do
       gives: gives,
       experiment: experiment,
       arm: arm,
+      track: track,
       recap: parse_recap(meta_lines),
       attempts: attempts
     }

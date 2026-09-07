@@ -787,6 +787,30 @@ defmodule MeaningGame.Chronicle do
   def from_markdown(markdown), do: MeaningGame.Chronicle.Markdown.parse(markdown)
 
   @doc """
+  Extracts track information (`%{path: path, title: title}`) from a Page or page view map
+  when its music record carries a path and title. Answers `nil` otherwise.
+  """
+  @spec page_track(map() | struct() | nil) :: %{path: String.t(), title: String.t()} | nil
+  def page_track(nil), do: nil
+
+  def page_track(page) when is_map(page) do
+    case page[:music_meta] || page["music_meta"] do
+      %{} = meta ->
+        path = meta[:path] || meta["path"]
+        title = meta[:title] || meta["title"]
+
+        if is_binary(path) and path != "" and is_binary(title) and title != "" do
+          %{path: path, title: title}
+        else
+          nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
   Answers spend for all Rooms across Author, Assayer, and Scribe calls.
   """
   @spec spend() :: map()
