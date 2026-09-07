@@ -242,6 +242,11 @@ porkbun_publish_record_idempotent() {
     expected_name="${subdomain}.${domain}"
   fi
 
+  if [[ -z "$subdomain" && "$type" == "CNAME" ]]; then
+    warn "Cannot publish CNAME with empty subdomain on ${domain}"
+    return 1
+  fi
+
   local existing_id=""
   if command -v jq >/dev/null 2>&1; then
     existing_id=$(printf '%s' "$existing_records" | jq -r \
@@ -313,6 +318,9 @@ if command -v aws >/dev/null 2>&1; then
   fi
 fi
 
+AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-${AWS_SES_ACCESS_KEY:-}}"
+AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-${AWS_SES_SECRET_ACCESS_KEY:-}}"
+
 if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]]; then
   ask AWS_ACCESS_KEY_ID "AWS Access Key ID:"
 else
@@ -375,13 +383,30 @@ if command -v aws >/dev/null 2>&1 && [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECR
 fi
 
 if (( ${#DKIM_TOKENS[@]} < 3 )); then
-  DKIM_TOKENS=()
-  say "Paste the three Easy DKIM tokens (the selector before ._domainkey):"
-  local_t1=""; local_t2=""; local_t3=""
-  ask local_t1 "DKIM Token 1:"
-  ask local_t2 "DKIM Token 2:"
-  ask local_t3 "DKIM Token 3:"
-  DKIM_TOKENS+=("${local_t1%%._domainkey*}" "${local_t2%%._domainkey*}" "${local_t3%%._domainkey*}")
+  say "Paste the three Easy DKIM tokens from the AWS Console."
+  say "(In SES Console -> Identities -> ${DOMAIN} -> Easy DKIM -> CNAME records table."
+  say "Copy the name string before ._domainkey, e.g. 'abcdef123456'):"
+  printf '\n'
+  DKIM_TOKEN_1="${DKIM_TOKEN_1:-}"
+  DKIM_TOKEN_2="${DKIM_TOKEN_2:-}"
+  DKIM_TOKEN_3="${DKIM_TOKEN_3:-}"
+
+  while [[ -z "${DKIM_TOKEN_1}" ]]; do
+    ask DKIM_TOKEN_1 "DKIM Token 1:"
+    DKIM_TOKEN_1="${DKIM_TOKEN_1%%._domainkey*}"
+    [[ -z "${DKIM_TOKEN_1}" ]] && warn "DKIM Token 1 cannot be empty."
+  done
+  while [[ -z "${DKIM_TOKEN_2}" ]]; do
+    ask DKIM_TOKEN_2 "DKIM Token 2:"
+    DKIM_TOKEN_2="${DKIM_TOKEN_2%%._domainkey*}"
+    [[ -z "${DKIM_TOKEN_2}" ]] && warn "DKIM Token 2 cannot be empty."
+  done
+  while [[ -z "${DKIM_TOKEN_3}" ]]; do
+    ask DKIM_TOKEN_3 "DKIM Token 3:"
+    DKIM_TOKEN_3="${DKIM_TOKEN_3%%._domainkey*}"
+    [[ -z "${DKIM_TOKEN_3}" ]] && warn "DKIM Token 3 cannot be empty."
+  done
+  DKIM_TOKENS=("${DKIM_TOKEN_1}" "${DKIM_TOKEN_2}" "${DKIM_TOKEN_3}")
 fi
 
 say "Easy DKIM CNAME records to publish on ${DOMAIN}:"
@@ -501,6 +526,10 @@ else
   # 1-3: Easy DKIM CNAMEs
   say "Publishing 3 Easy DKIM CNAMEs..."
   for token in "${DKIM_TOKENS[@]}"; do
+    if [[ -z "$token" ]]; then
+      warn "Skipping empty DKIM token"
+      continue
+    fi
     porkbun_publish_record_idempotent "${DOMAIN}" "${token}._domainkey" "CNAME" "${token}.dkim.amazonses.com" 0 "$EXISTING_DOMAIN_RECORDS"
   done
 
