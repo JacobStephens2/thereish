@@ -52,6 +52,7 @@ defmodule MeaningGame.Steward.TitleTest do
     test "accepts valid titles with letters, digits, spaces, hyphens and apostrophes" do
       assert Title.check(%{"title" => "Summer Drift"}) == :ok
       assert Title.check(%{"title" => "Cabin-2's Dawn"}) == :ok
+      assert Title.check(%{"title" => "Cabin-2’s Dawn"}) == :ok
       assert Title.check(%{"title" => "Word"}) == :ok
     end
 
@@ -69,10 +70,21 @@ defmodule MeaningGame.Steward.TitleTest do
     test "rejects a quoted title" do
       assert {:error, reason} = Title.check(%{"title" => "\"The Drift\""})
       assert reason =~ "quote"
+      assert {:error, reason2} = Title.check(%{"title" => "‘The Drift’"})
+      assert reason2 =~ "quote"
     end
 
     test "rejects invalid punctuation" do
       assert {:error, _reason} = Title.check(%{"title" => "Summer Drift!"})
+    end
+  end
+
+  describe "prompt/1 and schema/0" do
+    test "includes no song rule in system prompt, user prompt, and schema" do
+      prompt = Title.prompt(["lantern", "harbour"])
+      assert prompt.system =~ "No \"song\""
+      assert prompt.user =~ "no \"song\""
+      assert inspect(prompt.schema) =~ "no \\\"song\\\""
     end
   end
 
