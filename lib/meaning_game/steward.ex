@@ -125,6 +125,58 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
+  Builds failure provenance for a Foley voice failure.
+  """
+  @spec voice_failure(term()) :: map()
+  def voice_failure(reason) do
+    {provider, voice} = voice_provenance()
+
+    %{
+      "provider" => provider,
+      "voice" => voice,
+      "cost_usd" => 0.0,
+      "failure" => format_voice_error(reason)
+    }
+  end
+
+  defp voice_provenance do
+    if adapter() == MeaningGame.Steward.Fake do
+      {"fake", "fake-voice"}
+    else
+      role =
+        try do
+          role(:foley, :voice)
+        rescue
+          _ -> %{}
+        end
+
+      provider =
+        case role[:provider] do
+          MeaningGame.Steward.Hume ->
+            "hume"
+
+          MeaningGame.Steward.ElevenLabs ->
+            "eleven_labs"
+
+          mod when is_atom(mod) and not is_nil(mod) ->
+            mod |> Module.split() |> List.last() |> Macro.underscore()
+
+          other ->
+            to_string(other || "hume")
+        end
+
+      voice = to_string(role[:voice_id] || role[:voice] || "default")
+      {provider, voice}
+    end
+  end
+
+  defp format_voice_error(%RuntimeError{message: msg}), do: msg
+  defp format_voice_error({:exit, reason}), do: "process exited: #{inspect(reason)}"
+  defp format_voice_error(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_voice_error(reason) when is_binary(reason), do: reason
+  defp format_voice_error(reason), do: inspect(reason)
+
+  @doc """
   Generates N candidate sound effects or music tracks for a brief.
 
   Used only by the forge task.

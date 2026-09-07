@@ -1887,6 +1887,45 @@ defmodule MeaningGame.RoomsTest do
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
     end
 
+    test "failing voice synthesis records voice_meta with zero cost and failure on Verdict",
+         ctx do
+      steward_env = Application.get_env(:meaning_game, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_mode, :unavailable))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.set_voice(ctx.slug, true)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      room = Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+      pages = Chronicle.pages(room.id)
+      assert length(pages) == 1
+      page = hd(pages)
+      assert length(page.attempts) == 1
+      attempt = hd(page.attempts)
+      assert length(attempt.verdicts) == 1
+      verdict = hd(attempt.verdicts)
+
+      assert is_map(verdict.voice_meta)
+      assert verdict.voice_meta["provider"] == "fake"
+      assert verdict.voice_meta["voice"] == "fake-voice"
+      assert verdict.voice_meta["cost_usd"] == 0.0
+      assert verdict.voice_meta["failure"] =~ "unavailable"
+    end
+
     test "late voice arriving after next attempt started is dropped and logged", ctx do
       steward_env = Application.get_env(:meaning_game, :steward, [])
       fake_env = Keyword.get(steward_env, :fake, [])
@@ -2265,6 +2304,60 @@ defmodule MeaningGame.RoomsTest do
       [page | _] = MeaningGame.Chronicle.page_views(ctx.slug)
       assert page.music_meta[:provider] == "fake" or page.music_meta["provider"] == "fake"
       assert page.music_meta[:cost_usd] != nil or page.music_meta["cost_usd"] != nil
+    end
+  end
+
+  describe "in-play count (Spend stays a ledger of the record)" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "in_play_count is 1 for a Room in bridging and 0 after its Page closes", ctx do
+      room = Repo.get_by!(MeaningGame.Rooms.Room, slug: ctx.slug)
+
+      # In giving, phase is not bridging/assaying/reveal
+      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
+      assert Rooms.in_play_count(ctx.slug) == 0
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "lantern")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "harbour")
+      await_phase(ctx.slug, :bridging)
+
+      assert Rooms.in_play_count(ctx.slug) == 1
+      assert Rooms.in_play_count(room.id) == 1
+      assert Rooms.in_play_count() >= 1
+
+      # Melding closes the page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(
+        fn ->
+          Rooms.snapshot(ctx.slug, nil).phase == :closed
+        end,
+        "the room never closed"
+      )
+
+      assert Rooms.in_play_count(ctx.slug) == 0
+      assert Rooms.in_play_count(room.id) == 0
+    end
+
+    test "in_play_count is 0 for an unknown or unstarted room" do
+      assert Rooms.in_play_count("nonexistent-slug") == 0
+      assert Rooms.in_play_count(Ecto.UUID.generate()) == 0
+    end
+
+    test "in_play_sentence formats the sentence and omits when zero" do
+      assert Rooms.in_play_sentence(0) == nil
+      assert Rooms.in_play_sentence(1) == "1 Page in play, not yet counted"
+      assert Rooms.in_play_sentence(2) == "2 Pages in play, not yet counted"
+      assert Rooms.in_play_sentence(10) == "10 Pages in play, not yet counted"
     end
   end
 
