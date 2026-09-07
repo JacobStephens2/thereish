@@ -2426,6 +2426,81 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "loop rotation (ticket 03)" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      %{slug: slug, mara: mara, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "snapshot carries the Page's loop as name and path once written, and nil before", ctx do
+      # Before a page is written (in giving), loop is nil
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert is_nil(view[:loop])
+
+      # Write page 1
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert %{name: name, path: path} = view.loop
+      assert is_binary(name) and byte_size(name) > 0
+      assert is_binary(path) and String.starts_with?(path, "/audio/house-loop")
+      assert view.loop in MeaningGame.Foley.Loops.all()
+    end
+
+    test "no-immediate-repeat rule across three Pages", ctx do
+      all_loops = MeaningGame.Foley.Loops.all()
+
+      # Page 1
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting 1a")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 1b")
+      await_phase(ctx.slug, :bridging)
+
+      view1 = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view1.loop in all_loops
+      loop1 = view1.loop
+
+      # Solve Page 1 to close
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.mara.id).phase == :closed end)
+
+      # Page 2
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting 2a")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 2b")
+      await_phase(ctx.slug, :bridging)
+
+      view2 = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view2.loop in all_loops
+      loop2 = view2.loop
+      refute loop2 == loop1
+
+      # Solve Page 2 to close
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.mara.id).phase == :closed end)
+
+      # Page 3
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting 3a")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 3b")
+      await_phase(ctx.slug, :bridging)
+
+      view3 = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view3.loop in all_loops
+      loop3 = view3.loop
+      refute loop3 == loop2
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do

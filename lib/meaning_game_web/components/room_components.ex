@@ -1338,6 +1338,39 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  attr :room, :map, required: true
+
+  def now_playing(assigns) do
+    ~H"""
+    <p
+      :if={now_playing_text(@room)}
+      data-role="now-playing"
+      class="text-xs opacity-60 text-center"
+    >
+      {now_playing_text(@room)}
+    </p>
+    """
+  end
+
+  def now_playing_text(nil), do: nil
+
+  def now_playing_text(room) do
+    cond do
+      to_string(room[:music]) == "off" and
+          (room[:loop] != nil or room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
+        "Music is off"
+
+      room[:track] && room.track[:path] ->
+        nil
+
+      room[:loop] ->
+        "Now playing: #{room.loop.name} (the house loop)"
+
+      true ->
+        nil
+    end
+  end
+
   attr :speaker, :boolean, default: false
   attr :levels, :list, default: nil
   attr :meld_cue_delay_ms, :integer, default: nil
