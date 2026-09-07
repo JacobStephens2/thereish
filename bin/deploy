@@ -36,6 +36,11 @@ fi
 MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^GEMINI_API_KEY=.' ${APP_DIR}/.env || echo 'GEMINI_API_KEY'
   grep -q '^ANTHROPIC_API_KEY=.' ${APP_DIR}/.env || echo 'ANTHROPIC_API_KEY'
+  grep -q '^AWS_ACCESS_KEY_ID=.' ${APP_DIR}/.env || echo 'AWS_ACCESS_KEY_ID'
+  grep -q '^AWS_SECRET_ACCESS_KEY=.' ${APP_DIR}/.env || echo 'AWS_SECRET_ACCESS_KEY'
+  grep -q '^AWS_REGION=.' ${APP_DIR}/.env || echo 'AWS_REGION'
+  grep -q '^NOTICE_TO=.' ${APP_DIR}/.env || echo 'NOTICE_TO'
+  grep -q '^NOTICE_FROM=.' ${APP_DIR}/.env || echo 'NOTICE_FROM'
 ")
 
 if echo "${MISSING_KEYS}" | grep -q 'GEMINI_API_KEY'; then
@@ -46,6 +51,26 @@ fi
 if echo "${MISSING_KEYS}" | grep -q 'ANTHROPIC_API_KEY'; then
   echo "Note: no ANTHROPIC_API_KEY in ${APP_DIR}/.env — the Author cannot write for Gives."
   echo "      See docs/deploy.md, \"The Author's key\"."
+fi
+
+if echo "${MISSING_KEYS}" | grep -q 'AWS_ACCESS_KEY_ID'; then
+  echo "Note: no AWS_ACCESS_KEY_ID in ${APP_DIR}/.env — notices for new Rooms will not be sent."
+fi
+
+if echo "${MISSING_KEYS}" | grep -q 'AWS_SECRET_ACCESS_KEY'; then
+  echo "Note: no AWS_SECRET_ACCESS_KEY in ${APP_DIR}/.env — notices for new Rooms will not be sent."
+fi
+
+if echo "${MISSING_KEYS}" | grep -q 'AWS_REGION'; then
+  echo "Note: no AWS_REGION in ${APP_DIR}/.env — notices for new Rooms will not be sent."
+fi
+
+if echo "${MISSING_KEYS}" | grep -q 'NOTICE_TO'; then
+  echo "Note: no NOTICE_TO in ${APP_DIR}/.env — notices for new Rooms will not be sent."
+fi
+
+if echo "${MISSING_KEYS}" | grep -q 'NOTICE_FROM'; then
+  echo "Note: no NOTICE_FROM in ${APP_DIR}/.env — notices for new Rooms will not be sent."
 fi
 
 echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"

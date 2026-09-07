@@ -8,6 +8,7 @@ defmodule MeaningGame.RoomsTest do
   use MeaningGame.DataCase, async: false
 
   import MeaningGame.RoomFixtures
+  import ExUnit.CaptureLog
 
   alias MeaningGame.Chronicle
   alias MeaningGame.Rooms
@@ -760,6 +761,94 @@ defmodule MeaningGame.RoomsTest do
       assert String.length(code) == 4
       stop_room(code)
       stop_room(slug)
+    end
+  end
+
+  describe "the new-Room notice" do
+    defmodule FailingMailerAdapter do
+      use Swoosh.Adapter
+      def deliver(_email, _config), do: raise("SES connection failed")
+      def deliver_many(_emails, _config), do: raise("SES connection failed")
+    end
+
+    test "creating a Room from a device with no history delivers exactly one notice carrying the Code, the count, the time and a link; a device with history delivers none" do
+      # Device with no history:
+      token_new = device_token()
+      assert {:ok, code_new} = Rooms.create(2, token_new)
+
+      assert_receive {:email, email}, 1_000
+      assert email.to == [{"", "operator@example.com"}]
+      assert email.from == {"", "notice@thereish.app"}
+      assert email.subject =~ code_new
+      assert email.text_body =~ code_new
+      assert email.text_body =~ "2"
+      assert email.text_body =~ "/r/#{code_new}"
+      refute_received {:email, _}
+
+      stop_room(code_new)
+
+      # Device with history:
+      token_with_history = device_token()
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_with_history)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      await_reveal(slug)
+
+      # Clear any mailbox messages
+      receive do
+        {:email, _} -> :ok
+      after
+        0 -> :ok
+      end
+
+      assert {:ok, code_returning} = Rooms.create(2, token_with_history)
+      await_notice()
+      refute_received {:email, _}
+
+      stop_room(code_returning)
+      stop_room(slug)
+    end
+
+    test "delivery runs in a supervised task; a Mailer that raises leaves creation successful and logs" do
+      token = device_token()
+
+      previous_mailer_config = Application.get_env(:meaning_game, MeaningGame.Mailer)
+      Application.put_env(:meaning_game, MeaningGame.Mailer, adapter: FailingMailerAdapter)
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, MeaningGame.Mailer, previous_mailer_config)
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, code} = Rooms.create(2, token)
+          await_notice()
+          stop_room(code)
+        end)
+
+      assert log =~ "SES connection failed"
+    end
+
+    test "with no credentials configured the Mailer is not called" do
+      token = device_token()
+
+      previous_notice_config = Application.get_env(:meaning_game, :notice)
+      Application.put_env(:meaning_game, :notice, to: nil, from: nil)
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :notice, previous_notice_config)
+      end)
+
+      assert {:ok, code} = Rooms.create(2, token)
+      await_notice()
+      refute_received {:email, _}
+
+      stop_room(code)
     end
   end
 
