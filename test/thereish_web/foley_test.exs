@@ -369,6 +369,48 @@ defmodule ThereishWeb.FoleyTest do
                }
              } in events
     end
+
+    test "pushes house loop when the waiting Stage claims the speaker" do
+      first = hd(Thereish.Foley.Loops.all())
+      socket = test_socket(ThereishWeb.StageLive)
+
+      # Waiting snapshots have no Page loop yet; Foley falls back to the first shipped loop.
+      new_room = %{
+        phase: :waiting,
+        speaker?: true,
+        music: "house",
+        loop: nil
+      }
+
+      result = Foley.push_foley_events(socket, nil, new_room, stage?: true)
+      events = pushed_events(result)
+
+      assert {"foley:page", %{path: first.path, title: first.name, kind: "house"}} in events
+    end
+
+    test "pushes house loop when music is switched from off to house while waiting" do
+      first = hd(Thereish.Foley.Loops.all())
+      socket = test_socket(ThereishWeb.StageLive)
+
+      old_room = %{
+        phase: :waiting,
+        speaker?: true,
+        music: "off",
+        loop: nil
+      }
+
+      new_room = %{
+        phase: :waiting,
+        speaker?: true,
+        music: "house",
+        loop: nil
+      }
+
+      result = Foley.push_foley_events(socket, old_room, new_room, stage?: true)
+      events = pushed_events(result)
+
+      assert {"foley:page", %{path: first.path, title: first.name, kind: "house"}} in events
+    end
   end
 
   describe "push_own_commit/1" do
