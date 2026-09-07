@@ -1736,6 +1736,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.melissa, "[data-role=voice-switch]")
       assert has_element?(ctx.melissa, "[data-role=music-control]")
       assert has_element?(ctx.melissa, "[data-role=local-sound-toggle]")
+      assert has_element?(ctx.melissa, "[data-role=local-sound-toggle][title=\"Commit sound plays from the Stage while connected\"]")
       assert has_element?(ctx.jacob, "[data-role=voice-switch]")
       assert has_element?(ctx.jacob, "[data-role=music-control]")
       assert has_element?(ctx.jacob, "[data-role=local-sound-toggle]")
@@ -2129,7 +2130,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       end)
     end
 
-    test "commit pushes foley:commit to stage and foley:own-commit to committer only", ctx do
+    test "commit pushes foley:commit to stage and foley:own-commit to nobody when stage is present", ctx do
       give_setting(ctx.melissa, "setting one")
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
@@ -2139,7 +2140,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.melissa, "cairn")
 
       assert_push_event(ctx.stage, "foley:commit", %{})
-      assert_push_event(ctx.melissa, "foley:own-commit", %{})
+      refute_push_event(ctx.melissa, "foley:own-commit", %{})
       refute_push_event(ctx.jacob, "foley:commit", %{})
       refute_push_event(ctx.jacob, "foley:own-commit", %{})
       refute_push_event(ctx.melissa, "foley:commit", %{})
@@ -2148,7 +2149,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       commit(ctx.jacob, "cairo")
 
       assert_push_event(ctx.stage, "foley:commit", %{})
-      assert_push_event(ctx.jacob, "foley:own-commit", %{})
+      refute_push_event(ctx.jacob, "foley:own-commit", %{})
       refute_push_event(ctx.melissa, "foley:commit", %{})
       refute_push_event(ctx.melissa, "foley:own-commit", %{})
       refute_push_event(ctx.jacob, "foley:commit", %{})
@@ -2164,6 +2165,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       melissa |> element("[data-role=speaker-toggle]") |> render_click()
       assert has_element?(melissa, "[data-role=speaker-toggle][data-speaker=self]")
+      assert has_element?(melissa, "[data-role=local-sound-toggle][title=\"Toggle commit sound on this device\"]")
 
       give_setting(melissa, "setting one")
       give_setting(jacob, "setting two")
@@ -2183,6 +2185,65 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert_push_event(jacob, "foley:own-commit", %{})
       refute_push_event(jacob, "foley:commit", %{})
       refute_push_event(melissa, "foley:commit", %{})
+      refute_push_event(melissa, "foley:own-commit", %{})
+    end
+
+    test "stage leaving mid-Page moves commit sound to committer phone on next commit" do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      give_setting(melissa, "setting one")
+      give_setting(jacob, "setting two")
+      await_phase(slug, :bridging)
+      eventually(fn -> has_element?(melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(jacob, "[data-role=bridge-form]") end)
+
+      # First commit with Stage present: Stage sounds, phones are quiet
+      commit(melissa, "cairn")
+      assert_push_event(stage, "foley:commit", %{})
+      refute_push_event(melissa, "foley:own-commit", %{})
+      refute_push_event(jacob, "foley:own-commit", %{})
+
+      # Stage leaves mid-Page
+      GenServer.stop(stage.pid)
+      eventually(fn -> not MeaningGameWeb.Presence.stage_present?(slug) end)
+
+      # Second commit with Stage gone: committer phone sounds
+      commit(jacob, "cairo")
+      assert_push_event(jacob, "foley:own-commit", %{})
+      refute_push_event(melissa, "foley:own-commit", %{})
+    end
+
+    test "stage joining mid-Page moves commit sound to Stage on next commit" do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      give_setting(melissa, "setting one")
+      give_setting(jacob, "setting two")
+      await_phase(slug, :bridging)
+      eventually(fn -> has_element?(melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(jacob, "[data-role=bridge-form]") end)
+
+      # First commit with no Stage: committer phone sounds
+      commit(melissa, "cairn")
+      assert_push_event(melissa, "foley:own-commit", %{})
+      refute_push_event(jacob, "foley:own-commit", %{})
+
+      # Stage joins mid-Page
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      eventually(fn -> MeaningGameWeb.Presence.stage_present?(slug) end)
+
+      # Second commit with Stage now present: Stage sounds, phones are quiet
+      commit(jacob, "cairo")
+      assert_push_event(stage, "foley:commit", %{})
+      refute_push_event(jacob, "foley:own-commit", %{})
       refute_push_event(melissa, "foley:own-commit", %{})
     end
   end

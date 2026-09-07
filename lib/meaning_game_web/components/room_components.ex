@@ -1211,7 +1211,12 @@ defmodule MeaningGameWeb.RoomComponents do
   @doc """
   Per-device sound switch for local commit sounds.
   Defaults to on in browser storage, toggled by tap, persists across reload.
+  When a Stage is present, commit sounds play from the Stage and the switch
+  notes this honestly in its title and aria-label while preserving the device
+  preference for play without a Stage.
   """
+  attr :stage_present?, :boolean, default: false
+
   def local_sound_switch(assigns) do
     ~H"""
     <button
@@ -1220,8 +1225,20 @@ defmodule MeaningGameWeb.RoomComponents do
       phx-hook=".LocalSoundToggle"
       data-role="local-sound-toggle"
       data-sound="on"
-      aria-label="Toggle commit sound on this device"
-      title="Toggle commit sound on this device"
+      aria-label={
+        if @stage_present? do
+          "Toggle commit sound on this device (commit sound plays from the Stage while connected)"
+        else
+          "Toggle commit sound on this device"
+        end
+      }
+      title={
+        if @stage_present? do
+          "Commit sound plays from the Stage while connected"
+        else
+          "Toggle commit sound on this device"
+        end
+      }
       class="flex items-center justify-center p-1 rounded hover:bg-base-200 transition-colors opacity-70 hover:opacity-100 cursor-pointer"
     >
       <svg
