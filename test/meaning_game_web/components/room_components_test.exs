@@ -297,6 +297,39 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ "(with Melissa)"
       assert html =~ ~s(data-couple="true")
     end
+
+    test "roster in :stage mode renders as a compact horizontal strip" do
+      room = %{
+        seats: [
+          %{
+            id: "s1",
+            name: "Melissa",
+            you?: false,
+            committed?: true
+          },
+          %{
+            id: "s2",
+            name: "Jacob",
+            you?: false,
+            committed?: false
+          }
+        ],
+        open_seats: 0,
+        seat_limit: 2,
+        phase: :bridging
+      }
+
+      html = render_component(&roster/1, room: room, mode: :stage)
+
+      assert html =~ ~s(data-role="roster")
+      assert html =~ ~s(data-mode="stage")
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ ~s(data-committed="true")
+      assert html =~ "Melissa"
+      assert html =~ ~s(data-seat="s2")
+      assert html =~ "Jacob"
+      assert html =~ ~s(data-role="open-seats")
+    end
   end
 
   describe "couples on the reveal and stage meld map" do
