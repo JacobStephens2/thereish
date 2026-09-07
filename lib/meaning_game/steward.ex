@@ -165,11 +165,18 @@ defmodule MeaningGame.Steward do
   def score_failure(reason) do
     {provider, model} = music_provenance()
 
+    failure =
+      cond do
+        is_binary(reason) -> reason
+        is_atom(reason) -> Atom.to_string(reason)
+        true -> inspect(reason)
+      end
+
     %{
       provider: provider,
       model: model,
       cost_usd: 0.0,
-      failure: if(is_binary(reason), do: reason, else: inspect(reason))
+      failure: failure
     }
   end
 

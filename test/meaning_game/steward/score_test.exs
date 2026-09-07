@@ -57,6 +57,14 @@ defmodule MeaningGame.Steward.ScoreTest do
       assert meta.provider in ["fake", "mureka"]
       assert is_binary(meta.model)
     end
+
+    test "score_failure handles non-binary and tuple failure reasons safely" do
+      meta = Steward.score_failure({:http, 429, "rate limit"})
+      assert meta.failure == "{:http, 429, \"rate limit\"}"
+
+      meta_str = Steward.score_failure("upstream error")
+      assert meta_str.failure == "upstream error"
+    end
   end
 
   describe "Steward.Live.score" do
