@@ -22,7 +22,7 @@ Implemented issue 03 according to spec:
    - `MeaningGame.Steward.Music` constructs prompt using the house-style conversational background prefix and joined Gives.
    - `MeaningGame.Steward.Mureka` initiates generation with `n: 1`, polls until completion or deadline, and provides track payload.
 2. **Track Cache & Volume Storage**:
-   - Migration `20260907120000_create_the_track_cache_and_add_music_meta.exs` added `track_cache` table.
+   - Migration `20260907130000_create_the_track_cache_and_add_music_meta.exs` added `track_cache` table.
    - `MeaningGame.Steward.TrackCache` hashes and normalizes sorted Gives (NFC, downcased, whitespace trimmed/collapsed) as key.
    - Cache hit returns cached record immediately without external API call.
    - Cache miss persists generated audio into local `media/tracks` directory on server volume and records path, duration, format, and metadata in `track_cache`.
@@ -30,7 +30,7 @@ Implemented issue 03 according to spec:
    - In `MeaningGame.Rooms.Server`, on performing the Author effect, kicks off an asynchronous scoring task under `MeaningGame.Steward.Tasks` unless `house_loop_only` is true.
    - On receiving `{:scored, page_ref, result}`, verifies `page_ref` matches current page before recording and broadcasting.
    - If the page moved on, the track is dropped.
-   - Errors or timeouts are logged and recorded via `Steward.score_failure/1` on the Chronicle Page without stalling the game or interrupting the house loop.
+   - Errors or timeouts are logged and recorded via `Steward.score_failure/1` on the Chronicle Page without stalling play in the Room or interrupting the house loop.
 4. **Client Playback & Cross-Fading**:
    - Speaking client receives `foley:page` with track path and cross-fades smoothly from the house loop over two seconds on `musicBus`.
    - Track loops and persists across Attempts for that Page.
@@ -41,7 +41,7 @@ Implemented issue 03 according to spec:
 6. **Testing**:
    - Comprehensive test suite in `test/meaning_game/steward/score_test.exs`, `test/meaning_game/steward/track_cache_test.exs`, `test/meaning_game/rooms_test.exs`, `test/meaning_game_web/live/room_live_test.exs`, and `test/meaning_game_web/live/spend_live_test.exs`.
 7. **Deployment Verification**:
-   - Deployment keys configured via `bin/keys-to-server` (tracked under issue 07). Verified in playtest (Room RICE) with background track arriving mid-Page, fading in over the house loop, and responding to the house loop switch.
+   - Deployment keys configured via `bin/keys-to-server` (tracked under issue 07). Verified in playtest (Room RICE) with the Page track arriving mid-Page, fading in over the house loop, and responding to the house loop switch.
 
 ## Comments
 
@@ -49,4 +49,4 @@ Implemented issue 03 according to spec:
 
 **2026-09-06.** The last box is blocked by 07: the deployment has no `MUREKA_API_KEY`, so on the third playtest every score task failed at once with `:no_api_key` and the house loop played for the whole Page. Nothing here is wrong in code; the track has never been asked for from the server.
 
-**2026-09-07.** Deployment keys resolved under issue 07 (`bin/keys-to-server`). Verified on deployment during Room RICE playtest session. Ticket marked resolved.
+**2026-09-07.** Deployment keys resolved under issue 07 (`bin/keys-to-server`). Verified on deployment during Room RICE playtest. Ticket marked resolved.
