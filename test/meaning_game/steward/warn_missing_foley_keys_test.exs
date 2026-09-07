@@ -1,9 +1,7 @@
-defmodule MeaningGame.Steward.FoleyTest do
+defmodule MeaningGame.Steward.WarnMissingFoleyKeysTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
-
-  alias MeaningGame.Steward.Foley
 
   setup do
     original_steward = Application.get_env(:meaning_game, :steward)
@@ -15,12 +13,12 @@ defmodule MeaningGame.Steward.FoleyTest do
     :ok
   end
 
-  describe "warn_missing_keys/0" do
+  describe "warn_missing_foley_keys/0" do
     test "silent when all keys are present" do
       # In the test environment, all keys are populated with test placeholders
       log =
         capture_log(fn ->
-          assert :ok = Foley.warn_missing_keys()
+          assert :ok = MeaningGame.Steward.warn_missing_foley_keys()
         end)
 
       assert log == ""
@@ -31,7 +29,7 @@ defmodule MeaningGame.Steward.FoleyTest do
 
       log =
         capture_log(fn ->
-          assert :ok = Foley.warn_missing_keys()
+          assert :ok = MeaningGame.Steward.warn_missing_foley_keys()
         end)
 
       assert log =~ "no MUREKA_API_KEY — every Page will have only the house loop"
@@ -43,7 +41,7 @@ defmodule MeaningGame.Steward.FoleyTest do
 
       log =
         capture_log(fn ->
-          assert :ok = Foley.warn_missing_keys()
+          assert :ok = MeaningGame.Steward.warn_missing_foley_keys()
         end)
 
       assert log =~ "the voice switch will do nothing"
@@ -60,7 +58,7 @@ defmodule MeaningGame.Steward.FoleyTest do
 
       log =
         capture_log(fn ->
-          assert :ok = Foley.warn_missing_keys()
+          assert :ok = MeaningGame.Steward.warn_missing_foley_keys()
         end)
 
       assert log =~ "no ELEVENLABS_API_KEY — the voice switch will do nothing"
@@ -75,7 +73,7 @@ defmodule MeaningGame.Steward.FoleyTest do
 
       log =
         capture_log(fn ->
-          assert :ok = Foley.warn_missing_keys()
+          assert :ok = MeaningGame.Steward.warn_missing_foley_keys()
         end)
 
       # One warning for music
@@ -84,6 +82,17 @@ defmodule MeaningGame.Steward.FoleyTest do
       assert log =~ "the voice switch will do nothing"
       assert log =~ "HUME_API_KEY"
       assert log =~ "HUME_SECRET_KEY"
+    end
+
+    test "application boot invokes Foley key warning" do
+      configure_foley([], music: [api_key: nil])
+
+      log =
+        capture_log(fn ->
+          _ = MeaningGame.Application.start(:normal, [])
+        end)
+
+      assert log =~ "no MUREKA_API_KEY — every Page will have only the house loop"
     end
   end
 

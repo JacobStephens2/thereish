@@ -28,6 +28,8 @@ defmodule MeaningGame.Steward do
   rather than six.
   """
 
+  require Logger
+
   @typedoc "The Bookends, and every Bridge written between them, in roster order."
   @type request :: %{bookends: [String.t()], bridges: [String.t()]}
 
@@ -351,20 +353,69 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Returns the names of any missing API keys required by a role job.
-  """
-  @spec missing_keys(atom(), atom()) :: [String.t()]
-  def missing_keys(role_name, job) do
-    config = role(role_name, job)
-    provider = config[:provider]
-    _ = is_atom(provider) && Code.ensure_loaded?(provider)
+  Warns at application boot if keys for Foley's active jobs are missing.
 
-    if is_atom(provider) and function_exported?(provider, :missing_keys, 1) do
-      provider.missing_keys(config)
-    else
-      []
+  - Music (`:music`): missing `MUREKA_API_KEY` warns that every Page will have
+    only the house loop.
+  - Voice (`:voice`): missing key(s) for the configured voice provider (`HUME_API_KEY`
+    and `HUME_SECRET_KEY` today, `ELEVENLABS_API_KEY` if switched) warns that
+    the voice switch will do nothing.
+
+  Emits one warning per Foley job that has no key, in the same words as `bin/deploy`,
+  and silence when every key is present.
+  """
+  @spec warn_missing_foley_keys() :: :ok
+  def warn_missing_foley_keys do
+    warn_missing_music_key()
+    warn_missing_voice_keys()
+    :ok
+  end
+
+  defp warn_missing_music_key do
+    music = role(:foley, :music)
+
+    if missing_key?(music[:api_key]) do
+      Logger.warning("no MUREKA_API_KEY — every Page will have only the house loop")
     end
   end
+
+  defp warn_missing_voice_keys do
+    voice = role(:foley, :voice)
+
+    missing =
+      case voice[:provider] do
+        MeaningGame.Steward.ElevenLabs ->
+          if missing_key?(voice[:api_key]) and missing_key?(voice[:elevenlabs_api_key]) do
+            ["ELEVENLABS_API_KEY"]
+          else
+            []
+          end
+
+        MeaningGame.Steward.Hume ->
+          [
+            if(missing_key?(voice[:api_key]) and missing_key?(voice[:hume_api_key]),
+              do: "HUME_API_KEY"
+            ),
+            if(missing_key?(voice[:secret_key]) and missing_key?(voice[:hume_secret_key]),
+              do: "HUME_SECRET_KEY"
+            )
+          ]
+          |> Enum.reject(&is_nil/1)
+
+        _ ->
+          []
+      end
+
+    case missing do
+      [] ->
+        :ok
+
+      keys ->
+        Logger.warning("no #{Enum.join(keys, " and ")} — the voice switch will do nothing")
+    end
+  end
+
+  defp missing_key?(val), do: is_nil(val) or val == ""
 
   @doc """
   The most Seats a Room may hold while the Assayer is grading it live.
