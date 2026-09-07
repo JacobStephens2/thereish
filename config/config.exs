@@ -8,6 +8,7 @@
 import Config
 
 config :meaning_game,
+  env: config_env(),
   ecto_repos: [MeaningGame.Repo],
   # Microseconds, because insertion order is display order: the roster, the
   # reveal, and every Chronicle table to come are read in the order the rows
@@ -262,6 +263,9 @@ config :logger, :default_formatter,
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
+
+# Configure Swoosh API client
+config :swoosh, :api_client, Swoosh.ApiClient.Req
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
