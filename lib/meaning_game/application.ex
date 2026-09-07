@@ -9,6 +9,8 @@ defmodule MeaningGame.Application do
 
   @impl true
   def start(_type, _args) do
+    MeaningGame.Steward.warn_missing_foley_keys()
+
     if Application.get_env(:meaning_game, :boot_warnings, true) do
       warn_missing_keys()
     end

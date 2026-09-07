@@ -33,9 +33,15 @@ fi
 # the game runs without keys, it just degrades to silence or static pools. But
 # an evening where the Assayer has no verdict or the Author cannot write is a
 # missing line in a file, not a design, and this is the last moment anyone is looking.
+VOICE_PROVIDER=$(grep -E '^[[:space:]]*voice:[[:space:]]*\[' -A 5 "${SCRIPT_DIR}/../config/config.exs" | grep -v '^[[:space:]]*#' | grep -o 'provider:[[:space:]]*MeaningGame\.Steward\.[A-Za-z0-9_]*' | head -n1 | sed 's/.*\.//')
+
 MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^GEMINI_API_KEY=.' ${APP_DIR}/.env || echo 'GEMINI_API_KEY'
   grep -q '^ANTHROPIC_API_KEY=.' ${APP_DIR}/.env || echo 'ANTHROPIC_API_KEY'
+  grep -q '^MUREKA_API_KEY=.' ${APP_DIR}/.env || echo 'MUREKA_API_KEY'
+  grep -q '^HUME_API_KEY=.' ${APP_DIR}/.env || echo 'HUME_API_KEY'
+  grep -q '^HUME_SECRET_KEY=.' ${APP_DIR}/.env || echo 'HUME_SECRET_KEY'
+  grep -q '^ELEVENLABS_API_KEY=.' ${APP_DIR}/.env || echo 'ELEVENLABS_API_KEY'
   grep -q '^UMAMI_SCRIPT_URL=.' ${APP_DIR}/.env || echo 'UMAMI_SCRIPT_URL'
   grep -q '^UMAMI_WEBSITE_ID=.' ${APP_DIR}/.env || echo 'UMAMI_WEBSITE_ID'
   grep -q '^AWS_ACCESS_KEY_ID=.' ${APP_DIR}/.env || echo 'AWS_ACCESS_KEY_ID'
@@ -54,6 +60,27 @@ if echo "${MISSING_KEYS}" | grep -q 'ANTHROPIC_API_KEY'; then
   echo "Note: no ANTHROPIC_API_KEY in ${APP_DIR}/.env — the Author cannot write for Gives."
   echo "      See docs/deploy.md, \"The Author's key\"."
 fi
+
+if echo "${MISSING_KEYS}" | grep -q 'MUREKA_API_KEY'; then
+  echo "Note: no MUREKA_API_KEY in ${APP_DIR}/.env — every Page will have only the house loop."
+  echo "      See docs/deploy.md, \"Foley's keys\"."
+fi
+
+if [ "${VOICE_PROVIDER}" = "ElevenLabs" ]; then
+  VOICE_KEYS=("ELEVENLABS_API_KEY")
+elif [ "${VOICE_PROVIDER}" = "Hume" ]; then
+  VOICE_KEYS=("HUME_API_KEY" "HUME_SECRET_KEY")
+else
+  echo "Warning: could not determine voice provider from config/config.exs (found: '${VOICE_PROVIDER}')" >&2
+  VOICE_KEYS=()
+fi
+
+for key in "${VOICE_KEYS[@]}"; do
+  if echo "${MISSING_KEYS}" | grep -q "${key}"; then
+    echo "Note: no ${key} in ${APP_DIR}/.env — the voice switch will do nothing."
+    echo "      See docs/deploy.md, \"Foley's keys\"."
+  fi
+done
 
 if echo "${MISSING_KEYS}" | grep -q 'UMAMI_SCRIPT_URL' && echo "${MISSING_KEYS}" | grep -q 'UMAMI_WEBSITE_ID'; then
   echo "Note: no UMAMI_SCRIPT_URL and UMAMI_WEBSITE_ID in ${APP_DIR}/.env — Umami will count nothing."
