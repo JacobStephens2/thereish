@@ -5,8 +5,16 @@ defmodule MeaningGame.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
+    MeaningGame.Steward.warn_missing_foley_keys()
+
+    if Application.get_env(:meaning_game, :boot_warnings, true) do
+      warn_missing_keys()
+    end
+
     children = [
       MeaningGameWeb.Telemetry,
       MeaningGame.Repo,
@@ -28,6 +36,10 @@ defmodule MeaningGame.Application do
       # everyone has stood up. Nothing should have to wait on one to know about
       # the other.
       {Task.Supervisor, name: MeaningGame.Scribe.Tasks},
+      # Notice tasks run under their own supervisor so room creation never
+      # blocks or fails on mail delivery.
+      {Task.Supervisor, name: MeaningGame.Notice.Tasks},
+      MeaningGame.Rooms.RateLimit,
       # Start to serve requests, typically the last entry
       MeaningGameWeb.Endpoint
     ]
@@ -35,7 +47,15 @@ defmodule MeaningGame.Application do
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: MeaningGame.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    case Supervisor.start_link(children, opts) do
+      {:ok, pid} ->
+        MeaningGame.Notice.warn_at_boot()
+        {:ok, pid}
+
+      error ->
+        error
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration
@@ -44,5 +64,33 @@ defmodule MeaningGame.Application do
   def config_change(changed, _new, removed) do
     MeaningGameWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  @doc """
+  Logs warnings at boot for missing configuration keys.
+  """
+  def warn_missing_keys do
+    config = Application.get_env(:meaning_game, :umami, [])
+    url = Keyword.get(config, :script_url)
+    website_id = Keyword.get(config, :website_id)
+
+    has_url = is_binary(url) and url != ""
+    has_id = is_binary(website_id) and website_id != ""
+
+    cond do
+      has_url and has_id ->
+        :ok
+
+      not has_url and not has_id ->
+        Logger.warning(
+          "UMAMI_SCRIPT_URL and UMAMI_WEBSITE_ID are not set; page views will not be counted"
+        )
+
+      not has_url ->
+        Logger.warning("UMAMI_SCRIPT_URL is not set; page views will not be counted")
+
+      not has_id ->
+        Logger.warning("UMAMI_WEBSITE_ID is not set; page views will not be counted")
+    end
   end
 end

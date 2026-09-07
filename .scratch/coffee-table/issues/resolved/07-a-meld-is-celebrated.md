@@ -4,9 +4,9 @@
 
 **Blocked by:** 01 (The forge, again: seven new sounds).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `foley:ending` carries `meld`, `deep_meld` or `unmelded`, read from the closing Verdict's band and the close's reason
-- [ ] `meld` and `deep_meld` play their cue on the stings bus and fade the music bus out beneath it over about two seconds; `unmelded` plays the settle as today
-- [ ] The meld cue's existing 1.8-second delay after the sting is kept or re-tuned by ear, and the value is configuration beside the levels
-- [ ] LiveView tests for all three kinds; a components test for the hook's handling of the three
+- [x] `foley:ending` carries `meld`, `deep_meld` or `unmelded`, read from the closing Verdict's band and the close's reason
+- [x] `meld` and `deep_meld` play their cue on the stings bus and fade the music bus out beneath it over about two seconds; `unmelded` plays the settle as today
+- [x] The meld cue's existing 1.8-second delay after the sting is kept or re-tuned by ear, and the value is configuration beside the levels
+- [x] LiveView tests for all three kinds; a components test for the hook's handling of the three

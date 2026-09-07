@@ -1,6 +1,7 @@
 defmodule MeaningGameWeb.RoomComponentsTest do
   use MeaningGameWeb.ConnCase, async: true
 
+  import Phoenix.Component
   import Phoenix.LiveViewTest
   import MeaningGameWeb.RoomComponents
 
@@ -296,6 +297,39 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ "(with Melissa)"
       assert html =~ ~s(data-couple="true")
     end
+
+    test "roster in :stage mode renders as a compact horizontal strip" do
+      room = %{
+        seats: [
+          %{
+            id: "s1",
+            name: "Melissa",
+            you?: false,
+            committed?: true
+          },
+          %{
+            id: "s2",
+            name: "Jacob",
+            you?: false,
+            committed?: false
+          }
+        ],
+        open_seats: 0,
+        seat_limit: 2,
+        phase: :bridging
+      }
+
+      html = render_component(&roster/1, room: room, mode: :stage)
+
+      assert html =~ ~s(data-role="roster")
+      assert html =~ ~s(data-mode="stage")
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ ~s(data-committed="true")
+      assert html =~ "Melissa"
+      assert html =~ ~s(data-seat="s2")
+      assert html =~ "Jacob"
+      assert html =~ ~s(data-role="open-seats")
+    end
   end
 
   describe "couples on the reveal and stage meld map" do
@@ -420,23 +454,82 @@ defmodule MeaningGameWeb.RoomComponentsTest do
   end
 
   describe "foley components" do
-    test "foley_switches render only when holding the speaker" do
-      room_with_speaker = %{speaker?: true, voice: true, house_loop_only: false}
+    test "foley_switches renders voice switch and three-way music control on any view" do
+      room_with_speaker = %{speaker?: true, voice: true, music: "page"}
       html = render_component(&foley_switches/1, room: room_with_speaker)
       assert html =~ ~s(data-role="voice-switch")
-      assert html =~ ~s(data-role="house-loop-switch")
+      assert html =~ ~s(data-role="music-control")
       assert html =~ "Voice"
-      assert html =~ "House loop only"
+      assert html =~ "Off"
+      assert html =~ "House loop"
+      assert html =~ "Written for this Page"
 
-      room_without_speaker = %{speaker?: false, voice: true, house_loop_only: false}
-      assert render_component(&foley_switches/1, room: room_without_speaker) == ""
+      # Also renders on a room without speaker
+      room_without_speaker = %{speaker?: false, voice: false, music: "off"}
+      html_without = render_component(&foley_switches/1, room: room_without_speaker)
+      assert html_without =~ ~s(data-role="voice-switch")
+      assert html_without =~ ~s(data-role="music-control")
+      assert html_without =~ "Off"
+      assert html_without =~ "House loop"
+      assert html_without =~ "Written for this Page"
     end
 
-    test "foley_hook renders hook container for colocated Foley hook" do
+    test "foley_hook renders hook container for colocated Foley hook with configured levels" do
+      configured = MeaningGame.Steward.foley_levels()
+      assert is_list(configured) and length(configured) > 0
+
       html = render_component(&foley_hook/1, speaker: true)
       assert html =~ ~s(id="foley-container")
       assert html =~ ~s(phx-hook="MeaningGameWeb.RoomComponents.Foley")
       assert html =~ ~s(data-speaker="true")
+      assert html =~ ~s(data-level-music="#{configured[:music]}")
+      assert html =~ ~s(data-level-stings="#{configured[:stings]}")
+      assert html =~ ~s(data-level-voice="#{configured[:voice]}")
+      assert html =~ ~s(data-level-duck="#{configured[:duck]}")
+
+      # Redundant non-level prefixed attributes are not rendered
+      refute html =~ ~s(data-music=)
+      refute html =~ ~s(data-stings=)
+      refute html =~ ~s(data-voice=)
+      refute html =~ ~s(data-duck=)
+
+      # Custom levels passed explicitly override configured ones
+      custom_levels = [music: 0.8, stings: 1.5, voice: 1.0, duck: 0.2]
+      custom_html = render_component(&foley_hook/1, speaker: true, levels: custom_levels)
+      assert custom_html =~ ~s(data-level-music="0.8")
+      assert custom_html =~ ~s(data-level-stings="1.5")
+      assert custom_html =~ ~s(data-level-voice="1.0")
+      assert custom_html =~ ~s(data-level-duck="0.2")
+    end
+
+    test "foley_hook renders meld cue delay and hook script handles meld, deep_meld, and unmelded" do
+      default_delay = MeaningGame.Steward.foley_meld_cue_delay_ms()
+      assert is_integer(default_delay) and default_delay > 0
+
+      html = render_component(&foley_hook/1, speaker: true)
+      assert html =~ ~s(data-meld-cue-delay-ms="#{default_delay}")
+
+      # Custom delay overrides configured one
+      custom_html = render_component(&foley_hook/1, speaker: true, meld_cue_delay_ms: 2500)
+      assert custom_html =~ ~s(data-meld-cue-delay-ms="2500")
+
+      # Script in room_components handles meld and deep_meld with victory cues and fadeMusicOut
+      hook_source = File.read!("lib/meaning_game_web/components/room_components.ex")
+      assert hook_source =~ "victory-meld.mp3"
+      assert hook_source =~ "victory-deep-meld.mp3"
+      assert hook_source =~ "ending-unmelded.mp3"
+      assert hook_source =~ "fadeMusicOut(2.0)"
+      refute hook_source =~ ~s("/audio/ending-meld.mp3")
+    end
+
+    test "local_sound_switch renders button with colocated LocalSoundToggle hook and default on state" do
+      html = render_component(&local_sound_switch/1, %{})
+      assert html =~ ~s(id="local-sound-toggle")
+      assert html =~ ~s(phx-hook="MeaningGameWeb.RoomComponents.LocalSoundToggle")
+      assert html =~ ~s(data-role="local-sound-toggle")
+      assert html =~ ~s(data-sound="on")
+      assert html =~ ~s(data-state="on")
+      assert html =~ ~s(data-state="off")
     end
   end
 
@@ -604,6 +697,101 @@ defmodule MeaningGameWeb.RoomComponentsTest do
 
       assert opponent_html =~
                "proposed an overrule for their Side. Waiting for their partner to agree."
+    end
+  end
+
+  describe "bookends component" do
+    test "renders a 'Bookends' caption over the Bookends in the caption style" do
+      room = %{
+        bookends: ["lantern", "harbour"]
+      }
+
+      html = render_component(&bookends/1, room: room)
+
+      assert html =~ "Bookends"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "lantern"
+      assert html =~ "harbour"
+    end
+  end
+
+  describe "caption component" do
+    test "renders slot content with shared caption styling" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.caption data-role="test-caption" class="custom-class">
+          Test Caption Content
+        </.caption>
+        """)
+
+      assert html =~ "Test Caption Content"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "custom-class"
+      assert html =~ ~s(data-role="test-caption")
+    end
+  end
+
+  describe "now_playing component" do
+    test "renders 'Music is off' when music is off" do
+      room = %{music: "off", loop: %{name: "The Porch", path: "/audio/house-loop.mp3"}}
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Music is off"
+      refute html =~ "The Porch"
+    end
+
+    test "renders loop name and 'the house loop' under house" do
+      room = %{music: "house", loop: %{name: "Sunlit Drift", path: "/audio/house-loop-2.mp3"}}
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Sunlit Drift"
+      assert html =~ "the house loop"
+      refute html =~ "Music is off"
+    end
+
+    test "renders loop name and 'the house loop' under page before track lands" do
+      room = %{
+        music: "page",
+        loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
+        track: nil
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Morning Breeze"
+      assert html =~ "the house loop"
+    end
+
+    test "renders nothing when track has landed" do
+      room = %{
+        music: "page",
+        loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
+        track: %{path: "/audio/track-1.mp3"}
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+      refute html =~ "the house loop"
+    end
+
+    test "renders nothing when room has no loop and music is not off" do
+      room = %{music: "page", loop: nil, track: nil}
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
+    end
+
+    test "renders nothing when room has no loop and music is off in lobby" do
+      room = %{music: "off", loop: nil, track: nil, phase: :waiting}
+      html = render_component(&now_playing/1, room: room)
+
+      refute html =~ ~s(data-role="now-playing")
     end
   end
 end
