@@ -2398,7 +2398,7 @@ defmodule MeaningGame.RoomsTest do
       end)
     end
 
-    test "title lands on Track before delayed score answers", ctx do
+    test "title lands on Track before delayed Track answers", ctx do
       set_fake(music_delay_ms: 50, title_delay_ms: 0)
 
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "summer camp")
