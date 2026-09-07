@@ -516,7 +516,7 @@ defmodule MeaningGameWeb.RoomLive do
         <.input
           name="bridge"
           value={nil}
-          label="The word between them"
+          label="Your bridge"
           autocomplete="off"
           autofocus
         />
@@ -528,7 +528,7 @@ defmodule MeaningGameWeb.RoomLive do
 
       <div :if={!@room[:late?] && @room.your_bridge && mid_page?(@room)} class="flex flex-col gap-1">
         <p data-role="your-bridge" class="text-lg">
-          You wrote <span class="font-semibold">{@room.your_bridge}</span>.
+          Your bridge: <span class="font-semibold">{@room.your_bridge}</span>
         </p>
         <p :if={@room.phase == :bridging} class="text-sm opacity-60">Waiting for the others.</p>
       </div>
