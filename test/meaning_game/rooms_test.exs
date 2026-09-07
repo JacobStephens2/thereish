@@ -2372,6 +2372,182 @@ defmodule MeaningGame.RoomsTest do
     end
   end
 
+  describe "the Scribe titles the Track" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+
+      %{slug: slug, mara: mara, jacob: jacob}
+    end
+
+    defp set_fake(opts) do
+      steward = Application.get_env(:meaning_game, :steward, [])
+      fake = Keyword.get(steward, :fake, [])
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(steward, :fake, Keyword.merge(fake, opts))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:meaning_game, :steward, steward)
+      end)
+    end
+
+    test "title lands on Track before delayed score answers", ctx do
+      set_fake(music_delay_ms: 50, title_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "summer camp")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "viking beaches")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view[:track] != nil and view.track[:title] != nil
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.track.title == "Summer Camp · Viking Beaches"
+      assert view.track.path =~ "/media/tracks/"
+      assert view.music_meta[:title] == "Summer Camp · Viking Beaches"
+      assert view.music_meta[:path] == view.track.path
+      assert view.music_meta[:title_cost_usd] != nil
+    end
+
+    test "track lands before title (Track before title race)", ctx do
+      set_fake(music_delay_ms: 0, title_delay_ms: 60)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "lantern")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "harbour")
+      await_phase(ctx.slug, :bridging)
+
+      # Track lands first
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view[:track] != nil
+      end)
+
+      # Eventually title lands and updates track
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view.track[:title] != nil
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.track.title == "Lantern · Harbour"
+      assert view.music_meta[:title] == "Lantern · Harbour"
+      assert view.music_meta[:title_cost_usd] != nil
+    end
+
+    test "cache hit answers file and title without provider call", ctx do
+      gives = ["glacier", "tundra"]
+
+      cached_track = %{
+        title: "Frozen Horizon",
+        path: "/media/tracks/frozen-glacier-tundra.mp3",
+        duration: 120,
+        format: :mp3,
+        meta: %{provider: "cached", cost_usd: 0.04}
+      }
+
+      {:ok, _} = MeaningGame.Steward.TrackCache.put(gives, cached_track)
+
+      # Break provider calls to prove cache hit requires no provider call
+      set_fake(music_mode: :unavailable, title_mode: :unavailable)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "glacier")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "tundra")
+      await_phase(ctx.slug, :bridging)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.track != nil
+      assert view.track.title == "Frozen Horizon"
+      assert view.track.path == "/media/tracks/frozen-glacier-tundra.mp3"
+      assert view.music_meta[:title] == "Frozen Horizon"
+    end
+
+    test "dropped title: title for a Page that moved on is dropped", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting a")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting b")
+      await_phase(ctx.slug, :bridging)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      old_page_ref = :sys.get_state(pid).current_page_ref
+
+      # Advance to next attempt and meld to close page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      # Send late title for the old page ref
+      send(pid, {:titled, old_page_ref, {:ok, %{title: "Late Title", meta: %{cost_usd: 0.0}}}})
+
+      # Current track does not adopt late title
+      state = :sys.get_state(pid)
+      refute state[:current_title] == "Late Title"
+    end
+
+    test "race: both late (both title and track arrive after page moved on)", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting c")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting d")
+      await_phase(ctx.slug, :bridging)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      old_page_ref = :sys.get_state(pid).current_page_ref
+
+      # Advance to next attempt and meld to close page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      # Send both late title and late track for the old page ref
+      send(pid, {:titled, old_page_ref, {:ok, %{title: "Late Title", meta: %{cost_usd: 0.0}}}})
+
+      send(
+        pid,
+        {:scored, old_page_ref,
+         {:ok, %{path: "/media/tracks/late.mp3", duration: 120, format: :mp3, meta: %{}}}}
+      )
+
+      # Neither late title nor late track lands on the room
+      state = :sys.get_state(pid)
+      refute state[:current_title] == "Late Title"
+      refute state[:current_track] && state.current_track[:path] == "/media/tracks/late.mp3"
+    end
+
+    test "closed Chronicle page carries title and path and title cost in music_meta", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "deep sea")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "coral reef")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view[:track] != nil and view.track[:title] != nil
+      end)
+
+      # Meld to close page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(fn ->
+        pages = MeaningGame.Chronicle.page_views(ctx.slug)
+
+        pages != [] and hd(pages).music_meta != nil and
+          (hd(pages).music_meta[:title] != nil or hd(pages).music_meta["title"] != nil)
+      end)
+
+      [page | _] = MeaningGame.Chronicle.page_views(ctx.slug)
+      assert page.music_meta[:title] != nil or page.music_meta["title"] != nil
+      assert page.music_meta[:path] != nil or page.music_meta["path"] != nil
+      assert page.music_meta[:title_cost_usd] != nil or page.music_meta["title_cost_usd"] != nil
+    end
+  end
+
   describe "in-play count (Spend stays a ledger of the record)" do
     setup do
       slug = open_room()

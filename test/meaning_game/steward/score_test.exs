@@ -49,6 +49,14 @@ defmodule MeaningGame.Steward.ScoreTest do
 
       assert {:error, :music_unavailable} = Fake.score(@gives)
     end
+
+    test "score_failure builds failure provenance with provider and model" do
+      meta = Steward.score_failure(:timeout)
+      assert meta.cost_usd == 0.0
+      assert meta.failure == "timeout"
+      assert meta.provider in ["fake", "mureka"]
+      assert is_binary(meta.model)
+    end
   end
 
   describe "Steward.Live.score" do

@@ -44,10 +44,11 @@ defmodule MeaningGame.Steward.TrackCacheTest do
       assert TrackCache.get(["unheard theme", "quiet room"]) == :miss
     end
 
-    test "stores and retrieves a track with path, duration, format and meta" do
+    test "stores and retrieves a track with title, path, duration, format and meta" do
       gives = ["lantern", "harbour"]
 
       track_attrs = %{
+        title: "Lantern Harbour",
         path: "/media/tracks/test-lantern-harbour.mp3",
         duration: 180,
         format: :mp3,
@@ -59,6 +60,7 @@ defmodule MeaningGame.Steward.TrackCacheTest do
       # Querying in reverse order hits the same cached entry
       assert {:ok, track} = TrackCache.get(["harbour", "lantern"])
 
+      assert track.title == "Lantern Harbour"
       assert track.path == "/media/tracks/test-lantern-harbour.mp3"
       assert track.duration == 180
       assert track.format == :mp3
@@ -87,6 +89,30 @@ defmodule MeaningGame.Steward.TrackCacheTest do
       assert {:ok, track} = TrackCache.get(gives)
       assert track.path == "/media/tracks/forest.mp3"
     end
+
+    test "subsequent put with title updates title on existing untitled row" do
+      gives = ["fog", "lighthouse"]
+
+      track_attrs = %{
+        path: "/media/tracks/fog.mp3",
+        duration: 120,
+        format: :mp3,
+        meta: @meta
+      }
+
+      # Initially stored without title
+      assert {:ok, _} = TrackCache.put(gives, track_attrs)
+      assert {:ok, initial} = TrackCache.get(gives)
+      assert initial.title == nil
+
+      # Later titled by Scribe
+      titled_attrs = Map.put(track_attrs, :title, "Beacon in the Mist")
+      assert {:ok, _} = TrackCache.put(gives, titled_attrs)
+
+      assert {:ok, updated} = TrackCache.get(gives)
+      assert updated.title == "Beacon in the Mist"
+      assert updated.path == "/media/tracks/fog.mp3"
+    end
   end
 
   describe "store" do
@@ -104,6 +130,7 @@ defmodule MeaningGame.Steward.TrackCacheTest do
       bytes = <<255, 251, 144, 100, 42, 42, 42>>
 
       mureka_result = %{
+        title: "Solitude Station",
         bytes: bytes,
         url: "https://cdn.mureka.ai/audio/temp.mp3",
         model: "auto",
@@ -111,6 +138,7 @@ defmodule MeaningGame.Steward.TrackCacheTest do
       }
 
       assert {:ok, track} = TrackCache.store(gives, mureka_result)
+      assert track.title == "Solitude Station"
       assert String.starts_with?(track.path, "/media/tracks/")
       assert track.format == :mp3
       assert track.meta.provider == "mureka"
@@ -124,6 +152,7 @@ defmodule MeaningGame.Steward.TrackCacheTest do
 
       # Verify subsequent get hits cache without needing provider
       assert {:ok, cached} = TrackCache.get(gives)
+      assert cached.title == "Solitude Station"
       assert cached.path == track.path
     end
   end
