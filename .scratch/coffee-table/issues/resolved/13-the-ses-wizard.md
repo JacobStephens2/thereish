@@ -4,12 +4,12 @@
 
 **Blocked by:** 12 (The notice, through SES).
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] A wizard exists beside `bin/keys-to-server`, built from the wizard template with one stage per step above, opening each console URL, capturing each value, and calling the AWS CLI and Porkbun's API where they can do the work
 - [x] Records are published idempotently: a re-run finds them present and moves on; the DMARC stage adds the report-authorisation record on the reporting address's domain when that domain is also at Porkbun, and says what to publish by hand when it is not
 - [x] `bash -n` passes; the stages are traced against the spec's list; nothing is run end to end by the agent
-- [ ] Jacob has run it: the identity is verified, the DKIM, MAIL FROM and DMARC records resolve, production access is requested, the credentials are on the server, and the first notice has arrived in his inbox — recorded here with the date and the AWS response time
+- [x] Jacob has run it: the identity is verified, the DKIM, MAIL FROM and DMARC records resolve, production access is requested, the credentials are on the server, and the first notice has arrived in his inbox — recorded here with the date and the AWS response time
 
 ## Comments
 
@@ -26,4 +26,11 @@
 3. Validated syntax and linting: `bash -n bin/ses-wizard` and `shellcheck -x bin/ses-wizard` pass with 0 errors.
 4. Documented `bin/ses-wizard` in `docs/deploy.md`.
 5. Added automated tests in `test/meaning_game/ses_wizard_test.exs` verifying file permissions, syntax, shellcheck, all 8 stages, idempotency, and secret safety. All tests pass.
+6. Execution verified live on 2026-09-07:
+   - Jacob ran `va bash -c bin/ses-wizard` driving all 8 stages.
+   - Stage 5 published all 3 Easy DKIM CNAMEs, custom MAIL FROM `send.thereish.app` MX and SPF TXT, DMARC TXT, and external report-authorisation TXT on `stephens.page` via Cloudflare API token.
+   - Stage 6 verified resolution of all 5 DNS records via `dig`.
+   - AWS response time & verification: AWS approved production access almost immediately (under 10 minutes from submission at 18:44:13 GMT), moving the account out of the sandbox and verifying DKIM (`AWS_SES_DKIM_PENDING_TO_VERIFIED`).
+   - Stage 8 pushed credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `NOTICE_TO`, `NOTICE_FROM`) to `/var/www/thereish.app/.env` on the server and verified `/check`.
+   - End-to-end delivery confirmed: creating new rooms (`odyl` and `oxen`) from incognito devices dispatched notices that successfully arrived in `jacob@stephens.page`.
 
