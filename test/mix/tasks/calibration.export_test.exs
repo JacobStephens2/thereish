@@ -2,14 +2,14 @@ defmodule Mix.Tasks.Calibration.ExportTest do
   @moduledoc """
   Tests for `mix calibration.export` (ticket 11, ADR-0005).
   """
-  use MeaningGame.DataCase, async: false
+  use Thereish.DataCase, async: false
 
-  import MeaningGame.RoomFixtures
+  import Thereish.RoomFixtures
 
-  alias MeaningGame.Chronicle
-  alias MeaningGame.Repo
-  alias MeaningGame.Rooms
-  alias MeaningGame.Rooms.Room
+  alias Thereish.Chronicle
+  alias Thereish.Repo
+  alias Thereish.Rooms
+  alias Thereish.Rooms.Room
 
   setup do
     slug = open_room()

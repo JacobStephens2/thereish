@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.VerdictsKeepTheQuipAndBothOrderings do
+defmodule Thereish.Repo.Migrations.VerdictsKeepTheQuipAndBothOrderings do
   use Ecto.Migration
 
   # A live Assayer grades every pair twice, once in each ordering, because which

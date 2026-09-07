@@ -39,7 +39,7 @@ defmodule StageSnapshotGenerator do
         assigns_override
       )
 
-    rendered = MeaningGameWeb.StageLive.render(assigns)
+    rendered = ThereishWeb.StageLive.render(assigns)
     Phoenix.HTML.Safe.to_iodata(rendered) |> IO.iodata_to_binary()
   end
 end

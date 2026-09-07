@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AddTitleToTrackCache do
+defmodule Thereish.Repo.Migrations.AddTitleToTrackCache do
   use Ecto.Migration
 
   def change do

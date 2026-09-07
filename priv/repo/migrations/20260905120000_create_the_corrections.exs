@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateTheCorrections do
+defmodule Thereish.Repo.Migrations.CreateTheCorrections do
   use Ecto.Migration
 
   # The couple can correct an entry in the Chronicle, and the correction is

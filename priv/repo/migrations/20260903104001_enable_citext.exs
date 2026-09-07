@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.EnableCitext do
+defmodule Thereish.Repo.Migrations.EnableCitext do
   use Ecto.Migration
 
   # No game tables yet. This exists so the migration path itself is exercised on

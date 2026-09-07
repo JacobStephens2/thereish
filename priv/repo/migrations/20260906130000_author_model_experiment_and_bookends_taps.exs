@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AuthorModelExperimentAndBookendsTaps do
+defmodule Thereish.Repo.Migrations.AuthorModelExperimentAndBookendsTaps do
   use Ecto.Migration
 
   def change do
