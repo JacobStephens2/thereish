@@ -86,11 +86,14 @@ defmodule MeaningGame.Rooms do
 
   def create(player_count, device_token) when is_integer(player_count) do
     if player_count in seat_counts() do
-      case digests_for_device(device_token) do
+      device_rooms =
+        if is_binary(device_token), do: Store.rooms_for_device(device_token), else: []
+
+      case digests_for_rooms(device_rooms) do
         [] ->
           # No history: makes no model call and draws a random word
           with {:ok, code} <- insert_with_a_free_code(player_count, @code_draws) do
-            if device_holds_no_seat_anywhere?(device_token) do
+            if is_binary(device_token) and device_rooms == [] do
               MeaningGame.Notice.notify_new_room(code, player_count)
             end
 
@@ -107,17 +110,8 @@ defmodule MeaningGame.Rooms do
 
   def create(_player_count, _device_token), do: {:error, :bad_player_count}
 
-  defp device_holds_no_seat_anywhere?(nil), do: true
-
-  defp device_holds_no_seat_anywhere?(device_token) do
-    Store.rooms_for_device(device_token) == []
-  end
-
-  defp digests_for_device(nil), do: []
-
-  defp digests_for_device(device_token) do
-    device_token
-    |> Store.rooms_for_device()
+  defp digests_for_rooms(rooms) do
+    rooms
     |> Enum.uniq_by(fn %{room: room} -> room.id end)
     |> Enum.map(fn %{room: room} -> Chronicle.digest(room.id) end)
     |> Enum.reject(&String.starts_with?(&1, "Nothing yet"))

@@ -9,20 +9,20 @@ defmodule MeaningGame.Notice do
   import Swoosh.Email
   require Logger
 
-  @credential_names ~w(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION NOTICE_TO NOTICE_FROM)
+  @required_credential_names ~w(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY NOTICE_TO NOTICE_FROM)
 
   @doc """
   Builds a plain-text notice email carrying the Code, player count, time, and room link.
   """
   def build_email(code, player_count, time \\ DateTime.utc_now()) do
-    to_address = to_address()
-    from_address = from_address()
+    to_addr = to_address()
+    from_addr = from_address()
     link = room_url(code)
     formatted_time = DateTime.to_iso8601(time)
 
     new()
-    |> to(to_address)
-    |> from(from_address)
+    |> to(to_addr)
+    |> from(from_addr)
     |> subject("Room created: #{code}")
     |> text_body("""
     Room: #{code}
@@ -33,19 +33,15 @@ defmodule MeaningGame.Notice do
   end
 
   @doc """
-  Delivers the notice email via MeaningGame.Mailer if configured.
+  Delivers the notice email via MeaningGame.Mailer.
   """
   def deliver(code, player_count, time \\ DateTime.utc_now()) do
-    if configured?() do
-      email = build_email(code, player_count, time)
-      MeaningGame.Mailer.deliver(email)
-    else
-      :ok
-    end
+    email = build_email(code, player_count, time)
+    MeaningGame.Mailer.deliver(email)
   end
 
   @doc """
-  Delivers the notice asynchronously in a supervised task.
+  Delivers the notice asynchronously in a supervised task when configured.
   Never raises, times out, or blocks the caller.
   """
   def notify_new_room(code, player_count) do
@@ -76,20 +72,32 @@ defmodule MeaningGame.Notice do
   end
 
   @doc """
-  True when notice delivery is configured.
+  True when notice delivery and mailer credentials are configured.
   """
   def configured? do
-    config = Application.get_env(:meaning_game, :notice, [])
-    to = Keyword.get(config, :to)
-    from = Keyword.get(config, :from)
+    notice_config = Application.get_env(:meaning_game, :notice, [])
+    to = Keyword.get(notice_config, :to)
+    from = Keyword.get(notice_config, :from)
 
-    configured_addresses? = is_binary(to) and to != "" and is_binary(from) and from != ""
+    addresses_configured? = is_binary(to) and to != "" and is_binary(from) and from != ""
 
-    if Application.get_env(:meaning_game, :env) == :prod or config_env_is_prod?() do
-      configured_addresses? and missing_credentials(:system) == []
-    else
-      configured_addresses?
-    end
+    mailer_config = Application.get_env(:meaning_game, MeaningGame.Mailer, [])
+    adapter = Keyword.get(mailer_config, :adapter)
+
+    mailer_ready? =
+      case adapter do
+        Swoosh.Adapters.AmazonSES ->
+          Keyword.get(mailer_config, :access_key) not in [nil, ""] and
+            Keyword.get(mailer_config, :secret) not in [nil, ""]
+
+        nil ->
+          false
+
+        _ ->
+          true
+      end
+
+    addresses_configured? and mailer_ready?
   end
 
   @doc """
@@ -100,10 +108,9 @@ defmodule MeaningGame.Notice do
       case env do
         :system -> &System.get_env/1
         map when is_map(map) -> &Map.get(map, &1)
-        kw when is_list(kw) -> &Keyword.get(kw, String.to_atom(&1))
       end
 
-    Enum.filter(@credential_names, fn name ->
+    Enum.filter(@required_credential_names, fn name ->
       val = lookup.(name)
       is_nil(val) or val == ""
     end)
@@ -127,14 +134,10 @@ defmodule MeaningGame.Notice do
   end
 
   defp to_address do
-    Application.get_env(:meaning_game, :notice, [])[:to] || "operator@example.com"
+    Application.get_env(:meaning_game, :notice, [])[:to]
   end
 
   defp from_address do
-    Application.get_env(:meaning_game, :notice, [])[:from] || "notice@thereish.app"
-  end
-
-  defp config_env_is_prod? do
-    System.get_env("RELEASE_NAME") != nil
+    Application.get_env(:meaning_game, :notice, [])[:from]
   end
 end
