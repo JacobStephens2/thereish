@@ -147,12 +147,16 @@ defmodule MeaningGame.Rooms do
   end
 
   defp insert_and_start(code, player_count) do
-    case Store.insert_room(code, player_count) do
-      {:ok, room} ->
-        with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
+    with normalized when is_binary(normalized) <- Code.normalise(code),
+         {:ok, room} <- Store.insert_room(normalized, player_count) do
+      case start_room(room.slug) do
+        {:ok, _pid} ->
+          {:ok, room.slug}
 
-      error ->
-        error
+        error ->
+          MeaningGame.Repo.delete(room)
+          error
+      end
     end
   end
 
