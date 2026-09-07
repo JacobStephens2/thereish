@@ -507,6 +507,7 @@ defmodule MeaningGame.Steward do
   end
 
   @default_foley_levels [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15]
+  @default_foley_meld_cue_delay_ms 1800
 
   @doc "Levels configured for Foley buses: music, stings, voice, duck."
   @spec foley_levels() :: keyword()
@@ -517,6 +518,18 @@ defmodule MeaningGame.Steward do
 
       _ ->
         @default_foley_levels
+    end
+  end
+
+  @doc "Delay in milliseconds before the victory cue plays after a meld sting."
+  @spec foley_meld_cue_delay_ms() :: non_neg_integer()
+  def foley_meld_cue_delay_ms do
+    case settings(:foley) do
+      settings when is_list(settings) ->
+        Keyword.get(settings, :meld_cue_delay_ms, @default_foley_meld_cue_delay_ms)
+
+      _ ->
+        @default_foley_meld_cue_delay_ms
     end
   end
 
