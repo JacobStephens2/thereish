@@ -12,6 +12,10 @@ _Avoid_: game, session, lobby, table
 The four-letter word a Room is known by, read aloud so others can join. The Scribe picks it with a nod to the creator's past play when there is any; otherwise it is drawn at random.
 _Avoid_: slug, link, room id, PIN, join code
 
+**Stage**:
+The Room's public screen — a laptop on the table, holding no Seat — where the reveal is performed to everyone at once while the phones go quiet. Any phone can make its device the Stage; a Room without one is still a Room.
+_Avoid_: display, TV, big screen, host screen, dashboard, "the laptop" (in copy)
+
 **Game**:
 The rules themselves, as a pure function: what a Room's state is, what each event does to it, and what a given Seat may see. It is not a synonym for Room — a Room is the process and the people; the Game is only the ruling.
 _Avoid_: engine, state machine, logic, rules service
@@ -59,6 +63,14 @@ _Avoid_: logger, narrator, historian
 **Foley**:
 The machine role that makes what the Room hears — the stings and the house loop, made once and shipped, and the music written for a Page's Gives while it is played. (Named for the theatre's sound artist; the stage, the beat and the reveal are already its vocabulary.)
 _Avoid_: composer, sound designer, DJ, audio service
+
+**Speaker**:
+The one device in a Room that plays what Foley makes — the Stage when one is open, otherwise the phone that claimed it; claiming it silences whoever had it. Held by a device, not a Seat, so a phone with no Seat can hold it.
+_Avoid_: audio device, output, host phone, "the sound", speakerphone
+
+**Track**:
+The instrumental Foley writes for one Page from its Gives, arriving a minute or so into play and fading in over the house loop. It is titled by the Scribe and kept, so the same Gives bring the same Track back — a song the Chronicle can remember.
+_Avoid_: song (in code), background music, BGM, soundtrack, loop (that is the house loop, which is not written for a Page)
 
 **Bookends**:
 The two words — or two-word phrases — a Page shows; each player writes the Bridge between them. Chosen from different Gives to stand far apart.
