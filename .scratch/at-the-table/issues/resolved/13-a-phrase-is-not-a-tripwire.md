@@ -14,15 +14,25 @@ Spec sections: The Game (Legality) in `.scratch/at-the-table/spec.md`, whose Leg
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A function-word list is a module attribute in `Legality`; its words are removed from both the Bridge's words and the barred item's words before the pairwise root check, and a test pins the list's effect on *the*, *and*, *for*, *one*, *out* against *theology*, *android*, *forest*, *onerous*, *outfit*
-- [ ] "the meaning of life" commits against a Bookend of *theology*; "the lava rock" is still refused against *lava*, naming *lava* — a phrase's content words are untouched
-- [ ] A Bridge made only of function words ("the one", "and so") is legal and does not raise; the Assayer scores it as it finds it
-- [ ] The prefix floor is four; `shared_root?/2` still answers true for *runner* / *run*, *lanterns* / *lantern*, *harbour* / *harbour*, and the whole existing legality, game and rooms suites pass unchanged
-- [ ] A genuine three-letter root that is not in the inflection table (*sea* / *seashore*) no longer collides; this is the accepted cost, recorded here, and the fix if it ever bites is a line in `inflections.txt`, not a lower floor
-- [ ] The Author's Bookends still go through the same gate with the same numbers — `check_author_bridge/2` is unchanged in behaviour beyond the two rules above
-- [ ] The spec's Legality paragraph and 04's resolved ticket say four and say what function words do
+- [x] A function-word list is a module attribute in `Legality`; its words are removed from both the Bridge's words and the barred item's words before the pairwise root check, and a test pins the list's effect on *the*, *and*, *for*, *one*, *out* against *theology*, *android*, *forest*, *onerous*, *outfit*
+- [x] "the meaning of life" commits against a Bookend of *theology*; "the lava rock" is still refused against *lava*, naming *lava* — a phrase's content words are untouched
+- [x] A Bridge made only of function words ("the one", "and so") is legal and does not raise; the Assayer scores it as it finds it
+- [x] The prefix floor is four; `shared_root?/2` still answers true for *runner* / *run*, *lanterns* / *lantern*, *harbour* / *harbour*, and the whole existing legality, game and rooms suites pass unchanged
+- [x] A genuine three-letter root that is not in the inflection table (*sea* / *seashore*) no longer collides; this is the accepted cost, recorded here, and the fix if it ever bites is a line in `inflections.txt`, not a lower floor
+- [x] The Author's Bookends still go through the same gate with the same numbers — `check_author_bridge/2` is unchanged in behaviour beyond the two rules above
+- [x] The spec's Legality paragraph and 04's resolved ticket say four and say what function words do
+
+## Answer
+
+1. **Function words.** `@function_words` in `MeaningGame.Steward.Legality` is a closed list of articles, conjunctions, prepositions, pronouns, the copula, plus *one* and *all*. `check_against_barred/2` drops them from both the Bridge and the barred item before the pairwise root check. Exact identity of a whole phrase still bars (*the one* against *the one*), so a Bookend or an already-used Bridge cannot be replayed.
+
+2. **Prefix floor.** `prefix_overlap?/4` needs four letters. *runner* / *run*, *lanterns* / *lantern*, *harbour* / *harbour* still collide through the inflection table, the stemmer, or identity. *sea* / *seashore* no longer collides; a line in `inflections.txt` is the fix if that ever bites.
+
+3. **Docs.** Spec Legality and 04's legality checkbox say four and say what function words do.
+
+4. **Tests.** `MIX_TEST_PARTITION=att13 mix test` — 767 passed, 11 excluded.
 
 ## Comments
 
