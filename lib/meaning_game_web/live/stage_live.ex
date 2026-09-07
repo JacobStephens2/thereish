@@ -94,7 +94,7 @@ defmodule MeaningGameWeb.StageLive do
     <main
       id="stage"
       phx-hook=".WakeLock"
-      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5 overflow-hidden select-none"
+      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5"
     >
       <header class="flex items-center justify-between shrink-0 gap-4">
         <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
@@ -151,7 +151,7 @@ defmodule MeaningGameWeb.StageLive do
 
         <.attempt room={@room} />
 
-        <.bookends room={@room} />
+        <.bookends room={@room} mode={:stage} />
 
         <.assaying room={@room} />
 
@@ -161,7 +161,7 @@ defmodule MeaningGameWeb.StageLive do
 
         <.carry_forward room={@room} />
 
-        <.ending room={@room} />
+        <.ending room={@room} mode={:stage} />
       </div>
 
       <footer class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-base-content/10 pt-2 shrink-0 text-xs sm:text-sm opacity-80">

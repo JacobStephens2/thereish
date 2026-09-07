@@ -68,9 +68,9 @@ defmodule MeaningGameWeb.RoomComponents do
               <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
               <span
                 :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
-                class="text-xs opacity-60"
+                class="text-xs opacity-60 font-semibold"
               >
-                has written a bridge
+                ✓
               </span>
             </li>
             <li :if={@room.seats == []} class="opacity-60">Nobody yet</li>
@@ -153,18 +153,34 @@ defmodule MeaningGameWeb.RoomComponents do
   end
 
   attr :room, :map, required: true
+  attr :mode, :atom, default: :phone
 
   @doc "The two words the Page hangs between, shown to everyone at once."
   def bookends(assigns) do
     ~H"""
-    <div :if={@room.bookends} class="flex flex-col items-center gap-2">
+    <div
+      :if={@room.bookends}
+      class={[
+        "flex flex-col items-center",
+        if(@mode == :stage, do: "gap-2", else: "gap-3")
+      ]}
+    >
       <div
         data-role="bookends"
-        class="flex flex-wrap items-center justify-center gap-3 sm:gap-4"
+        class={[
+          "flex flex-wrap items-center justify-center",
+          if(@mode == :stage, do: "gap-3 sm:gap-4", else: "gap-4")
+        ]}
       >
         <span
           :for={bookend <- @room.bookends}
-          class="rounded-lg bg-base-200 px-4 py-2 sm:px-5 sm:py-2.5 text-2xl sm:text-3xl font-semibold tracking-tight"
+          class={[
+            "rounded-lg bg-base-200 font-semibold tracking-tight",
+            if(@mode == :stage,
+              do: "px-4 py-2 sm:px-5 sm:py-2.5 text-2xl sm:text-3xl",
+              else: "px-5 py-3 text-3xl"
+            )
+          ]}
         >
           {bookend}
         </span>
