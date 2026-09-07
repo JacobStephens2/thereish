@@ -343,6 +343,11 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
+  def handle_call(:in_play?, _from, state) do
+    in_play? = Game.phase(state.game) in [:bridging, :assaying, :reveal]
+    {:reply, in_play?, state}
+  end
+
   # The snapshot answers how long the Assayer has been thinking, plus the
   # Room facts (speaker?, speaker_claimed?, voice, music) for the
   # requesting viewer's device token. Device tokens never leave the Room.
@@ -433,6 +438,14 @@ defmodule MeaningGame.Rooms.Server do
 
   def handle_info({:voice_spoken, attempt, {:error, reason}}, state) do
     Logger.warning("Voice synthesis failed for attempt #{attempt}: #{inspect(reason)}")
+
+    failure_meta = MeaningGame.Steward.voice_failure(reason)
+
+    state = %{
+      state
+      | voice_meta: Map.put(state.voice_meta, attempt, failure_meta)
+    }
+
     {:noreply, state}
   end
 
