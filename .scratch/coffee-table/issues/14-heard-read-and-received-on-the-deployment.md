@@ -24,11 +24,5 @@
   - `/spend` renders cleanly; "N Pages in play" sentence is correctly omitted when zero pages are active.
   - SES production access was granted on 2026-09-07, DKIM and custom MAIL FROM are verified, and initial notices for new-device rooms (`odyl`, `oxen`) were received at `jacob@stephens.page`.
   - Chronicle track playback and Markdown export round-tripping (`Track: <title>`) are deployed and ready for tonight's recorded tracks.
-- Ready for Jacob's physical couch / table playtest:
-  1. Room with a Stage (laptop) + phones: test music segmented control (Off, House loop, Written for this Page), loop rotation per Page, "Now playing" title arrival, commit ticks on Stage and phone, Meld / deep meld victory cues and Track fade, "Bookends" and "Your bridge" labels, and Scribe quip.
-  2. Room without a Stage: verify only committing phone sounds tick and non-speaker controls Speaker phone.
-  3. Judge levels by ear and record any config adjustments on `.scratch/foley/issues/06`.
-  4. Verify Chronicle track playback and export from the evening's closed Pages.
-  5. Check for the first incoming DMARC aggregate report.
-  6. Record final `/spend` and findings below.
+- The ticket remains `Status: ready-for-human` for the physical playtest session on deployment to verify the checklist items above.
 
