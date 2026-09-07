@@ -53,25 +53,11 @@ if echo "${MISSING_KEYS}" | grep -q 'ANTHROPIC_API_KEY'; then
   echo "      See docs/deploy.md, \"The Author's key\"."
 fi
 
-if echo "${MISSING_KEYS}" | grep -q 'AWS_ACCESS_KEY_ID'; then
-  echo "Note: no AWS_ACCESS_KEY_ID in ${APP_DIR}/.env — notices for new Rooms will not be sent."
-fi
-
-if echo "${MISSING_KEYS}" | grep -q 'AWS_SECRET_ACCESS_KEY'; then
-  echo "Note: no AWS_SECRET_ACCESS_KEY in ${APP_DIR}/.env — notices for new Rooms will not be sent."
-fi
-
-if echo "${MISSING_KEYS}" | grep -q 'AWS_REGION'; then
-  echo "Note: no AWS_REGION in ${APP_DIR}/.env — notices for new Rooms will not be sent."
-fi
-
-if echo "${MISSING_KEYS}" | grep -q 'NOTICE_TO'; then
-  echo "Note: no NOTICE_TO in ${APP_DIR}/.env — notices for new Rooms will not be sent."
-fi
-
-if echo "${MISSING_KEYS}" | grep -q 'NOTICE_FROM'; then
-  echo "Note: no NOTICE_FROM in ${APP_DIR}/.env — notices for new Rooms will not be sent."
-fi
+for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION NOTICE_TO NOTICE_FROM; do
+  if echo "${MISSING_KEYS}" | grep -q "${key}"; then
+    echo "Note: no ${key} in ${APP_DIR}/.env — notices for new Rooms will not be sent."
+  fi
+done
 
 echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"
 ssh "${SERVER}" bash -s <<REMOTE

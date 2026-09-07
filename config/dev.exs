@@ -58,6 +58,10 @@ config :meaning_game, dev_routes: true
 # Mailer configuration for development
 config :meaning_game, MeaningGame.Mailer, adapter: Swoosh.Adapters.Local
 
+config :meaning_game, :notice,
+  to: "operator@example.com",
+  from: "notice@thereish.app"
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

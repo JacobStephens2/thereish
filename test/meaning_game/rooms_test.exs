@@ -850,6 +850,14 @@ defmodule MeaningGame.RoomsTest do
 
       stop_room(code)
     end
+
+    test "creating a Room with nil device token delivers no notice" do
+      assert {:ok, code} = Rooms.create(2, nil)
+      await_notice()
+      refute_received {:email, _}
+
+      stop_room(code)
+    end
   end
 
   describe "opening a Room" do
