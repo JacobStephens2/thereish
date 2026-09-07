@@ -82,24 +82,31 @@ defmodule MeaningGame.Rooms do
   history draws a random word.
   """
   @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
-  def create(player_count, device_token)
+  def create(seat_count, device_token)
 
-  def create(player_count, device_token) when is_integer(player_count) do
-    if player_count in seat_counts() do
+  def create(seat_count, device_token) when is_integer(seat_count) do
+    if seat_count in seat_counts() do
       case digests_for_device(device_token) do
         [] ->
           # No history: makes no model call and draws a random word
-          insert_with_a_free_code(player_count, @code_draws)
+          insert_with_a_free_code(seat_count, @code_draws)
 
         digests ->
-          name_with_scribe_or_fallback(player_count, digests)
+          with {:ok, code} when is_binary(code) <-
+                 Steward.name_room(digests, Store.taken_codes()),
+               {:ok, code} <- insert_and_start(code, seat_count) do
+            {:ok, code}
+          else
+            _ ->
+              insert_with_a_free_code(seat_count, @code_draws)
+          end
       end
     else
       {:error, :bad_player_count}
     end
   end
 
-  def create(_player_count, _device_token), do: {:error, :bad_player_count}
+  def create(_seat_count, _device_token), do: {:error, :bad_player_count}
 
   defp digests_for_device(nil), do: []
 
@@ -107,48 +114,33 @@ defmodule MeaningGame.Rooms do
     device_token
     |> Store.rooms_for_device()
     |> Enum.uniq_by(fn %{room: room} -> room.id end)
-    |> Enum.map(fn %{room: room} -> Chronicle.digest(room.id) end)
-    |> Enum.reject(&String.starts_with?(&1, "Nothing yet"))
-  end
-
-  defp name_with_scribe_or_fallback(player_count, digests) do
-    taken = Store.taken_codes()
-
-    case Steward.name_room(digests, taken) do
-      {:ok, code} when is_binary(code) ->
-        case insert_and_start(code, player_count) do
-          {:ok, slug} -> {:ok, slug}
-          {:error, _changeset} -> insert_with_a_free_code(player_count, @code_draws)
-        end
-
-      _ ->
-        insert_with_a_free_code(player_count, @code_draws)
-    end
+    |> Enum.map(fn %{room: room} -> Chronicle.history_digest(room.id) end)
+    |> Enum.reject(&is_nil/1)
   end
 
   # A drawn word that somebody else already took is drawn again, and nothing
   # else is. There are thousands of four-letter words and a household will never
   # crowd them, so a handful of draws is a ceiling that exists only so a bug
   # cannot spin here.
-  defp insert_with_a_free_code(_player_count, 0), do: {:error, :no_free_code}
+  defp insert_with_a_free_code(_seat_count, 0), do: {:error, :no_free_code}
 
-  defp insert_with_a_free_code(player_count, draws_left) do
-    case insert_and_start(Code.draw(), player_count) do
-      {:ok, slug} ->
-        {:ok, slug}
+  defp insert_with_a_free_code(seat_count, draws_left) do
+    case insert_and_start(Code.draw(), seat_count) do
+      {:ok, code} ->
+        {:ok, code}
 
       {:error, changeset} ->
         if code_taken?(changeset) do
-          insert_with_a_free_code(player_count, draws_left - 1)
+          insert_with_a_free_code(seat_count, draws_left - 1)
         else
           {:error, changeset}
         end
     end
   end
 
-  defp insert_and_start(code, player_count) do
+  defp insert_and_start(code, seat_count) do
     with normalized when is_binary(normalized) <- Code.normalise(code),
-         {:ok, room} <- Store.insert_room(normalized, player_count) do
+         {:ok, room} <- Store.insert_room(normalized, seat_count) do
       case start_room(room.slug) do
         {:ok, _pid} ->
           {:ok, room.slug}
