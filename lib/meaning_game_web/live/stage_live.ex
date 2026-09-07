@@ -81,7 +81,7 @@ defmodule MeaningGameWeb.StageLive do
 
     socket
     |> assign(:room, new_room)
-    |> MeaningGameWeb.Foley.push_foley_events(old_room, new_room)
+    |> MeaningGameWeb.Foley.push_foley_events(old_room, new_room, stage?: true)
   end
 
   defp join_url(slug), do: url(~p"/r/#{slug}")

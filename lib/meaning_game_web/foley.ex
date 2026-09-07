@@ -9,8 +9,19 @@ defmodule MeaningGameWeb.Foley do
   @doc """
   Pushes foley audio events to the socket when this view is the speaker.
   Silences this view if it lost the speaker.
+  When `stage?: true` (or when view is StageLive), pushes `foley:commit` to
+  the Stage view whenever the count of committed Seats rises within a Page.
   """
-  def push_foley_events(socket, old_room, new_room) do
+  def push_foley_events(socket, old_room, new_room, opts \\ []) do
+    stage? = Keyword.get(opts, :stage?, socket.view == MeaningGameWeb.StageLive)
+
+    socket =
+      if stage? do
+        maybe_push_commit(socket, old_room, new_room)
+      else
+        socket
+      end
+
     cond do
       not is_nil(old_room) and Map.get(old_room, :speaker?) and not Map.get(new_room, :speaker?) ->
         push_event(socket, "foley:stop", %{})
@@ -25,6 +36,13 @@ defmodule MeaningGameWeb.Foley do
       true ->
         socket
     end
+  end
+
+  @doc """
+  Pushes a foley:own-commit event to the committing phone's view.
+  """
+  def push_own_commit(socket) do
+    push_event(socket, "foley:own-commit", %{})
   end
 
   @doc """
@@ -146,6 +164,38 @@ defmodule MeaningGameWeb.Foley do
 
       true ->
         nil
+    end
+  end
+
+  defp maybe_push_commit(socket, old_room, new_room) do
+    if commit_rose?(old_room, new_room) do
+      push_event(socket, "foley:commit", %{})
+    else
+      socket
+    end
+  end
+
+  defp commit_rose?(nil, _new_room), do: false
+
+  defp commit_rose?(old_room, new_room) do
+    new_room.phase in [:bridging, :assaying] and
+      attempt_number(old_room) == attempt_number(new_room) and
+      count_committed(new_room) > count_committed(old_room)
+  end
+
+  defp attempt_number(room) do
+    case room[:attempt] do
+      %{number: n} -> n
+      n when is_integer(n) -> n
+      _ -> nil
+    end
+  end
+
+  defp count_committed(room) do
+    if room && is_list(room[:seats]) do
+      Enum.count(room.seats, & &1[:committed?])
+    else
+      0
     end
   end
 end
