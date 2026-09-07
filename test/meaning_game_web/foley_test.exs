@@ -370,4 +370,18 @@ defmodule MeaningGameWeb.FoleyTest do
              } in events
     end
   end
+
+  describe "push_own_commit/2" do
+    test "pushes foley:own-commit when no stage is present" do
+      socket = test_socket()
+      result = Foley.push_own_commit(socket, stage_present?: false)
+      assert {"foley:own-commit", %{}} in pushed_events(result)
+    end
+
+    test "does not push foley:own-commit when stage is present" do
+      socket = test_socket()
+      result = Foley.push_own_commit(socket, stage_present?: true)
+      assert pushed_events(result) == []
+    end
+  end
 end

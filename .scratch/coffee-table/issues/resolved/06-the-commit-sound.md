@@ -11,3 +11,7 @@
 - [x] The hook runs on every phone with a local-sounds mode that owns only the tick; the Speaker mode is unchanged; the local tick is gated by a per-device switch in browser storage (default on) and by reduced-motion, and the Commit tap is the audio gesture
 - [x] The per-device switch renders as a small icon beside the speaker icon on every phone and its state survives a reload on that device
 - [x] LiveView tests with two phones and a Stage: a commit pushes `foley:commit` to the Stage and `foley:own-commit` to the committer only; with no Stage and one phone holding the Speaker, a commit pushes `foley:own-commit` to the committer and `foley:commit` to nobody
+
+## Comments
+
+**2026-09-07.** Amended by `.scratch/coffee-table/issues/15-the-stage-ticks-alone.md`: when a Stage is present at the table, the Stage sounds every commit and phones stay quiet, so one commit does not make two sounds from two places.
