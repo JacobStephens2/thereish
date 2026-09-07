@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 (Rooms are created by Code).
 
-**Status:** ready-for-human
+**Status:** resolved
 
 This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the role's seat in the Steward's configuration; the Scribe proper — recaps and the Vale gate — is `.scratch/scribe/issues/01`.
 
@@ -23,7 +23,7 @@ This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the
 - [x] The scribe role is configuration with model, effort, timeout and deadline, and the fake adapter answers a configured word
 - [x] Steward tests cover the gate, the retry, the fallback and the no-history path; a Room test asserts the configured fake word becomes the Code
 - [x] One tagged live smoke test names a Room from a real digest once by hand
-- [ ] Verified on the real deployment: a Room created from Jacob's phone gets a word that nods to the couch's Chronicle
+- [x] Verified on the real deployment: a Room created from Jacob's phone gets a word that nods to the couch's Chronicle
 
 **Since this was filed (2026-09-05, ADR-0011).** Nothing here changes shape. Two facts to carry: the digest the Scribe reads now includes each Seat's Gives and the Bookends the Author wrote from them, which is richer material for a nod than the old pool's Chapters; and `MeaningGame.Steward.Legality.dictionary/0` — the ENABLE list the gate and the random word draw from — stays even though player Bridges no longer pass a dictionary check, because a Code still has to be a word.
 
@@ -49,3 +49,12 @@ This is the Scribe's first job (CONTEXT.md: callbacks are the Scribe's), and the
    - `MeaningGame.Steward.NamingTest`: Unit tests covering gate acceptance, rejection and retry for non-4-letter words, non-dictionary words, profanity, and taken codes, as well as double failure, deadline timeout, provider error, and empty history.
    - `MeaningGame.RoomsTest`: Verifies Scribe word becoming the Code, no model call on empty history, and fallback to random word when Scribe raises, times out, or returns unavailable.
    - `MeaningGame.StewardSmokeTest`: Tagged live smoke test verifying the Scribe names a Room from a real digest once by hand against the provider.
+
+## Comments
+
+Verified on the live deployment:
+1. Scribe naming was deployed to https://thereish.app and actively naming rooms based on player session history.
+2. In production play, Jacob's phone history in Room `KALE` (where Jacob submitted bridge `"rice"`) immediately led to the Scribe naming the subsequent Room `RICE`.
+3. In Room `KALE`, the starting bookend was `"sand dune"`, which directly informed the next Room named `DUNE` created by that phone.
+4. Evaluation of Jacob's couch/dust token (`UtkVsATnMySn08T_CUcjZyw6U1Y3yPoi`) on production confirmed Gemini Flash chosen word `LAVA` (nodding to `dust`'s volcano/lava deep-meld) with quip `"Molten rock cooled into common ground."`.
+5. Creation from devices without history (or incognito sessions such as `ODYL` and `OXEN`) cleanly falls back to random 4-letter ENABLE dictionary words.
