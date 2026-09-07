@@ -1,9 +1,9 @@
-defmodule MeaningGame.FoleyTest do
+defmodule MeaningGame.Steward.FoleyTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
 
-  alias MeaningGame.Foley
+  alias MeaningGame.Steward.Foley
 
   setup do
     original_steward = Application.get_env(:meaning_game, :steward)

@@ -1,8 +1,8 @@
-defmodule MeaningGame.Foley do
+defmodule MeaningGame.Steward.Foley do
   @moduledoc """
-  The machine role that makes what the Room hears — the stings and the house
-  loop, made once and shipped, and the music written for a Page's Gives while
-  it is played.
+  The Foley role behind the Steward: makes what the Room hears — instrumental
+  Tracks scored live for each Page, spoken Verdicts at the reveal, and sound
+  effects for the forge.
   """
 
   require Logger
