@@ -5,7 +5,7 @@ import Config
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
-config :meaning_game, MeaningGame.Repo,
+config :thereish, Thereish.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
@@ -13,7 +13,7 @@ config :meaning_game, MeaningGame.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
 
-# The server runs during test so `MeaningGameWeb.EndpointTest` can prove the
+# The server runs during test so `ThereishWeb.EndpointTest` can prove the
 # endpoint actually boots and serves over a real socket, not just through
 # `Plug.Test`. Every other test still goes through `Phoenix.ConnTest`.
 #
@@ -33,25 +33,25 @@ test_port =
       end
   end
 
-config :meaning_game, MeaningGameWeb.Endpoint,
+config :thereish, ThereishWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: test_port],
   url: [host: "localhost", port: test_port],
   secret_key_base: "GGMqZggnqg1t8Q+zsg6ClM7aAnFwYXJk0/zQFqiGudcO7XNGYHZaGz9qrpv/LDYt",
   server: true
 
 # The couch is promised 2.5 seconds; a test suite is not. Tests that are about
-# the beat itself set their own with `MeaningGame.RoomFixtures.beat/1`.
-config :meaning_game, reveal_beat_ms: 5
+# the beat itself set their own with `Thereish.RoomFixtures.beat/1`.
+config :thereish, reveal_beat_ms: 5
 
 # Suppress missing-key warnings during test suite boots.
-config :meaning_game, boot_warnings: false
+config :thereish, boot_warnings: false
 
 # No test grades against a provider. The suite must never spend money and never
 # depend on somebody's uptime, so the fake is the Assayer here and the handful
 # of tests that actually call somebody (the live smoke test) are tagged
 # `:live` and excluded from the default run.
-config :meaning_game, :steward,
-  adapter: MeaningGame.Steward.Fake,
+config :thereish, :steward,
+  adapter: Thereish.Steward.Fake,
   roles: [
     assayer: [timeout_ms: 1_000, deadline_ms: 2_000, api_key: "recorded-responses-need-no-key"],
     author: [timeout_ms: 2_000, deadline_ms: 5_000, api_key: "recorded-responses-need-no-key"],
@@ -79,19 +79,19 @@ config :meaning_game, :steward,
         ],
         ear: [timeout_ms: 1_000, api_key: "recorded-responses-need-no-key"],
         voice: [
-          provider: MeaningGame.Steward.Hume,
+          provider: Thereish.Steward.Hume,
           voice_id: "44cb3a51-07b4-4934-83fd-9d9e8d363ce6",
           timeout_ms: 3_000
         ]
       ]
     ]
   ],
-  http_options: [plug: {Req.Test, MeaningGame.Steward.Gemini}]
+  http_options: [plug: {Req.Test, Thereish.Steward.Gemini}]
 
 # The escalation ladder, in test time. The shape is what matters — activity,
 # then no verdict — and the shape is the same at a fortieth of the wall clock.
-config :meaning_game, assayer_escalation_ms: [slow: 100, unavailable: 250]
-config :meaning_game, author_escalation_ms: [still_writing: 100, deadline: 250]
+config :thereish, assayer_escalation_ms: [slow: 100, unavailable: 250]
+config :thereish, author_escalation_ms: [still_writing: 100, deadline: 250]
 
 # Print only warnings and errors during test
 config :logger, level: :warning
@@ -99,9 +99,9 @@ config :logger, level: :warning
 # Disable swoosh api client as it is not needed for tests
 config :swoosh, :api_client, false
 
-config :meaning_game, MeaningGame.Mailer, adapter: Swoosh.Adapters.Test
+config :thereish, Thereish.Mailer, adapter: Swoosh.Adapters.Test
 
-config :meaning_game, :notice,
+config :thereish, :notice,
   to: "operator@example.com",
   from: "notice@thereish.app"
 

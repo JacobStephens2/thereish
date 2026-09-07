@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateTheExperiments do
+defmodule Thereish.Repo.Migrations.CreateTheExperiments do
   use Ecto.Migration
 
   # Every Page is an experiment, starting with Bait against plain (ADR-0004, ticket 13).

@@ -72,7 +72,7 @@ defmodule Mix.Tasks.Foley.Bakeoff do
       :rand.seed(:exsss, {seed, seed, seed})
     end
 
-    quips = MeaningGame.Chronicle.recent_quips(room, count)
+    quips = Thereish.Chronicle.recent_quips(room, count)
 
     if quips == [] do
       Mix.raise("No quips found in Chronicle for room #{inspect(room)}.")
@@ -84,13 +84,13 @@ defmodule Mix.Tasks.Foley.Bakeoff do
     candidates = [
       %{
         provider: "ElevenLabs",
-        provider_module: MeaningGame.Steward.ElevenLabs,
+        provider_module: Thereish.Steward.ElevenLabs,
         voice_id: eleven_voice,
         voice_name: "George"
       },
       %{
         provider: "Hume",
-        provider_module: MeaningGame.Steward.Hume,
+        provider_module: Thereish.Steward.Hume,
         voice_id: hume_voice,
         voice_name: "Dungeon Master"
       }
@@ -184,7 +184,7 @@ defmodule Mix.Tasks.Foley.Bakeoff do
   end
 
   defp speak!(quip, provider_module, voice_id) do
-    case MeaningGame.Steward.speak(quip, provider: provider_module, voice_id: voice_id) do
+    case Thereish.Steward.speak(quip, provider: provider_module, voice_id: voice_id) do
       {:ok, %{audio: audio}} when is_binary(audio) ->
         audio
 

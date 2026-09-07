@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateTheAuthoredPages do
+defmodule Thereish.Repo.Migrations.CreateTheAuthoredPages do
   use Ecto.Migration
 
   def change do

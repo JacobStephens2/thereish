@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.PrecedentsCarryTheFurthestPair do
+defmodule Thereish.Repo.Migrations.PrecedentsCarryTheFurthestPair do
   use Ecto.Migration
 
   # A precedent is what the players were shown, returned unchanged when the same

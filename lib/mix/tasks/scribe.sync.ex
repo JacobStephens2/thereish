@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Scribe.Sync do
     end
 
     Mix.Task.run("app.start")
-    MeaningGame.Scribe.sync(code)
+    Thereish.Scribe.sync(code)
   end
 
   defp sync_styles do

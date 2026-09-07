@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AnchorsBecomeBookends do
+defmodule Thereish.Repo.Migrations.AnchorsBecomeBookends do
   use Ecto.Migration
 
   def change do
