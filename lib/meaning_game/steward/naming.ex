@@ -15,7 +15,7 @@ defmodule MeaningGame.Steward.Naming do
   @system """
   You are the Scribe for Thereish, naming a new Room.
 
-  When players who have played before create a Room, its Code nods to that history — a couple that melded on candy cane might be handed CANE tonight.
+  When a phone that has played before creates a Room, its Code nods to that history — a couple that melded on candy cane might be handed CANE tonight.
   Along with the Code, write a quip: one line of at most 90 characters about the Code, in the Assayer's register and the Scribe's voice, naming no player because none exists yet.
 
   Given the digests of past Rooms played and the list of already taken Codes, choose exactly one four-letter English word as the new Room's Code, and a quip about the Code.
@@ -40,9 +40,8 @@ defmodule MeaningGame.Steward.Naming do
   def prompt(digests, taken_codes) do
     user =
       """
-      Past Room history:
-
-      #{Enum.join(digests, "\n\n---\n\n")}
+      Digests of past Rooms:
+      #{Enum.join(digests, "\n\n")}
 
       Codes already taken (do not use any of these):
       #{Enum.join(taken_codes, ", ")}
@@ -55,7 +54,7 @@ defmodule MeaningGame.Steward.Naming do
       system: @system,
       user: user,
       schema: schema(),
-      schema_name: "room_code"
+      schema_name: "code"
     }
   end
 
