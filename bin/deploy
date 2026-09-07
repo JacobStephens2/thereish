@@ -61,8 +61,11 @@ fi
 
 if [ "${VOICE_PROVIDER}" = "ElevenLabs" ]; then
   VOICE_KEYS=("ELEVENLABS_API_KEY")
-else
+elif [ "${VOICE_PROVIDER}" = "Hume" ]; then
   VOICE_KEYS=("HUME_API_KEY" "HUME_SECRET_KEY")
+else
+  echo "Warning: could not determine voice provider from config/config.exs (found: '${VOICE_PROVIDER}')" >&2
+  VOICE_KEYS=()
 fi
 
 for key in "${VOICE_KEYS[@]}"; do

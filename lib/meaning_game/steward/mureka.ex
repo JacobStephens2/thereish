@@ -31,17 +31,6 @@ defmodule MeaningGame.Steward.Mureka do
           cost_usd: float()
         }
 
-  @doc """
-  Returns the names of any missing API keys required by Mureka.
-  """
-  @spec missing_keys(keyword() | map()) :: [String.t()]
-  def missing_keys(opts \\ %{}) do
-    case fetch_api_key(opts) do
-      {:ok, _} -> []
-      :error -> ["MUREKA_API_KEY"]
-    end
-  end
-
   @spec generate(request() | keyword() | map()) :: {:ok, response()} | {:error, term()}
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
 
@@ -180,20 +169,13 @@ defmodule MeaningGame.Steward.Mureka do
   end
 
   defp api_key(request) do
-    case fetch_api_key(request) do
-      {:ok, key} ->
+    case Map.get(request, :api_key) || Map.get(request, "api_key") do
+      key when is_binary(key) and key != "" ->
         {:ok, key}
 
-      :error ->
+      _ ->
         Logger.error("MUREKA_API_KEY is not set; Foley cannot generate music")
         {:error, :no_api_key}
-    end
-  end
-
-  defp fetch_api_key(request) do
-    case Map.get(request, :api_key) || Map.get(request, "api_key") do
-      key when is_binary(key) and key != "" -> {:ok, key}
-      _ -> :error
     end
   end
 end

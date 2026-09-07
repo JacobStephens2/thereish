@@ -15,20 +15,6 @@ defmodule MeaningGame.Steward.Hume do
   @default_voice_id "44cb3a51-07b4-4934-83fd-9d9e8d363ce6"
 
   @doc """
-  Returns the names of any missing API keys required by Hume.
-  """
-  @spec missing_keys(keyword() | map()) :: [String.t()]
-  def missing_keys(opts \\ []) do
-    opts = if is_map(opts), do: Map.to_list(opts), else: opts
-
-    [
-      if(match?({:error, _}, api_key(opts)), do: "HUME_API_KEY"),
-      if(match?({:error, _}, secret_key(opts)), do: "HUME_SECRET_KEY")
-    ]
-    |> Enum.reject(&is_nil/1)
-  end
-
-  @doc """
   Synthesizes speech for one line of text via Hume TTS API.
   """
   @spec speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
