@@ -1323,6 +1323,17 @@ defmodule MeaningGame.Chronicle do
   def digest(room_id_or_slug), do: compose_digest(page_views(room_id_or_slug, :asc), false, nil)
 
   @doc """
+  The digest of a Room for naming, or `nil` if no Pages have been played yet.
+  """
+  @spec history_digest(Ecto.UUID.t() | String.t()) :: String.t() | nil
+  def history_digest(room_id_or_slug) do
+    case page_views(room_id_or_slug, :asc) do
+      [] -> nil
+      views -> compose_digest(views, false, nil)
+    end
+  end
+
+  @doc """
   The same digest, with every recap the Scribe has already written folded in.
 
   Only the Scribe reads this one. A callback is a line that remembers an earlier

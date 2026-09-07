@@ -74,12 +74,12 @@ defmodule MeaningGame.Rooms do
   end
 
   @spec create(String.t() | nil, keyword()) :: {:ok, String.t()} | {:error, term()}
-  @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
   def create(device_token, opts)
       when (is_binary(device_token) or is_nil(device_token)) and is_list(opts) do
     create(MeaningGame.Steward.seat_cap(), device_token, opts)
   end
 
+  @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
   def create(seat_count, device_token) when is_integer(seat_count) do
     create(seat_count, device_token, [])
   end
@@ -121,8 +121,8 @@ defmodule MeaningGame.Rooms do
   defp digests_for_rooms(rooms) do
     rooms
     |> Enum.uniq_by(fn %{room: room} -> room.id end)
-    |> Enum.map(fn %{room: room} -> Chronicle.digest(room.id) end)
-    |> Enum.reject(&String.starts_with?(&1, "Nothing yet"))
+    |> Enum.map(fn %{room: room} -> Chronicle.history_digest(room.id) end)
+    |> Enum.reject(&is_nil/1)
   end
 
   defp name_with_scribe_or_fallback(seat_count, digests) do
@@ -199,13 +199,17 @@ defmodule MeaningGame.Rooms do
     end
   end
 
-  defp insert_and_start(code, player_count, quip) do
-    case Store.insert_room(code, player_count, quip) do
-      {:ok, room} ->
-        with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
+  defp insert_and_start(code, seat_count, quip) do
+    with normalized when is_binary(normalized) <- Code.normalise(code),
+         {:ok, room} <- Store.insert_room(normalized, seat_count, quip) do
+      case start_room(room.slug) do
+        {:ok, _pid} ->
+          {:ok, room.slug}
 
-      error ->
-        error
+        error ->
+          MeaningGame.Repo.delete(room)
+          error
+      end
     end
   end
 
