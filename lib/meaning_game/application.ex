@@ -34,6 +34,10 @@ defmodule MeaningGame.Application do
       # everyone has stood up. Nothing should have to wait on one to know about
       # the other.
       {Task.Supervisor, name: MeaningGame.Scribe.Tasks},
+      # Notice tasks run under their own supervisor so room creation never
+      # blocks or fails on mail delivery.
+      {Task.Supervisor, name: MeaningGame.Notice.Tasks},
+      MeaningGame.Rooms.RateLimit,
       # Start to serve requests, typically the last entry
       MeaningGameWeb.Endpoint
     ]
@@ -41,7 +45,15 @@ defmodule MeaningGame.Application do
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: MeaningGame.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    case Supervisor.start_link(children, opts) do
+      {:ok, pid} ->
+        MeaningGame.Notice.warn_at_boot()
+        {:ok, pid}
+
+      error ->
+        error
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

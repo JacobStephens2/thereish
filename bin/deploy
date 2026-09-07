@@ -38,6 +38,11 @@ MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^ANTHROPIC_API_KEY=.' ${APP_DIR}/.env || echo 'ANTHROPIC_API_KEY'
   grep -q '^UMAMI_SCRIPT_URL=.' ${APP_DIR}/.env || echo 'UMAMI_SCRIPT_URL'
   grep -q '^UMAMI_WEBSITE_ID=.' ${APP_DIR}/.env || echo 'UMAMI_WEBSITE_ID'
+  grep -q '^AWS_ACCESS_KEY_ID=.' ${APP_DIR}/.env || echo 'AWS_ACCESS_KEY_ID'
+  grep -q '^AWS_SECRET_ACCESS_KEY=.' ${APP_DIR}/.env || echo 'AWS_SECRET_ACCESS_KEY'
+  grep -q '^AWS_REGION=.' ${APP_DIR}/.env || echo 'AWS_REGION'
+  grep -q '^NOTICE_TO=.' ${APP_DIR}/.env || echo 'NOTICE_TO'
+  grep -q '^NOTICE_FROM=.' ${APP_DIR}/.env || echo 'NOTICE_FROM'
 ")
 
 if echo "${MISSING_KEYS}" | grep -q 'GEMINI_API_KEY'; then
@@ -60,6 +65,12 @@ elif echo "${MISSING_KEYS}" | grep -q 'UMAMI_WEBSITE_ID'; then
   echo "Note: no UMAMI_WEBSITE_ID in ${APP_DIR}/.env — Umami will count nothing."
   echo "      See docs/deploy.md, \"Umami\"."
 fi
+
+for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION NOTICE_TO NOTICE_FROM; do
+  if echo "${MISSING_KEYS}" | grep -q "${key}"; then
+    echo "Note: no ${key} in ${APP_DIR}/.env — notices for new Rooms will not be sent."
+  fi
+done
 
 echo "== Deploying ${LOCAL_HEAD:0:7} to ${HOST}"
 ssh "${SERVER}" bash -s <<REMOTE

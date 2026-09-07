@@ -93,7 +93,7 @@ What the Assayer says about one Attempt's Bridges, read together: a Closeness, t
 _Avoid_: result, judgement, ruling (the players rule; the Assayer only grades)
 
 **Quip**:
-The Assayer's one line of comedy at the reveal, written about the Bridges the players actually wrote. It rides on the Verdict beside the reasoning and is not the grade's justification — it is what makes the graded number a punchline rather than a ruling.
+The Assayer's one line of comedy at the reveal, written about the Bridges the players actually wrote. It rides on the Verdict beside the reasoning and is not the grade's justification — it is what makes the graded number a punchline rather than a ruling. Also the Scribe's one line about the Room's Code, shown beneath the Code on the Code card, in the Stage's header beside the join line, and under each rejoin link on the front page.
 _Avoid_: joke (on its own), flavour text, band script (the Author's prewritten fallback), roast
 
 **Phase**:

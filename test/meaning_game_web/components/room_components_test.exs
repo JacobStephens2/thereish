@@ -1,6 +1,7 @@
 defmodule MeaningGameWeb.RoomComponentsTest do
   use MeaningGameWeb.ConnCase, async: true
 
+  import Phoenix.Component
   import Phoenix.LiveViewTest
   import MeaningGameWeb.RoomComponents
 
@@ -420,23 +421,52 @@ defmodule MeaningGameWeb.RoomComponentsTest do
   end
 
   describe "foley components" do
-    test "foley_switches render only when holding the speaker" do
-      room_with_speaker = %{speaker?: true, voice: true, house_loop_only: false}
+    test "foley_switches renders voice switch and three-way music control on any view" do
+      room_with_speaker = %{speaker?: true, voice: true, music: "page"}
       html = render_component(&foley_switches/1, room: room_with_speaker)
       assert html =~ ~s(data-role="voice-switch")
-      assert html =~ ~s(data-role="house-loop-switch")
+      assert html =~ ~s(data-role="music-control")
       assert html =~ "Voice"
-      assert html =~ "House loop only"
+      assert html =~ "Off"
+      assert html =~ "House loop"
+      assert html =~ "Written for this Page"
 
-      room_without_speaker = %{speaker?: false, voice: true, house_loop_only: false}
-      assert render_component(&foley_switches/1, room: room_without_speaker) == ""
+      # Also renders on a room without speaker
+      room_without_speaker = %{speaker?: false, voice: false, music: "off"}
+      html_without = render_component(&foley_switches/1, room: room_without_speaker)
+      assert html_without =~ ~s(data-role="voice-switch")
+      assert html_without =~ ~s(data-role="music-control")
+      assert html_without =~ "Off"
+      assert html_without =~ "House loop"
+      assert html_without =~ "Written for this Page"
     end
 
-    test "foley_hook renders hook container for colocated Foley hook" do
+    test "foley_hook renders hook container for colocated Foley hook with configured levels" do
+      configured = MeaningGame.Steward.foley_levels()
+      assert is_list(configured) and length(configured) > 0
+
       html = render_component(&foley_hook/1, speaker: true)
       assert html =~ ~s(id="foley-container")
       assert html =~ ~s(phx-hook="MeaningGameWeb.RoomComponents.Foley")
       assert html =~ ~s(data-speaker="true")
+      assert html =~ ~s(data-level-music="#{configured[:music]}")
+      assert html =~ ~s(data-level-stings="#{configured[:stings]}")
+      assert html =~ ~s(data-level-voice="#{configured[:voice]}")
+      assert html =~ ~s(data-level-duck="#{configured[:duck]}")
+
+      # Redundant non-level prefixed attributes are not rendered
+      refute html =~ ~s(data-music=)
+      refute html =~ ~s(data-stings=)
+      refute html =~ ~s(data-voice=)
+      refute html =~ ~s(data-duck=)
+
+      # Custom levels passed explicitly override configured ones
+      custom_levels = [music: 0.8, stings: 1.5, voice: 1.0, duck: 0.2]
+      custom_html = render_component(&foley_hook/1, speaker: true, levels: custom_levels)
+      assert custom_html =~ ~s(data-level-music="0.8")
+      assert custom_html =~ ~s(data-level-stings="1.5")
+      assert custom_html =~ ~s(data-level-voice="1.0")
+      assert custom_html =~ ~s(data-level-duck="0.2")
     end
   end
 
@@ -604,6 +634,39 @@ defmodule MeaningGameWeb.RoomComponentsTest do
 
       assert opponent_html =~
                "proposed an overrule for their Side. Waiting for their partner to agree."
+    end
+  end
+
+  describe "bookends component" do
+    test "renders a 'Bookends' caption over the Bookends in the caption style" do
+      room = %{
+        bookends: ["lantern", "harbour"]
+      }
+
+      html = render_component(&bookends/1, room: room)
+
+      assert html =~ "Bookends"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "lantern"
+      assert html =~ "harbour"
+    end
+  end
+
+  describe "caption component" do
+    test "renders slot content with shared caption styling" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.caption data-role="test-caption" class="custom-class">
+          Test Caption Content
+        </.caption>
+        """)
+
+      assert html =~ "Test Caption Content"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "custom-class"
+      assert html =~ ~s(data-role="test-caption")
     end
   end
 end

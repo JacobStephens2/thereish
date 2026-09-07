@@ -52,8 +52,8 @@ defmodule MeaningGameWeb.StageLive do
     {:noreply, resync(socket)}
   end
 
-  def handle_event("toggle_house_loop_only", _params, socket) do
-    Rooms.set_house_loop_only(socket.assigns.slug, !socket.assigns.room.house_loop_only)
+  def handle_event("set_music", %{"music" => music}, socket) do
+    Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}
   end
 
@@ -120,6 +120,7 @@ defmodule MeaningGameWeb.StageLive do
         </div>
         <p class="text-xl opacity-70">
           Join at <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
+          <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
         </p>
       </header>
 

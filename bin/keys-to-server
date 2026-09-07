@@ -208,19 +208,24 @@ SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "${SERVER}")
 # Every key the release reads that deploy/provision.sh cannot generate, in
 # display order. Bash 3.2 on a stock Mac has no associative arrays, hence the
 # case statement rather than a map.
-KEYS=(GEMINI_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY MUREKA_API_KEY HUME_API_KEY HUME_SECRET_KEY ELEVENLABS_API_KEY UMAMI_SCRIPT_URL UMAMI_WEBSITE_ID)
+KEYS=(GEMINI_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY MUREKA_API_KEY HUME_API_KEY HUME_SECRET_KEY ELEVENLABS_API_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION NOTICE_TO NOTICE_FROM UMAMI_SCRIPT_URL UMAMI_WEBSITE_ID)
 
 buys() {
   case "$1" in
-    GEMINI_API_KEY)     echo "the Assayer's verdicts, the Author's Flash arm, the Scribe's naming, Foley's ear" ;;
-    ANTHROPIC_API_KEY)  echo "the Scribe's recaps" ;;
-    OPENAI_API_KEY)     echo "the Author's Astra arm of the author_model experiment" ;;
-    MUREKA_API_KEY)     echo "a Track for every Page (without it: the house loop only)" ;;
-    HUME_API_KEY)       echo "the Assayer's voice (Hume Octave 2, the bake-off winner)" ;;
-    HUME_SECRET_KEY)    echo "the Assayer's voice (Hume needs both keys)" ;;
-    ELEVENLABS_API_KEY) echo "the alternative voice, and the forge's effects" ;;
-    UMAMI_SCRIPT_URL)   echo "page view counting in Umami (the script URL; needs UMAMI_WEBSITE_ID too)" ;;
-    UMAMI_WEBSITE_ID)   echo "page view counting in Umami (the website id from the dashboard)" ;;
+    GEMINI_API_KEY)        echo "the Assayer's verdicts, the Author's Flash arm, the Scribe's naming, Foley's ear" ;;
+    ANTHROPIC_API_KEY)     echo "the Scribe's recaps" ;;
+    OPENAI_API_KEY)        echo "the Author's Astra arm of the author_model experiment" ;;
+    MUREKA_API_KEY)        echo "a Track for every Page (without it: the house loop only)" ;;
+    HUME_API_KEY)          echo "the Assayer's voice (Hume Octave 2, the bake-off winner)" ;;
+    HUME_SECRET_KEY)       echo "the Assayer's voice (Hume needs both keys)" ;;
+    ELEVENLABS_API_KEY)    echo "the alternative voice, and the forge's effects" ;;
+    AWS_ACCESS_KEY_ID)     echo "the notice when a new device creates a Room (Amazon SES)" ;;
+    AWS_SECRET_ACCESS_KEY) echo "the notice when a new device creates a Room (Amazon SES)" ;;
+    AWS_REGION)            echo "the AWS region for Amazon SES (us-east-1)" ;;
+    NOTICE_TO)             echo "the recipient of the new-Room notice (operator's address)" ;;
+    NOTICE_FROM)           echo "the sender of the new-Room notice (at thereish.app)" ;;
+    UMAMI_SCRIPT_URL)      echo "page view counting in Umami (the script URL; needs UMAMI_WEBSITE_ID too)" ;;
+    UMAMI_WEBSITE_ID)      echo "page view counting in Umami (the website id from the dashboard)" ;;
   esac
 }
 

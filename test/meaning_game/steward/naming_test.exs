@@ -18,8 +18,9 @@ defmodule MeaningGame.Steward.NamingTest do
     """
   ]
 
-  defp naming_response(word) do
-    response(Jason.encode!(%{"word" => word}))
+  defp naming_response(word, quip \\ nil) do
+    data = if quip, do: %{"word" => word, "quip" => quip}, else: %{"word" => word}
+    response(Jason.encode!(data))
   end
 
   defp live_naming(role_opts \\ []) do
@@ -43,12 +44,30 @@ defmodule MeaningGame.Steward.NamingTest do
       :ok
     end
 
-    test "a word the gate accepts comes back lowercase" do
+    test "a word the gate accepts comes back lowercase with quip" do
       recorded(fn conn, _body ->
-        Req.Test.json(conn, naming_response("CANE"))
+        Req.Test.json(conn, naming_response("CANE", "A nod to candy cane."))
       end)
 
-      assert {:ok, "cane"} = Live.name_room(@digests, ["couch"])
+      assert {:ok, %{word: "cane", quip: "A nod to candy cane."}} =
+               Live.name_room(@digests, ["couch"])
+    end
+
+    test "the gate drops a 91-character quip in live naming without failing the word" do
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, naming_response("CANE", String.duplicate("a", 91)))
+      end)
+
+      assert {:ok, %{word: "cane", quip: nil}} = Live.name_room(@digests, ["couch"])
+    end
+
+    test "quip_code asks for a quip for a random word" do
+      recorded(fn conn, body ->
+        assert Enum.any?(body["messages"], fn m -> m["content"] =~ "CANE" end)
+        Req.Test.json(conn, quip_response("A sweet four-letter room."))
+      end)
+
+      assert {:ok, "A sweet four-letter room."} = Live.quip_code("cane")
     end
 
     test "the gate rejects a word that is not four letters and retries once" do
@@ -68,7 +87,7 @@ defmodule MeaningGame.Steward.NamingTest do
         end
       end)
 
-      assert {:ok, "cane"} = Live.name_room(@digests, ["couch"])
+      assert {:ok, %{word: "cane"}} = Live.name_room(@digests, ["couch"])
       assert Agent.get(counts, &Map.get(&1, :naming)) == 2
     end
 
@@ -88,7 +107,7 @@ defmodule MeaningGame.Steward.NamingTest do
         end
       end)
 
-      assert {:ok, "cane"} = Live.name_room(@digests, ["couch"])
+      assert {:ok, %{word: "cane"}} = Live.name_room(@digests, ["couch"])
       assert Agent.get(counts, &Map.get(&1, :naming)) == 2
     end
 
@@ -107,7 +126,7 @@ defmodule MeaningGame.Steward.NamingTest do
         end
       end)
 
-      assert {:ok, "cane"} = Live.name_room(@digests, ["couch"])
+      assert {:ok, %{word: "cane"}} = Live.name_room(@digests, ["couch"])
       assert Agent.get(counts, &Map.get(&1, :naming)) == 2
     end
 
@@ -127,7 +146,7 @@ defmodule MeaningGame.Steward.NamingTest do
         end
       end)
 
-      assert {:ok, "cane"} = Live.name_room(@digests, ["flak"])
+      assert {:ok, %{word: "cane"}} = Live.name_room(@digests, ["flak"])
       assert Agent.get(counts, &Map.get(&1, :naming)) == 2
     end
 
@@ -169,6 +188,49 @@ defmodule MeaningGame.Steward.NamingTest do
       end)
 
       assert Steward.name_room([], ["couch"]) == {:error, :no_history}
+    end
+
+    test "the naming schema gains quip" do
+      schema = MeaningGame.Steward.Naming.schema()
+      # Schema contains quip property
+      properties = schema.values |> List.keyfind("properties", 0) |> elem(1)
+      assert List.keyfind(properties.values, "quip", 0) != nil
+      assert List.keyfind(schema.values, "required", 0) == {"required", ["word"]}
+
+      prompt = MeaningGame.Steward.Naming.prompt(@digests, ["couch"])
+      assert prompt.system =~ "quip"
+      assert prompt.user =~ "quip"
+    end
+
+    test "the gate accepts a non-empty single line of at most 90 characters" do
+      valid = "A room that remembers yesterday."
+      assert MeaningGame.Steward.Naming.quip(%{"quip" => valid}) == valid
+    end
+
+    test "the gate drops a 91-character quip without failing the word" do
+      long_quip = String.duplicate("a", 91)
+      json = %{"word" => "CANE", "quip" => long_quip}
+
+      assert MeaningGame.Steward.Naming.check(json, ["couch"]) == :ok
+      assert MeaningGame.Steward.Naming.quip(json) == nil
+    end
+
+    test "the gate drops a quip with a newline without failing the word" do
+      newline_quip = "Line one\nLine two"
+      json = %{"word" => "CANE", "quip" => newline_quip}
+
+      assert MeaningGame.Steward.Naming.check(json, ["couch"]) == :ok
+      assert MeaningGame.Steward.Naming.quip(json) == nil
+    end
+
+    test "the quip-only request has its own prompt and schema" do
+      prompt = MeaningGame.Steward.Naming.quip_prompt("cane")
+      assert prompt.schema_name == "room_quip"
+      assert prompt.user =~ "CANE"
+
+      schema = MeaningGame.Steward.Naming.quip_schema()
+      properties = schema.values |> List.keyfind("properties", 0) |> elem(1)
+      assert List.keyfind(properties.values, "quip", 0) != nil
     end
   end
 end
