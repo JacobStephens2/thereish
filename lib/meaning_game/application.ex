@@ -5,15 +5,10 @@ defmodule MeaningGame.Application do
 
   use Application
 
-  require Logger
-
   @impl true
   def start(_type, _args) do
     MeaningGame.Steward.warn_missing_foley_keys()
-
-    if Application.get_env(:meaning_game, :boot_warnings, true) do
-      warn_missing_keys()
-    end
+    MeaningGame.Umami.warn_at_boot()
 
     children = [
       MeaningGameWeb.Telemetry,
@@ -69,28 +64,5 @@ defmodule MeaningGame.Application do
   @doc """
   Logs warnings at boot for missing configuration keys.
   """
-  def warn_missing_keys do
-    config = Application.get_env(:meaning_game, :umami, [])
-    url = Keyword.get(config, :script_url)
-    website_id = Keyword.get(config, :website_id)
-
-    has_url = is_binary(url) and url != ""
-    has_id = is_binary(website_id) and website_id != ""
-
-    cond do
-      has_url and has_id ->
-        :ok
-
-      not has_url and not has_id ->
-        Logger.warning(
-          "UMAMI_SCRIPT_URL and UMAMI_WEBSITE_ID are not set; page views will not be counted"
-        )
-
-      not has_url ->
-        Logger.warning("UMAMI_SCRIPT_URL is not set; page views will not be counted")
-
-      not has_id ->
-        Logger.warning("UMAMI_WEBSITE_ID is not set; page views will not be counted")
-    end
-  end
+  defdelegate warn_missing_keys, to: MeaningGame.Umami
 end
