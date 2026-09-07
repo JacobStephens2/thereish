@@ -194,12 +194,15 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
 
       for view <- [ctx.mara, ctx.jacob, stage] do
+        assert has_element?(view, "[data-role=bookends-caption]", "Bookends")
         assert has_element?(view, "[data-role=bookends]", "lantern")
         assert has_element?(view, "[data-role=bookends]", "harbour")
       end
     end
 
     test "an illegal bridge is caught on the phone before commit and on commit", ctx do
+      assert has_element?(ctx.mara, "label", "Your bridge")
+
       ctx.mara
       |> form("[data-role=bridge-form]", %{"bridge" => "lanterns"})
       |> render_change()
@@ -222,7 +225,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute has_element?(ctx.mara, "[data-role=your-bridge]")
 
       commit(ctx.mara, "beacon")
-      assert has_element?(ctx.mara, "[data-role=your-bridge]", "beacon")
+      assert has_element?(ctx.mara, "[data-role=your-bridge]", "Your bridge: beacon")
       refute has_element?(ctx.mara, "[data-role=bridge-form]")
     end
 

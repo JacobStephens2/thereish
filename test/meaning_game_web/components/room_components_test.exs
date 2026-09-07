@@ -1,6 +1,7 @@
 defmodule MeaningGameWeb.RoomComponentsTest do
   use MeaningGameWeb.ConnCase, async: true
 
+  import Phoenix.Component
   import Phoenix.LiveViewTest
   import MeaningGameWeb.RoomComponents
 
@@ -604,6 +605,39 @@ defmodule MeaningGameWeb.RoomComponentsTest do
 
       assert opponent_html =~
                "proposed an overrule for their Side. Waiting for their partner to agree."
+    end
+  end
+
+  describe "bookends component" do
+    test "renders a 'Bookends' caption over the Bookends in the caption style" do
+      room = %{
+        bookends: ["lantern", "harbour"]
+      }
+
+      html = render_component(&bookends/1, room: room)
+
+      assert html =~ "Bookends"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "lantern"
+      assert html =~ "harbour"
+    end
+  end
+
+  describe "caption component" do
+    test "renders slot content with shared caption styling" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.caption data-role="test-caption" class="custom-class">
+          Test Caption Content
+        </.caption>
+        """)
+
+      assert html =~ "Test Caption Content"
+      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert html =~ "custom-class"
+      assert html =~ ~s(data-role="test-caption")
     end
   end
 end
