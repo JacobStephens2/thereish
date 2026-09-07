@@ -238,7 +238,11 @@ porkbun_publish_record_idempotent() {
   # Normalize content: strip quotes and trailing dot for hostnames
   content="${content%\"}"
   content="${content#\"}"
-  if [[ "$type" == "CNAME" || "$type" == "MX" ]]; then
+  if [[ "$type" == "CNAME" ]]; then
+    content="${content%.}"
+  elif [[ "$type" == "MX" ]]; then
+    # Strip any leading priority number like "10 feedback-smtp..."
+    content="${content#"${content%%[a-zA-Z]*}"}"
     content="${content%.}"
   fi
 
@@ -503,6 +507,8 @@ MAIL_FROM_TXT="v=spf1 include:amazonses.com ~all"
 say "Read back and confirm custom MAIL FROM records for ${MAIL_FROM_SUBDOMAIN}.${DOMAIN}:"
 ask MAIL_FROM_MX "MAIL FROM MX destination [default ${MAIL_FROM_MX}]:"
 MAIL_FROM_MX="${MAIL_FROM_MX:-feedback-smtp.${AWS_REGION}.amazonses.com}"
+MAIL_FROM_MX="${MAIL_FROM_MX#"${MAIL_FROM_MX%%[a-zA-Z]*}"}"
+MAIL_FROM_MX="${MAIL_FROM_MX%.}"
 ask MAIL_FROM_TXT "MAIL FROM TXT (SPF) [default ${MAIL_FROM_TXT}]:"
 MAIL_FROM_TXT="${MAIL_FROM_TXT:-v=spf1 include:amazonses.com ~all}"
 
