@@ -371,6 +371,7 @@ defmodule MeaningGame.Rooms.Server do
       |> Map.put(:speaker_claimed?, speaker_claimed?)
       |> Map.put(:voice, state.room.voice)
       |> Map.put(:music, state.room.music)
+      |> Map.put(:quip, state.room.quip)
       |> Map.put(:track, if(state.room.music == "page", do: state[:current_track], else: nil))
       |> Map.put(:music_meta, state[:music_meta])
 

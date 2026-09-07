@@ -15,6 +15,11 @@ defmodule MeaningGame.RoomsTest do
   alias MeaningGame.Rooms.Server
   alias MeaningGame.Rooms.Store
 
+  setup do
+    MeaningGame.Rooms.RateLimit.reset()
+    :ok
+  end
+
   describe "joining by name" do
     test "two players join a Room and both appear in the roster" do
       slug = open_room()
@@ -701,21 +706,78 @@ defmodule MeaningGame.RoomsTest do
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
       await_reveal(slug)
 
-      steward(name_word: "fork")
+      steward(name_word: "fork", name_quip: "Fork in the road.")
 
       assert {:ok, "fork"} = Rooms.create(2, token)
+      assert Rooms.snapshot("fork", nil).quip == "Fork in the road."
       stop_room("fork")
       stop_room(slug)
     end
 
-    test "a phone with no history makes no model call and draws a random word" do
+    test "a phone with no history draws a random word and asks for a quip" do
       token = device_token()
-      # Even if the Scribe would raise, a phone with no history makes no call
-      steward(name_mode: :raise)
+      steward(quip_text: "A freshly minted room.")
 
       assert {:ok, code} = Rooms.create(2, token)
       assert String.length(code) == 4
+      assert Rooms.snapshot(code, nil).quip == "A freshly minted room."
       stop_room(code)
+    end
+
+    test "a phone with no history succeeds when quip is slow, raises, or unavailable" do
+      token1 = device_token()
+      steward(quip_mode: :raise)
+      assert {:ok, code1} = Rooms.create(2, token1)
+      assert Rooms.snapshot(code1, nil).quip == nil
+      stop_room(code1)
+
+      token2 = device_token()
+      steward(quip_mode: :unavailable)
+      assert {:ok, code2} = Rooms.create(2, token2)
+      assert Rooms.snapshot(code2, nil).quip == nil
+      stop_room(code2)
+
+      token3 = device_token()
+      steward(quip_delay_ms: 1_500)
+      assert {:ok, code3} = Rooms.create(2, token3)
+      assert Rooms.snapshot(code3, nil).quip == nil
+      stop_room(code3)
+    end
+
+    test "creation is rate limited per device token and per remote address" do
+      prev_config = Application.get_env(:meaning_game, :room_creation_rate_limit)
+
+      Application.put_env(:meaning_game, :room_creation_rate_limit,
+        per_device: 2,
+        per_address: 3,
+        window_seconds: 3600
+      )
+
+      on_exit(fn ->
+        if prev_config,
+          do: Application.put_env(:meaning_game, :room_creation_rate_limit, prev_config),
+          else: Application.delete_env(:meaning_game, :room_creation_rate_limit)
+
+        MeaningGame.Rooms.RateLimit.reset()
+      end)
+
+      token = device_token()
+      ip = "192.168.1.50"
+
+      assert {:ok, code1} = Rooms.create(2, token, address: ip)
+      stop_room(code1)
+
+      # 2nd creation with this token is refused (per_device is 2)
+      assert {:error, :rate_limited} = Rooms.create(2, token, address: ip)
+
+      # Different token, same IP: 2nd creation on this IP is allowed (since per_address is 3)
+      token2 = device_token()
+      assert {:ok, code2} = Rooms.create(2, token2, address: ip)
+      stop_room(code2)
+
+      # 3rd creation on this IP is refused (per_address is 3)
+      token3 = device_token()
+      assert {:error, :rate_limited} = Rooms.create(2, token3, address: ip)
     end
 
     test "a Scribe that raises or answers nothing valid falls back to a random word" do
@@ -1436,7 +1498,10 @@ defmodule MeaningGame.RoomsTest do
       assert File.exists?(expand_file)
       assert File.exists?(contract_file)
       assert File.read!(expand_file) =~ "add :music"
-      assert File.read!(expand_file) =~ "UPDATE rooms SET music = 'house' WHERE house_loop_only = true"
+
+      assert File.read!(expand_file) =~
+               "UPDATE rooms SET music = 'house' WHERE house_loop_only = true"
+
       assert File.read!(contract_file) =~ "remove :house_loop_only"
 
       # Verify the expand-and-contract migration pair on a table with the pre-migration shape

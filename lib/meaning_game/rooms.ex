@@ -22,6 +22,7 @@ defmodule MeaningGame.Rooms do
   alias MeaningGame.Chronicle
   alias MeaningGame.Rooms.Code
   alias MeaningGame.Rooms.NoSuchRoomError
+  alias MeaningGame.Rooms.RateLimit
   alias MeaningGame.Rooms.Room
   alias MeaningGame.Rooms.Seat
   alias MeaningGame.Rooms.Server
@@ -68,47 +69,54 @@ defmodule MeaningGame.Rooms do
   Opens a new count-free Room at the seat cap and returns its Code.
   """
   @spec create(String.t() | nil) :: {:ok, String.t()} | {:error, term()}
-  def create(device_token), do: create(MeaningGame.Steward.seat_cap(), device_token)
+  def create(device_token) when is_binary(device_token) or is_nil(device_token) do
+    create(MeaningGame.Steward.seat_cap(), device_token, [])
+  end
 
-  @doc """
-  Opens a new Room of `player_count` Seats and returns its Code.
-
-  Rooms are created, never conjured. Nothing else in this interface brings one
-  into being: every other call finds a Room that somebody made here, which is
-  why a mistyped Code is a 404 rather than an empty Room nobody meant.
-
-  `device_token` is the creating phone's, which is what the Scribe will read to
-  name the Room after the Rooms that phone has played in. A phone with no
-  history draws a random word.
-  """
+  @spec create(String.t() | nil, keyword()) :: {:ok, String.t()} | {:error, term()}
   @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
-  def create(player_count, device_token)
+  def create(device_token, opts)
+      when (is_binary(device_token) or is_nil(device_token)) and is_list(opts) do
+    create(MeaningGame.Steward.seat_cap(), device_token, opts)
+  end
 
-  def create(player_count, device_token) when is_integer(player_count) do
-    if player_count in seat_counts() do
-      device_rooms =
-        if is_binary(device_token), do: Store.rooms_for_device(device_token), else: []
+  def create(seat_count, device_token) when is_integer(seat_count) do
+    create(seat_count, device_token, [])
+  end
 
-      case digests_for_rooms(device_rooms) do
-        [] ->
-          # No history: makes no model call and draws a random word
-          with {:ok, code} <- insert_with_a_free_code(player_count, @code_draws) do
-            if is_binary(device_token) and device_rooms == [] do
-              MeaningGame.Notice.notify_new_room(code, player_count)
+  def create(_seat_count, _device_token), do: {:error, :bad_player_count}
+
+  @spec create(pos_integer(), String.t() | nil, keyword()) :: {:ok, String.t()} | {:error, term()}
+  def create(seat_count, device_token, opts)
+      when is_integer(seat_count) and is_list(opts) do
+    if seat_count in seat_counts() do
+      address = Keyword.get(opts, :address)
+
+      with :ok <- RateLimit.hit(device_token, address) do
+        device_rooms =
+          if is_binary(device_token), do: Store.rooms_for_device(device_token), else: []
+
+        case digests_for_rooms(device_rooms) do
+          [] ->
+            # No history: draws a random word and makes one quip-only request under naming deadline
+            with {:ok, code} <- create_without_history(seat_count) do
+              if is_binary(device_token) and device_rooms == [] do
+                MeaningGame.Notice.notify_new_room(code, seat_count)
+              end
+
+              {:ok, code}
             end
 
-            {:ok, code}
-          end
-
-        digests ->
-          name_with_scribe_or_fallback(player_count, digests)
+          digests ->
+            name_with_scribe_or_fallback(seat_count, digests)
+        end
       end
     else
       {:error, :bad_player_count}
     end
   end
 
-  def create(_player_count, _device_token), do: {:error, :bad_player_count}
+  def create(_seat_count, _device_token, _opts), do: {:error, :bad_player_count}
 
   defp digests_for_rooms(rooms) do
     rooms
@@ -117,18 +125,57 @@ defmodule MeaningGame.Rooms do
     |> Enum.reject(&String.starts_with?(&1, "Nothing yet"))
   end
 
-  defp name_with_scribe_or_fallback(player_count, digests) do
+  defp name_with_scribe_or_fallback(seat_count, digests) do
     taken = Store.taken_codes()
 
     case Steward.name_room(digests, taken) do
-      {:ok, code} when is_binary(code) ->
-        case insert_and_start(code, player_count) do
+      {:ok, %{word: code, quip: quip}} when is_binary(code) ->
+        case insert_and_start(code, seat_count, quip) do
           {:ok, slug} -> {:ok, slug}
-          {:error, _changeset} -> insert_with_a_free_code(player_count, @code_draws)
+          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
+        end
+
+      {:ok, code} when is_binary(code) ->
+        case insert_and_start(code, seat_count, nil) do
+          {:ok, slug} -> {:ok, slug}
+          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
         end
 
       _ ->
-        insert_with_a_free_code(player_count, @code_draws)
+        insert_with_a_free_code(seat_count, @code_draws)
+    end
+  end
+
+  # A drawn word with no history makes one quip-only request under the naming deadline
+  defp create_without_history(seat_count) do
+    case draw_untaken_code(@code_draws) do
+      {:ok, code} ->
+        quip =
+          case Steward.quip_code(code) do
+            {:ok, q} when is_binary(q) -> q
+            _ -> nil
+          end
+
+        case insert_and_start(code, seat_count, quip) do
+          {:ok, slug} -> {:ok, slug}
+          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
+        end
+
+      {:error, :no_free_code} ->
+        {:error, :no_free_code}
+    end
+  end
+
+  defp draw_untaken_code(0), do: {:error, :no_free_code}
+
+  defp draw_untaken_code(draws_left) do
+    code = Code.draw()
+    taken = Store.taken_codes()
+
+    if code in taken do
+      draw_untaken_code(draws_left - 1)
+    else
+      {:ok, code}
     end
   end
 
@@ -136,24 +183,24 @@ defmodule MeaningGame.Rooms do
   # else is. There are thousands of four-letter words and a household will never
   # crowd them, so a handful of draws is a ceiling that exists only so a bug
   # cannot spin here.
-  defp insert_with_a_free_code(_player_count, 0), do: {:error, :no_free_code}
+  defp insert_with_a_free_code(_seat_count, 0), do: {:error, :no_free_code}
 
-  defp insert_with_a_free_code(player_count, draws_left) do
-    case insert_and_start(Code.draw(), player_count) do
+  defp insert_with_a_free_code(seat_count, draws_left) do
+    case insert_and_start(Code.draw(), seat_count, nil) do
       {:ok, slug} ->
         {:ok, slug}
 
       {:error, changeset} ->
         if code_taken?(changeset) do
-          insert_with_a_free_code(player_count, draws_left - 1)
+          insert_with_a_free_code(seat_count, draws_left - 1)
         else
           {:error, changeset}
         end
     end
   end
 
-  defp insert_and_start(code, player_count) do
-    case Store.insert_room(code, player_count) do
+  defp insert_and_start(code, player_count, quip) do
+    case Store.insert_room(code, player_count, quip) do
       {:ok, room} ->
         with {:ok, _pid} <- start_room(room.slug), do: {:ok, room.slug}
 

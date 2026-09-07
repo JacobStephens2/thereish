@@ -85,7 +85,9 @@ defmodule MeaningGame.Steward do
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
   @callback forge(map() | String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   @callback rank([binary() | map()], map() | String.t()) :: {:ok, [map()]} | {:error, term()}
-  @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @callback name_room([String.t()], [String.t()]) ::
+              {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
+  @callback quip_code(String.t()) :: {:ok, String.t() | nil} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
 
@@ -222,9 +224,10 @@ defmodule MeaningGame.Steward do
 
   @doc """
   Asks the Scribe to name a Room with one four-letter word that nods to the
-  history in `digests` and avoids `taken_codes`.
+  history in `digests` and avoids `taken_codes`, answering both word and quip.
   """
-  @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @spec name_room([String.t()], [String.t()]) ::
+          {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
   def name_room([], _taken_codes), do: {:error, :no_history}
 
   def name_room(digests, taken_codes) do
@@ -236,7 +239,28 @@ defmodule MeaningGame.Steward do
       end)
 
     case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
+      {:ok, {:ok, %{word: _} = result}} -> {:ok, result}
+      {:ok, {:ok, word}} when is_binary(word) -> {:ok, %{word: word, quip: nil}}
+      {:ok, other} -> other
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
+    end
+  end
+
+  @doc """
+  Asks the Scribe for a quip about a Room Code drawn at random, answering one line.
+  """
+  @spec quip_code(String.t()) :: {:ok, String.t() | nil} | {:error, term()}
+  def quip_code(code) do
+    role = role(:scribe, :naming)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        adapter().quip_code(code)
+      end)
+
+    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, quip}} -> {:ok, quip}
       {:ok, other} -> other
       {:exit, reason} -> {:error, reason}
       nil -> {:error, :timeout}

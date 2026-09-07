@@ -268,6 +268,12 @@ config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+# Room creation rate limiting: sliding hour in memory per device and per address
+config :meaning_game, :room_creation_rate_limit,
+  per_device: 10,
+  per_address: 30,
+  window_seconds: 3600
+
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 

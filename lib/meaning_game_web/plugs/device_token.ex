@@ -23,9 +23,22 @@ defmodule MeaningGameWeb.DeviceToken do
 
   @impl true
   def call(conn, _opts) do
-    case Plug.Conn.get_session(conn, @key) do
-      nil -> Plug.Conn.put_session(conn, @key, mint())
-      _token -> conn
+    conn =
+      case Plug.Conn.get_session(conn, @key) do
+        nil -> Plug.Conn.put_session(conn, @key, mint())
+        _token -> conn
+      end
+
+    ip_string =
+      case conn.remote_ip do
+        ip when is_tuple(ip) -> ip |> :inet.ntoa() |> to_string()
+        _ -> nil
+      end
+
+    if ip_string do
+      Plug.Conn.put_session(conn, "remote_ip", ip_string)
+    else
+      conn
     end
   end
 

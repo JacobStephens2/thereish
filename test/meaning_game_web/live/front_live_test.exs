@@ -103,6 +103,24 @@ defmodule MeaningGameWeb.FrontLiveTest do
 
       refute has_element?(front, "[data-role=rejoin]")
     end
+
+    test "rejoin link renders the Room's quip when present, and nothing when absent" do
+      first = open_room(quip: "A room with a quip.")
+      second = open_room(quip: nil)
+      phone = build_conn() |> get(~p"/r/#{first}")
+
+      {:ok, view, _} = live(phone)
+      join(view, "Melissa")
+
+      {:ok, view, _} = live(get(phone, ~p"/r/#{second}"))
+      join(view, "Mel")
+
+      {:ok, front, _} = live(get(phone, ~p"/"))
+
+      assert has_element?(front, "[data-role=rejoin-quip]", "A room with a quip.")
+      html = render(front)
+      assert [_match] = Regex.scan(~r/data-role="rejoin-quip"/, html)
+    end
   end
 
   describe "New Room" do
@@ -139,6 +157,66 @@ defmodule MeaningGameWeb.FrontLiveTest do
 
       assert has_element?(room, "input[name=name]")
       assert Rooms.snapshot(code, nil).seats == []
+    end
+
+    test "room creation is refused with 'Give it a minute' when rate limited per device" do
+      prev_config = Application.get_env(:meaning_game, :room_creation_rate_limit)
+
+      Application.put_env(:meaning_game, :room_creation_rate_limit,
+        per_device: 2,
+        per_address: 100,
+        window_seconds: 3600
+      )
+
+      on_exit(fn ->
+        if prev_config,
+          do: Application.put_env(:meaning_game, :room_creation_rate_limit, prev_config),
+          else: Application.delete_env(:meaning_game, :room_creation_rate_limit)
+      end)
+
+      MeaningGame.Rooms.RateLimit.reset()
+
+      phone = build_conn() |> get(~p"/new")
+      {:ok, new1, _} = live(phone)
+      {:error, {:live_redirect, %{to: to1}}} = new1 |> form("form") |> render_submit()
+      "/r/" <> code1 = to1
+      on_exit(fn -> stop_room(code1) end)
+
+      phone = get(phone, ~p"/new")
+      {:ok, new2, _} = live(phone)
+      html = new2 |> form("form") |> render_submit()
+      assert html =~ "Give it a minute"
+      assert has_element?(new2, "[data-role=error]", "Give it a minute")
+    end
+
+    test "room creation is refused with 'Give it a minute' when rate limited per remote address" do
+      prev_config = Application.get_env(:meaning_game, :room_creation_rate_limit)
+
+      Application.put_env(:meaning_game, :room_creation_rate_limit,
+        per_device: 100,
+        per_address: 2,
+        window_seconds: 3600
+      )
+
+      on_exit(fn ->
+        if prev_config,
+          do: Application.put_env(:meaning_game, :room_creation_rate_limit, prev_config),
+          else: Application.delete_env(:meaning_game, :room_creation_rate_limit)
+      end)
+
+      MeaningGame.Rooms.RateLimit.reset()
+
+      phone1 = build_conn() |> get(~p"/new")
+      {:ok, new1, _} = live(phone1)
+      {:error, {:live_redirect, %{to: to1}}} = new1 |> form("form") |> render_submit()
+      "/r/" <> code1 = to1
+      on_exit(fn -> stop_room(code1) end)
+
+      phone2 = build_conn() |> get(~p"/new")
+      {:ok, new2, _} = live(phone2)
+      html = new2 |> form("form") |> render_submit()
+      assert html =~ "Give it a minute"
+      assert has_element?(new2, "[data-role=error]", "Give it a minute")
     end
   end
 

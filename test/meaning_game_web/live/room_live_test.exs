@@ -82,6 +82,26 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert_order(html, [~s(data-role="room-code"), "In the Room"])
     end
 
+    test "Code card renders the Room's quip beneath the Code when present, and nothing when absent" do
+      slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
+      {:ok, view, _html} = live(phone(slug_with_quip))
+      assert has_element?(view, "[data-role=code-quip]", "A gentle word for quiet hours.")
+
+      slug_no_quip = open_room(quip: nil)
+      {:ok, view_no_quip, _html} = live(phone(slug_no_quip))
+      refute has_element?(view_no_quip, "[data-role=code-quip]")
+    end
+
+    test "Stage header renders the Room's quip beside the join line when present, and nothing when absent" do
+      slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
+      {:ok, stage, _html} = live(build_conn(), ~p"/r/#{slug_with_quip}/stage")
+      assert has_element?(stage, "[data-role=stage-quip]", "A gentle word for quiet hours.")
+
+      slug_no_quip = open_room(quip: nil)
+      {:ok, stage_no_quip, _html} = live(build_conn(), ~p"/r/#{slug_no_quip}/stage")
+      refute has_element?(stage_no_quip, "[data-role=stage-quip]")
+    end
+
     test "two phones and a stage all show the same roster" do
       slug = open_room()
 
