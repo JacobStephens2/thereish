@@ -1404,7 +1404,7 @@ defmodule MeaningGameWeb.RoomComponents do
       data-level-stings={to_string(@levels[:stings] || 1.2)}
       data-level-voice={to_string(@levels[:voice] || 1.2)}
       data-level-duck={to_string(@levels[:duck] || 0.15)}
-      data-level-duck-stings={to_string(@levels[:duck_stings] || @levels[:stings_duck] || 0.35)}
+      data-level-duck-stings={to_string(@levels[:duck_stings] || 0.35)}
       data-meld-cue-delay-ms={to_string(@meld_cue_delay_ms)}
       class="hidden"
     >
@@ -1597,15 +1597,6 @@ defmodule MeaningGameWeb.RoomComponents do
             source.connect(bus)
             if (duckDuration > 0) {
               this.duckMusic(duckDuration)
-            }
-            if (bus === this.stingsBus && this.isStingsDucked()) {
-              const now = this.ctx.currentTime
-              this.stingsBus.gain.cancelScheduledValues(now)
-              this.stingsBus.gain.setValueAtTime(this.stingsBus.gain.value, now)
-              this.stingsBus.gain.setTargetAtTime(this.levels.duckStings, now, 0.05)
-              if (this.stingsDuckUntil > now) {
-                this.stingsBus.gain.setTargetAtTime(this.levels.stings, this.stingsDuckUntil, 0.2)
-              }
             }
             source.start(0)
           }

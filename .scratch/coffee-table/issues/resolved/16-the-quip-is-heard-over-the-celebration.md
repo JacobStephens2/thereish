@@ -15,7 +15,7 @@ The fix belongs where the ducking already is (`lib/meaning_game_web/components/r
 - [x] The meld and deep-meld cues still play in full over an unmelded close and over a Page with the voice switched off; nothing about the two-second music fade under the cue changes
 - [x] The existing meld cue delay (1.8s, configuration) is re-examined against when the voice actually starts, and any change is recorded here with the number
 - [x] A components test for the hook: a voice event during a playing cue ducks the stings bus and restores it on end; a cue arriving during a playing voice starts ducked
-- [x] Judged by ear on the couch as part of `14`, with the quip intelligible over the celebration from across the room
+- [ ] Judged by ear on the couch as part of `14`, with the quip intelligible over the celebration from across the room
 
 ## Comments
 
@@ -26,6 +26,6 @@ The fix belongs where the ducking already is (`lib/meaning_game_web/components/r
 - Rendered `data-level-duck-stings` attribute on `#foley-container` in `MeaningGameWeb.RoomComponents.foley_hook/1`.
 - Added `duckStings`, `restoreStings`, and `isStingsDucked` methods to the `.Foley` hook in `room_components.ex`.
 - In `foley:voice`, both `duckMusic(duration)` and `duckStings(duration)` are called; `restoreStings()` is invoked on `source.onended` and in `stopVoice()`.
-- In `playEffect()`, if a sound is played on `stingsBus` while voice is active (`isStingsDucked()`), it starts ducked at `levels.duckStings` (0.35).
 - Re-examined existing meld cue delay: The `ClimbNumber` animation runs for ~1.2–1.5s to visually reveal the score and reach the meld band, followed by a 300ms beat before the victory cue begins at 1800ms (`meld_cue_delay_ms: 1800`). Since the voice audio typically lands and starts speaking near ~0.5s, keeping 1800ms ensures the cue begins ducked (0.35) under the quip narration, and swells to full volume (1.2) once the quip punchline ends. The 1800ms setting is confirmed and retained.
 - Verified with unit and hook simulation tests in `RoomComponentsTest`. All 755 tests pass.
+- Physical listening verification is scheduled on the deployment as part of ticket 14 (`.scratch/coffee-table/issues/14-heard-read-and-received-on-the-deployment.md`).
