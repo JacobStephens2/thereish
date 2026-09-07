@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 - [x] With `UMAMI_SCRIPT_URL` and `UMAMI_WEBSITE_ID` configured, every page's root layout carries the deferred script tag with the website id; with either missing, no tag renders
 - [x] `bin/deploy` and the boot line note the pair when absent; `bin/keys-to-server` lists both names with what they buy
