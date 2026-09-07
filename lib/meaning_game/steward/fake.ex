@@ -208,12 +208,36 @@ defmodule MeaningGame.Steward.Fake do
     case config_get(:name_mode, :ok) do
       :ok ->
         case config_get(:name_word, "cane") do
-          nil -> {:error, :no_name}
-          word -> {:ok, word}
+          nil ->
+            {:error, :no_name}
+
+          word ->
+            quip = config_get(:name_quip, "A room from the old days.")
+            {:ok, %{word: word, quip: quip}}
         end
 
       :unavailable ->
         {:error, :no_name}
+
+      :raise ->
+        raise "this Scribe is having a moment"
+    end
+  end
+
+  @impl true
+  def quip_code(_code) do
+    delay = config_get(:quip_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:quip_mode, :ok) do
+      :ok ->
+        case config_get(:quip_text, "A fine room.") do
+          nil -> {:error, :no_quip}
+          quip -> {:ok, quip}
+        end
+
+      :unavailable ->
+        {:error, :no_quip}
 
       :raise ->
         raise "this Scribe is having a moment"

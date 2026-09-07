@@ -120,6 +120,7 @@ defmodule MeaningGameWeb.StageLive do
         </div>
         <p class="text-xl opacity-70">
           Join at <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
+          <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
         </p>
       </header>
 

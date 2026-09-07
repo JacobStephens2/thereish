@@ -22,8 +22,9 @@ defmodule MeaningGame.RoomFixtures do
   def open_room(opts \\ []) do
     slug = Keyword.get_lazy(opts, :slug, &unique_slug/0)
     seat_limit = Keyword.get(opts, :seat_limit, Rooms.default_seat_limit())
+    quip = Keyword.get(opts, :quip)
 
-    {:ok, _room} = Store.insert_room(slug, seat_limit)
+    {:ok, _room} = Store.insert_room(slug, seat_limit, quip)
 
     ExUnit.Callbacks.start_supervised!(
       Supervisor.child_spec({Server, slug: slug}, id: {Server, slug})

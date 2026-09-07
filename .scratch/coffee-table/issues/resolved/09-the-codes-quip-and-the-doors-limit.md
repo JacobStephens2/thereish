@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The naming request's schema gains `quip`; the gate accepts a non-empty single line of at most 90 characters and drops a failing quip without failing the word
-- [ ] A Room created from a phone with no history draws its random word and makes one quip-only request under the naming job's deadline; a Fake that is slow, raises or answers nothing leaves the quip empty and creation succeeds within the configured wait
-- [ ] The Room row gains `quip`; it renders on the Code card, in the Stage's header and under each rejoin link on the front page when present, and nothing renders when absent
-- [ ] Room creation is limited per device token and per remote address with limits in configuration; the Nth creation in an hour is refused with the door's message and the first after the window is admitted; the counter is in memory and a restart forgets it
-- [ ] Steward tests for the schema and gate; Room tests for the history and no-history paths and the limit; LiveView tests for the three renderings and the refused door
+- [x] The naming request's schema gains `quip`; the gate accepts a non-empty single line of at most 90 characters and drops a failing quip without failing the word
+- [x] A Room created from a phone with no history draws its random word and makes one quip-only request under the naming job's deadline; a Fake that is slow, raises or answers nothing leaves the quip empty and creation succeeds within the configured wait
+- [x] The Room row gains `quip`; it renders on the Code card, in the Stage's header and under each rejoin link on the front page when present, and nothing renders when absent
+- [x] Room creation is limited per device token and per remote address with limits in configuration; the Nth creation in an hour is refused with the door's message and the first after the window is admitted; the counter is in memory and a restart forgets it
+- [x] Steward tests for the schema and gate; Room tests for the history and no-history paths and the limit; LiveView tests for the three renderings and the refused door
