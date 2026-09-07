@@ -1529,16 +1529,22 @@ defmodule MeaningGameWeb.RoomComponents do
           this.duckMusic = (durationSeconds = 2.0) => {
             if (!this.ctx || !this.musicBus || this.musicOff) return
             const now = this.ctx.currentTime
+            this.duckUntil = Math.max(this.duckUntil || 0, now + durationSeconds)
             this.musicBus.gain.cancelScheduledValues(now)
             this.musicBus.gain.setTargetAtTime(this.levels.duck, now, 0.05)
-            this.musicBus.gain.setTargetAtTime(this.levels.music, now + durationSeconds, 0.2)
+            this.musicBus.gain.setTargetAtTime(this.levels.music, this.duckUntil, 0.2)
           }
 
           this.restoreMusic = () => {
             if (!this.ctx || !this.musicBus || this.musicOff) return
             const now = this.ctx.currentTime
+            this.duckUntil = 0
             this.musicBus.gain.cancelScheduledValues(now)
             this.musicBus.gain.setTargetAtTime(this.levels.music, now, 0.1)
+          }
+
+          this.isDucked = () => {
+            return !this.musicOff && Boolean(this.duckUntil && this.ctx && this.ctx.currentTime < this.duckUntil)
           }
 
           this.stopVoice = () => {
@@ -1571,6 +1577,7 @@ defmodule MeaningGameWeb.RoomComponents do
           this.fadeMusicOut = (fadeDuration = 2.0) => {
             if (!this.ctx || !this.musicBus) return
             const now = this.ctx.currentTime
+            this.duckUntil = 0
             this.musicBus.gain.cancelScheduledValues(now)
             this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
             this.musicBus.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
@@ -1614,9 +1621,13 @@ defmodule MeaningGameWeb.RoomComponents do
             const trackUrl = path
 
             if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              const targetGain = this.isDucked() ? this.levels.duck : this.levels.music
               this.musicBus.gain.cancelScheduledValues(now)
               this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
-              this.musicBus.gain.linearRampToValueAtTime(this.levels.music, now + 1.0)
+              this.musicBus.gain.linearRampToValueAtTime(targetGain, now + 1.0)
+              if (this.isDucked() && this.duckUntil > now) {
+                this.musicBus.gain.setTargetAtTime(this.levels.music, this.duckUntil, 0.2)
+              }
               return
             }
 
@@ -1627,9 +1638,13 @@ defmodule MeaningGameWeb.RoomComponents do
               return
             }
 
+            const targetGain = this.isDucked() ? this.levels.duck : this.levels.music
             this.musicBus.gain.cancelScheduledValues(now)
             this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
-            this.musicBus.gain.linearRampToValueAtTime(this.levels.music, now + fadeDuration)
+            this.musicBus.gain.linearRampToValueAtTime(targetGain, now + fadeDuration)
+            if (this.isDucked() && this.duckUntil > now) {
+              this.musicBus.gain.setTargetAtTime(this.levels.music, this.duckUntil, 0.2)
+            }
 
             const newGain = this.ctx.createGain()
             const newSource = this.ctx.createBufferSource()
