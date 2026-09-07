@@ -42,6 +42,8 @@ MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^HUME_API_KEY=.' ${APP_DIR}/.env || echo 'HUME_API_KEY'
   grep -q '^HUME_SECRET_KEY=.' ${APP_DIR}/.env || echo 'HUME_SECRET_KEY'
   grep -q '^ELEVENLABS_API_KEY=.' ${APP_DIR}/.env || echo 'ELEVENLABS_API_KEY'
+  grep -q '^UMAMI_SCRIPT_URL=.' ${APP_DIR}/.env || echo 'UMAMI_SCRIPT_URL'
+  grep -q '^UMAMI_WEBSITE_ID=.' ${APP_DIR}/.env || echo 'UMAMI_WEBSITE_ID'
   grep -q '^AWS_ACCESS_KEY_ID=.' ${APP_DIR}/.env || echo 'AWS_ACCESS_KEY_ID'
   grep -q '^AWS_SECRET_ACCESS_KEY=.' ${APP_DIR}/.env || echo 'AWS_SECRET_ACCESS_KEY'
   grep -q '^AWS_REGION=.' ${APP_DIR}/.env || echo 'AWS_REGION'
@@ -79,6 +81,17 @@ for key in "${VOICE_KEYS[@]}"; do
     echo "      See docs/deploy.md, \"Foley's keys\"."
   fi
 done
+
+if echo "${MISSING_KEYS}" | grep -q 'UMAMI_SCRIPT_URL' && echo "${MISSING_KEYS}" | grep -q 'UMAMI_WEBSITE_ID'; then
+  echo "Note: no UMAMI_SCRIPT_URL and UMAMI_WEBSITE_ID in ${APP_DIR}/.env — Umami will count nothing."
+  echo "      See docs/deploy.md, \"Umami\"."
+elif echo "${MISSING_KEYS}" | grep -q 'UMAMI_SCRIPT_URL'; then
+  echo "Note: no UMAMI_SCRIPT_URL in ${APP_DIR}/.env — Umami will count nothing."
+  echo "      See docs/deploy.md, \"Umami\"."
+elif echo "${MISSING_KEYS}" | grep -q 'UMAMI_WEBSITE_ID'; then
+  echo "Note: no UMAMI_WEBSITE_ID in ${APP_DIR}/.env — Umami will count nothing."
+  echo "      See docs/deploy.md, \"Umami\"."
+fi
 
 for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION NOTICE_TO NOTICE_FROM; do
   if echo "${MISSING_KEYS}" | grep -q "${key}"; then

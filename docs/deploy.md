@@ -202,7 +202,24 @@ alternative is switched in) leaves the voice switch doing nothing. `bin/deploy`
 warns when any Foley key is missing from `.env`, and the release logs the same
 warning once at boot.
 
+### Umami
+
+Page views are counted first-party and cookieless through self-hosted Umami (ticket 11).
+The instance already runs on the server; the website is created in its dashboard by hand.
+Two values live in `/var/www/thereish.app/.env`:
+
+```sh
+ssh jacob@stephens.page
+sudo -e /var/www/thereish.app/.env    # UMAMI_SCRIPT_URL=... UMAMI_WEBSITE_ID=...
+cd /var/www/thereish.app && docker compose -f docker-compose.app.yml up -d
+```
+
+On the Mac they can be set in `.env.local` for the release image, or omitted so development and tests load nothing.
+
+Without them, the game renders no analytics script tag at all. `bin/deploy` and the boot line warn when the pair is missing, and `bin/keys-to-server` can push them.
+
 ### The keys on the Mac: `va`
+
 
 Every key the game reads — `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and the Foley's `MUREKA_API_KEY`, `ELEVENLABS_API_KEY`, `HUME_API_KEY` / `HUME_SECRET_KEY` — is in the Bitwarden manifest of Jacob's `vaulted-agent` launcher. A shell or harness started through it has them in the environment and nothing else does:
 
