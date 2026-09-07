@@ -12,6 +12,11 @@ defmodule MeaningGameWeb.Layouts do
   embed_templates "layouts/*"
 
   @doc """
+  Returns the configured Umami script URL and website ID if both are present.
+  """
+  defdelegate umami_config, to: MeaningGame
+
+  @doc """
   Renders your app layout.
 
   This function is typically invoked from every template,
