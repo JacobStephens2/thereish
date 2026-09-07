@@ -43,6 +43,9 @@ config :meaning_game, MeaningGameWeb.Endpoint,
 # the beat itself set their own with `MeaningGame.RoomFixtures.beat/1`.
 config :meaning_game, reveal_beat_ms: 5
 
+# Suppress missing-key warnings during test suite boots.
+config :meaning_game, boot_warnings: false
+
 # No test grades against a provider. The suite must never spend money and never
 # depend on somebody's uptime, so the fake is the Assayer here and the handful
 # of tests that actually call somebody (the live smoke test) are tagged
