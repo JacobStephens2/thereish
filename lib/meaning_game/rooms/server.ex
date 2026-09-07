@@ -227,6 +227,8 @@ defmodule MeaningGame.Rooms.Server do
       |> Map.put(:current_page_ref, nil)
       |> Map.put(:current_track, nil)
       |> Map.put(:music_meta, nil)
+      |> Map.put(:current_gives, nil)
+      |> Map.put(:score_task_running, false)
 
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -244,6 +246,8 @@ defmodule MeaningGame.Rooms.Server do
           |> Map.put(:current_page_ref, nil)
           |> Map.put(:current_track, nil)
           |> Map.put(:music_meta, nil)
+          |> Map.put(:current_gives, nil)
+          |> Map.put(:score_task_running, false)
 
         {:reply, :ok, advance(new_state, game, effects)}
 
@@ -316,15 +320,22 @@ defmodule MeaningGame.Rooms.Server do
     end
   end
 
-  def handle_call({:set_house_loop_only, enabled}, _from, state) do
-    case Store.update_room(state.room, %{house_loop_only: enabled}) do
-      {:ok, room} ->
-        state = %{state | room: room}
-        broadcast(state.room.slug)
-        {:reply, :ok, state}
+  def handle_call({:set_music, music}, _from, state) do
+    music = to_string(music)
 
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+    if music in ["off", "house", "page"] do
+      case Store.update_room(state.room, %{music: music}) do
+        {:ok, room} ->
+          state = %{state | room: room}
+          state = maybe_start_score_on_music_change(state)
+          broadcast(state.room.slug)
+          {:reply, :ok, state}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    else
+      {:reply, {:error, :bad_music_setting}, state}
     end
   end
 
@@ -340,7 +351,7 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   # The snapshot answers how long the Assayer has been thinking, plus the
-  # Room facts (speaker?, speaker_claimed?, voice, house_loop_only) for the
+  # Room facts (speaker?, speaker_claimed?, voice, music) for the
   # requesting viewer's device token. Device tokens never leave the Room.
   def handle_call({:snapshot, viewer}, from, state) do
     handle_call({:snapshot, viewer, nil}, from, state)
@@ -361,8 +372,8 @@ defmodule MeaningGame.Rooms.Server do
       |> Map.put(:speaker?, speaker?)
       |> Map.put(:speaker_claimed?, speaker_claimed?)
       |> Map.put(:voice, state.room.voice)
-      |> Map.put(:house_loop_only, state.room.house_loop_only)
-      |> Map.put(:track, if(state.room.house_loop_only, do: nil, else: state[:current_track]))
+      |> Map.put(:music, state.room.music)
+      |> Map.put(:track, if(state.room.music == "page", do: state[:current_track], else: nil))
       |> Map.put(:music_meta, state[:music_meta])
 
     {:reply, view, state}
@@ -499,16 +510,13 @@ defmodule MeaningGame.Rooms.Server do
   def handle_info({:author_completed, _ref, _result}, state), do: {:noreply, state}
 
   def handle_info({:scored, page_ref, result}, %{current_page_ref: page_ref} = state) do
+    state = Map.put(state, :score_task_running, false)
+
     if MeaningGame.Game.phase(state.game) == :closed do
       {:noreply, state}
     else
       case result do
         {:ok, track} ->
-          state = %{state | current_track: track, music_meta: track.meta}
-          broadcast(state.room.slug)
-          {:noreply, state}
-
-        %{path: _} = track ->
           state = %{state | current_track: track, music_meta: track.meta}
           broadcast(state.room.slug)
           {:noreply, state}
@@ -627,7 +635,7 @@ defmodule MeaningGame.Rooms.Server do
   defp perform({:chronicle, entry}, state) do
     music_meta =
       cond do
-        state.room.house_loop_only ->
+        state.room.music != "page" ->
           nil
 
         not is_nil(state[:music_meta]) ->
@@ -713,6 +721,24 @@ defmodule MeaningGame.Rooms.Server do
     ref = make_ref()
     page_ref = make_ref()
 
+    gives = extract_give_strings(request)
+
+    state =
+      state
+      |> Map.put(:current_arm, arm)
+      |> Map.put(:current_page_ref, page_ref)
+      |> Map.put(:current_gives, gives)
+      |> Map.put(:current_track, nil)
+      |> Map.put(:music_meta, nil)
+      |> waiting_on_author(ref)
+
+    state =
+      if state.room.music == "page" do
+        start_score_task(room, page_ref, gives, state)
+      else
+        Map.put(state, :score_task_running, false)
+      end
+
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
         case Steward.author(request, job: arm, digest: digest) do
@@ -731,14 +757,7 @@ defmodule MeaningGame.Rooms.Server do
       end
     end)
 
-    maybe_start_score_task(room, page_ref, request, state.room.house_loop_only)
-
     state
-    |> Map.put(:current_arm, arm)
-    |> Map.put(:current_page_ref, page_ref)
-    |> Map.put(:current_track, nil)
-    |> Map.put(:music_meta, nil)
-    |> waiting_on_author(ref)
   end
 
   defp perform({:assay, request}, state) do
@@ -866,11 +885,17 @@ defmodule MeaningGame.Rooms.Server do
     {:side_verdicts_unavailable, %{}}
   end
 
-  defp maybe_start_score_task(_room, _page_ref, _request, true), do: :ok
+  defp maybe_start_score_on_music_change(state) do
+    if state.room.music == "page" and is_nil(state[:current_track]) and
+         not Map.get(state, :score_task_running, false) and
+         not is_nil(state[:current_page_ref]) and not is_nil(state[:current_gives]) do
+      start_score_task(self(), state.current_page_ref, state.current_gives, state)
+    else
+      state
+    end
+  end
 
-  defp maybe_start_score_task(room, page_ref, request, false) do
-    gives = extract_give_strings(request)
-
+  defp start_score_task(room, page_ref, gives, state) do
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
         case Steward.score(gives) do
@@ -888,6 +913,8 @@ defmodule MeaningGame.Rooms.Server do
           send(room, {:scored, page_ref, {:error, {:exit, reason}}})
       end
     end)
+
+    Map.put(state, :score_task_running, true)
   end
 
   defp extract_give_strings(request) do
