@@ -14,77 +14,141 @@ defmodule MeaningGameWeb.RoomComponents do
   use MeaningGameWeb, :html
 
   attr :room, :map, required: true, doc: "a snapshot from MeaningGame.Rooms.snapshot/2"
+  attr :mode, :atom, default: :phone
 
   def roster(assigns) do
     ~H"""
-    <div data-role="roster">
-      <%= if @room[:sides_mode?] && @room[:sides] do %>
-        <div data-role="sides-roster" class="flex flex-col gap-4">
-          <div
-            :for={side <- @room.sides}
-            data-side={side.id}
-            class="flex flex-col gap-2 rounded-xl border border-base-300 bg-base-200/30 p-3"
-          >
-            <div class="flex items-center justify-between">
+    <%= if @mode == :stage do %>
+      <div
+        data-role="roster"
+        data-mode="stage"
+        class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+      >
+        <%= if @room[:sides_mode?] && @room[:sides] do %>
+          <div data-role="sides-roster" class="flex flex-wrap items-center gap-3">
+            <div
+              :for={side <- @room.sides}
+              data-side={side.id}
+              class="flex items-center gap-2"
+            >
               <span class="text-xs font-bold uppercase tracking-wider text-primary">
-                {side.name}
+                {side.name}:
               </span>
-              <span :if={side.you?} class="text-xs font-semibold text-primary">(your side)</span>
-            </div>
-            <ul class="flex flex-col gap-1.5">
-              <li
-                :for={seat <- side.seats}
-                data-seat={seat.id}
-                data-committed={to_string(seat.committed?)}
-                class="flex items-center gap-2 text-base"
-              >
-                <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-                <span class="font-medium">{seat.name}</span>
-                <span :if={seat.you?} class="text-xs opacity-60">(you)</span>
-                <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
-                <span
-                  :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
-                  class="text-xs opacity-60"
+              <ul class="flex items-center gap-2">
+                <li
+                  :for={seat <- side.seats}
+                  data-seat={seat.id}
+                  data-committed={to_string(seat.committed?)}
+                  class="flex items-center gap-1"
                 >
-                  has written a bridge
-                </span>
-              </li>
-            </ul>
+                  <span class="size-1.5 rounded-full bg-primary" aria-hidden="true"></span>
+                  <span class="font-medium">{seat.name}</span>
+                </li>
+              </ul>
+            </div>
           </div>
-        </div>
-      <% else %>
-        <ul class="flex flex-col gap-2">
-          <li
-            :for={seat <- @room.seats}
-            data-seat={seat.id}
-            data-committed={to_string(seat.committed?)}
-            data-couple={to_string(Map.get(seat, :couple?, false))}
-            class="flex items-center gap-2 text-lg"
-          >
-            <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-            <span>{seat.name}</span>
-            <span
-              :if={Map.get(seat, :couple?) && seat.partner_name}
-              data-role="partner"
-              class="text-sm opacity-70"
+        <% else %>
+          <ul class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <li
+              :for={seat <- @room.seats}
+              data-seat={seat.id}
+              data-committed={to_string(seat.committed?)}
+              data-couple={to_string(Map.get(seat, :couple?, false))}
+              class="flex items-center gap-1.5"
             >
-              (with {seat.partner_name})
-            </span>
-            <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
-            <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
-            <span
-              :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
-              class="text-sm opacity-60"
-            >
-              has written a bridge
-            </span>
-          </li>
-          <li :if={@room.seats == []} class="text-lg opacity-60">Nobody yet</li>
-        </ul>
-      <% end %>
+              <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+              <span class="font-medium">{seat.name}</span>
+              <span
+                :if={Map.get(seat, :couple?) && seat.partner_name}
+                data-role="partner"
+                class="text-xs opacity-70"
+              >
+                (with {seat.partner_name})
+              </span>
+              <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
+              <span
+                :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
+                class="text-xs opacity-60"
+              >
+                has written a bridge
+              </span>
+            </li>
+            <li :if={@room.seats == []} class="opacity-60">Nobody yet</li>
+          </ul>
+        <% end %>
 
-      <p data-role="open-seats" class="mt-3 text-sm opacity-60">{waiting(@room)}</p>
-    </div>
+        <p data-role="open-seats" class="opacity-60">{waiting(@room)}</p>
+      </div>
+    <% else %>
+      <div data-role="roster">
+        <%= if @room[:sides_mode?] && @room[:sides] do %>
+          <div data-role="sides-roster" class="flex flex-col gap-4">
+            <div
+              :for={side <- @room.sides}
+              data-side={side.id}
+              class="flex flex-col gap-2 rounded-xl border border-base-300 bg-base-200/30 p-3"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-primary">
+                  {side.name}
+                </span>
+                <span :if={side.you?} class="text-xs font-semibold text-primary">(your side)</span>
+              </div>
+              <ul class="flex flex-col gap-1.5">
+                <li
+                  :for={seat <- side.seats}
+                  data-seat={seat.id}
+                  data-committed={to_string(seat.committed?)}
+                  class="flex items-center gap-2 text-base"
+                >
+                  <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+                  <span class="font-medium">{seat.name}</span>
+                  <span :if={seat.you?} class="text-xs opacity-60">(you)</span>
+                  <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
+                  <span
+                    :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
+                    class="text-xs opacity-60"
+                  >
+                    has written a bridge
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        <% else %>
+          <ul class="flex flex-col gap-2">
+            <li
+              :for={seat <- @room.seats}
+              data-seat={seat.id}
+              data-committed={to_string(seat.committed?)}
+              data-couple={to_string(Map.get(seat, :couple?, false))}
+              class="flex items-center gap-2 text-lg"
+            >
+              <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
+              <span>{seat.name}</span>
+              <span
+                :if={Map.get(seat, :couple?) && seat.partner_name}
+                data-role="partner"
+                class="text-sm opacity-70"
+              >
+                (with {seat.partner_name})
+              </span>
+              <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
+              <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
+              <span
+                :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
+                class="text-sm opacity-60"
+              >
+                has written a bridge
+              </span>
+            </li>
+            <li :if={@room.seats == []} class="text-lg opacity-60">Nobody yet</li>
+          </ul>
+        <% end %>
+
+        <p data-role="open-seats" class="mt-3 text-sm opacity-60">{waiting(@room)}</p>
+      </div>
+    <% end %>
     """
   end
 
@@ -93,14 +157,14 @@ defmodule MeaningGameWeb.RoomComponents do
   @doc "The two words the Page hangs between, shown to everyone at once."
   def bookends(assigns) do
     ~H"""
-    <div :if={@room.bookends} class="flex flex-col items-center gap-3">
+    <div :if={@room.bookends} class="flex flex-col items-center gap-2">
       <div
         data-role="bookends"
-        class="flex flex-wrap items-center justify-center gap-4"
+        class="flex flex-wrap items-center justify-center gap-3 sm:gap-4"
       >
         <span
           :for={bookend <- @room.bookends}
-          class="rounded-lg bg-base-200 px-5 py-3 text-3xl font-semibold tracking-tight"
+          class="rounded-lg bg-base-200 px-4 py-2 sm:px-5 sm:py-2.5 text-2xl sm:text-3xl font-semibold tracking-tight"
         >
           {bookend}
         </span>
@@ -225,19 +289,29 @@ defmodule MeaningGameWeb.RoomComponents do
       data-role="reveal"
       data-arrival={reveal_arrival(@room.reveal)}
       data-mode={@mode}
-      class="flex flex-col items-center gap-8 w-full max-w-xl mx-auto"
+      class={[
+        "flex flex-col items-center w-full mx-auto",
+        if(@mode == :stage, do: "gap-[clamp(0.5rem,1.8vh,1.5rem)] max-w-4xl", else: "gap-8 max-w-xl")
+      ]}
     >
       <div
         data-role="comparison"
         style="animation: reveal-comparison 0.35s ease-out both;"
-        class="flex flex-wrap items-stretch justify-center gap-3 sm:gap-4 w-full"
+        class={[
+          "flex flex-wrap items-stretch justify-center w-full",
+          if(@mode == :stage, do: "gap-2 sm:gap-3", else: "gap-3 sm:gap-4")
+        ]}
       >
         <div
           :for={bridge <- @room.reveal.bridges}
           data-bridge={bridge.seat_id}
           data-you={to_string(you?(@seat, bridge))}
           class={[
-            "flex flex-1 min-w-[120px] sm:min-w-44 flex-col items-center justify-center gap-1 rounded-xl border p-4 text-center transition-all duration-300",
+            "flex flex-1 flex-col items-center justify-center gap-1 rounded-xl border text-center transition-all duration-300",
+            if(@mode == :stage,
+              do: "min-w-[120px] max-w-[240px] basis-40 sm:basis-48 p-2.5 sm:p-3",
+              else: "min-w-[120px] sm:min-w-44 p-4"
+            ),
             if(you?(@seat, bridge),
               do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
               else: "border-base-300 bg-base-100 shadow-sm"
@@ -250,7 +324,7 @@ defmodule MeaningGameWeb.RoomComponents do
           </div>
           <span class={[
             "font-bold tracking-tight",
-            if(@mode == :stage, do: "text-3xl sm:text-4xl", else: "text-2xl sm:text-3xl")
+            if(@mode == :stage, do: "text-2xl sm:text-3xl md:text-4xl", else: "text-2xl sm:text-3xl")
           ]}>
             {bridge.bridge}
           </span>
@@ -290,7 +364,8 @@ defmodule MeaningGameWeb.RoomComponents do
         data-role="closeness-display"
         style="animation: reveal-closeness 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;"
         class={[
-          "flex flex-col items-center justify-center rounded-2xl px-8 py-6 transition-all duration-500 w-full max-w-sm text-center",
+          "flex flex-col items-center justify-center rounded-2xl transition-all duration-500 w-full max-w-sm text-center",
+          if(@mode == :stage, do: "px-6 py-2 sm:py-3", else: "px-8 py-6"),
           @presentation.container_class
         ]}
       >
@@ -301,19 +376,26 @@ defmodule MeaningGameWeb.RoomComponents do
           data-target={@room.reveal.closeness}
           class={[
             "font-black tracking-tighter tabular-nums leading-none select-none",
-            if(@mode == :stage, do: "text-9xl sm:text-[10rem]", else: "text-7xl sm:text-8xl"),
+            if(@mode == :stage, do: "text-7xl sm:text-8xl md:text-9xl", else: "text-7xl sm:text-8xl"),
             @presentation.number_class
           ]}
         >
           {@room.reveal.closeness}
         </span>
 
-        <div class="mt-3 flex flex-col items-center gap-1.5">
+        <div class={[
+          "flex flex-col items-center",
+          if(@mode == :stage, do: "mt-1 sm:mt-1.5 gap-1", else: "mt-3 gap-1.5")
+        ]}>
           <span
             data-role="band"
             style="animation: band-arrive 0.4s ease-out 0.8s both;"
             class={[
-              "text-lg sm:text-xl font-extrabold uppercase tracking-widest px-4 py-1 rounded-full",
+              "font-extrabold uppercase tracking-widest rounded-full",
+              if(@mode == :stage,
+                do: "text-sm sm:text-base md:text-lg px-3 py-0.5",
+                else: "text-lg sm:text-xl px-4 py-1"
+              ),
               @presentation.badge_class
             ]}
           >
@@ -344,7 +426,7 @@ defmodule MeaningGameWeb.RoomComponents do
         class={[
           "font-serif italic font-medium leading-snug max-w-prose text-center",
           if(@mode == :stage,
-            do: "text-3xl sm:text-4xl text-base-content",
+            do: "text-xl sm:text-2xl md:text-3xl text-base-content",
             else: "text-xl sm:text-2xl text-base-content/90"
           )
         ]}
@@ -825,12 +907,32 @@ defmodule MeaningGameWeb.RoomComponents do
 
   def ending(assigns) do
     ~H"""
-    <section :if={@room.closed} data-role="ending" class="flex flex-col items-center gap-4">
-      <p data-role="ending-line" class="max-w-prose text-center text-xl">
+    <section
+      :if={@room.closed}
+      data-role="ending"
+      class={[
+        "flex flex-col items-center w-full",
+        if(@mode == :stage, do: "gap-2 sm:gap-3", else: "gap-4")
+      ]}
+    >
+      <p
+        data-role="ending-line"
+        class={[
+          "max-w-prose text-center font-medium",
+          if(@mode == :stage, do: "text-lg sm:text-xl", else: "text-xl")
+        ]}
+      >
         {ending_line(@room.closed)}
       </p>
 
-      <ol :if={@room.played != []} data-role="arc" class="flex flex-col gap-1 text-sm opacity-70">
+      <ol
+        :if={@room.played != []}
+        data-role="arc"
+        class={[
+          "flex flex-col opacity-70",
+          if(@mode == :stage, do: "gap-0.5 sm:gap-1 text-xs sm:text-sm", else: "gap-1 text-sm")
+        ]}
+      >
         <li
           :for={attempt <- @room.played}
           data-attempt={attempt.number}
