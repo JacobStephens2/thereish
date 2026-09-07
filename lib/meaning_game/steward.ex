@@ -122,10 +122,42 @@ defmodule MeaningGame.Steward do
   """
   @spec score_failure(term()) :: map()
   def score_failure(reason) do
+    {provider, model} = music_provenance()
+
     %{
+      provider: provider,
+      model: model,
       cost_usd: 0.0,
       failure: to_string(reason)
     }
+  end
+
+  defp music_provenance do
+    if adapter() == MeaningGame.Steward.Fake do
+      {"fake", "fake-music"}
+    else
+      role =
+        try do
+          role(:foley, :music)
+        rescue
+          _ -> %{}
+        end
+
+      provider =
+        case role[:provider] do
+          MeaningGame.Steward.Mureka ->
+            "mureka"
+
+          mod when is_atom(mod) and not is_nil(mod) ->
+            mod |> Module.split() |> List.last() |> Macro.underscore()
+
+          other ->
+            to_string(other || "mureka")
+        end
+
+      model = to_string(role[:model] || "auto")
+      {provider, model}
+    end
   end
 
   @doc """
