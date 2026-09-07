@@ -6,7 +6,7 @@ It is a mechanical change with one genuinely careful part — the database — a
 
 **Blocked by:** None strictly, but do `01` first so this happens in a directory with the right name.
 
-**Status:** claimed
+**Status:** resolved
 
 **On the database.** The rename does not require renaming it. `:thereish` can keep talking to a database called `meaning_game` — the name is a string in `DATABASE_URL` and nothing else. Renaming it means an `ALTER DATABASE` with no connections open, a matching `pg_hba.conf` grant, and a change to the server's `.env`, all on a Chronicle that holds every evening played so far. **Do not rename the database in this ticket.** Leave it, note the mismatch in `docs/deploy.md` in one line, and let it be a separate deliberate job if it ever bothers anyone. A failed rename here loses the record of every Page ever played.
 
@@ -18,7 +18,7 @@ It is a mechanical change with one genuinely careful part — the database — a
 - [x] The four `rel/overlays/bin/` scripts exec `./thereish` and call `Thereish.Release.migrate`
 - [x] The database keeps its current name; `docs/deploy.md` says in one line that the app is `thereish` and its database is still `meaning_game`, and why
 - [x] `mix compile --warnings-as-errors` is clean and the full suite passes with no test's meaning changed — renames only, no assertions rewritten to fit
-- [ ] Deployed, and the deployment checked: `/check` returns 200, a Room can be created and a Page played through to a close, and the Chronicle still shows the evenings that came before the rename
+- [x] Deployed, and the deployment checked: `/check` returns 200, a Room can be created and a Page played through to a close, and the Chronicle still shows the evenings that came before the rename
 - [x] The `MeaningGame` name survives only in the research notes and in ADRs as historical record; `grep -rn "MeaningGame" lib test config rel bin` is empty
 
 ## Comments
@@ -26,3 +26,5 @@ It is a mechanical change with one genuinely careful part — the database — a
 **2026-09-07.** Filed from Jacob's playtest notes (`.scratch/ideas/ideas.md`): "I see some code that's still meaning game which I'm wondering if It would be good to change to thereish. such as MeaningGameWeb." Scope measured the same day: 179 files mention `MeaningGame`.
 
 **2026-09-07.** Mechanical rename is on this branch. `mix compile --warnings-as-errors` is clean; 760 tests, 0 failures. Session cookie stays `_meaning_game_key` so existing Seats survive the deploy. Remaining: the production window (merge to master, then the live `/check` / Room / Chronicle check).
+
+**2026-09-07.** Merged as PR 55 (`bf0680f`). Deploy run 34164464810 succeeded. Live check: `/check` 200, socket connected over WebSocket, prose gate installed. Room ERGS opened; Ada and Bea played grease trap · manuscript to a deep meld on attempt 1. Couch Chronicle still shows lantern · harbour (4 Sep). Database was not renamed.
