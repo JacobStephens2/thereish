@@ -39,10 +39,16 @@ defmodule MeaningGameWeb.Foley do
   end
 
   @doc """
-  Pushes a foley:own-commit event to the committing phone's view.
+  Pushes a foley:own-commit event to the committing phone's view only when no
+  Stage holds the Room. With a Stage present, the Stage sounds the commit and
+  the phone stays quiet.
   """
   def push_own_commit(socket) do
-    push_event(socket, "foley:own-commit", %{})
+    if Map.get(socket.assigns, :stage_present?, false) do
+      socket
+    else
+      push_event(socket, "foley:own-commit", %{})
+    end
   end
 
   @doc """

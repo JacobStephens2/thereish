@@ -325,7 +325,12 @@ defmodule MeaningGameWeb.RoomLive do
       class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12"
     >
       <%= if not playing_phase?(@room) do %>
-        <.speaker_bar_and_code room={@room} code={@slug} join_url={@join_url} />
+        <.speaker_bar_and_code
+          room={@room}
+          code={@slug}
+          join_url={@join_url}
+          stage_present?={@stage_present?}
+        />
       <% end %>
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">
@@ -577,7 +582,12 @@ defmodule MeaningGameWeb.RoomLive do
       </div>
 
       <%= if playing_phase?(@room) do %>
-        <.speaker_bar_and_code room={@room} code={@slug} join_url={@join_url} />
+        <.speaker_bar_and_code
+          room={@room}
+          code={@slug}
+          join_url={@join_url}
+          stage_present?={@stage_present?}
+        />
       <% end %>
 
       <section class="flex flex-col gap-2">
@@ -619,6 +629,8 @@ defmodule MeaningGameWeb.RoomLive do
   end
 
   defp speaker_bar_and_code(assigns) do
+    assigns = assign_new(assigns, :stage_present?, fn -> false end)
+
     ~H"""
     <section
       :if={@room}
@@ -652,7 +664,7 @@ defmodule MeaningGameWeb.RoomLive do
             <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
           </button>
 
-          <.local_sound_switch />
+          <.local_sound_switch stage_present?={@stage_present?} />
         </div>
 
         <.foley_switches room={@room} />

@@ -702,6 +702,16 @@ defmodule MeaningGameWeb.RoomComponentsTest do
       assert html =~ ~s(data-state="on")
       assert html =~ ~s(data-state="off")
     end
+
+    test "local_sound_switch renders title and aria-label reflecting whether stage is present" do
+      html_without_stage = render_component(&local_sound_switch/1, %{stage_present?: false})
+      assert html_without_stage =~ ~s(title="Toggle commit sound on this device")
+      assert html_without_stage =~ ~s(aria-label="Toggle commit sound on this device")
+
+      html_with_stage = render_component(&local_sound_switch/1, %{stage_present?: true})
+      assert html_with_stage =~ ~s(title="Commit sound plays from the Stage while connected")
+      assert html_with_stage =~ ~s[aria-label="Toggle commit sound on this device (commit sound plays from the Stage while connected)"]
+    end
   end
 
   describe "Sides: couple versus couple components" do
