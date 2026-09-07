@@ -1074,6 +1074,97 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  @doc """
+  Per-device sound switch for local commit sounds.
+  Defaults to on in browser storage, toggled by tap, persists across reload.
+  """
+  def local_sound_switch(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id="local-sound-toggle"
+      phx-hook=".LocalSoundToggle"
+      data-role="local-sound-toggle"
+      data-sound="on"
+      aria-label="Toggle commit sound on this device"
+      title="Toggle commit sound on this device"
+      class="flex items-center justify-center p-1 rounded hover:bg-base-200 transition-colors opacity-70 hover:opacity-100 cursor-pointer"
+    >
+      <svg
+        data-state="on"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        class="size-4 inline-block"
+        aria-hidden="true"
+      >
+        <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+      </svg>
+      <svg
+        data-state="off"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        class="size-4 hidden inline-block opacity-40"
+        aria-hidden="true"
+      >
+        <path d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" />
+        <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.064 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+      </svg>
+    </button>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalSoundToggle">
+      export default {
+        mounted() {
+          this.syncUI = () => {
+            let enabled = true
+            try {
+              enabled = localStorage.getItem("foley:local-sounds") !== "off"
+            } catch (_) {}
+
+            this.el.dataset.sound = enabled ? "on" : "off"
+            this.el.setAttribute("aria-checked", enabled ? "true" : "false")
+            const onIcon = this.el.querySelector("[data-state=on]")
+            const offIcon = this.el.querySelector("[data-state=off]")
+            if (onIcon && offIcon) {
+              if (enabled) {
+                onIcon.classList.remove("hidden")
+                offIcon.classList.add("hidden")
+              } else {
+                onIcon.classList.add("hidden")
+                offIcon.classList.remove("hidden")
+              }
+            }
+          }
+
+          this.syncUI()
+
+          this.handleClick = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            let enabled = true
+            try {
+              enabled = localStorage.getItem("foley:local-sounds") !== "off"
+              const next = !enabled
+              localStorage.setItem("foley:local-sounds", next ? "on" : "off")
+            } catch (_) {}
+            this.syncUI()
+          }
+
+          this.el.addEventListener("click", this.handleClick)
+        },
+        updated() {
+          this.syncUI()
+        },
+        destroyed() {
+          if (this.handleClick) {
+            this.el.removeEventListener("click", this.handleClick)
+          }
+        }
+      }
+    </script>
+    """
+  end
+
   attr :room, :map, required: true
 
   @music_options [
@@ -1133,6 +1224,7 @@ defmodule MeaningGameWeb.RoomComponents do
       id="foley-container"
       phx-hook=".Foley"
       data-speaker={to_string(@speaker)}
+      data-mode={if @speaker, do: "speaker", else: "local"}
       data-level-music={to_string(@levels[:music] || 0.5)}
       data-level-stings={to_string(@levels[:stings] || 1.2)}
       data-level-voice={to_string(@levels[:voice] || 1.2)}
@@ -1143,9 +1235,10 @@ defmodule MeaningGameWeb.RoomComponents do
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Foley">
       export default {
         mounted() {
-          this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          this.isReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
           this.speaker = this.el.dataset.speaker === "true"
-          this.canPlay = () => !this.reducedMotion && this.speaker
+          this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
+          this.canPlay = () => !this.isReducedMotion() && this.speaker
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -1201,7 +1294,6 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.resumeAudio = async () => {
-            this.reducedMotion = false
             this.initAudio()
             if (this.ctx && this.ctx.state !== "running") {
               await this.ctx.resume()
@@ -1218,6 +1310,21 @@ defmodule MeaningGameWeb.RoomComponents do
           if (speakerToggle) {
             speakerToggle.addEventListener("click", () => this.resumeAudio())
           }
+
+          this.onFormSubmit = (e) => {
+            if (e.target && (e.target.id === "bridge-form" || e.target.closest("#bridge-form"))) {
+              this.resumeAudio()
+            }
+          }
+
+          this.onCommitClick = (e) => {
+            if (e.target && e.target.closest("#bridge-form button, [phx-submit=commit_bridge] button")) {
+              this.resumeAudio()
+            }
+          }
+
+          document.addEventListener("submit", this.onFormSubmit)
+          document.addEventListener("click", this.onCommitClick)
 
           this.fetchBuffer = async (url) => {
             if (this.audioBuffers.has(url)) return this.audioBuffers.get(url)
@@ -1438,6 +1545,31 @@ defmodule MeaningGameWeb.RoomComponents do
             }
           })
 
+          this.playCommitTick = async () => {
+            await this.resumeAudio()
+            if (!this.ctx) return
+            const buf = await this.fetchBuffer("/audio/commit-tick.mp3")
+            if (!buf) return
+            const source = this.ctx.createBufferSource()
+            source.buffer = buf
+            source.connect(this.stingsBus || this.ctx.destination)
+            source.start(0)
+          }
+
+          this.handleEvent("foley:commit", async () => {
+            if (this.isReducedMotion()) return
+            await this.playCommitTick()
+          })
+
+          this.handleEvent("foley:own-commit", async () => {
+            let enabled = true
+            try {
+              enabled = localStorage.getItem("foley:local-sounds") !== "off"
+            } catch (_) {}
+            if (!enabled || this.isReducedMotion()) return
+            await this.playCommitTick()
+          })
+
           this.handleEvent("foley:ending", async ({kind}) => {
             const endingKind = (kind === "meld") ? "meld" : "unmelded"
             const delayMs = (kind === "meld") ? 1800 : 0
@@ -1458,6 +1590,7 @@ defmodule MeaningGameWeb.RoomComponents do
 
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
+          this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
           this.updateTapForSound()
           if (!this.speaker) {
             this.stopVoice()
@@ -1467,6 +1600,8 @@ defmodule MeaningGameWeb.RoomComponents do
         },
 
         destroyed() {
+          if (this.onFormSubmit) document.removeEventListener("submit", this.onFormSubmit)
+          if (this.onCommitClick) document.removeEventListener("click", this.onCommitClick)
           this.stopVoice()
           this.currentVoiceAttempt = null
           this.stopMusic()
