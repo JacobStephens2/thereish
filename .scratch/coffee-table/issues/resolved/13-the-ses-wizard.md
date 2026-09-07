@@ -30,7 +30,7 @@
    - Jacob ran `va bash -c bin/ses-wizard` driving all 8 stages.
    - Stage 5 published all 3 Easy DKIM CNAMEs, custom MAIL FROM `send.thereish.app` MX and SPF TXT, DMARC TXT, and external report-authorisation TXT on `stephens.page` via Cloudflare API token.
    - Stage 6 verified resolution of all 5 DNS records via `dig`.
-   - AWS response time & verification: AWS approved production access almost immediately (under 10 minutes from submission at 18:44:13 GMT), moving the account out of the sandbox and verifying DKIM (`AWS_SES_DKIM_PENDING_TO_VERIFIED`).
+   - AWS response time & verification: AWS approved production access almost immediately (under 10 minutes from submission at 18:44:13 GMT), moving the account out of the sandbox and verifying DKIM (`AWS_SES_DKIM_PENDING_TO_VERIFIED`). Custom MAIL FROM domain `send.thereish.app` verified shortly after at 19:04:19 GMT (`AWS_SES_CMF_PENDING_TO_SUCCESS`).
    - Stage 8 pushed credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `NOTICE_TO`, `NOTICE_FROM`) to `/var/www/thereish.app/.env` on the server and verified `/check`.
    - End-to-end delivery confirmed: creating new rooms (`odyl` and `oxen`) from incognito devices dispatched notices that successfully arrived in `jacob@stephens.page`.
 
