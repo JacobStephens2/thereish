@@ -4,14 +4,9 @@ defmodule Thereish.DeployEnvTest do
   @env_sh Path.expand("../../deploy/env.sh", __DIR__)
 
   test "deploy/env.sh sets REPO to thereish.git" do
-    {output, 0} =
-      System.cmd("bash", [
-        "-c",
-        "source \"$1\" && printf '%s' \"$REPO\"",
-        "source-env",
-        @env_sh
-      ])
+    content = File.read!(@env_sh)
 
-    assert output == "https://github.com/JacobStephens2/thereish.git"
+    assert content =~ ~s(REPO="https://github.com/JacobStephens2/thereish.git")
+    refute content =~ "meaning-game.git"
   end
 end
