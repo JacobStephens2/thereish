@@ -230,10 +230,17 @@ porkbun_call() {
 }
 
 # Publish a DNS record to Porkbun idempotently
-# Returns 0 on success/already exists, 1 on failure.
+# Returns 0 on success/already exists/recorded as skipped (never crashes wizard under set -e).
 porkbun_publish_record_idempotent() {
   local domain="$1" subdomain="$2" type="$3" content="$4" prio="${5:-0}"
   local existing_records="$6"
+
+  # Normalize content: strip quotes and trailing dot for hostnames
+  content="${content%\"}"
+  content="${content#\"}"
+  if [[ "$type" == "CNAME" || "$type" == "MX" ]]; then
+    content="${content%.}"
+  fi
 
   local expected_name
   if [[ -z "$subdomain" || "$subdomain" == "@" ]]; then
@@ -244,7 +251,8 @@ porkbun_publish_record_idempotent() {
 
   if [[ -z "$subdomain" && "$type" == "CNAME" ]]; then
     warn "Cannot publish CNAME with empty subdomain on ${domain}"
-    return 1
+    SKIPPED+=("DNS record CNAME ${expected_name} (empty subdomain)")
+    return 0
   fi
 
   local existing_id=""
@@ -263,6 +271,44 @@ porkbun_publish_record_idempotent() {
   if [[ -n "$existing_id" ]]; then
     say "  ${GREEN}✓${RESET} ${type} ${expected_name} already present in Porkbun DNS (id: ${existing_id})"
     return 0
+  fi
+
+  # In DNS, a CNAME record cannot coexist with any other record type at the same host (RFC 1912 §2.4).
+  # If we are publishing an MX or TXT record and a CNAME exists for that exact host, Porkbun will
+  # reject the create call ("Create error: We were unable to create the DNS record").
+  # Similarly, if publishing CNAME and another record exists, it must be removed.
+  if command -v jq >/dev/null 2>&1; then
+    local conflicting_cnames
+    if [[ "$type" != "CNAME" ]]; then
+      conflicting_cnames=$(printf '%s' "$existing_records" | jq -r \
+        --arg name "$expected_name" \
+        '.records[]? | select(
+          (.name | ascii_downcase) == ($name | ascii_downcase) and
+          (.type | ascii_upcase) == "CNAME"
+        ) | .id' 2>/dev/null || true)
+    else
+      conflicting_cnames=$(printf '%s' "$existing_records" | jq -r \
+        --arg name "$expected_name" \
+        '.records[]? | select(
+          (.name | ascii_downcase) == ($name | ascii_downcase) and
+          (.type | ascii_upcase) != "CNAME"
+        ) | .id' 2>/dev/null || true)
+    fi
+
+    if [[ -n "$conflicting_cnames" ]]; then
+      while IFS= read -r conflict_id; do
+        [[ -z "$conflict_id" ]] && continue
+        say "  ${YELLOW}Notice: Found conflicting record for ${expected_name} (id: ${conflict_id}). Deleting to allow ${type}...${RESET}"
+        local del_res del_status
+        del_res=$(porkbun_call "dns/delete/${domain}/${conflict_id}" "{}")
+        del_status=$(printf '%s' "$del_res" | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || true)
+        if [[ "$del_status" == "SUCCESS" ]]; then
+          say "  ${GREEN}✓ Deleted conflicting record (id: ${conflict_id})${RESET}"
+        else
+          warn "Could not delete conflicting record (id: ${conflict_id}): ${del_res}"
+        fi
+      done <<< "$conflicting_cnames"
+    fi
   fi
 
   local payload
@@ -289,8 +335,19 @@ porkbun_publish_record_idempotent() {
   else
     msg=$(printf '%s' "$res" | grep -o '"message":"[^"]*"' | cut -d'"' -f4 || true)
     warn "Failed to publish ${type} ${expected_name}: ${msg:-unknown error}"
-    SKIPPED+=("DNS record ${type} ${expected_name}")
-    return 1
+    if [[ -n "$res" && "$res" != *"\"message\""* ]]; then
+      say "  ${DIM}API response: ${res}${RESET}"
+    fi
+    SKIPPED+=("DNS record ${type} ${expected_name} → ${content}")
+    say "  ${YELLOW}You can publish this record manually in Porkbun DNS Console:${RESET}"
+    say "    Type:     ${type}"
+    say "    Host:     ${subdomain}"
+    say "    Answer:   ${content}"
+    if [[ "$type" == "MX" ]]; then
+      say "    Priority: ${prio}"
+    fi
+    say "    TTL:      600"
+    return 0
   fi
 }
 
@@ -535,12 +592,15 @@ else
 
   # 4-5: MAIL FROM MX and TXT
   say "Publishing custom MAIL FROM records..."
-  porkbun_publish_record_idempotent "${DOMAIN}" "${MAIL_FROM_SUBDOMAIN}" "MX" "${MAIL_FROM_MX}" 10 "$EXISTING_DOMAIN_RECORDS"
-  porkbun_publish_record_idempotent "${DOMAIN}" "${MAIL_FROM_SUBDOMAIN}" "TXT" "${MAIL_FROM_TXT}" 0 "$EXISTING_DOMAIN_RECORDS"
+  EXISTING_DOMAIN_RECORDS=$(porkbun_call "dns/retrieve/${DOMAIN}" "{}")
+  porkbun_publish_record_idempotent "${DOMAIN}" "${MAIL_FROM_SUBDOMAIN}" "MX" "${MAIL_FROM_MX}" 10 "$EXISTING_DOMAIN_RECORDS" || true
+  EXISTING_DOMAIN_RECORDS=$(porkbun_call "dns/retrieve/${DOMAIN}" "{}")
+  porkbun_publish_record_idempotent "${DOMAIN}" "${MAIL_FROM_SUBDOMAIN}" "TXT" "${MAIL_FROM_TXT}" 0 "$EXISTING_DOMAIN_RECORDS" || true
 
   # 6: DMARC record
   say "Publishing DMARC record..."
-  porkbun_publish_record_idempotent "${DOMAIN}" "_dmarc" "TXT" "${DMARC_TXT}" 0 "$EXISTING_DOMAIN_RECORDS"
+  EXISTING_DOMAIN_RECORDS=$(porkbun_call "dns/retrieve/${DOMAIN}" "{}")
+  porkbun_publish_record_idempotent "${DOMAIN}" "_dmarc" "TXT" "${DMARC_TXT}" 0 "$EXISTING_DOMAIN_RECORDS" || true
 
   # 7: Report-authorisation record on reporting domain
   if [[ -n "$REPORT_AUTH_DOMAIN" ]]; then
