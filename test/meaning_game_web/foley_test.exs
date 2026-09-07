@@ -270,4 +270,104 @@ defmodule MeaningGameWeb.FoleyTest do
       refute {"foley:commit", %{}} in events
     end
   end
+
+  describe "push_foley_events/4 page track events" do
+    test "pushes foley:page with track path, title, and kind: 'track' when room has landed track" do
+      socket = test_socket()
+
+      new_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        track: %{
+          path: "/media/tracks/test.mp3",
+          title: "Summer Camp · Viking Beaches"
+        }
+      }
+
+      result = Foley.push_foley_events(socket, nil, new_room)
+      events = pushed_events(result)
+
+      assert {
+               "foley:page",
+               %{
+                 path: "/media/tracks/test.mp3",
+                 title: "Summer Camp · Viking Beaches",
+                 kind: "track"
+               }
+             } in events
+    end
+
+    test "pushes foley:page when track lands over house loop" do
+      socket = test_socket()
+      loop = hd(MeaningGame.Foley.Loops.all())
+
+      old_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        loop: loop,
+        track: nil
+      }
+
+      new_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        loop: loop,
+        track: %{
+          path: "/media/tracks/test.mp3",
+          title: "Summer Camp · Viking Beaches"
+        }
+      }
+
+      result = Foley.push_foley_events(socket, old_room, new_room)
+      events = pushed_events(result)
+
+      assert {
+               "foley:page",
+               %{
+                 path: "/media/tracks/test.mp3",
+                 title: "Summer Camp · Viking Beaches",
+                 kind: "track"
+               }
+             } in events
+    end
+
+    test "pushes foley:page when track title arrives after path" do
+      socket = test_socket()
+
+      old_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        track: %{
+          path: "/media/tracks/test.mp3",
+          title: nil
+        }
+      }
+
+      new_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        track: %{
+          path: "/media/tracks/test.mp3",
+          title: "Summer Camp · Viking Beaches"
+        }
+      }
+
+      result = Foley.push_foley_events(socket, old_room, new_room)
+      events = pushed_events(result)
+
+      assert {
+               "foley:page",
+               %{
+                 path: "/media/tracks/test.mp3",
+                 title: "Summer Camp · Viking Beaches",
+                 kind: "track"
+               }
+             } in events
+    end
+  end
 end

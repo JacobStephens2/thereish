@@ -166,6 +166,17 @@ config :meaning_game, :steward,
           requests: 1,
           timeout_ms: 2_500,
           deadline_ms: 5_000
+        ],
+        title: [
+          # Gemini 3.8 Flash at low effort, a one-field schema, a short timeout
+          # and deadline in the naming job's class (spec: The Scribe titles the Track).
+          provider: MeaningGame.Steward.Gemini,
+          model: "gemini-3.8-flash",
+          effort: "low",
+          max_tokens: 200,
+          requests: 1,
+          timeout_ms: 2_500,
+          deadline_ms: 5_000
         ]
       ]
     ],

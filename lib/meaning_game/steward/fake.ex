@@ -325,6 +325,43 @@ defmodule MeaningGame.Steward.Fake do
     end
   end
 
+  @impl true
+  def title_track(gives, opts \\ []) do
+    delay = title_delay_ms()
+    if delay > 0, do: Process.sleep(delay)
+
+    case title_mode() do
+      :ok ->
+        title =
+          Keyword.get(opts, :title) ||
+            config_get(:title_text, nil) ||
+            MeaningGame.Steward.Title.fallback(gives)
+
+        {:ok,
+         %{
+           title: title,
+           meta: %{
+             provider: "fake",
+             model: "fake-scribe",
+             cost_usd: 0.0001,
+             latency_ms: delay
+           }
+         }}
+
+      :unavailable ->
+        {:error, :title_unavailable}
+
+      :timeout ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :raise ->
+        raise "this Scribe is having a moment"
+    end
+  end
+
   # The Scribe with no model behind it writes the one true sentence about a
   # Page: who wrote what, first and last. It is a dial like the grade is — a
   # test that wants a recap naming a word writes that word as a Bridge — and it
@@ -354,6 +391,8 @@ defmodule MeaningGame.Steward.Fake do
   defp voice_mode, do: config_get(:voice_mode, :ok)
   defp music_delay_ms, do: config_get(:music_delay_ms, 0)
   defp music_mode, do: config_get(:music_mode, :ok)
+  defp title_delay_ms, do: config_get(:title_delay_ms, 0)
+  defp title_mode, do: config_get(:title_mode, :ok)
 
   defp config_get(key, default) do
     :meaning_game

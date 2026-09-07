@@ -46,6 +46,8 @@ defmodule MeaningGame.Steward.Live do
   """
   @behaviour MeaningGame.Steward
 
+  require Logger
+
   alias MeaningGame.Steward
   alias MeaningGame.Steward.Assay
   alias MeaningGame.Steward.Gate
@@ -53,6 +55,7 @@ defmodule MeaningGame.Steward.Live do
   alias MeaningGame.Steward.Naming
   alias MeaningGame.Steward.Precedent
   alias MeaningGame.Steward.Recap
+  alias MeaningGame.Steward.Title
   alias MeaningGame.Steward.TrackCache
   alias MeaningGame.Steward.Vale
 
@@ -305,6 +308,43 @@ defmodule MeaningGame.Steward.Live do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @impl true
+  def title_track(gives, _opts \\ []) do
+    role = Steward.role(:scribe, :title)
+    prompt = Title.prompt(gives)
+
+    case Gate.answer(role, prompt, &Title.check/1) do
+      {:ok, answer} ->
+        title = Title.title(answer.json)
+
+        {:ok,
+         %{
+           title: title,
+           meta: %{
+             model: answer.model,
+             cost_usd: answer.cost_usd,
+             latency_ms: answer.latency_ms,
+             attempts: answer.attempts
+           }
+         }}
+
+      {:error, reason} ->
+        Logger.warning("Scribe title failed (#{inspect(reason)}), falling back")
+
+        {:ok,
+         %{
+           title: Title.fallback(gives),
+           meta: %{
+             model: role.model,
+             cost_usd: 0.0,
+             latency_ms: 0,
+             attempts: 1,
+             fallback: true
+           }
+         }}
     end
   end
 
