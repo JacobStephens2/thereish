@@ -4,11 +4,11 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The Room row gains `music` with values `off`, `house`, `page` (default `page`) and loses `house_loop_only`, migrated in one expand-and-contract pair that writes `house` where the boolean was true; the Room's interface offers `set_music` in place of the boolean's setter and the snapshot answers `music`
-- [ ] The score task starts only under `page`; setting `page` mid-Page with no Track and no task running starts one; `house` and `off` do not, and a running task's late answer under `house` or `off` is kept for a later switch back rather than played
-- [ ] The three-way control and the voice switch render on every phone and on the Stage; a tap on any phone changes the fact and every connected view re-renders it; on the phone the control lives in the speaker bar (which ticket `.scratch/at-the-table/issues/11` moves below the play controls), on the Stage in the header
-- [ ] `foley:page` is pushed with a nil path under `off`; the hook fades the music bus out and keeps the stings and voice buses live; a later `house` or `page` fades music back in
-- [ ] Levels are read from the `foley` role's configuration and rendered as data attributes on the hook's container, which the hook reads on mount; a components test asserts the attributes carry the configured values
-- [ ] Room tests for the migration, persistence across a restart, and the three gating cases; LiveView tests with two phones and a Stage for the control on every view and the push under `off`; the two-phone tests without a Stage pass unchanged
+- [x] The Room row gains `music` with values `off`, `house`, `page` (default `page`) and loses `house_loop_only`, migrated in one expand-and-contract pair that writes `house` where the boolean was true; the Room's interface offers `set_music` in place of the boolean's setter and the snapshot answers `music`
+- [x] The score task starts only under `page`; setting `page` mid-Page with no Track and no task running starts one; `house` and `off` do not, and a running task's late answer under `house` or `off` is kept for a later switch back rather than played
+- [x] The three-way control and the voice switch render on every phone and on the Stage; a tap on any phone changes the fact and every connected view re-renders it; on the phone the control lives in the speaker bar (which ticket `.scratch/at-the-table/issues/11` moves below the play controls), on the Stage in the header
+- [x] `foley:page` is pushed with a nil path under `off`; the hook fades the music bus out and keeps the stings and voice buses live; a later `house` or `page` fades music back in
+- [x] Levels are read from the `foley` role's configuration and rendered as data attributes on the hook's container, which the hook reads on mount; a components test asserts the attributes carry the configured values
+- [x] Room tests for the migration, persistence across a restart, and the three gating cases; LiveView tests with two phones and a Stage for the control on every view and the push under `off`; the two-phone tests without a Stage pass unchanged

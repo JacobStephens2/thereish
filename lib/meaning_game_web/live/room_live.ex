@@ -221,8 +221,8 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
-  def handle_event("toggle_house_loop_only", _params, socket) do
-    Rooms.set_house_loop_only(socket.assigns.slug, !socket.assigns.room.house_loop_only)
+  def handle_event("set_music", %{"music" => music}, socket) do
+    Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}
   end
 

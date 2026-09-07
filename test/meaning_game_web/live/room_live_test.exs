@@ -1589,27 +1589,41 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
 
       assert has_element?(ctx.stage, "[data-role=voice-switch]")
-      assert has_element?(ctx.stage, "[data-role=house-loop-switch]")
-      refute has_element?(ctx.melissa, "[data-role=voice-switch]")
-      refute has_element?(ctx.melissa, "[data-role=house-loop-switch]")
+      assert has_element?(ctx.stage, "[data-role=music-control]")
+      assert has_element?(ctx.melissa, "[data-role=voice-switch]")
+      assert has_element?(ctx.melissa, "[data-role=music-control]")
+      assert has_element?(ctx.jacob, "[data-role=voice-switch]")
+      assert has_element?(ctx.jacob, "[data-role=music-control]")
+
+      assert has_element?(ctx.stage, "[data-role=voice-switch][data-active=false]")
+      assert has_element?(ctx.stage, "[data-role=music-page][data-active=true]")
+      assert has_element?(ctx.melissa, "[data-role=music-page][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=music-page][data-active=true]")
 
       ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
 
       assert_push_event(ctx.stage, "foley:stop", %{})
       refute has_element?(ctx.stage, "[data-role=tap-for-sound]")
-      refute has_element?(ctx.stage, "[data-role=voice-switch]")
 
+      assert has_element?(ctx.stage, "[data-role=voice-switch]")
+      assert has_element?(ctx.stage, "[data-role=music-control]")
       assert has_element?(ctx.melissa, "[data-role=speaker-toggle][data-speaker=self]")
       assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
 
       assert has_element?(ctx.melissa, "[data-role=voice-switch]")
-      assert has_element?(ctx.melissa, "[data-role=house-loop-switch]")
+      assert has_element?(ctx.melissa, "[data-role=music-control]")
 
       ctx.melissa |> element("[data-role=voice-switch]") |> render_click()
       assert Rooms.get_room(ctx.slug).voice == true
+      assert has_element?(ctx.melissa, "[data-role=voice-switch][data-active=true]")
+      assert has_element?(ctx.stage, "[data-role=voice-switch][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=voice-switch][data-active=true]")
 
-      ctx.melissa |> element("[data-role=house-loop-switch]") |> render_click()
-      assert Rooms.get_room(ctx.slug).house_loop_only == true
+      ctx.jacob |> element("[data-role=music-off]") |> render_click()
+      assert Rooms.get_room(ctx.slug).music == "off"
+      assert has_element?(ctx.melissa, "[data-role=music-off][data-active=true]")
+      assert has_element?(ctx.stage, "[data-role=music-off][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=music-off][data-active=true]")
     end
 
     test "foley events push to the speaking view alone across a Page arc", ctx do
@@ -1657,19 +1671,49 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute_push_event(ctx.stage, "foley:ending", %{})
     end
 
-    test "toggling house-loop-only pushes house loop to speaker", ctx do
+    test "music control pushes off, house, and page to speaker alone", ctx do
       give_setting(ctx.melissa, "setting one")
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
       assert_push_event(ctx.stage, "foley:page", %{path: track_path})
       assert String.starts_with?(track_path, "/media/tracks/fake-")
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
 
-      # Toggle house-loop-only on
-      ctx.stage |> element("[data-role=house-loop-switch]") |> render_click()
+      # Setting off (e.g. from Melissa's phone) pushes path: nil to speaker alone
+      ctx.melissa |> element("[data-role=music-off]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{path: nil})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      # Setting house (e.g. from Jacob's phone) pushes house-loop.mp3 to speaker alone
+      ctx.jacob |> element("[data-role=music-house]") |> render_click()
 
       assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
       refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      # Setting back to page (from stage) pushes track_path to speaker alone
+      ctx.stage |> element("[data-role=music-page]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{path: ^track_path})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+    end
+
+    test "starting a page under off pushes nil path to speaker", ctx do
+      ctx.melissa |> element("[data-role=music-off]") |> render_click()
+      assert Rooms.get_room(ctx.slug).music == "off"
+
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: nil})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
     end
 
     test "leaving stage releases speaker", ctx do

@@ -1322,11 +1322,96 @@ defmodule MeaningGame.RoomsTest do
       %{slug: slug, token_a: token_a, token_b: token_b, melissa: melissa, jacob: jacob}
     end
 
-    test "a new Room has no speaker and both switches off by default", ctx do
+    test "a new Room has no speaker, voice off, and music page by default", ctx do
       room = Store.get_room(ctx.slug)
       assert is_nil(room.speaker)
       assert room.voice == false
-      assert room.house_loop_only == false
+      assert room.music == "page"
+    end
+
+    test "migration pair converts house_loop_only true to house and drops house_loop_only" do
+      migrations_dir = Application.app_dir(:meaning_game, "priv/repo/migrations")
+      expand_file = Path.join(migrations_dir, "20260907140000_add_music_to_rooms.exs")
+
+      contract_file =
+        Path.join(migrations_dir, "20260907140001_remove_house_loop_only_from_rooms.exs")
+
+      assert File.exists?(expand_file)
+      assert File.exists?(contract_file)
+      assert File.read!(expand_file) =~ "add :music"
+      assert File.read!(expand_file) =~ "UPDATE rooms SET music = 'house' WHERE house_loop_only = true"
+      assert File.read!(contract_file) =~ "remove :house_loop_only"
+
+      # Verify the expand-and-contract migration pair on a table with the pre-migration shape
+      Ecto.Adapters.SQL.query!(MeaningGame.Repo, """
+      CREATE TEMP TABLE test_migration_rooms (
+        id UUID PRIMARY KEY,
+        slug VARCHAR(255),
+        seat_limit INT,
+        voice BOOLEAN DEFAULT false,
+        house_loop_only BOOLEAN DEFAULT false,
+        inserted_at TIMESTAMP,
+        updated_at TIMESTAMP
+      )
+      """)
+
+      now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "INSERT INTO test_migration_rooms (id, slug, seat_limit, voice, house_loop_only, inserted_at, updated_at) VALUES (gen_random_uuid(), 'mig-true', 2, false, true, $1, $1)",
+        [now]
+      )
+
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "INSERT INTO test_migration_rooms (id, slug, seat_limit, voice, house_loop_only, inserted_at, updated_at) VALUES (gen_random_uuid(), 'mig-false', 2, false, false, $1, $1)",
+        [now]
+      )
+
+      # Expand: add music column and backfill from house_loop_only
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "ALTER TABLE test_migration_rooms ADD COLUMN music VARCHAR(255) DEFAULT 'page' NOT NULL"
+      )
+
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "UPDATE test_migration_rooms SET music = 'house' WHERE house_loop_only = true"
+      )
+
+      res_true =
+        Ecto.Adapters.SQL.query!(
+          MeaningGame.Repo,
+          "SELECT music FROM test_migration_rooms WHERE slug = 'mig-true'",
+          []
+        )
+
+      res_false =
+        Ecto.Adapters.SQL.query!(
+          MeaningGame.Repo,
+          "SELECT music FROM test_migration_rooms WHERE slug = 'mig-false'",
+          []
+        )
+
+      assert res_true.rows == [["house"]]
+      assert res_false.rows == [["page"]]
+
+      # Contract: remove house_loop_only column
+      Ecto.Adapters.SQL.query!(
+        MeaningGame.Repo,
+        "ALTER TABLE test_migration_rooms DROP COLUMN house_loop_only"
+      )
+
+      cols =
+        Ecto.Adapters.SQL.query!(
+          MeaningGame.Repo,
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'test_migration_rooms'"
+        ).rows
+        |> List.flatten()
+
+      assert "music" in cols
+      refute "house_loop_only" in cols
     end
 
     test "claiming the speaker updates the Room and broadcasts", ctx do
@@ -1370,26 +1455,34 @@ defmodule MeaningGame.RoomsTest do
       assert is_nil(Store.get_room(ctx.slug).speaker)
     end
 
-    test "voice and house-loop-only switches update the Room and broadcast", ctx do
+    test "voice and music switches update the Room and broadcast", ctx do
       Rooms.subscribe(ctx.slug)
 
       assert :ok = Rooms.set_voice(ctx.slug, true)
       assert_receive :room_changed
       assert Store.get_room(ctx.slug).voice == true
 
-      assert :ok = Rooms.set_house_loop_only(ctx.slug, true)
+      assert :ok = Rooms.set_music(ctx.slug, "off")
       assert_receive :room_changed
-      assert Store.get_room(ctx.slug).house_loop_only == true
+      assert Store.get_room(ctx.slug).music == "off"
+
+      assert :ok = Rooms.set_music(ctx.slug, :house)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).music == "house"
+
+      assert :ok = Rooms.set_music(ctx.slug, "page")
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).music == "page"
 
       assert :ok = Rooms.set_voice(ctx.slug, false)
       assert_receive :room_changed
       assert Store.get_room(ctx.slug).voice == false
     end
 
-    test "speaker, voice and house-loop-only survive a Room process restart", ctx do
+    test "speaker, voice and music survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       assert :ok = Rooms.set_voice(ctx.slug, true)
-      assert :ok = Rooms.set_house_loop_only(ctx.slug, true)
+      assert :ok = Rooms.set_music(ctx.slug, "off")
 
       pid = GenServer.whereis(Server.via(ctx.slug))
       ref = Process.monitor(pid)
@@ -1404,7 +1497,7 @@ defmodule MeaningGame.RoomsTest do
 
       assert room.speaker == ctx.token_a
       assert room.voice == true
-      assert room.house_loop_only == true
+      assert room.music == "off"
     end
 
     test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
@@ -1417,14 +1510,15 @@ defmodule MeaningGame.RoomsTest do
         assert view.speaker? == false
         assert view.speaker_claimed? == false
         assert view.voice == false
-        assert view.house_loop_only == false
+        assert view.music == "page"
+        refute Map.has_key?(view, :house_loop_only)
         refute Map.has_key?(view, :speaker)
         refute Map.has_key?(view, :device_token)
       end
 
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       :ok = Rooms.set_voice(ctx.slug, true)
-      :ok = Rooms.set_house_loop_only(ctx.slug, true)
+      :ok = Rooms.set_music(ctx.slug, "house")
 
       view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
       view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
@@ -1433,12 +1527,12 @@ defmodule MeaningGame.RoomsTest do
       assert view_a.speaker? == true
       assert view_a.speaker_claimed? == true
       assert view_a.voice == true
-      assert view_a.house_loop_only == true
+      assert view_a.music == "house"
 
       assert view_b.speaker? == false
       assert view_b.speaker_claimed? == true
       assert view_b.voice == true
-      assert view_b.house_loop_only == true
+      assert view_b.music == "house"
       assert view_stage.speaker? == false
       assert view_stage.speaker_claimed? == true
 
@@ -1941,18 +2035,69 @@ defmodule MeaningGame.RoomsTest do
       assert is_nil(view[:track])
     end
 
-    test "when house_loop_only is enabled, Author does not start a score task", ctx do
-      :ok = Rooms.set_house_loop_only(ctx.slug, true)
+    test "setting page mid-Page with no Track and no task running starts a score task", ctx do
+      :ok = Rooms.set_music(ctx.slug, "house")
 
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "cabin in woods")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "desert night")
 
       await_phase(ctx.slug, :bridging)
 
-      # Wait a bit and verify no track arrived
+      # Under house, no track and no task running
       Process.sleep(50)
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert is_nil(view[:track])
+
+      # Switch to page mid-Page
+      Rooms.subscribe(ctx.slug)
+      assert :ok = Rooms.set_music(ctx.slug, "page")
+      assert_receive :room_changed
+
+      # Score task starts and delivers track
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert String.starts_with?(view.track.path, "/media/tracks/fake-")
+    end
+
+    test "under house or off, score task does not start, and late track is kept for later switch back",
+         ctx do
+      :ok = Rooms.set_music(ctx.slug, "off")
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "cabin in woods")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "desert night")
+
+      await_phase(ctx.slug, :bridging)
+
+      Process.sleep(50)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+
+      # Under house, late answer is kept rather than played
+      :ok = Rooms.set_music(ctx.slug, "house")
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+
+      fake_track = %{
+        path: "/media/tracks/late-answer.mp3",
+        duration: 120,
+        format: :mp3,
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:scored, page_ref, {:ok, fake_track}})
+
+      # Under house, the track is NOT exposed in snapshot
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
+
+      # Switch back to page: kept track is immediately exposed
+      :ok = Rooms.set_music(ctx.slug, "page")
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.track.path == "/media/tracks/late-answer.mp3"
     end
 
     test "a failing score task leaves track nil and records failure in music_meta on the Chronicle page",
