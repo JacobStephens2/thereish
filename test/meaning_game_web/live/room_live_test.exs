@@ -45,6 +45,19 @@ defmodule MeaningGameWeb.RoomLiveTest do
   # on every connection and say nothing about what the player sees.
   defp rendered_room(view), do: view |> element("#room") |> render()
 
+  defp assert_order(html, patterns) when is_list(patterns) do
+    indices =
+      Enum.map(patterns, fn pattern ->
+        case :binary.match(html, pattern) do
+          {idx, _} -> idx
+          :nomatch -> flunk("Expected to find #{inspect(pattern)} in rendered output")
+        end
+      end)
+
+    Enum.chunk_every(indices, 2, 1, :discard)
+    |> Enum.each(fn [a, b] -> assert a < b end)
+  end
+
   describe "joining" do
     test "a phone types a name and is in the Room" do
       slug = open_room()
@@ -52,11 +65,41 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       assert html =~ "Nobody yet"
 
+      # In :waiting, speaker bar and Code card render above the join form
+      assert_order(html, [
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        ~s(phx-submit="join")
+      ])
+
       html = join(melissa, "Melissa")
 
       assert html =~ "You are"
       assert has_element?(melissa, "[data-seat]", "Melissa")
       refute has_element?(melissa, "form")
+
+      # After joining in :waiting, Code card renders before "In the Room"
+      assert_order(html, [~s(data-role="room-code"), "In the Room"])
+    end
+
+    test "Code card renders the Room's quip beneath the Code when present, and nothing when absent" do
+      slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
+      {:ok, view, _html} = live(phone(slug_with_quip))
+      assert has_element?(view, "[data-role=code-quip]", "A gentle word for quiet hours.")
+
+      slug_no_quip = open_room(quip: nil)
+      {:ok, view_no_quip, _html} = live(phone(slug_no_quip))
+      refute has_element?(view_no_quip, "[data-role=code-quip]")
+    end
+
+    test "Stage header renders the Room's quip beside the join line when present, and nothing when absent" do
+      slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
+      {:ok, stage, _html} = live(build_conn(), ~p"/r/#{slug_with_quip}/stage")
+      assert has_element?(stage, "[data-role=stage-quip]", "A gentle word for quiet hours.")
+
+      slug_no_quip = open_room(quip: nil)
+      {:ok, stage_no_quip, _html} = live(build_conn(), ~p"/r/#{slug_no_quip}/stage")
+      refute has_element?(stage_no_quip, "[data-role=stage-quip]")
     end
 
     test "two phones and a stage all show the same roster" do
@@ -194,12 +237,42 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
 
       for view <- [ctx.melissa, ctx.jacob, stage] do
+        assert has_element?(view, "[data-role=bookends-caption]", "Bookends")
         assert has_element?(view, "[data-role=bookends]", "lantern")
         assert has_element?(view, "[data-role=bookends]", "harbour")
       end
     end
 
+    test "during bridging, the Attempt line, Bookends and Bridge form come first and speaker bar and Code card are below",
+         ctx do
+      html = render(ctx.melissa)
+
+      assert_order(html, [
+        ~s(data-role="attempt"),
+        ~s(data-role="bookends"),
+        ~s(data-role="bridge-form"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room"
+      ])
+    end
+
+    test "a phone with no Seat mid-Page renders join form first, then speaker bar and Code card before In the Room",
+         ctx do
+      {:ok, onlooker, _} = live(phone(ctx.slug))
+      html = render(onlooker)
+
+      assert_order(html, [
+        ~s(phx-submit="join"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room"
+      ])
+    end
+
     test "an illegal bridge is caught on the phone before commit and on commit", ctx do
+      assert has_element?(ctx.melissa, "label", "Your bridge")
+
       ctx.melissa
       |> form("[data-role=bridge-form]", %{"bridge" => "lanterns"})
       |> render_change()
@@ -222,7 +295,7 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute has_element?(ctx.melissa, "[data-role=your-bridge]")
 
       commit(ctx.melissa, "beacon")
-      assert has_element?(ctx.melissa, "[data-role=your-bridge]", "beacon")
+      assert has_element?(ctx.melissa, "[data-role=your-bridge]", "Your bridge: beacon")
       refute has_element?(ctx.melissa, "[data-role=bridge-form]")
     end
 
@@ -667,26 +740,28 @@ defmodule MeaningGameWeb.RoomLiveTest do
         refute has_element?(view, "[data-role=furthest]")
 
         # Order within reveal: comparison -> closeness -> quip
-        {comp_idx, _} = :binary.match(html, ~s(data-role="comparison"))
-        {close_idx, _} = :binary.match(html, ~s(data-role="closeness-display"))
-        {quip_idx, _} = :binary.match(html, ~s(data-role="quip"))
-        assert comp_idx < close_idx
-        assert close_idx < quip_idx
+        assert_order(html, [
+          ~s(data-role="comparison"),
+          ~s(data-role="closeness-display"),
+          ~s(data-role="quip")
+        ])
       end
 
       # Phone distinguishes your bridge with (you)
       assert has_element?(ctx.melissa, "[data-bridge][data-you=true]", "Melissa")
       assert has_element?(ctx.melissa, "[data-bridge][data-you=false]", "Jacob")
 
-      # Code card renders in every phase, full Room included
-      assert has_element?(ctx.melissa, "[data-role=room-code]")
-      assert has_element?(ctx.jacob, "[data-role=room-code]")
-
-      # Header and "You are …" render below reveal as a footer on phone
+      # Code card renders after reveal and controls, before In the Room and footer
       phone_html = render(ctx.melissa)
-      {reveal_idx, _} = :binary.match(phone_html, ~s(data-role="reveal"))
-      {footer_idx, _} = :binary.match(phone_html, "<footer")
-      assert reveal_idx < footer_idx
+
+      assert_order(phone_html, [
+        ~s(data-role="reveal"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room",
+        "<footer"
+      ])
+
       assert has_element?(ctx.melissa, "footer [data-role=you]", "Melissa")
       assert has_element?(ctx.melissa, "footer h1", "Thereish")
       assert has_element?(ctx.melissa, "footer a", "The Chronicle")
@@ -925,6 +1000,15 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.stage, "[data-role=giving-stage]")
       assert render(ctx.stage) =~ "0 of 2"
 
+      # Code card and speaker bar are above setting form during giving phase
+      melissa_giving_html = render(ctx.melissa)
+
+      assert_order(melissa_giving_html, [
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        ~s(data-role="setting-form")
+      ])
+
       # Melissa gives a setting
       give_setting(ctx.melissa, "candlelit cathedral")
 
@@ -945,6 +1029,16 @@ defmodule MeaningGameWeb.RoomLiveTest do
       # Beat meter pulses during writing phase
       eventually(fn -> has_element?(ctx.stage, "[data-role=writing-stage]") end)
       assert has_element?(ctx.melissa, "[data-role=writing-phase]")
+
+      # From :writing on, speaker bar and Code card render after writing phase and before In the Room
+      writing_html = render(ctx.melissa)
+
+      assert_order(writing_html, [
+        ~s(data-role="writing-phase"),
+        ~s(data-role="speaker-bar"),
+        ~s(data-role="room-code"),
+        "In the Room"
+      ])
 
       # Transitions to bridging with bookends and no setting line
       await_phase(ctx.slug, :bridging)
@@ -1589,27 +1683,41 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
 
       assert has_element?(ctx.stage, "[data-role=voice-switch]")
-      assert has_element?(ctx.stage, "[data-role=house-loop-switch]")
-      refute has_element?(ctx.melissa, "[data-role=voice-switch]")
-      refute has_element?(ctx.melissa, "[data-role=house-loop-switch]")
+      assert has_element?(ctx.stage, "[data-role=music-control]")
+      assert has_element?(ctx.melissa, "[data-role=voice-switch]")
+      assert has_element?(ctx.melissa, "[data-role=music-control]")
+      assert has_element?(ctx.jacob, "[data-role=voice-switch]")
+      assert has_element?(ctx.jacob, "[data-role=music-control]")
+
+      assert has_element?(ctx.stage, "[data-role=voice-switch][data-active=false]")
+      assert has_element?(ctx.stage, "[data-role=music-page][data-active=true]")
+      assert has_element?(ctx.melissa, "[data-role=music-page][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=music-page][data-active=true]")
 
       ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
 
       assert_push_event(ctx.stage, "foley:stop", %{})
       refute has_element?(ctx.stage, "[data-role=tap-for-sound]")
-      refute has_element?(ctx.stage, "[data-role=voice-switch]")
 
+      assert has_element?(ctx.stage, "[data-role=voice-switch]")
+      assert has_element?(ctx.stage, "[data-role=music-control]")
       assert has_element?(ctx.melissa, "[data-role=speaker-toggle][data-speaker=self]")
       assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
 
       assert has_element?(ctx.melissa, "[data-role=voice-switch]")
-      assert has_element?(ctx.melissa, "[data-role=house-loop-switch]")
+      assert has_element?(ctx.melissa, "[data-role=music-control]")
 
       ctx.melissa |> element("[data-role=voice-switch]") |> render_click()
       assert Rooms.get_room(ctx.slug).voice == true
+      assert has_element?(ctx.melissa, "[data-role=voice-switch][data-active=true]")
+      assert has_element?(ctx.stage, "[data-role=voice-switch][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=voice-switch][data-active=true]")
 
-      ctx.melissa |> element("[data-role=house-loop-switch]") |> render_click()
-      assert Rooms.get_room(ctx.slug).house_loop_only == true
+      ctx.jacob |> element("[data-role=music-off]") |> render_click()
+      assert Rooms.get_room(ctx.slug).music == "off"
+      assert has_element?(ctx.melissa, "[data-role=music-off][data-active=true]")
+      assert has_element?(ctx.stage, "[data-role=music-off][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=music-off][data-active=true]")
     end
 
     test "foley events push to the speaking view alone across a Page arc", ctx do
@@ -1657,19 +1765,49 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute_push_event(ctx.stage, "foley:ending", %{})
     end
 
-    test "toggling house-loop-only pushes house loop to speaker", ctx do
+    test "music control pushes off, house, and page to speaker alone", ctx do
       give_setting(ctx.melissa, "setting one")
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
       assert_push_event(ctx.stage, "foley:page", %{path: track_path})
       assert String.starts_with?(track_path, "/media/tracks/fake-")
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
 
-      # Toggle house-loop-only on
-      ctx.stage |> element("[data-role=house-loop-switch]") |> render_click()
+      # Setting off (e.g. from Melissa's phone) pushes path: nil to speaker alone
+      ctx.melissa |> element("[data-role=music-off]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{path: nil})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      # Setting house (e.g. from Jacob's phone) pushes house-loop.mp3 to speaker alone
+      ctx.jacob |> element("[data-role=music-house]") |> render_click()
 
       assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
       refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+
+      # Setting back to page (from stage) pushes track_path to speaker alone
+      ctx.stage |> element("[data-role=music-page]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{path: ^track_path})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
+    end
+
+    test "starting a page under off pushes nil path to speaker", ctx do
+      ctx.melissa |> element("[data-role=music-off]") |> render_click()
+      assert Rooms.get_room(ctx.slug).music == "off"
+
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{path: nil})
+      refute_push_event(ctx.melissa, "foley:page", %{})
+      refute_push_event(ctx.jacob, "foley:page", %{})
     end
 
     test "leaving stage releases speaker", ctx do

@@ -8,6 +8,7 @@
 import Config
 
 config :meaning_game,
+  env: config_env(),
   ecto_repos: [MeaningGame.Repo],
   # Microseconds, because insertion order is display order: the roster, the
   # reveal, and every Chronicle table to come are read in the order the rows
@@ -133,9 +134,15 @@ config :meaning_game, :steward,
           # `claude-fable-5-1` because the Steward prototype measured it writing
           # the best recaps of the models benched, and long ones — which is what
           # the Vale gate is for rather than a reason to pick a worse writer.
+          #
+          # Effort is low because the role furthest from the table is not nine
+          # dollars in ten: the ten recaps to date were $0.71 of the $0.80 ever
+          # spent (spec, "Spend and the record").
+          # xhigh is kept as a one-line alternative if prose quality requires it:
+          # effort: "xhigh",
           provider: MeaningGame.Steward.Anthropic,
           model: "claude-fable-5-1",
-          effort: "xhigh",
+          effort: "low",
           max_tokens: 8_000,
           # Nobody is waiting. The budget is generous because a recap that takes
           # a minute is a recap, and a recap that was rushed is a paragraph the
@@ -158,6 +165,7 @@ config :meaning_game, :steward,
       ]
     ],
     foley: [
+      levels: [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15],
       elevenlabs_api_key: nil,
       hume_api_key: nil,
       hume_secret_key: nil,
@@ -183,7 +191,7 @@ config :meaning_game, :steward,
           model: "gemini-3.8-flash",
           effort: "low",
           max_tokens: 1_000,
-          timeout_ms: 30_000,
+          timeout_ms: 90_000,
           api_key: nil
         ],
         # Either provider is one config line. Dungeon Master (Hume, bake-off winner) with George (ElevenLabs) as alternative.
@@ -260,8 +268,17 @@ config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+# Room creation rate limiting: sliding hour in memory per device and per address
+config :meaning_game, :room_creation_rate_limit,
+  per_device: 10,
+  per_address: 30,
+  window_seconds: 3600
+
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
+
+# Configure Swoosh API client
+config :swoosh, :api_client, Swoosh.ApiClient.Req
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

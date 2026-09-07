@@ -4,9 +4,13 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The brief set carries the seven new briefs with the kinds, durations and target names above; the manifest schema accepts a name per loop
-- [ ] A loop-names module answers every loop in the manifest as name and path, the existing loop first, and a test proves the list matches the manifest
-- [ ] `mix foley.forge` with the Fake writes candidates for every new brief, prints the ranking, and with a manifest copies the seven winners to their fixed names; the forge task test covers the new briefs
-- [ ] Run under `va bash`; Jacob has chosen every asset; the seven files and the manifest are committed; the spend printed is recorded here
+- [x] The brief set carries the seven new briefs with the kinds, durations and target names above; the manifest schema accepts a name per loop
+- [x] A loop-names module answers every loop in the manifest as name and path, the existing loop first, and a test proves the list matches the manifest
+- [x] `mix foley.forge` with the Fake writes candidates for every new brief, prints the ranking, and with a manifest copies the seven winners to their fixed names; the forge task test covers the new briefs
+- [x] Run under `va bash`; Jacob has chosen every asset; the seven files and the manifest are committed; the spend printed is recorded here
+  - Commit tick (ElevenLabs + Gemini ear): $0.0029
+  - Victory cues (ElevenLabs + Gemini ear): $0.0890
+  - House loops (Mureka + Gemini ear): $0.7039
+  - Total spend: $0.7958

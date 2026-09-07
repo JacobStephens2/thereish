@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The spend page shows "N Pages in play, not yet counted" when N > 0 and nothing when N = 0; a Room's Chronicle foot does the same for that Room (0 or 1)
-- [ ] A speak task that fails records `voice_meta` for its Attempt with provider, voice, `cost_usd` 0.0 and a `failure`; it is attached to the Verdict at chronicle time and the spend page counts it as a Foley call at zero
-- [ ] The `recap` job's effort is `low`, with `xhigh` as a commented alternative and the reason in the comment; a test asserts the configured effort reaches the request
-- [ ] Chronicle tests for the in-play count and the zero-cost failure; Room tests for the recorded voice failure; a spend page test for the sentence present and absent
+- [x] The spend page shows "N Pages in play, not yet counted" when N > 0 and nothing when N = 0; a Room's Chronicle foot does the same for that Room (0 or 1)
+- [x] A speak task that fails records `voice_meta` for its Attempt with provider, voice, `cost_usd` 0.0 and a `failure`; it is attached to the Verdict at chronicle time and the spend page counts it as a Foley call at zero
+- [x] The `recap` job's effort is `low`, with `xhigh` as a commented alternative and the reason in the comment; a test asserts the configured effort reaches the request
+- [x] Chronicle tests for the in-play count and the zero-cost failure; Room tests for the recorded voice failure; a spend page test for the sentence present and absent
