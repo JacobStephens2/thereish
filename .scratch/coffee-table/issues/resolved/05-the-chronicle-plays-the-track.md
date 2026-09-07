@@ -4,8 +4,8 @@
 
 **Blocked by:** 04 (The Scribe titles the Track).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A closed Page whose `music_meta` has a path shows its title and a player in the book; a Page without a path shows no music line; a Page under Off or with a failed score shows none
-- [ ] The Markdown export writes `Track: <title>` for a Page with one and nothing otherwise; the reader accepts the line; an export from before this ticket still parses
-- [ ] Chronicle LiveView tests for both renderings; Chronicle tests for the export line both ways
+- [x] A closed Page whose `music_meta` has a path shows its title and a player in the book; a Page without a path shows no music line; a Page under Off or with a failed score shows none
+- [x] The Markdown export writes `Track: <title>` for a Page with one and nothing otherwise; the reader accepts the line; an export from before this ticket still parses
+- [x] Chronicle LiveView tests for both renderings; Chronicle tests for the export line both ways
