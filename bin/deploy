@@ -42,6 +42,11 @@ MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^HUME_API_KEY=.' ${APP_DIR}/.env || echo 'HUME_API_KEY'
   grep -q '^HUME_SECRET_KEY=.' ${APP_DIR}/.env || echo 'HUME_SECRET_KEY'
   grep -q '^ELEVENLABS_API_KEY=.' ${APP_DIR}/.env || echo 'ELEVENLABS_API_KEY'
+  grep -q '^AWS_ACCESS_KEY_ID=.' ${APP_DIR}/.env || echo 'AWS_ACCESS_KEY_ID'
+  grep -q '^AWS_SECRET_ACCESS_KEY=.' ${APP_DIR}/.env || echo 'AWS_SECRET_ACCESS_KEY'
+  grep -q '^AWS_REGION=.' ${APP_DIR}/.env || echo 'AWS_REGION'
+  grep -q '^NOTICE_TO=.' ${APP_DIR}/.env || echo 'NOTICE_TO'
+  grep -q '^NOTICE_FROM=.' ${APP_DIR}/.env || echo 'NOTICE_FROM'
 ")
 
 if echo "${MISSING_KEYS}" | grep -q 'GEMINI_API_KEY'; then
@@ -72,6 +77,12 @@ for key in "${VOICE_KEYS[@]}"; do
   if echo "${MISSING_KEYS}" | grep -q "${key}"; then
     echo "Note: no ${key} in ${APP_DIR}/.env — the voice switch will do nothing."
     echo "      See docs/deploy.md, \"Foley's keys\"."
+  fi
+done
+
+for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION NOTICE_TO NOTICE_FROM; do
+  if echo "${MISSING_KEYS}" | grep -q "${key}"; then
+    echo "Note: no ${key} in ${APP_DIR}/.env — notices for new Rooms will not be sent."
   fi
 done
 

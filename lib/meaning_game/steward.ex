@@ -87,7 +87,9 @@ defmodule MeaningGame.Steward do
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
   @callback forge(map() | String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   @callback rank([binary() | map()], map() | String.t()) :: {:ok, [map()]} | {:error, term()}
-  @callback name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @callback name_room([String.t()], [String.t()]) ::
+              {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
+  @callback quip_code(String.t()) :: {:ok, String.t() | nil} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
 
@@ -125,6 +127,58 @@ defmodule MeaningGame.Steward do
       failure: to_string(reason)
     }
   end
+
+  @doc """
+  Builds failure provenance for a Foley voice failure.
+  """
+  @spec voice_failure(term()) :: map()
+  def voice_failure(reason) do
+    {provider, voice} = voice_provenance()
+
+    %{
+      "provider" => provider,
+      "voice" => voice,
+      "cost_usd" => 0.0,
+      "failure" => format_voice_error(reason)
+    }
+  end
+
+  defp voice_provenance do
+    if adapter() == MeaningGame.Steward.Fake do
+      {"fake", "fake-voice"}
+    else
+      role =
+        try do
+          role(:foley, :voice)
+        rescue
+          _ -> %{}
+        end
+
+      provider =
+        case role[:provider] do
+          MeaningGame.Steward.Hume ->
+            "hume"
+
+          MeaningGame.Steward.ElevenLabs ->
+            "eleven_labs"
+
+          mod when is_atom(mod) and not is_nil(mod) ->
+            mod |> Module.split() |> List.last() |> Macro.underscore()
+
+          other ->
+            to_string(other || "hume")
+        end
+
+      voice = to_string(role[:voice_id] || role[:voice] || "default")
+      {provider, voice}
+    end
+  end
+
+  defp format_voice_error(%RuntimeError{message: msg}), do: msg
+  defp format_voice_error({:exit, reason}), do: "process exited: #{inspect(reason)}"
+  defp format_voice_error(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_voice_error(reason) when is_binary(reason), do: reason
+  defp format_voice_error(reason), do: inspect(reason)
 
   @doc """
   Generates N candidate sound effects or music tracks for a brief.
@@ -172,9 +226,10 @@ defmodule MeaningGame.Steward do
 
   @doc """
   Asks the Scribe to name a Room with one four-letter word that nods to the
-  history in `digests` and avoids `taken_codes`.
+  history in `digests` and avoids `taken_codes`, answering both word and quip.
   """
-  @spec name_room([String.t()], [String.t()]) :: {:ok, String.t()} | {:error, term()}
+  @spec name_room([String.t()], [String.t()]) ::
+          {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
   def name_room([], _taken_codes), do: {:error, :no_history}
 
   def name_room(digests, taken_codes) do
@@ -186,7 +241,28 @@ defmodule MeaningGame.Steward do
       end)
 
     case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {:ok, word}} when is_binary(word) -> {:ok, word}
+      {:ok, {:ok, %{word: _} = result}} -> {:ok, result}
+      {:ok, {:ok, word}} when is_binary(word) -> {:ok, %{word: word, quip: nil}}
+      {:ok, other} -> other
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
+    end
+  end
+
+  @doc """
+  Asks the Scribe for a quip about a Room Code drawn at random, answering one line.
+  """
+  @spec quip_code(String.t()) :: {:ok, String.t() | nil} | {:error, term()}
+  def quip_code(code) do
+    role = role(:scribe, :naming)
+
+    task =
+      Task.Supervisor.async_nolink(MeaningGame.Steward.Tasks, fn ->
+        adapter().quip_code(code)
+      end)
+
+    case Task.yield(task, role.deadline_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, quip}} -> {:ok, quip}
       {:ok, other} -> other
       {:exit, reason} -> {:error, reason}
       nil -> {:error, :timeout}
@@ -428,6 +504,20 @@ defmodule MeaningGame.Steward do
   @spec seat_cap() :: pos_integer()
   def seat_cap do
     :meaning_game |> Application.fetch_env!(:steward) |> Keyword.fetch!(:seat_cap)
+  end
+
+  @default_foley_levels [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15]
+
+  @doc "Levels configured for Foley buses: music, stings, voice, duck."
+  @spec foley_levels() :: keyword()
+  def foley_levels do
+    case settings(:foley) do
+      settings when is_list(settings) ->
+        Keyword.get(settings, :levels, @default_foley_levels)
+
+      _ ->
+        @default_foley_levels
+    end
   end
 
   @doc """
