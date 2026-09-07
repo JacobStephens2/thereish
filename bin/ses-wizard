@@ -355,6 +355,59 @@ porkbun_publish_record_idempotent() {
   fi
 }
 
+# Publish a TXT record to Cloudflare idempotently if token is available.
+# Returns 0 on success/already exists, 1 if no token or publication failed.
+cloudflare_publish_txt_idempotent() {
+  local domain="$1" subdomain="$2" content="$3"
+  local token="${CLOUDFLARE_EDIT_ZONES_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}"
+  [[ -z "$token" ]] && return 1
+
+  command -v jq >/dev/null 2>&1 || return 1
+
+  say "Found Cloudflare API token. Checking Cloudflare DNS for ${domain}..."
+  local zone_id
+  zone_id=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" \
+    -H "Authorization: Bearer ${token}" \
+    -H "Content-Type: application/json" 2>/dev/null | jq -r '.result[0].id // empty' 2>/dev/null || true)
+
+  if [[ -z "$zone_id" ]]; then
+    warn "Could not resolve Cloudflare zone ID for ${domain} with the provided token."
+    return 1
+  fi
+
+  local full_name="${subdomain}.${domain}"
+  local existing_id
+  existing_id=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=TXT&name=${full_name}" \
+    -H "Authorization: Bearer ${token}" \
+    -H "Content-Type: application/json" 2>/dev/null | jq -r '.result[0].id // empty' 2>/dev/null || true)
+
+  if [[ -n "$existing_id" ]]; then
+    say "  ${GREEN}✓ TXT ${full_name} already present in Cloudflare DNS (id: ${existing_id})${RESET}"
+    return 0
+  fi
+
+  say "Publishing report-authorisation record on Cloudflare (${domain})..."
+  local payload res success new_id
+  payload=$(jq -n \
+    --arg name "${subdomain}" \
+    --arg content "${content}" \
+    '{type: "TXT", name: $name, content: $content, ttl: 3600}')
+  res=$(curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
+    -H "Authorization: Bearer ${token}" \
+    -H "Content-Type: application/json" \
+    -d "$payload" 2>/dev/null || true)
+  success=$(printf '%s' "$res" | jq -r '.success // false' 2>/dev/null || true)
+
+  if [[ "$success" == "true" ]]; then
+    new_id=$(printf '%s' "$res" | jq -r '.result.id // empty' 2>/dev/null || true)
+    say "  ${GREEN}✓ Published TXT ${full_name} → ${content} via Cloudflare API (id: ${new_id})${RESET}"
+    return 0
+  else
+    warn "Could not publish via Cloudflare API: ${res}"
+    return 1
+  fi
+}
+
 banner "Thereish: Amazon SES & DNS wizard"
 
 # ── Stage 1 ───────────────────────────────────────────────────────────────
@@ -619,6 +672,8 @@ else
       say "${GREEN}✓ Reporting domain ${REPORT_AUTH_DOMAIN} found at Porkbun.${RESET}"
       say "Publishing report-authorisation record on ${REPORT_AUTH_DOMAIN}..."
       porkbun_publish_record_idempotent "${REPORT_AUTH_DOMAIN}" "${REPORT_AUTH_SUBDOMAIN}" "TXT" "${REPORT_AUTH_RECORD}" 0 "$REPORTING_RECORDS"
+    elif cloudflare_publish_txt_idempotent "${REPORT_AUTH_DOMAIN}" "${REPORT_AUTH_SUBDOMAIN}" "${REPORT_AUTH_RECORD}"; then
+      : # Successfully published or verified on Cloudflare
     else
       say "${YELLOW}Reporting domain ${REPORT_AUTH_DOMAIN} is not managed by Porkbun DNS.${RESET}"
       say "Publish the report-authorisation record by hand at ${REPORT_AUTH_DOMAIN}'s DNS provider:"
