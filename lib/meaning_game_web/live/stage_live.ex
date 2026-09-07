@@ -94,83 +94,85 @@ defmodule MeaningGameWeb.StageLive do
     <main
       id="stage"
       phx-hook=".WakeLock"
-      class="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-12 px-8 py-16"
+      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between px-6 py-4 sm:px-8 sm:py-5 overflow-y-auto select-none box-border"
     >
-      <header class="flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <h1 class="text-4xl font-semibold">Thereish</h1>
-          <div class="flex items-center gap-4">
-            <button
-              :if={@room && @room.speaker?}
-              type="button"
-              id="tap-for-sound"
-              data-role="tap-for-sound"
-              class="btn btn-outline btn-sm animate-pulse"
-            >
-              Tap for sound
-            </button>
-            <.foley_switches :if={@room} room={@room} />
-            <.link
-              navigate={chronicle_path(@slug)}
-              class="text-base font-medium underline opacity-70 hover:opacity-100"
-            >
-              The Chronicle
-            </.link>
-          </div>
+      <header class="flex items-center justify-between w-full shrink-0">
+        <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
+        <div class="flex items-center gap-4">
+          <button
+            :if={@room && @room.speaker?}
+            type="button"
+            id="tap-for-sound"
+            data-role="tap-for-sound"
+            class="btn btn-outline btn-sm animate-pulse"
+          >
+            Tap for sound
+          </button>
+          <.foley_switches :if={@room} room={@room} />
+          <.link
+            navigate={chronicle_path(@slug)}
+            class="text-base font-medium underline opacity-70 hover:opacity-100"
+          >
+            The Chronicle
+          </.link>
         </div>
-        <p class="text-xl opacity-70">
-          Join at <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
-        </p>
       </header>
 
-      <section
-        :if={@room.phase == :giving}
-        data-role="giving-stage"
-        class="flex flex-col items-center justify-center gap-3 text-center"
+      <div class="flex-1 flex flex-col items-center justify-center min-h-0 w-full my-auto overflow-hidden gap-[clamp(0.5rem,1.5vh,1.5rem)]">
+        <section
+          :if={@room.phase == :giving}
+          data-role="giving-stage"
+          class="flex flex-col items-center justify-center gap-3 text-center"
+        >
+          <p class="text-xs uppercase tracking-widest font-semibold text-primary">Settings</p>
+          <p class="text-2xl font-semibold">
+            Waiting for settings: {@room.gives_in} of {length(@room.seats)}
+          </p>
+        </section>
+
+        <section
+          :if={@room.phase == :writing && is_nil(@room[:author_failure])}
+          data-role="writing-stage"
+          class="flex flex-col items-center justify-center gap-3 text-center"
+        >
+          <.author_writing room={@room} mode={:stage} />
+        </section>
+
+        <section
+          :if={@room.phase == :writing && @room[:author_failure]}
+          data-role="author-failure"
+          class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
+        >
+          <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+          <p class="text-2xl font-semibold">
+            The Author couldn't write from these settings: {@room.author_failure}
+          </p>
+        </section>
+
+        <.attempt room={@room} />
+
+        <.bookends room={@room} mode={:stage} />
+
+        <.assaying room={@room} />
+
+        <.reveal room={@room} mode={:stage} />
+
+        <.overrule_banner room={@room} />
+
+        <.carry_forward room={@room} />
+
+        <.ending room={@room} />
+      </div>
+
+      <footer
+        data-role="stage-foot"
+        class="w-full flex flex-wrap items-center justify-between gap-3 border-t border-base-300/60 pt-2 text-sm shrink-0"
       >
-        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Settings</p>
-        <p class="text-2xl font-semibold">
-          Waiting for settings: {@room.gives_in} of {length(@room.seats)}
+        <p class="text-sm opacity-70 shrink-0">
+          Join at <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
         </p>
-      </section>
-
-      <section
-        :if={@room.phase == :writing && is_nil(@room[:author_failure])}
-        data-role="writing-stage"
-        class="flex flex-col items-center justify-center gap-3 text-center"
-      >
-        <.author_writing room={@room} mode={:stage} />
-      </section>
-
-      <section
-        :if={@room.phase == :writing && @room[:author_failure]}
-        data-role="author-failure"
-        class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
-      >
-        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
-        <p class="text-2xl font-semibold">
-          The Author couldn't write from these settings: {@room.author_failure}
-        </p>
-      </section>
-
-      <.attempt room={@room} />
-
-      <.bookends room={@room} />
-
-      <.assaying room={@room} />
-
-      <.reveal room={@room} mode={:stage} />
-
-      <.overrule_banner room={@room} />
-
-      <.carry_forward room={@room} />
-
-      <.ending room={@room} />
-
-      <section class="flex flex-col gap-4">
-        <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>
-        <.roster room={@room} />
-      </section>
+        <.roster room={@room} mode={:stage} />
+      </footer>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".WakeLock">
         export default {

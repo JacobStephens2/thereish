@@ -556,6 +556,18 @@ defmodule MeaningGameWeb.RoomLiveTest do
 
       # Two of three landing on one word is not the table being of one mind.
       assert has_element?(stage, "[data-role=band]", "miss")
+
+      # Structure and position: header -> attempt -> bookends -> bridges -> closeness -> quip -> foot strip
+      html = render(stage)
+      assert_order(html, [
+        "<header",
+        ~s(data-role="attempt"),
+        ~s(data-role="bookends"),
+        ~s(data-role="comparison"),
+        ~s(data-role="closeness"),
+        ~s(data-role="quip"),
+        ~s(data-role="stage-foot")
+      ])
     end
 
     test "shows the URL a phone should open" do
@@ -563,6 +575,36 @@ defmodule MeaningGameWeb.RoomLiveTest do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
       assert has_element?(stage, "[data-role=join-url]", "/r/#{slug}")
+    end
+
+    test "heading, controls, and chronicle share one line; join URL and roster share one compact strip at the foot" do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      html = render(stage)
+
+      # Header has Thereish, controls, and The Chronicle, but NOT the join URL
+      assert has_element?(stage, "header h1", "Thereish")
+      assert has_element?(stage, "header a", "The Chronicle")
+      refute has_element?(stage, "header [data-role=join-url]")
+
+      # The foot strip holds both the join URL and the roster
+      assert has_element?(stage, "[data-role=stage-foot] [data-role=join-url]", "/r/#{slug}")
+      assert has_element?(stage, "[data-role=stage-foot] [data-role=roster]")
+      assert has_element?(stage, "[data-role=stage-foot] [data-seat]", "Melissa")
+      assert has_element?(stage, "[data-role=stage-foot] [data-seat]", "Jacob")
+      assert has_element?(stage, "[data-role=stage-foot] [data-role=open-seats]", "All 2 seats taken")
+
+      # No separate "In the Room" section on the stage
+      refute html =~ "In the Room"
+
+      # Order: header -> play content -> stage-foot
+      assert_order(html, ["<header", ~s(data-role="stage-foot")])
     end
   end
 
