@@ -1,0 +1,51 @@
+================================================================================
+FIRST AUDIBLE LISTEN REPORT
+================================================================================
+Timestamp: 2026-09-07T23:38:53.489114Z
+Mode: Live Providers
+Gives: pine, cold river
+Prompt: Gentle, conversational background instrumental music that sits comfortably under spoken conversation. Atmosphere and theme: pine, cold river
+
+--------------------------------------------------------------------------------
+MEASUREMENTS
+--------------------------------------------------------------------------------
+1. Control (poll-then-download):
+  Provider: Mureka (auto)
+  Status: succeeded
+  Time to first audible audio: 89772 ms
+  Chronicle music_meta.latency: 89772 ms
+  Format / Codec: audio/mpeg (MP3)
+  Browser Playable: true
+  Cost: $0.04
+  File: 01-control.mp3
+  Notes: Downloaded complete MP3 after succeeded status.
+
+
+2. Mureka Stream (stream: true):
+  Provider: Mureka (auto)
+  Status: streaming
+  Time to first audible audio: 24061 ms
+  Chronicle music_meta.latency: 23687 ms
+  Format / Codec: audio/aac (audio/aac)
+  Browser Playable: true
+  Cost: $0.04
+  File: 02-mureka-stream.aac
+  Notes: stream_url received at 23687 ms; probe TTFB 24061 ms.
+
+
+3. ElevenLabs Loop (≤30 s):
+  Provider: ElevenLabs (eleven_text_to_sound_v2)
+  Status: succeeded
+  Time to first audible audio: 6625 ms
+  Chronicle music_meta.latency: 6625 ms
+  Format / Codec: audio/mpeg (MP3 (44.1 kHz, seamless loop))
+  Browser Playable: true
+  Cost: $0.030000000000000002
+  File: 03-elevenlabs-30s-loop.mp3
+  Notes: Generated 30 s seamless audio loop.
+
+
+================================================================================
+ATTEMPT 1 TIMING BAR:
+Bar: During Attempt 1, before the second Attempt's Bridges (~20–45 s).
+================================================================================
