@@ -1059,9 +1059,19 @@ defmodule MeaningGameWeb.RoomComponents do
 
   attr :room, :map, required: true
 
+  @music_options [
+    {"off", "music-off", "Off"},
+    {"house", "music-house", "House loop"},
+    {"page", "music-page", "Written for this Page"}
+  ]
+
   def foley_switches(assigns) do
     music = to_string(assigns.room[:music] || "page")
-    assigns = assign(assigns, :current_music, music)
+
+    assigns =
+      assigns
+      |> assign(:current_music, music)
+      |> assign(:music_options, @music_options)
 
     ~H"""
     <div class="flex items-center gap-3 text-xs opacity-80">
@@ -1078,37 +1088,16 @@ defmodule MeaningGameWeb.RoomComponents do
       </label>
       <div data-role="music-control" class="join">
         <button
+          :for={{mode, role, label} <- @music_options}
           type="button"
           phx-click="set_music"
-          phx-value-music="off"
-          data-role="music-off"
-          data-music="off"
-          data-active={to_string(@current_music == "off")}
-          class={"btn btn-xs join-item " <> if(@current_music == "off", do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
+          phx-value-music={mode}
+          data-role={role}
+          data-music={mode}
+          data-active={to_string(@current_music == mode)}
+          class={"btn btn-xs join-item " <> if(@current_music == mode, do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
         >
-          Off
-        </button>
-        <button
-          type="button"
-          phx-click="set_music"
-          phx-value-music="house"
-          data-role="music-house"
-          data-music="house"
-          data-active={to_string(@current_music == "house")}
-          class={"btn btn-xs join-item " <> if(@current_music == "house", do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
-        >
-          House loop
-        </button>
-        <button
-          type="button"
-          phx-click="set_music"
-          phx-value-music="page"
-          data-role="music-page"
-          data-music="page"
-          data-active={to_string(@current_music == "page")}
-          class={"btn btn-xs join-item " <> if(@current_music == "page", do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
-        >
-          Written for this Page
+          {label}
         </button>
       </div>
     </div>

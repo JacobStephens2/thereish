@@ -59,6 +59,7 @@ defmodule MeaningGame.Rooms.Server do
 
   alias MeaningGame.Chronicle
   alias MeaningGame.Game
+  alias MeaningGame.Rooms.Room
   alias MeaningGame.Rooms.Seat
   alias MeaningGame.Rooms.Store
   alias MeaningGame.Scribe
@@ -224,11 +225,7 @@ defmodule MeaningGame.Rooms.Server do
     state =
       state
       |> author_answered()
-      |> Map.put(:current_page_ref, nil)
-      |> Map.put(:current_track, nil)
-      |> Map.put(:music_meta, nil)
-      |> Map.put(:current_gives, nil)
-      |> Map.put(:score_task_running, false)
+      |> reset_score_state()
 
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -243,11 +240,7 @@ defmodule MeaningGame.Rooms.Server do
           %{state | opened_at: nil, voice_audio: nil, voice_meta: %{}}
           |> Map.put(:current_arm, nil)
           |> Map.put(:current_page_id, nil)
-          |> Map.put(:current_page_ref, nil)
-          |> Map.put(:current_track, nil)
-          |> Map.put(:music_meta, nil)
-          |> Map.put(:current_gives, nil)
-          |> Map.put(:score_task_running, false)
+          |> reset_score_state()
 
         {:reply, :ok, advance(new_state, game, effects)}
 
@@ -323,7 +316,7 @@ defmodule MeaningGame.Rooms.Server do
   def handle_call({:set_music, music}, _from, state) do
     music = to_string(music)
 
-    if music in ["off", "house", "page"] do
+    if music in Room.music_modes() do
       case Store.update_room(state.room, %{music: music}) do
         {:ok, room} ->
           state = %{state | room: room}
@@ -883,6 +876,15 @@ defmodule MeaningGame.Rooms.Server do
 
   defp side_verdicts_event(_result_side_a, _result_side_b, _result_overall) do
     {:side_verdicts_unavailable, %{}}
+  end
+
+  defp reset_score_state(state) do
+    state
+    |> Map.put(:current_page_ref, nil)
+    |> Map.put(:current_track, nil)
+    |> Map.put(:music_meta, nil)
+    |> Map.put(:current_gives, nil)
+    |> Map.put(:score_task_running, false)
   end
 
   defp maybe_start_score_on_music_change(state) do
