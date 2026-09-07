@@ -94,6 +94,15 @@ defmodule MeaningGame.Steward.WarnMissingFoleyKeysTest do
 
       assert log =~ "no MUREKA_API_KEY — every Page will have only the house loop"
     end
+
+    test "application boot is silent when all keys are present" do
+      log =
+        capture_log(fn ->
+          _ = MeaningGame.Application.start(:normal, [])
+        end)
+
+      assert log == ""
+    end
   end
 
   defp configure_foley(foley_updates, job_updates \\ []) do
