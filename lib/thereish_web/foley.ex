@@ -67,23 +67,35 @@ defmodule ThereishWeb.Foley do
     end
   end
 
-  defp maybe_push_page(socket, old_room, new_room) do
-    is_active_page = new_room.phase in [:bridging, :assaying, :reveal]
+  # Music plays on the Stage as soon as it holds the Speaker — including the
+  # wait for seats, Gives, and the Author — not only once Bridging starts.
+  # Tap-for-sound only resumes the audio context; without this push there is
+  # nothing to hear.
+  @music_phases [:waiting, :giving, :writing, :bridging, :assaying, :reveal]
 
-    entered_active_page =
-      is_nil(old_room) or old_room.phase not in [:bridging, :assaying, :reveal]
+  defp maybe_push_page(socket, old_room, new_room) do
+    is_music_phase? = new_room.phase in @music_phases
+
+    entered_music_phase? =
+      is_nil(old_room) or old_room.phase not in @music_phases
 
     just_claimed = is_nil(old_room) or !Map.get(old_room, :speaker?)
+
+    # A new Page still gets its own push, even when the waiting fallback
+    # resolved to the same file as the Page's loop.
+    entered_bridging? =
+      new_room.phase == :bridging and
+        (is_nil(old_room) or old_room.phase not in [:bridging, :assaying, :reveal])
 
     track_info = resolve_track(new_room)
     old_track_info = resolve_track(old_room)
 
     track_changed =
-      is_active_page and not is_nil(old_room) and
+      is_music_phase? and not is_nil(old_room) and
         (track_info.path != old_track_info.path or track_info.title != old_track_info.title)
 
-    if (new_room.phase == :bridging and entered_active_page) or (is_active_page and just_claimed) or
-         track_changed do
+    if (is_music_phase? and entered_music_phase?) or (is_music_phase? and just_claimed) or
+         entered_bridging? or track_changed do
       push_event(socket, "foley:page", track_info)
     else
       socket
