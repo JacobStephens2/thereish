@@ -20,13 +20,13 @@ defmodule MeaningGame.Steward.ElevenLabs do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Returns the names of any missing API keys required by ElevenLabs.
+  Returns the names of any missing API keys required by ElevenLabs for voice.
   """
-  @spec missing_keys(keyword() | map(), atom()) :: [String.t()]
-  def missing_keys(opts \\ [], job_kind \\ :voice) do
+  @spec missing_keys(keyword() | map()) :: [String.t()]
+  def missing_keys(opts \\ []) do
     opts = if is_map(opts), do: Map.to_list(opts), else: opts
 
-    case api_key(opts, job_kind) do
+    case api_key(opts, :voice) do
       {:ok, _} -> []
       {:error, _} -> ["ELEVENLABS_API_KEY"]
     end

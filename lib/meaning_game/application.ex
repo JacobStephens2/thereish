@@ -7,7 +7,7 @@ defmodule MeaningGame.Application do
 
   @impl true
   def start(_type, _args) do
-    MeaningGame.Foley.warn_missing_keys()
+    MeaningGame.Steward.Foley.warn_missing_keys()
 
     children = [
       MeaningGameWeb.Telemetry,

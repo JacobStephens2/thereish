@@ -36,13 +36,9 @@ defmodule MeaningGame.Steward.Mureka do
   """
   @spec missing_keys(keyword() | map()) :: [String.t()]
   def missing_keys(opts \\ %{}) do
-    opts = if is_list(opts), do: Map.new(opts), else: opts
-    key = Map.get(opts, :api_key) || Map.get(opts, "api_key")
-
-    if is_binary(key) and key != "" do
-      []
-    else
-      ["MUREKA_API_KEY"]
+    case fetch_api_key(opts) do
+      {:ok, _} -> []
+      :error -> ["MUREKA_API_KEY"]
     end
   end
 
@@ -184,13 +180,20 @@ defmodule MeaningGame.Steward.Mureka do
   end
 
   defp api_key(request) do
-    case Map.get(request, :api_key) || Map.get(request, "api_key") do
-      key when is_binary(key) and key != "" ->
+    case fetch_api_key(request) do
+      {:ok, key} ->
         {:ok, key}
 
-      _ ->
+      :error ->
         Logger.error("MUREKA_API_KEY is not set; Foley cannot generate music")
         {:error, :no_api_key}
+    end
+  end
+
+  defp fetch_api_key(request) do
+    case Map.get(request, :api_key) || Map.get(request, "api_key") do
+      key when is_binary(key) and key != "" -> {:ok, key}
+      _ -> :error
     end
   end
 end

@@ -351,26 +351,18 @@ defmodule MeaningGame.Steward do
   end
 
   @doc """
-  Returns the names of any missing API keys required by a role or job.
+  Returns the names of any missing API keys required by a role job.
   """
-  @spec missing_keys(atom(), atom() | nil) :: [String.t()]
-  def missing_keys(role_name, job \\ nil) do
-    config = if job, do: role(role_name, job), else: role(role_name)
+  @spec missing_keys(atom(), atom()) :: [String.t()]
+  def missing_keys(role_name, job) do
+    config = role(role_name, job)
     provider = config[:provider]
     _ = is_atom(provider) && Code.ensure_loaded?(provider)
 
-    cond do
-      is_atom(provider) and function_exported?(provider, :missing_keys, 2) ->
-        provider.missing_keys(config, job)
-
-      is_atom(provider) and function_exported?(provider, :missing_keys, 1) ->
-        provider.missing_keys(config)
-
-      true ->
-        case config[:api_key] do
-          key when is_binary(key) and key != "" -> []
-          _ -> ["#{String.upcase(to_string(role_name))}_API_KEY"]
-        end
+    if is_atom(provider) and function_exported?(provider, :missing_keys, 1) do
+      provider.missing_keys(config)
+    else
+      []
     end
   end
 
