@@ -84,7 +84,10 @@ defmodule Thereish.Rooms.Server do
       seats = Store.list_seats(room.id)
       game = Game.init(seat_limit: room.seat_limit, seats: seats)
 
+      wait_music = Thereish.Foley.Repertoire.draw(room.id)
+
       state = %{
+        slug: slug,
         room: room,
         game: game,
         beat: nil,
@@ -98,7 +101,7 @@ defmodule Thereish.Rooms.Server do
         current_track: nil,
         current_title: nil,
         title_meta: nil,
-        current_loop: nil,
+        wait_music: wait_music,
         music_meta: nil,
         voice_audio: nil,
         voice_meta: %{}
@@ -239,10 +242,13 @@ defmodule Thereish.Rooms.Server do
   def handle_call({:next_page, seat_id}, _from, state) do
     case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
       {:ok, game, effects} ->
+        wait_music = Thereish.Foley.Repertoire.draw(state.room.id, state[:wait_music])
+
         new_state =
           %{state | opened_at: nil, voice_audio: nil, voice_meta: %{}}
           |> Map.put(:current_arm, nil)
           |> Map.put(:current_page_id, nil)
+          |> Map.put(:wait_music, wait_music)
           |> reset_score_state()
 
         {:reply, :ok, advance(new_state, game, effects)}
@@ -364,6 +370,8 @@ defmodule Thereish.Rooms.Server do
         state.room.speaker == device_token
 
     speaker_claimed? = not is_nil(state.room.speaker)
+    wait_music = current_wait_music(state)
+    playing = resolve_playing(state, wait_music)
 
     view =
       state.game
@@ -377,7 +385,8 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:quip, state.room.quip)
       |> Map.put(:track, if(state.room.music == "page", do: state[:current_track], else: nil))
       |> Map.put(:music_meta, state[:music_meta])
-      |> Map.put(:loop, if(state.game.page != nil, do: state[:current_loop], else: nil))
+      |> Map.put(:loop, if(state.room.music != "off", do: wait_music, else: nil))
+      |> Map.put(:playing, playing)
 
     {:reply, view, state}
   end
@@ -648,7 +657,6 @@ defmodule Thereish.Rooms.Server do
       Enum.reduce(events, state, fn event, state ->
         case Game.apply(state.game, event) do
           {:ok, game, effects} ->
-            state = maybe_handle_page_written(state, event)
             advance(state, game, effects)
 
           # A verdict for a Page that has moved on is nothing to act on and
@@ -665,13 +673,39 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  defp maybe_handle_page_written(state, event)
-       when is_tuple(event) and elem(event, 0) == :page_written do
-    loop = Thereish.Foley.Loops.pick(state[:current_loop])
-    %{state | current_loop: loop}
+  defp current_wait_music(state) do
+    state[:wait_music] ||
+      (state[:room] && state.room[:id] && Thereish.Foley.Repertoire.draw(state.room.id)) ||
+      hd(Thereish.Foley.Repertoire.shipped_loops())
   end
 
-  defp maybe_handle_page_written(state, _event), do: state
+  defp resolve_playing(state, wait_music) do
+    case state.room.music do
+      "off" ->
+        nil
+
+      "house" ->
+        repertoire_playing(wait_music)
+
+      "page" ->
+        cond do
+          state[:current_track] && state.current_track[:path] ->
+            %{
+              path: state.current_track.path,
+              title: state.current_track[:title] || state[:current_title] || "Track",
+              kind: "track"
+            }
+
+          true ->
+            repertoire_playing(wait_music)
+        end
+    end
+  end
+
+  defp repertoire_playing(wait_music) do
+    title = wait_music[:title] || wait_music[:name] || "Track"
+    %{path: wait_music.path, title: title, kind: "repertoire"}
+  end
 
   defp advance(state, game, effects) do
     state = Enum.reduce(effects, opened(%{state | game: game}), &perform/2)

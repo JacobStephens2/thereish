@@ -926,17 +926,17 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "The Porch"
     end
 
-    test "renders loop name and 'the house loop' under house" do
+    test "renders loop name and 'the Repertoire' under house" do
       room = %{music: "house", loop: %{name: "Sunlit Drift", path: "/audio/house-loop-2.mp3"}}
       html = render_component(&now_playing/1, room: room)
 
       assert html =~ ~s(data-role="now-playing")
       assert html =~ "Sunlit Drift"
-      assert html =~ "the house loop"
+      assert html =~ "the Repertoire"
       refute html =~ "Music is off"
     end
 
-    test "renders loop name and 'the house loop' under page before track lands" do
+    test "renders loop name and 'the Repertoire' under page before track lands" do
       room = %{
         music: "page",
         loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
@@ -947,10 +947,24 @@ defmodule ThereishWeb.RoomComponentsTest do
 
       assert html =~ ~s(data-role="now-playing")
       assert html =~ "Morning Breeze"
-      assert html =~ "the house loop"
+      assert html =~ "the Repertoire"
     end
 
-    test "renders nothing when track has landed" do
+    test "renders Repertoire draw title and 'the Repertoire' when playing is on snapshot" do
+      room = %{
+        music: "page",
+        playing: %{title: "Cabin Warmth", path: "/media/tracks/cabin.mp3", kind: "repertoire"},
+        track: nil
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Cabin Warmth"
+      assert html =~ "the Repertoire"
+    end
+
+    test "renders nothing when track has landed without title" do
       room = %{
         music: "page",
         loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
@@ -960,7 +974,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       html = render_component(&now_playing/1, room: room)
 
       refute html =~ ~s(data-role="now-playing")
-      refute html =~ "the house loop"
+      refute html =~ "the Repertoire"
     end
 
     test "renders nothing when room has no loop and music is not off" do
