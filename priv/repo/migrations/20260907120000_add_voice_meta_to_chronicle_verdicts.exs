@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AddVoiceMetaToChronicleVerdicts do
+defmodule Thereish.Repo.Migrations.AddVoiceMetaToChronicleVerdicts do
   use Ecto.Migration
 
   def change do

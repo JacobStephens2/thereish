@@ -1,9 +1,9 @@
 defmodule Mix.Tasks.Foley.ForgeTest do
-  use MeaningGame.DataCase, async: true
+  use Thereish.DataCase, async: true
 
   import ExUnit.CaptureIO
 
-  alias MeaningGame.Foley.Briefs
+  alias Thereish.Foley.Briefs
 
   @tag :tmp_dir
   test "generates candidates, prints ranking, reasons, paths and spend across all 17 briefs", %{

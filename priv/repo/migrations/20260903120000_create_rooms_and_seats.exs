@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateRoomsAndSeats do
+defmodule Thereish.Repo.Migrations.CreateRoomsAndSeats do
   use Ecto.Migration
 
   # Seats never expire, so there is no expiry column and nothing ever deletes a

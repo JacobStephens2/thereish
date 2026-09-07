@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.TheScribeWritesTheChronicle do
+defmodule Thereish.Repo.Migrations.TheScribeWritesTheChronicle do
   use Ecto.Migration
 
   @moduledoc """

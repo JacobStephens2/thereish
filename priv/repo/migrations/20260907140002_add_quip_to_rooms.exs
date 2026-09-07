@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.AddQuipToRooms do
+defmodule Thereish.Repo.Migrations.AddQuipToRooms do
   use Ecto.Migration
 
   def change do

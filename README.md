@@ -23,7 +23,7 @@ mix setup
 mix phx.server
 ```
 
-Then http://localhost:4000, which serves `MeaningGameWeb.CheckLive` — the
+Then http://localhost:4000, which serves `ThereishWeb.CheckLive` — the
 deployment's proof of life, and nothing game-shaped yet.
 
 ```sh

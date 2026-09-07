@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateThePrecedents do
+defmodule Thereish.Repo.Migrations.CreateThePrecedents do
   use Ecto.Migration
 
   # The verdict cache is the precedent (ADR-0006, design law 1). When the couple
