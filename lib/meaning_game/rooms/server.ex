@@ -96,6 +96,8 @@ defmodule MeaningGame.Rooms.Server do
         current_page_id: nil,
         current_page_ref: nil,
         current_track: nil,
+        current_title: nil,
+        title_meta: nil,
         current_loop: nil,
         music_meta: nil,
         voice_audio: nil,
@@ -518,6 +520,38 @@ defmodule MeaningGame.Rooms.Server do
   # Stale, duplicate, or superseded author tasks change nothing
   def handle_info({:author_completed, _ref, _result}, state), do: {:noreply, state}
 
+  def handle_info({:titled, page_ref, result}, %{current_page_ref: page_ref} = state) do
+    state = Map.put(state, :title_task_running, false)
+
+    if MeaningGame.Game.phase(state.game) == :closed do
+      {:noreply, state}
+    else
+      case result do
+        {:ok, %{title: title} = res} ->
+          title_meta = res[:meta] || %{}
+
+          state =
+            state
+            |> Map.put(:current_title, title)
+            |> Map.put(:title_meta, title_meta)
+
+          if state[:current_track] != nil do
+            state = apply_track_and_title(state, state.current_track, title, title_meta)
+            broadcast(state.room.slug)
+            {:noreply, state}
+          else
+            {:noreply, state}
+          end
+
+        {:error, reason} ->
+          Logger.warning("Scribe titling failed for room #{state.room.slug}: #{inspect(reason)}")
+          {:noreply, state}
+      end
+    end
+  end
+
+  def handle_info({:titled, _page_ref, _result}, state), do: {:noreply, state}
+
   def handle_info({:scored, page_ref, result}, %{current_page_ref: page_ref} = state) do
     state = Map.put(state, :score_task_running, false)
 
@@ -526,7 +560,9 @@ defmodule MeaningGame.Rooms.Server do
     else
       case result do
         {:ok, track} ->
-          state = %{state | current_track: track, music_meta: track.meta}
+          title = track[:title] || state[:current_title]
+          title_meta = state[:title_meta] || %{}
+          state = apply_track_and_title(state, track, title, title_meta)
           broadcast(state.room.slug)
           {:noreply, state}
 
@@ -540,6 +576,33 @@ defmodule MeaningGame.Rooms.Server do
   end
 
   def handle_info({:scored, _page_ref, _result}, state), do: {:noreply, state}
+
+  defp apply_track_and_title(state, track, title, title_meta) do
+    title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
+    track = if title, do: Map.put(track, :title, title), else: track
+
+    music_meta =
+      (state.music_meta || track[:meta] || %{})
+      |> Map.put(:path, track.path)
+      |> Map.put("path", track.path)
+
+    music_meta =
+      if title do
+        music_meta
+        |> Map.put(:title, title)
+        |> Map.put(:title_cost_usd, title_cost)
+        |> Map.put("title", title)
+        |> Map.put("title_cost_usd", title_cost)
+      else
+        music_meta
+      end
+
+    if not is_nil(title) and not is_nil(state[:current_gives]) do
+      Steward.cache_track(state.current_gives, track)
+    end
+
+    %{state | current_track: track, music_meta: music_meta}
+  end
 
   defp format_author_error({:max_tokens, _}), do: "too broad or complex"
   defp format_author_error(:refused), do: "content declined"
@@ -750,14 +813,18 @@ defmodule MeaningGame.Rooms.Server do
       |> Map.put(:current_page_ref, page_ref)
       |> Map.put(:current_gives, gives)
       |> Map.put(:current_track, nil)
+      |> Map.put(:current_title, nil)
+      |> Map.put(:title_meta, nil)
       |> Map.put(:music_meta, nil)
       |> waiting_on_author(ref)
 
     state =
       if state.room.music == "page" do
-        start_score_task(room, page_ref, gives, state)
+        start_music_tasks(room, page_ref, gives, state)
       else
-        Map.put(state, :score_task_running, false)
+        state
+        |> Map.put(:score_task_running, false)
+        |> Map.put(:title_task_running, false)
       end
 
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
@@ -910,22 +977,51 @@ defmodule MeaningGame.Rooms.Server do
     state
     |> Map.put(:current_page_ref, nil)
     |> Map.put(:current_track, nil)
+    |> Map.put(:current_title, nil)
+    |> Map.put(:title_meta, nil)
     |> Map.put(:music_meta, nil)
     |> Map.put(:current_gives, nil)
     |> Map.put(:score_task_running, false)
+    |> Map.put(:title_task_running, false)
   end
 
   defp maybe_start_score_on_music_change(state) do
     if state.room.music == "page" and is_nil(state[:current_track]) and
          not Map.get(state, :score_task_running, false) and
          not is_nil(state[:current_page_ref]) and not is_nil(state[:current_gives]) do
-      start_score_task(self(), state.current_page_ref, state.current_gives, state)
+      start_music_tasks(self(), state.current_page_ref, state.current_gives, state)
     else
       state
     end
   end
 
-  defp start_score_task(room, page_ref, gives, state) do
+  defp start_music_tasks(room, page_ref, gives, state) do
+    case Steward.cached_track(gives) do
+      {:ok, cached_track} when not is_nil(cached_track.title) ->
+        music_meta =
+          (cached_track.meta || %{})
+          |> Map.put(:title, cached_track.title)
+          |> Map.put(:path, cached_track.path)
+          |> Map.put(:title_cost_usd, 0.0)
+          |> Map.put("title", cached_track.title)
+          |> Map.put("path", cached_track.path)
+          |> Map.put("title_cost_usd", 0.0)
+
+        state
+        |> Map.put(:current_track, cached_track)
+        |> Map.put(:current_title, cached_track.title)
+        |> Map.put(:music_meta, music_meta)
+        |> Map.put(:score_task_running, false)
+        |> Map.put(:title_task_running, false)
+
+      _ ->
+        state
+        |> start_score_task(room, page_ref, gives)
+        |> start_title_task(room, page_ref, gives)
+    end
+  end
+
+  defp start_score_task(state, room, page_ref, gives) do
     Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
       try do
         case Steward.score(gives) do
@@ -945,6 +1041,28 @@ defmodule MeaningGame.Rooms.Server do
     end)
 
     Map.put(state, :score_task_running, true)
+  end
+
+  defp start_title_task(state, room, page_ref, gives) do
+    Task.Supervisor.start_child(MeaningGame.Steward.Tasks, fn ->
+      try do
+        case Steward.title_track(gives) do
+          {:ok, result} ->
+            send(room, {:titled, page_ref, {:ok, result}})
+
+          {:error, reason} ->
+            send(room, {:titled, page_ref, {:error, reason}})
+        end
+      rescue
+        error ->
+          send(room, {:titled, page_ref, {:error, error}})
+      catch
+        :exit, reason ->
+          send(room, {:titled, page_ref, {:error, {:exit, reason}}})
+      end
+    end)
+
+    Map.put(state, :title_task_running, true)
   end
 
   defp extract_give_strings(request) do

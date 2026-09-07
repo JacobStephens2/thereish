@@ -2074,6 +2074,61 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute has_element?(ctx.jacob, "[data-role=now-playing]")
     end
 
+    test "foley:page pushes track with title and kind: track when track lands, and Now playing line updates",
+         ctx do
+      # Set delay so we can observe house loop first, then track lands
+      fake_config = Application.get_env(:meaning_game, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          Application.get_env(:meaning_game, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 100, title_delay_ms: 0)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :meaning_game,
+          :steward,
+          Keyword.put(Application.get_env(:meaning_game, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      give_setting(ctx.melissa, "summer camp")
+      give_setting(ctx.jacob, "viking beaches")
+      await_phase(ctx.slug, :bridging)
+
+      # Initially, house loop is pushed to speaker (Stage)
+      assert_push_event(ctx.stage, "foley:page", %{kind: "house"})
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "the house loop")
+
+      # When track lands, foley:page pushes track with title and kind: "track"
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: track_path,
+          title: "Summer Camp · Viking Beaches",
+          kind: "track"
+        },
+        1000
+      )
+
+      assert String.starts_with?(track_path, "/media/tracks/")
+
+      # Now playing line updates from house loop to written for this Page
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+        )
+      end)
+    end
+
     test "commit pushes foley:commit to stage and foley:own-commit to committer only", ctx do
       give_setting(ctx.melissa, "setting one")
       give_setting(ctx.jacob, "setting two")

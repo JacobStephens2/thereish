@@ -19,6 +19,7 @@ defmodule MeaningGame.Steward.TrackCache do
   schema "track_cache" do
     field :key, :string
     field :gives, {:array, :string}
+    field :title, :string
     field :path, :string
     field :duration, :integer
     field :format, :string, default: "mp3"
@@ -30,7 +31,7 @@ defmodule MeaningGame.Steward.TrackCache do
   @doc false
   def changeset(track_cache, attrs) do
     track_cache
-    |> cast(attrs, [:key, :gives, :path, :duration, :format, :meta])
+    |> cast(attrs, [:key, :gives, :title, :path, :duration, :format, :meta])
     |> validate_required([:key, :gives, :path])
     |> unique_constraint(:key)
   end
@@ -74,6 +75,7 @@ defmodule MeaningGame.Steward.TrackCache do
       row ->
         {:ok,
          %{
+           title: row.title,
            path: row.path,
            duration: row.duration,
            format: format_atom(row.format),
@@ -100,20 +102,31 @@ defmodule MeaningGame.Steward.TrackCache do
     params = %{
       key: cache_key,
       gives: normalized,
+      title: Map.get(attrs, :title) || Map.get(attrs, "title"),
       path: Map.get(attrs, :path) || Map.get(attrs, "path"),
       duration: Map.get(attrs, :duration) || Map.get(attrs, "duration"),
       format: format,
       meta: meta
     }
 
+    on_conflict =
+      if params.title do
+        {:replace, [:title, :updated_at]}
+      else
+        :nothing
+      end
+
     %TrackCache{}
     |> changeset(params)
-    |> Repo.insert(on_conflict: :nothing, conflict_target: :key)
+    |> Repo.insert(
+      on_conflict: on_conflict,
+      conflict_target: :key
+    )
   end
 
   @doc "Stores generated audio bytes into the media directory and records in cache."
-  @spec store([String.t() | map()], map()) :: {:ok, map()} | {:error, term()}
-  def store(gives, mureka_result) when is_list(gives) and is_map(mureka_result) do
+  @spec store([String.t() | map()], map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def store(gives, mureka_result, opts \\ []) when is_list(gives) and is_map(mureka_result) do
     cache_key = key(gives)
     filename = filename_for_key(cache_key) <> ".mp3"
     dir = Path.join(media_dir(), "tracks")
@@ -131,6 +144,10 @@ defmodule MeaningGame.Steward.TrackCache do
     web_path = "/media/tracks/#{filename}"
     duration = Map.get(mureka_result, :duration, 120) || 120
 
+    title =
+      Keyword.get(opts, :title) || Map.get(mureka_result, :title) ||
+        Map.get(mureka_result, "title")
+
     meta = %{
       provider: "mureka",
       model: Map.get(mureka_result, :model, "auto"),
@@ -138,6 +155,7 @@ defmodule MeaningGame.Steward.TrackCache do
     }
 
     track_attrs = %{
+      title: title,
       path: web_path,
       duration: duration,
       format: :mp3,

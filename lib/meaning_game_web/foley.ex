@@ -73,7 +73,8 @@ defmodule MeaningGameWeb.Foley do
     old_track_info = resolve_track(old_room)
 
     track_changed =
-      is_active_page and not is_nil(old_room) and track_info.path != old_track_info.path
+      is_active_page and not is_nil(old_room) and
+        (track_info.path != old_track_info.path or track_info.title != old_track_info.title)
 
     if (new_room.phase == :bridging and entered_active_page) or (is_active_page and just_claimed) or
          track_changed do
@@ -95,7 +96,7 @@ defmodule MeaningGameWeb.Foley do
 
       _ ->
         if room[:track] && room.track[:path] do
-          %{path: room.track.path}
+          %{path: room.track.path, title: room.track[:title], kind: "track"}
         else
           house_loop_payload(room)
         end
