@@ -1686,8 +1686,11 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.stage, "[data-role=music-control]")
       assert has_element?(ctx.mara, "[data-role=voice-switch]")
       assert has_element?(ctx.mara, "[data-role=music-control]")
+      assert has_element?(ctx.mara, "[data-role=local-sound-toggle]")
       assert has_element?(ctx.jacob, "[data-role=voice-switch]")
       assert has_element?(ctx.jacob, "[data-role=music-control]")
+      assert has_element?(ctx.jacob, "[data-role=local-sound-toggle]")
+      refute has_element?(ctx.stage, "[data-role=local-sound-toggle]")
 
       assert has_element?(ctx.stage, "[data-role=voice-switch][data-active=false]")
       assert has_element?(ctx.stage, "[data-role=music-page][data-active=true]")
@@ -1978,6 +1981,63 @@ defmodule MeaningGameWeb.RoomLiveTest do
       assert has_element?(ctx.mara, "[data-role=now-playing]", expected_loop.name)
       assert has_element?(ctx.mara, "[data-role=now-playing]", "the house loop")
       refute has_element?(ctx.jacob, "[data-role=now-playing]")
+    end
+
+    test "commit pushes foley:commit to stage and foley:own-commit to committer only", ctx do
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> has_element?(ctx.mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.mara, "cairn")
+
+      assert_push_event(ctx.stage, "foley:commit", %{})
+      assert_push_event(ctx.mara, "foley:own-commit", %{})
+      refute_push_event(ctx.jacob, "foley:commit", %{})
+      refute_push_event(ctx.jacob, "foley:own-commit", %{})
+      refute_push_event(ctx.mara, "foley:commit", %{})
+      refute_push_event(ctx.stage, "foley:own-commit", %{})
+
+      commit(ctx.jacob, "cairo")
+
+      assert_push_event(ctx.stage, "foley:commit", %{})
+      assert_push_event(ctx.jacob, "foley:own-commit", %{})
+      refute_push_event(ctx.mara, "foley:commit", %{})
+      refute_push_event(ctx.mara, "foley:own-commit", %{})
+      refute_push_event(ctx.jacob, "foley:commit", %{})
+      refute_push_event(ctx.stage, "foley:own-commit", %{})
+    end
+
+    test "with no Stage and one phone holding Speaker, commit pushes foley:own-commit to committer and foley:commit to nobody" do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+
+      mara |> element("[data-role=speaker-toggle]") |> render_click()
+      assert has_element?(mara, "[data-role=speaker-toggle][data-speaker=self]")
+
+      give_setting(mara, "setting one")
+      give_setting(jacob, "setting two")
+      await_phase(slug, :bridging)
+      eventually(fn -> has_element?(mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(jacob, "[data-role=bridge-form]") end)
+
+      commit(mara, "cairn")
+
+      assert_push_event(mara, "foley:own-commit", %{})
+      refute_push_event(mara, "foley:commit", %{})
+      refute_push_event(jacob, "foley:commit", %{})
+      refute_push_event(jacob, "foley:own-commit", %{})
+
+      commit(jacob, "cairo")
+
+      assert_push_event(jacob, "foley:own-commit", %{})
+      refute_push_event(jacob, "foley:commit", %{})
+      refute_push_event(mara, "foley:commit", %{})
+      refute_push_event(mara, "foley:own-commit", %{})
     end
   end
 
