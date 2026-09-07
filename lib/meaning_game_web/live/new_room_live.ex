@@ -16,18 +16,40 @@ defmodule MeaningGameWeb.NewRoomLive do
     {:ok,
      socket
      |> assign(:device_token, DeviceToken.from_session(session))
+     |> assign(:remote_address, remote_address(socket, session))
      |> assign(:error, nil)}
   end
 
   @impl true
   def handle_event("create", _params, socket) do
-    case Rooms.create(socket.assigns.device_token) do
+    opts =
+      case socket.assigns[:remote_address] do
+        nil -> []
+        address -> [address: address]
+      end
+
+    case Rooms.create(socket.assigns.device_token, opts) do
       {:ok, code} ->
         {:noreply, push_navigate(socket, to: ~p"/r/#{code}")}
+
+      {:error, :rate_limited} ->
+        {:noreply, assign(socket, :error, "Give it a minute")}
 
       {:error, _reason} ->
         {:noreply, assign(socket, :error, "That Room could not be opened. Try again.")}
     end
+  end
+
+  defp remote_address(socket, session) do
+    case get_connect_info(socket, :peer_data) do
+      %{address: address} when is_tuple(address) ->
+        address |> :inet.ntoa() |> to_string()
+
+      _ ->
+        Map.get(session, "remote_ip")
+    end
+  rescue
+    _ -> Map.get(session, "remote_ip")
   end
 
   @impl true
