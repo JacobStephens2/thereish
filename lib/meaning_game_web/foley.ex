@@ -67,10 +67,19 @@ defmodule MeaningGameWeb.Foley do
   defp resolve_track_path(nil), do: nil
 
   defp resolve_track_path(room) do
-    cond do
-      Map.get(room, :house_loop_only, false) -> "/audio/house-loop.mp3"
-      room[:track] && room.track[:path] -> room.track.path
-      true -> "/audio/house-loop.mp3"
+    case to_string(Map.get(room, :music, "page")) do
+      "off" ->
+        nil
+
+      "house" ->
+        "/audio/house-loop.mp3"
+
+      _ ->
+        if room[:track] && room.track[:path] do
+          room.track.path
+        else
+          "/audio/house-loop.mp3"
+        end
     end
   end
 
