@@ -1325,6 +1325,65 @@ defmodule MeaningGame.ChronicleTest do
       assert line =~ "Foley $0.0400"
     end
 
+    test "spend counts a zero-cost voice failure as a Foley call", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [ctx.mara.id, ctx.jacob.id],
+                bridges: ["water", "water"],
+                graded?: true,
+                closeness: 90,
+                band: :meld,
+                reasoning: "Both said water.",
+                quip: "Water in the sand.",
+                meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010},
+                voice_meta: %{
+                  "provider" => "fake",
+                  "voice" => "fake-voice",
+                  "cost_usd" => 0.0,
+                  "failure" => "voice_unavailable"
+                }
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+
+      spend = Chronicle.spend(room.id)
+      assert spend.by_role.foley.calls_count == 1
+      assert Decimal.equal?(spend.by_role.foley.total_usd, Decimal.new("0.0000"))
+      assert spend.by_role.foley.unpriced_count == 0
+      assert spend.by_role.foley.by_model["fake-voice"].calls_count == 1
+
+      assert Decimal.equal?(
+               spend.by_role.foley.by_model["fake-voice"].total_usd,
+               Decimal.new("0.0000")
+             )
+
+      line = Chronicle.spend_line(spend)
+      assert line =~ "Foley $0.0000"
+    end
+
     test "spend/0 computes all-Rooms answer with per-Room breakdown across multiple rooms", ctx do
       room1 = Repo.get_by!(Room, slug: ctx.slug)
       now = DateTime.utc_now()

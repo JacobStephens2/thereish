@@ -172,11 +172,14 @@ defmodule MeaningGame.Steward.FakeTest do
       assert result.meta.latency_ms >= 5
     end
 
-    test "the fake Scribe answers a configured word, or a default word" do
-      assert Fake.name_room(["some digest"], ["take"]) == {:ok, "cane"}
+    test "the fake Scribe answers a configured word and quip, or default" do
+      assert Fake.name_room(["some digest"], ["take"]) ==
+               {:ok, %{word: "cane", quip: "A room from the old days."}}
 
-      fake(name_word: "fork")
-      assert Fake.name_room(["some digest"], ["take"]) == {:ok, "fork"}
+      fake(name_word: "fork", name_quip: "Dinner is served.")
+
+      assert Fake.name_room(["some digest"], ["take"]) ==
+               {:ok, %{word: "fork", quip: "Dinner is served."}}
     end
 
     test "the fake Scribe answers nothing when configured to" do
@@ -197,6 +200,24 @@ defmodule MeaningGame.Steward.FakeTest do
 
     test "the fake Scribe with no history returns :no_history" do
       assert Fake.name_room([], ["take"]) == {:error, :no_history}
+    end
+
+    test "the fake Scribe quip_code answers a configured quip or default" do
+      assert Fake.quip_code("cane") == {:ok, "A fine room."}
+
+      fake(quip_text: "A sweet room.")
+      assert Fake.quip_code("cane") == {:ok, "A sweet room."}
+    end
+
+    test "the fake Scribe quip_code answers nothing or raises when configured to" do
+      fake(quip_mode: :unavailable)
+      assert Fake.quip_code("cane") == {:error, :no_quip}
+
+      fake(quip_mode: :raise)
+
+      assert_raise RuntimeError, ~r/this Scribe is having a moment/, fn ->
+        Fake.quip_code("cane")
+      end
     end
   end
 

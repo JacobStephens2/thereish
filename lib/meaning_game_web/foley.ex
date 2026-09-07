@@ -9,8 +9,19 @@ defmodule MeaningGameWeb.Foley do
   @doc """
   Pushes foley audio events to the socket when this view is the speaker.
   Silences this view if it lost the speaker.
+  When `stage?: true` (or when view is StageLive), pushes `foley:commit` to
+  the Stage view whenever the count of committed Seats rises within a Page.
   """
-  def push_foley_events(socket, old_room, new_room) do
+  def push_foley_events(socket, old_room, new_room, opts \\ []) do
+    stage? = Keyword.get(opts, :stage?, socket.view == MeaningGameWeb.StageLive)
+
+    socket =
+      if stage? do
+        maybe_push_commit(socket, old_room, new_room)
+      else
+        socket
+      end
+
     cond do
       not is_nil(old_room) and Map.get(old_room, :speaker?) and not Map.get(new_room, :speaker?) ->
         push_event(socket, "foley:stop", %{})
@@ -25,6 +36,13 @@ defmodule MeaningGameWeb.Foley do
       true ->
         socket
     end
+  end
+
+  @doc """
+  Pushes a foley:own-commit event to the committing phone's view.
+  """
+  def push_own_commit(socket) do
+    push_event(socket, "foley:own-commit", %{})
   end
 
   @doc """
@@ -51,27 +69,42 @@ defmodule MeaningGameWeb.Foley do
 
     just_claimed = is_nil(old_room) or !Map.get(old_room, :speaker?)
 
-    track_path = resolve_track_path(new_room)
-    old_track_path = resolve_track_path(old_room)
+    track_info = resolve_track(new_room)
+    old_track_info = resolve_track(old_room)
 
-    track_changed = is_active_page and not is_nil(old_room) and track_path != old_track_path
+    track_changed =
+      is_active_page and not is_nil(old_room) and track_info.path != old_track_info.path
 
     if (new_room.phase == :bridging and entered_active_page) or (is_active_page and just_claimed) or
          track_changed do
-      push_event(socket, "foley:page", %{path: track_path})
+      push_event(socket, "foley:page", track_info)
     else
       socket
     end
   end
 
-  defp resolve_track_path(nil), do: nil
+  defp resolve_track(nil), do: %{path: nil, title: nil, kind: nil}
 
-  defp resolve_track_path(room) do
-    cond do
-      Map.get(room, :house_loop_only, false) -> "/audio/house-loop.mp3"
-      room[:track] && room.track[:path] -> room.track.path
-      true -> "/audio/house-loop.mp3"
+  defp resolve_track(room) do
+    case to_string(Map.get(room, :music, "page")) do
+      "off" ->
+        %{path: nil, title: nil, kind: nil}
+
+      "house" ->
+        house_loop_payload(room)
+
+      _ ->
+        if room[:track] && room.track[:path] do
+          %{path: room.track.path}
+        else
+          house_loop_payload(room)
+        end
     end
+  end
+
+  defp house_loop_payload(room) do
+    loop = room[:loop] || hd(MeaningGame.Foley.Loops.all())
+    %{path: loop.path, title: loop.name, kind: "house"}
   end
 
   defp maybe_push_beat(socket, old_room, new_room) do
@@ -103,16 +136,72 @@ defmodule MeaningGameWeb.Foley do
         (old_room.phase == :closed or not is_nil(Map.get(old_room, :closed)))
 
     if closed_now? and not was_closed? do
-      kind =
-        if new_room[:closed] && new_room.closed[:because] == :meld do
-          :meld
-        else
-          :unmelded
-        end
-
+      kind = ending_kind(new_room)
       push_event(socket, "foley:ending", %{kind: kind})
     else
       socket
+    end
+  end
+
+  defp ending_kind(room) do
+    close_reason = room[:closed] && room.closed[:because]
+
+    if close_reason in [:meld, "meld"] do
+      case closing_band(room) do
+        band when band in [:deep_meld, "deep_meld"] -> :deep_meld
+        _ -> :meld
+      end
+    else
+      :unmelded
+    end
+  end
+
+  defp closing_band(room) do
+    cond do
+      is_nil(room[:reveal]) ->
+        nil
+
+      room.reveal[:band] ->
+        room.reveal[:band]
+
+      is_list(room.reveal[:sides]) ->
+        bands = Enum.map(room.reveal.sides, & &1[:band])
+        if :deep_meld in bands or "deep_meld" in bands, do: :deep_meld, else: :meld
+
+      true ->
+        nil
+    end
+  end
+
+  defp maybe_push_commit(socket, old_room, new_room) do
+    if commit_rose?(old_room, new_room) do
+      push_event(socket, "foley:commit", %{})
+    else
+      socket
+    end
+  end
+
+  defp commit_rose?(nil, _new_room), do: false
+
+  defp commit_rose?(old_room, new_room) do
+    new_room.phase in [:bridging, :assaying] and
+      attempt_number(old_room) == attempt_number(new_room) and
+      count_committed(new_room) > count_committed(old_room)
+  end
+
+  defp attempt_number(room) do
+    case room[:attempt] do
+      %{number: n} -> n
+      n when is_integer(n) -> n
+      _ -> nil
+    end
+  end
+
+  defp count_committed(room) do
+    if room && is_list(room[:seats]) do
+      Enum.count(room.seats, & &1[:committed?])
+    else
+      0
     end
   end
 end

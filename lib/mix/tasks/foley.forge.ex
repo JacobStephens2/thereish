@@ -156,27 +156,29 @@ defmodule Mix.Tasks.Foley.Forge do
     Mix.shell().info("=== Copying Foley Assets from Manifest: #{manifest_path} ===")
     Mix.shell().info("Destination: #{dest}\n")
 
-    Enum.each(briefs, fn brief ->
-      chosen_idx = lookup_chosen(manifest, brief)
+    copied =
+      Enum.flat_map(briefs, fn brief ->
+        case lookup_chosen(manifest, brief) do
+          nil ->
+            []
 
-      if is_nil(chosen_idx) do
-        Mix.raise("Manifest missing entry for #{brief.key} (or #{brief.target_filename})")
-      end
+          chosen_idx ->
+            src_file = Path.join(dir, "#{brief.key}-#{chosen_idx}.mp3")
 
-      src_file = Path.join(dir, "#{brief.key}-#{chosen_idx}.mp3")
+            unless File.exists?(src_file) do
+              Mix.raise(
+                "Candidate file not found: #{src_file}. Run mix foley.forge first to generate candidates."
+              )
+            end
 
-      unless File.exists?(src_file) do
-        Mix.raise(
-          "Candidate file not found: #{src_file}. Run mix foley.forge first to generate candidates."
-        )
-      end
+            dest_file = Path.join(dest, brief.target_filename)
+            File.cp!(src_file, dest_file)
+            Mix.shell().info("  Copied #{Path.basename(src_file)} -> #{brief.target_filename}")
+            [brief]
+        end
+      end)
 
-      dest_file = Path.join(dest, brief.target_filename)
-      File.cp!(src_file, dest_file)
-      Mix.shell().info("  Copied #{Path.basename(src_file)} -> #{brief.target_filename}")
-    end)
-
-    Mix.shell().info("\nAll 10 assets copied to #{dest}.")
+    Mix.shell().info("\n#{length(copied)} assets copied to #{dest}.")
   end
 
   defp read_manifest!(path) do
@@ -184,9 +186,10 @@ defmodule Mix.Tasks.Foley.Forge do
   end
 
   defp lookup_chosen(manifest, brief) do
-    manifest[to_string(brief.key)] ||
-      manifest[brief.key] ||
-      manifest[brief.target_filename] ||
-      manifest[to_string(brief.id)]
+    case manifest[to_string(brief.key)] do
+      idx when is_integer(idx) -> idx
+      %{"candidate" => idx} when is_integer(idx) -> idx
+      _ -> nil
+    end
   end
 end

@@ -431,6 +431,39 @@ defmodule MeaningGameWeb.ChronicleLiveTest do
       assert spend_text =~ "Author"
       assert spend_text =~ "Assayer"
       assert spend_text =~ "Scribe"
+      refute spend_text =~ "not yet counted"
+      refute has_element?(view, "[data-role=in-play-line]")
+    end
+
+    test "shows in-play sentence at foot when Room is in play, and omits it when not in play",
+         %{conn: conn, slug: slug} = ctx do
+      # When room is in play (:bridging)
+      :ok = Rooms.give(slug, ctx.mara.id, "lantern")
+      :ok = Rooms.give(slug, ctx.jacob.id, "harbour")
+      await_phase(slug, :bridging)
+
+      {:ok, view, html} = live(conn, ~p"/r/#{slug}/chronicle")
+      assert html =~ "1 Page in play, not yet counted"
+      assert has_element?(view, "[data-role=in-play-line]")
+
+      assert render(element(view, "[data-role=in-play-line]")) =~
+               "1 Page in play, not yet counted"
+
+      # Melding closes the page
+      :ok = Rooms.commit_bridge(slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, ctx.jacob.id, "cairn")
+      await_reveal(slug)
+
+      eventually(
+        fn ->
+          Rooms.snapshot(slug, nil).phase == :closed
+        end,
+        "room never closed"
+      )
+
+      {:ok, view2, html2} = live(conn, ~p"/r/#{slug}/chronicle")
+      refute html2 =~ "not yet counted"
+      refute has_element?(view2, "[data-role=in-play-line]")
     end
   end
 end

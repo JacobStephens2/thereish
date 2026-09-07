@@ -244,7 +244,7 @@ defmodule MeaningGame.StewardSmokeTest do
 
     taken = ["couch", "flak"]
 
-    {:ok, code} = Steward.name_room([digest], taken)
+    {:ok, %{word: code}} = Steward.name_room([digest], taken)
 
     assert is_binary(code)
     assert String.length(code) == 4

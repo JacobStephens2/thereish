@@ -1808,12 +1808,17 @@ defmodule MeaningGame.Chronicle do
     }
   end
 
+  defp uuid?(val) when is_binary(val) do
+    Regex.match?(
+      ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      val
+    )
+  end
+
+  defp uuid?(_), do: false
+
   defp resolve_room_id(room_id_or_slug) do
-    if is_binary(room_id_or_slug) and
-         Regex.match?(
-           ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-           room_id_or_slug
-         ) do
+    if uuid?(room_id_or_slug) do
       room_id_or_slug
     else
       Repo.get_by!(MeaningGame.Rooms.Room, slug: room_id_or_slug).id

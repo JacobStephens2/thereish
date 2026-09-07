@@ -8,16 +8,19 @@ defmodule MeaningGameWeb.SpendLive do
   use MeaningGameWeb, :live_view
 
   alias MeaningGame.Chronicle
+  alias MeaningGame.Rooms
 
   @impl true
   def mount(_params, _session, socket) do
     spend = Chronicle.spend()
+    in_play_count = Rooms.in_play_count()
 
     {:ok,
      socket
      |> assign(:page_title, "Spend")
      |> assign(:robots, "noindex")
-     |> assign(:spend, spend)}
+     |> assign(:spend, spend)
+     |> assign(:in_play_count, in_play_count)}
   end
 
   @impl true
@@ -63,6 +66,14 @@ defmodule MeaningGameWeb.SpendLive do
           </span>
         </div>
       </section>
+
+      <p
+        :if={@in_play_count > 0}
+        data-role="in-play-count"
+        class="font-mono text-sm opacity-75 -mt-4"
+      >
+        {Rooms.in_play_sentence(@in_play_count)}
+      </p>
 
       <!-- Spend by Role -->
       <section data-role="spend-by-role" class="flex flex-col gap-3">

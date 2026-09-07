@@ -22,6 +22,7 @@ defmodule MeaningGame.Rooms do
   alias MeaningGame.Chronicle
   alias MeaningGame.Rooms.Code
   alias MeaningGame.Rooms.NoSuchRoomError
+  alias MeaningGame.Rooms.RateLimit
   alias MeaningGame.Rooms.Room
   alias MeaningGame.Rooms.Seat
   alias MeaningGame.Rooms.Server
@@ -68,54 +69,114 @@ defmodule MeaningGame.Rooms do
   Opens a new count-free Room at the seat cap and returns its Code.
   """
   @spec create(String.t() | nil) :: {:ok, String.t()} | {:error, term()}
-  def create(device_token), do: create(MeaningGame.Steward.seat_cap(), device_token)
+  def create(device_token) when is_binary(device_token) or is_nil(device_token) do
+    create(MeaningGame.Steward.seat_cap(), device_token, [])
+  end
 
-  @doc """
-  Opens a new Room of `player_count` Seats and returns its Code.
+  @spec create(String.t() | nil, keyword()) :: {:ok, String.t()} | {:error, term()}
+  def create(device_token, opts)
+      when (is_binary(device_token) or is_nil(device_token)) and is_list(opts) do
+    create(MeaningGame.Steward.seat_cap(), device_token, opts)
+  end
 
-  Rooms are created, never conjured. Nothing else in this interface brings one
-  into being: every other call finds a Room that somebody made here, which is
-  why a mistyped Code is a 404 rather than an empty Room nobody meant.
-
-  `device_token` is the creating phone's, which is what the Scribe will read to
-  name the Room after the Rooms that phone has played in. A phone with no
-  history draws a random word.
-  """
   @spec create(pos_integer(), String.t() | nil) :: {:ok, String.t()} | {:error, term()}
-  def create(seat_count, device_token)
-
   def create(seat_count, device_token) when is_integer(seat_count) do
-    if seat_count in seat_counts() do
-      case digests_for_device(device_token) do
-        [] ->
-          # No history: makes no model call and draws a random word
-          insert_with_a_free_code(seat_count, @code_draws)
+    create(seat_count, device_token, [])
+  end
 
-        digests ->
-          with {:ok, code} when is_binary(code) <-
-                 Steward.name_room(digests, Store.taken_codes()),
-               {:ok, code} <- insert_and_start(code, seat_count) do
-            {:ok, code}
-          else
-            _ ->
-              insert_with_a_free_code(seat_count, @code_draws)
-          end
+  def create(_seat_count, _device_token), do: {:error, :bad_player_count}
+
+  @spec create(pos_integer(), String.t() | nil, keyword()) :: {:ok, String.t()} | {:error, term()}
+  def create(seat_count, device_token, opts)
+      when is_integer(seat_count) and is_list(opts) do
+    if seat_count in seat_counts() do
+      address = Keyword.get(opts, :address)
+
+      with :ok <- RateLimit.hit(device_token, address) do
+        device_rooms =
+          if is_binary(device_token), do: Store.rooms_for_device(device_token), else: []
+
+        case digests_for_rooms(device_rooms) do
+          [] ->
+            # No history: draws a random word and makes one quip-only request under naming deadline
+            with {:ok, code} <- create_without_history(seat_count) do
+              if is_binary(device_token) and device_rooms == [] do
+                MeaningGame.Notice.notify_new_room(code, seat_count)
+              end
+
+              {:ok, code}
+            end
+
+          digests ->
+            name_with_scribe_or_fallback(seat_count, digests)
+        end
       end
     else
       {:error, :bad_player_count}
     end
   end
 
-  def create(_seat_count, _device_token), do: {:error, :bad_player_count}
+  def create(_seat_count, _device_token, _opts), do: {:error, :bad_player_count}
 
-  defp digests_for_device(nil), do: []
-
-  defp digests_for_device(device_token) do
-    device_token
-    |> Store.rooms_for_device()
+  defp digests_for_rooms(rooms) do
+    rooms
     |> Enum.uniq_by(fn %{room: room} -> room.id end)
     |> Enum.map(fn %{room: room} -> Chronicle.history_digest(room.id) end)
     |> Enum.reject(&is_nil/1)
+  end
+
+  defp name_with_scribe_or_fallback(seat_count, digests) do
+    taken = Store.taken_codes()
+
+    case Steward.name_room(digests, taken) do
+      {:ok, %{word: code, quip: quip}} when is_binary(code) ->
+        case insert_and_start(code, seat_count, quip) do
+          {:ok, slug} -> {:ok, slug}
+          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
+        end
+
+      {:ok, code} when is_binary(code) ->
+        case insert_and_start(code, seat_count, nil) do
+          {:ok, slug} -> {:ok, slug}
+          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
+        end
+
+      _ ->
+        insert_with_a_free_code(seat_count, @code_draws)
+    end
+  end
+
+  # A drawn word with no history makes one quip-only request under the naming deadline
+  defp create_without_history(seat_count) do
+    case draw_untaken_code(@code_draws) do
+      {:ok, code} ->
+        quip =
+          case Steward.quip_code(code) do
+            {:ok, q} when is_binary(q) -> q
+            _ -> nil
+          end
+
+        case insert_and_start(code, seat_count, quip) do
+          {:ok, slug} -> {:ok, slug}
+          {:error, _changeset} -> insert_with_a_free_code(seat_count, @code_draws)
+        end
+
+      {:error, :no_free_code} ->
+        {:error, :no_free_code}
+    end
+  end
+
+  defp draw_untaken_code(0), do: {:error, :no_free_code}
+
+  defp draw_untaken_code(draws_left) do
+    code = Code.draw()
+    taken = Store.taken_codes()
+
+    if code in taken do
+      draw_untaken_code(draws_left - 1)
+    else
+      {:ok, code}
+    end
   end
 
   # A drawn word that somebody else already took is drawn again, and nothing
@@ -125,9 +186,9 @@ defmodule MeaningGame.Rooms do
   defp insert_with_a_free_code(_seat_count, 0), do: {:error, :no_free_code}
 
   defp insert_with_a_free_code(seat_count, draws_left) do
-    case insert_and_start(Code.draw(), seat_count) do
-      {:ok, code} ->
-        {:ok, code}
+    case insert_and_start(Code.draw(), seat_count, nil) do
+      {:ok, slug} ->
+        {:ok, slug}
 
       {:error, changeset} ->
         if code_taken?(changeset) do
@@ -138,9 +199,9 @@ defmodule MeaningGame.Rooms do
     end
   end
 
-  defp insert_and_start(code, seat_count) do
+  defp insert_and_start(code, seat_count, quip) do
     with normalized when is_binary(normalized) <- Code.normalise(code),
-         {:ok, room} <- Store.insert_room(normalized, seat_count) do
+         {:ok, room} <- Store.insert_room(normalized, seat_count, quip) do
       case start_room(room.slug) do
         {:ok, _pid} ->
           {:ok, room.slug}
@@ -378,9 +439,9 @@ defmodule MeaningGame.Rooms do
   @spec set_voice(String.t(), boolean()) :: :ok | {:error, term()}
   def set_voice(code, enabled), do: call(code, {:set_voice, enabled})
 
-  @doc "Sets the house-loop-only on/off switch."
-  @spec set_house_loop_only(String.t(), boolean()) :: :ok | {:error, term()}
-  def set_house_loop_only(code, enabled), do: call(code, {:set_house_loop_only, enabled})
+  @doc "Sets the music switch: 'off', 'house', or 'page'."
+  @spec set_music(String.t(), String.t() | atom()) :: :ok | {:error, term()}
+  def set_music(code, music), do: call(code, {:set_music, music})
 
   @doc """
   Fetches the voice audio bytes and format for `attempt` from the Room.
@@ -436,6 +497,78 @@ defmodule MeaningGame.Rooms do
 
   @doc false
   def topic(slug), do: "room:" <> slug
+
+  @doc """
+  Returns true if the Room process is running and its Phase is bridging, assaying, or reveal.
+  """
+  @spec in_play?(Room.t() | String.t() | pid() | any()) :: boolean()
+  def in_play?(%Room{slug: code}), do: in_play?(code)
+
+  def in_play?(code_or_id) when is_binary(code_or_id) do
+    if uuid?(code_or_id) do
+      case MeaningGame.Repo.get(Room, code_or_id) do
+        nil -> false
+        room -> in_play?(room.slug)
+      end
+    else
+      case Code.normalise(code_or_id) do
+        nil ->
+          false
+
+        normalized ->
+          case GenServer.whereis(Server.via(normalized)) do
+            pid when is_pid(pid) -> in_play?(pid)
+            nil -> false
+          end
+      end
+    end
+  end
+
+  def in_play?(pid) when is_pid(pid) do
+    try do
+      GenServer.call(pid, :in_play?, 1_000)
+    catch
+      :exit, _ -> false
+    end
+  end
+
+  def in_play?(_), do: false
+
+  @doc """
+  Counts how many Pages are in play across all running Room processes.
+  """
+  @spec in_play_count() :: non_neg_integer()
+  def in_play_count do
+    MeaningGame.Rooms.Registry
+    |> Registry.select([{{:"$1", :"$2", :"$3"}, [], [:"$2"]}])
+    |> Enum.count(&in_play?/1)
+  end
+
+  @doc """
+  Answers the count of Pages in play for one Room (0 or 1).
+  """
+  @spec in_play_count(Room.t() | Ecto.UUID.t() | String.t()) :: 0 | 1
+  def in_play_count(room_or_code_or_id) do
+    if in_play?(room_or_code_or_id), do: 1, else: 0
+  end
+
+  @doc """
+  Formats the in-play sentence for the spend page and Chronicle foot.
+  Omitted (nil) when count is 0.
+  """
+  @spec in_play_sentence(non_neg_integer()) :: String.t() | nil
+  def in_play_sentence(0), do: nil
+  def in_play_sentence(1), do: "1 Page in play, not yet counted"
+  def in_play_sentence(n) when is_integer(n) and n > 1, do: "#{n} Pages in play, not yet counted"
+
+  defp uuid?(val) when is_binary(val) do
+    Regex.match?(
+      ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      val
+    )
+  end
+
+  defp uuid?(_), do: false
 
   defp check_name(name) when is_binary(name) do
     trimmed = String.trim(name)
