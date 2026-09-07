@@ -2,11 +2,13 @@ defmodule MeaningGame.Foley.Briefs do
   @moduledoc """
   The fixed set of briefs for the sounds the game ships.
 
-  Ten briefs:
+  Seventeen briefs:
   - The beat figure (2.5s rising, resolving on the downbeat)
   - Six stings: miss, adjacent, close, almost, meld, deep meld (under 2s; meld pair brighter, deep meld brightest)
   - Two endings: meld (an arrival), unmelded (a settle, not a sting)
-  - The house loop (Mureka instrumental that sits under talk)
+  - Five house loops (Mureka instrumentals that sit under talk, each with a different mood)
+  - Two victory cues: meld (an arrival that resolves), deep meld (brighter, a beat longer)
+  - One commit tick: under half a second, soft click or wood tap
   """
 
   @briefs [
@@ -119,6 +121,79 @@ defmodule MeaningGame.Foley.Briefs do
       loop: true,
       prompt:
         "An understated, warm instrumental acoustic loop that sits gently under living room conversation. Unhurried acoustic guitars, subtle percussion, ambient warmth."
+    },
+    %{
+      id: :house_loop_2,
+      key: "house_loop_2",
+      name: "House Loop 2",
+      target_filename: "house-loop-2.mp3",
+      kind: :music,
+      loop: true,
+      prompt:
+        "An understated, warm instrumental acoustic loop that sits gently under living room conversation. A reflective, gentle mood with soft fingerpicked acoustic guitar and warm mellow tones."
+    },
+    %{
+      id: :house_loop_3,
+      key: "house_loop_3",
+      name: "House Loop 3",
+      target_filename: "house-loop-3.mp3",
+      kind: :music,
+      loop: true,
+      prompt:
+        "An understated, warm instrumental acoustic loop that sits gently under living room conversation. A light, breezy, sunlit mood with delicate acoustic strumming and subtle, airy percussion."
+    },
+    %{
+      id: :house_loop_4,
+      key: "house_loop_4",
+      name: "House Loop 4",
+      target_filename: "house-loop-4.mp3",
+      kind: :music,
+      loop: true,
+      prompt:
+        "An understated, warm instrumental acoustic loop that sits gently under living room conversation. A quiet, cozy late-evening mood with soft nylon guitar, gentle ambient texture, and a relaxed cadence."
+    },
+    %{
+      id: :house_loop_5,
+      key: "house_loop_5",
+      name: "House Loop 5",
+      target_filename: "house-loop-5.mp3",
+      kind: :music,
+      loop: true,
+      prompt:
+        "An understated, warm instrumental acoustic loop that sits gently under living room conversation. A spacious, atmospheric mood with open acoustic chords, lingering resonance, and subtle warmth."
+    },
+    %{
+      id: :victory_meld,
+      key: "victory_meld",
+      name: "Victory: Meld",
+      target_filename: "victory-meld.mp3",
+      kind: :effects,
+      duration_seconds: 9.5,
+      loop: false,
+      prompt:
+        "A celebratory victory cue between 8 and 12 seconds: an arrival that resolves. Warm, triumphant closure with radiant acoustic chords, synchronized harmony, celebrating a meld reached."
+    },
+    %{
+      id: :victory_deep_meld,
+      key: "victory_deep_meld",
+      name: "Victory: Deep Meld",
+      target_filename: "victory-deep-meld.mp3",
+      kind: :effects,
+      duration_seconds: 11.5,
+      loop: false,
+      prompt:
+        "A celebratory victory cue between 8 and 12 seconds: the same arrival idea brighter and a beat longer. Sparkling triumphant chime, profound harmonic resonance, celebrating a deep meld."
+    },
+    %{
+      id: :commit_tick,
+      key: "commit_tick",
+      name: "Commit Tick",
+      target_filename: "commit-tick.mp3",
+      kind: :effects,
+      duration_seconds: 0.5,
+      loop: false,
+      prompt:
+        "A very short sound effect under half a second. A soft click or organic wood tap, tactile and crisp, non-tonal enough to never clash with music."
     }
   ]
 
