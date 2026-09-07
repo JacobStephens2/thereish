@@ -208,7 +208,7 @@ SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "${SERVER}")
 # Every key the release reads that deploy/provision.sh cannot generate, in
 # display order. Bash 3.2 on a stock Mac has no associative arrays, hence the
 # case statement rather than a map.
-KEYS=(GEMINI_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY MUREKA_API_KEY HUME_API_KEY HUME_SECRET_KEY ELEVENLABS_API_KEY)
+KEYS=(GEMINI_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY MUREKA_API_KEY HUME_API_KEY HUME_SECRET_KEY ELEVENLABS_API_KEY UMAMI_SCRIPT_URL UMAMI_WEBSITE_ID)
 
 buys() {
   case "$1" in
@@ -219,6 +219,8 @@ buys() {
     HUME_API_KEY)       echo "the Assayer's voice (Hume Octave 2, the bake-off winner)" ;;
     HUME_SECRET_KEY)    echo "the Assayer's voice (Hume needs both keys)" ;;
     ELEVENLABS_API_KEY) echo "the alternative voice, and the forge's effects" ;;
+    UMAMI_SCRIPT_URL)   echo "page view counting in Umami (the script URL; needs UMAMI_WEBSITE_ID too)" ;;
+    UMAMI_WEBSITE_ID)   echo "page view counting in Umami (the website id from the dashboard)" ;;
   esac
 }
 
