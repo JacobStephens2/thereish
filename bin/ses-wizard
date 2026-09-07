@@ -215,11 +215,18 @@ PORKBUN_API_BASE="https://api.porkbun.com/api/json/v3"
 # Porkbun API caller
 porkbun_call() {
   local endpoint="$1" body="$2"
+  local merged_body
+  if command -v jq >/dev/null 2>&1; then
+    merged_body=$(printf '%s' "$body" | jq -c \
+      --arg apikey "${PORKBUN_API_KEY}" \
+      --arg secretapikey "${PORKBUN_SECRET_API_KEY}" \
+      '. + {apikey: $apikey, secretapikey: $secretapikey}' 2>/dev/null || true)
+  fi
   curl -sS -X POST "${PORKBUN_API_BASE}/${endpoint}" \
     -H "Content-Type: application/json" \
     -H "X-API-Key: ${PORKBUN_API_KEY}" \
     -H "X-Secret-API-Key: ${PORKBUN_SECRET_API_KEY}" \
-    -d "$body" 2>/dev/null || true
+    -d "${merged_body:-$body}" 2>/dev/null || true
 }
 
 # Publish a DNS record to Porkbun idempotently
