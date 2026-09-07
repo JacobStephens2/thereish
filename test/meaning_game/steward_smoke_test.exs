@@ -146,7 +146,7 @@ defmodule MeaningGame.StewardSmokeTest do
     assert answer.meta.model =~ "gpt-6-astra"
     assert answer.meta.arm == :astra
     assert answer.meta.cost_usd > 0
-    assert answer.meta.latency_ms < 15_000
+    assert answer.meta.latency_ms < 10_000
 
     IO.puts(
       "\n  live Author (Astra): #{left} / #{right} in #{answer.meta.latency_ms} ms " <>
