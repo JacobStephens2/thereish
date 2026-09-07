@@ -101,17 +101,11 @@ defmodule MeaningGame.Notice do
   end
 
   @doc """
-  Returns a list of missing credential names from the given env map or :system.
+  Returns a list of missing credential names from the given env map or System.get_env().
   """
-  def missing_credentials(env \\ :system) do
-    lookup =
-      case env do
-        :system -> &System.get_env/1
-        map when is_map(map) -> &Map.get(map, &1)
-      end
-
+  def missing_credentials(env \\ System.get_env()) do
     Enum.filter(@required_credential_names, fn name ->
-      val = lookup.(name)
+      val = Map.get(env, name)
       is_nil(val) or val == ""
     end)
   end
@@ -119,14 +113,21 @@ defmodule MeaningGame.Notice do
   @doc """
   Logs a warning naming missing credential names at boot, or stays silent when all are present.
   """
-  def warn_at_boot(env \\ :system) do
-    missing = missing_credentials(env)
+  def warn_at_boot(env \\ nil) do
+    if env != nil or prod_or_release?() do
+      target_env = env || System.get_env()
+      missing = missing_credentials(target_env)
 
-    if missing != [] do
-      Logger.warning("Notice mailer not configured: missing #{Enum.join(missing, ", ")}")
+      if missing != [] do
+        Logger.warning("Notice mailer not configured: missing #{Enum.join(missing, ", ")}")
+      end
     end
 
     :ok
+  end
+
+  defp prod_or_release? do
+    System.get_env("RELEASE_NAME") != nil or Application.get_env(:meaning_game, :env) == :prod
   end
 
   defp room_url(code) do

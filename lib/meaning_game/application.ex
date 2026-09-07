@@ -41,10 +41,7 @@ defmodule MeaningGame.Application do
 
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
-        if Application.get_env(:meaning_game, :env) == :prod do
-          MeaningGame.Notice.warn_at_boot()
-        end
-
+        MeaningGame.Notice.warn_at_boot()
         {:ok, pid}
 
       error ->
