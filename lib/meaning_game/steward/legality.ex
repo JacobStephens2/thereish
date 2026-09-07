@@ -15,6 +15,20 @@ defmodule MeaningGame.Steward.Legality do
     motherfucker wank wanker bollocks twat
   )
 
+  # Articles, conjunctions, prepositions, pronouns, the copula. Dropped from
+  # both sides before the pairwise root check so a Bridge's *the* bars nothing
+  # and a barred phrase's *the* is barred by nothing. Not a stopword library.
+  @function_words ~w(
+    a an the
+    and or but nor yet so
+    of in to for with on at from by about as into like through after over
+    between out against during without before under around among
+    i me my we us our you your he him his she her it its they them their
+    this that these those who whom which what
+    is am are was were be been being
+    one all
+  )
+
   @doc "Whether a string is a single lowercase word of letters only."
   @spec single_word?(term()) :: boolean()
   def single_word?(word) when is_binary(word) do
@@ -70,7 +84,10 @@ defmodule MeaningGame.Steward.Legality do
 
   Player bridges may be words or short phrases up to 40 characters containing
   letters, digits, spaces, hyphens, and apostrophes. Dictionary, single-word,
-  and profanity checks are not applied to player bridges.
+  and profanity checks are not applied to player bridges. Function words
+  (articles, conjunctions, prepositions, pronouns, the copula) are dropped
+  from both sides before the pairwise root check; prefix overlap needs four
+  letters.
   """
   @spec check_bridge(term(), [term()]) :: :ok | {:illegal, String.t()}
   def check_bridge(bridge, barred_words \\ []) do
@@ -130,12 +147,12 @@ defmodule MeaningGame.Steward.Legality do
   def extract_words(_), do: []
 
   defp check_against_barred(w, barred) do
-    bridge_words = extract_words(w)
+    bridge_words = w |> extract_words() |> content_words()
 
     Enum.find_value(barred, :ok, fn barred_item ->
       item_str = to_string(barred_item)
       item_norm = normalize_bridge(item_str)
-      barred_words = extract_words(item_norm)
+      barred_words = item_norm |> extract_words() |> content_words()
 
       cond do
         w == item_norm ->
@@ -152,6 +169,8 @@ defmodule MeaningGame.Steward.Legality do
       end
     end)
   end
+
+  defp content_words(words), do: Enum.reject(words, &(&1 in @function_words))
 
   @doc """
   Whether two words share a stem or an inflection root.
@@ -190,9 +209,11 @@ defmodule MeaningGame.Steward.Legality do
     end
   end
 
+  # Four letters: three is mostly a false shared-root. Genuine short roots
+  # collide through the stemmer and the inflection table instead.
   defp prefix_overlap?(a, b, stem_a, stem_b) do
-    (String.length(stem_a) >= 3 and String.starts_with?(b, stem_a)) or
-      (String.length(stem_b) >= 3 and String.starts_with?(a, stem_b))
+    (String.length(stem_a) >= 4 and String.starts_with?(b, stem_a)) or
+      (String.length(stem_b) >= 4 and String.starts_with?(a, stem_b))
   end
 
   defp inflection_match?(a, b) do

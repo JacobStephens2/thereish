@@ -162,5 +162,58 @@ defmodule MeaningGame.Steward.LegalityTest do
       assert {:illegal, "\"viking ship\" shares a root with \"viking\"."} =
                Legality.check_bridge("viking ship", ["viking beaches", "harbour"])
     end
+
+    test "function words never carry a collision" do
+      assert :ok = Legality.check_bridge("the", ["theology"])
+      assert :ok = Legality.check_bridge("and", ["android"])
+      assert :ok = Legality.check_bridge("for", ["forest"])
+      assert :ok = Legality.check_bridge("one", ["onerous"])
+      assert :ok = Legality.check_bridge("out", ["outfit"])
+      # Four-letter function words are the half the prefix floor does not catch.
+      assert :ok = Legality.check_bridge("that", ["thatch"])
+      assert :ok = Legality.check_bridge("thatch", ["that mill"])
+    end
+
+    test "a phrase's function words are dropped and its content words still collide" do
+      assert :ok = Legality.check_bridge("the meaning of life", ["theology"])
+
+      assert {:illegal, "\"the lava rock\" shares a root with \"lava\"."} =
+               Legality.check_bridge("the lava rock", ["lava", "mountain"])
+    end
+
+    test "a bridge made only of function words is legal" do
+      assert :ok = Legality.check_bridge("the one", ["theology", "android"])
+      assert :ok = Legality.check_bridge("and so", ["forest", "onerous"])
+    end
+
+    test "seashore does not collide with sea" do
+      assert :ok = Legality.check_bridge("seashore", ["sea", "harbour"])
+      assert :ok = Legality.check_bridge("sea", ["seashore", "harbour"])
+    end
+  end
+
+  describe "shared_root?/2" do
+    test "still answers true for inflection, stem, and identity" do
+      assert Legality.shared_root?("runner", "run")
+      assert Legality.shared_root?("lanterns", "lantern")
+      assert Legality.shared_root?("harbour", "harbour")
+    end
+  end
+
+  describe "check_author_bridge/2" do
+    test "still gates the Author's bookends through the same root check" do
+      assert :ok = Legality.check_author_bridge("beacon", ["lantern", "harbour"])
+
+      assert {:illegal, "\"runner\" shares a root with \"run\"."} =
+               Legality.check_author_bridge("runner", ["run", "fast"])
+
+      assert {:illegal, "\"xyzzyq\" is not in the dictionary."} =
+               Legality.check_author_bridge("xyzzyq", ["lantern", "harbour"])
+    end
+
+    test "theology against the and seashore against sea are legal" do
+      assert :ok = Legality.check_author_bridge("theology", ["the"])
+      assert :ok = Legality.check_author_bridge("seashore", ["sea"])
+    end
   end
 end
