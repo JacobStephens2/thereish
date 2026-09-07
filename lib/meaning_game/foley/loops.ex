@@ -18,4 +18,21 @@ defmodule MeaningGame.Foley.Loops do
   """
   @spec all() :: [loop()]
   def all, do: @loops
+
+  @doc """
+  Picks a house loop at random, excluding the previous loop if one is given.
+  """
+  @spec pick(loop() | nil) :: loop()
+  def pick(previous \\ nil)
+
+  def pick(nil), do: Enum.random(@loops)
+
+  def pick(%{} = previous) do
+    candidates =
+      Enum.reject(@loops, fn loop ->
+        loop.path == previous[:path] or loop.name == previous[:name]
+      end)
+
+    Enum.random(candidates)
+  end
 end

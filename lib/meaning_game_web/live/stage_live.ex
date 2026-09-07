@@ -173,6 +173,8 @@ defmodule MeaningGameWeb.StageLive do
         <.roster room={@room} mode={:stage} />
       </footer>
 
+      <.now_playing :if={@room} room={@room} />
+
       <script :type={Phoenix.LiveView.ColocatedHook} name=".WakeLock">
         export default {
           async mounted() {

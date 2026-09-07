@@ -1845,10 +1845,19 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute_push_event(ctx.melissa, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
-      # Setting house (e.g. from Jacob's phone) pushes house-loop.mp3 to speaker alone
+      # Setting house (e.g. from Jacob's phone) pushes the Page's loop to speaker alone
       ctx.jacob |> element("[data-role=music-house]") |> render_click()
 
-      assert_push_event(ctx.stage, "foley:page", %{path: "/audio/house-loop.mp3"})
+      expected_loop = Rooms.snapshot(ctx.slug, nil).loop
+
+      assert_push_event(ctx.stage, "foley:page", %{
+        path: expected_path,
+        title: expected_title,
+        kind: "house"
+      })
+
+      assert expected_path == expected_loop.path
+      assert expected_title == expected_loop.name
       refute_push_event(ctx.melissa, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
@@ -1938,6 +1947,100 @@ defmodule MeaningGameWeb.RoomLiveTest do
       refute_push_event(ctx.stage, "foley:sting", %{})
       refute_push_event(ctx.stage, "foley:voice", %{})
       refute_push_event(ctx.jacob, "foley:voice", %{})
+    end
+
+    test "ticket 03: foley:page carries title and kind: house before track lands, and Now playing line renders below the fold",
+         ctx do
+      # Set score_delay_ms so Track does not land immediately
+      fake_config = Application.get_env(:meaning_game, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :meaning_game,
+        :steward,
+        Keyword.put(
+          Application.get_env(:meaning_game, :steward, []),
+          :fake,
+          Keyword.put(fake_config, :music_delay_ms, 500)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :meaning_game,
+          :steward,
+          Keyword.put(Application.get_env(:meaning_game, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      give_setting(ctx.melissa, "mountain cabin")
+      give_setting(ctx.jacob, "misty forest")
+      await_phase(ctx.slug, :bridging)
+
+      room_snapshot = Rooms.snapshot(ctx.slug, nil)
+      expected_loop = room_snapshot.loop
+      assert expected_loop != nil
+
+      # Stage is speaker: foley:page carries loop's path, title, and kind: "house"
+      assert_push_event(ctx.stage, "foley:page", %{
+        path: loop_path,
+        title: loop_title,
+        kind: "house"
+      })
+
+      assert loop_path == expected_loop.path
+      assert loop_title == expected_loop.name
+
+      # "Now playing" line renders below the fold on Stage and on Speaker's phone
+      # Since Stage is speaker, Stage shows the line, and non-speaker phones do not
+      assert has_element?(ctx.stage, "[data-role=now-playing]", expected_loop.name)
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "the house loop")
+      refute has_element?(ctx.melissa, "[data-role=now-playing]")
+      refute has_element?(ctx.jacob, "[data-role=now-playing]")
+
+      # Check position on stage: now-playing is below the fold (after bookends)
+      stage_html = render(ctx.stage)
+
+      assert_order(stage_html, [
+        ~s(data-role="bookends"),
+        ~s(data-role="now-playing")
+      ])
+
+      # Melissa claims speaker: Melissa's phone now shows the Now playing line below the fold
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", expected_loop.name)
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", "the house loop")
+      refute has_element?(ctx.jacob, "[data-role=now-playing]")
+
+      # Check position on Melissa's phone: now-playing is below the fold (after bridge-form, before In the Room)
+      melissa_html = render(ctx.melissa)
+
+      assert_order(melissa_html, [
+        ~s(data-role="bridge-form"),
+        ~s(data-role="now-playing"),
+        "In the Room"
+      ])
+
+      # Setting off: pushes nil path to speaker, and Now playing says "Music is off"
+      ctx.melissa |> element("[data-role=music-off]") |> render_click()
+      assert_push_event(ctx.melissa, "foley:page", %{path: nil})
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "Music is off")
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", "Music is off")
+      refute has_element?(ctx.jacob, "[data-role=now-playing]")
+
+      # Setting house: pushes loop with title and kind: "house" to speaker
+      ctx.melissa |> element("[data-role=music-house]") |> render_click()
+
+      assert_push_event(ctx.melissa, "foley:page", %{
+        path: ^loop_path,
+        title: ^loop_title,
+        kind: "house"
+      })
+
+      assert has_element?(ctx.stage, "[data-role=now-playing]", expected_loop.name)
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "the house loop")
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", expected_loop.name)
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", "the house loop")
+      refute has_element?(ctx.jacob, "[data-role=now-playing]")
     end
 
     test "commit pushes foley:commit to stage and foley:own-commit to committer only", ctx do
