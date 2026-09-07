@@ -12,8 +12,8 @@ defmodule Mix.Tasks.Foley.Forge do
 
   use Mix.Task
 
-  alias MeaningGame.Foley.Briefs
-  alias MeaningGame.Steward
+  alias Thereish.Foley.Briefs
+  alias Thereish.Steward
 
   @shortdoc "Generates and ranks Foley audio assets, or copies chosen assets from a manifest"
 

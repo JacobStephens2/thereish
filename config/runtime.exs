@@ -12,18 +12,18 @@ import Config
 # If you use `mix release`, you need to explicitly enable the server
 # by passing the PHX_SERVER=true when you start it:
 #
-#     PHX_SERVER=true bin/meaning_game start
+#     PHX_SERVER=true bin/thereish start
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
 if System.get_env("PHX_SERVER") do
-  config :meaning_game, MeaningGameWeb.Endpoint, server: true
+  config :thereish, ThereishWeb.Endpoint, server: true
 end
 
 # Not in :test — the suite boots a real endpoint on the port config/test.exs
 # names, and this would otherwise silently move it to 4000.
 if config_env() != :test do
-  config :meaning_game, MeaningGameWeb.Endpoint,
+  config :thereish, ThereishWeb.Endpoint,
     http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 end
 
@@ -33,7 +33,7 @@ end
 # middle of a reveal. A missing key is not fatal: the game says it has no
 # verdict, loudly, and the couple make the call.
 if key = System.get_env("GEMINI_API_KEY") do
-  config :meaning_game, :steward,
+  config :thereish, :steward,
     roles: [
       assayer: [api_key: key],
       author: [api_key: key],
@@ -43,21 +43,21 @@ if key = System.get_env("GEMINI_API_KEY") do
 end
 
 if key = System.get_env("OPENAI_API_KEY") do
-  config :meaning_game, :steward,
+  config :thereish, :steward,
     roles: [
       author: [jobs: [astra: [api_key: key]]]
     ]
 end
 
 if key = System.get_env("ANTHROPIC_API_KEY") do
-  config :meaning_game, :steward,
+  config :thereish, :steward,
     roles: [
       scribe: [jobs: [recap: [api_key: key]]]
     ]
 end
 
 if key = System.get_env("ELEVENLABS_API_KEY") do
-  config :meaning_game, :steward,
+  config :thereish, :steward,
     roles: [
       foley: [
         elevenlabs_api_key: key,
@@ -67,36 +67,36 @@ if key = System.get_env("ELEVENLABS_API_KEY") do
 end
 
 if key = System.get_env("HUME_API_KEY") do
-  config :meaning_game, :steward, roles: [foley: [hume_api_key: key]]
+  config :thereish, :steward, roles: [foley: [hume_api_key: key]]
 end
 
 if key = System.get_env("HUME_SECRET_KEY") do
-  config :meaning_game, :steward, roles: [foley: [hume_secret_key: key]]
+  config :thereish, :steward, roles: [foley: [hume_secret_key: key]]
 end
 
 if key = System.get_env("MUREKA_API_KEY") do
-  config :meaning_game, :steward, roles: [foley: [jobs: [music: [api_key: key]]]]
+  config :thereish, :steward, roles: [foley: [jobs: [music: [api_key: key]]]]
 end
 
 if script_url = System.get_env("UMAMI_SCRIPT_URL") do
-  config :meaning_game, :umami, script_url: script_url
+  config :thereish, :umami, script_url: script_url
 end
 
 if website_id = System.get_env("UMAMI_WEBSITE_ID") do
-  config :meaning_game, :umami, website_id: website_id
+  config :thereish, :umami, website_id: website_id
 end
 
 if to = System.get_env("NOTICE_TO") do
-  config :meaning_game, :notice, to: to
+  config :thereish, :notice, to: to
 end
 
 if from = System.get_env("NOTICE_FROM") do
-  config :meaning_game, :notice, from: from
+  config :thereish, :notice, from: from
 end
 
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
-  config :meaning_game, MeaningGameWeb.Endpoint,
+  config :thereish, ThereishWeb.Endpoint,
     live_reload: [
       web_console_logger: true,
       patterns: [
@@ -105,8 +105,8 @@ if config_env() == :dev do
         # Gettext translations
         ~r"priv/gettext/.*\.po$"E,
         # Router, Controllers, LiveViews and LiveComponents
-        ~r"lib/meaning_game_web/router\.ex$"E,
-        ~r"lib/meaning_game_web/(controllers|live|components)/.*\.(ex|heex)$"E
+        ~r"lib/thereish_web/router\.ex$"E,
+        ~r"lib/thereish_web/(controllers|live|components)/.*\.(ex|heex)$"E
       ]
     ]
 end
@@ -121,7 +121,7 @@ if config_env() == :prod do
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
-  config :meaning_game, MeaningGame.Repo,
+  config :thereish, Thereish.Repo,
     # ssl: true,
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
@@ -143,9 +143,9 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
-  config :meaning_game, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  config :thereish, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
-  config :meaning_game, MeaningGameWeb.Endpoint,
+  config :thereish, ThereishWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
       # Enable IPv6 and bind on all interfaces.
@@ -161,7 +161,7 @@ if config_env() == :prod do
   # To get SSL working, you will need to add the `https` key
   # to your endpoint configuration:
   #
-  #     config :meaning_game, MeaningGameWeb.Endpoint,
+  #     config :thereish, ThereishWeb.Endpoint,
   #       https: [
   #         ...,
   #         port: 443,
@@ -183,7 +183,7 @@ if config_env() == :prod do
   # We also recommend setting `force_ssl` in your config/prod.exs,
   # ensuring no data is ever sent via http, always redirecting to https:
   #
-  #     config :meaning_game, MeaningGameWeb.Endpoint,
+  #     config :thereish, ThereishWeb.Endpoint,
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
@@ -193,7 +193,7 @@ if config_env() == :prod do
   aws_region = System.get_env("AWS_REGION") || "us-east-1"
 
   if aws_access_key_id && aws_secret_access_key do
-    config :meaning_game, MeaningGame.Mailer,
+    config :thereish, Thereish.Mailer,
       adapter: Swoosh.Adapters.AmazonSES,
       access_key: aws_access_key_id,
       secret: aws_secret_access_key,

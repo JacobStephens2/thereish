@@ -1,4 +1,4 @@
-defmodule MeaningGame.DataCase do
+defmodule Thereish.DataCase do
   @moduledoc """
   This module defines the setup for tests requiring
   access to the application's data layer.
@@ -10,7 +10,7 @@ defmodule MeaningGame.DataCase do
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
   PostgreSQL, you can even run database tests asynchronously
-  by setting `use MeaningGame.DataCase, async: true`, although
+  by setting `use Thereish.DataCase, async: true`, although
   this option is not recommended for other databases.
   """
 
@@ -18,17 +18,17 @@ defmodule MeaningGame.DataCase do
 
   using do
     quote do
-      alias MeaningGame.Repo
+      alias Thereish.Repo
 
       import Ecto
       import Ecto.Changeset
       import Ecto.Query
-      import MeaningGame.DataCase
+      import Thereish.DataCase
     end
   end
 
   setup tags do
-    MeaningGame.DataCase.setup_sandbox(tags)
+    Thereish.DataCase.setup_sandbox(tags)
     :ok
   end
 
@@ -36,7 +36,7 @@ defmodule MeaningGame.DataCase do
   Sets up the sandbox based on the test tags.
   """
   def setup_sandbox(tags) do
-    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(MeaningGame.Repo, shared: not tags[:async])
+    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Thereish.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
   end
 

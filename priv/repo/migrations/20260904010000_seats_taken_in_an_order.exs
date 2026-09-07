@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.SeatsTakenInAnOrder do
+defmodule Thereish.Repo.Migrations.SeatsTakenInAnOrder do
   use Ecto.Migration
 
   # The order Seats were taken in is the order the roster and the reveal are

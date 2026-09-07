@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.VerdictsNameTheTwoFurthestApart do
+defmodule Thereish.Repo.Migrations.VerdictsNameTheTwoFurthestApart do
   use Ecto.Migration
 
   # The Assayer now reads every Bridge of an Attempt together and answers once

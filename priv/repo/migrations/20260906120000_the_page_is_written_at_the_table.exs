@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.ThePageIsWrittenAtTheTable do
+defmodule Thereish.Repo.Migrations.ThePageIsWrittenAtTheTable do
   use Ecto.Migration
 
   def change do

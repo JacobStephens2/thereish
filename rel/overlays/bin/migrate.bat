@@ -1,1 +1,1 @@
-call "%~dp0\meaning_game" eval MeaningGame.Release.migrate
+call "%~dp0\thereish" eval Thereish.Release.migrate

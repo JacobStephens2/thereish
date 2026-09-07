@@ -1,4 +1,4 @@
-defmodule MeaningGame.Repo.Migrations.CreateTheOverrules do
+defmodule Thereish.Repo.Migrations.CreateTheOverrules do
   use Ecto.Migration
 
   # The couple can jointly overrule any grade, and the overrule is recorded in

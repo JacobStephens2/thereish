@@ -7,9 +7,9 @@
 # General application configuration
 import Config
 
-config :meaning_game,
+config :thereish,
   env: config_env(),
-  ecto_repos: [MeaningGame.Repo],
+  ecto_repos: [Thereish.Repo],
   # Microseconds, because insertion order is display order: the roster, the
   # reveal, and every Chronicle table to come are read in the order the rows
   # were written, and a second is wide enough for two players to tie in.
@@ -61,12 +61,12 @@ config :meaning_game,
 # chosen for repeatability, because a constant offset is calibrated once by the
 # couple while noise makes the first grade on a borderline pair a dice roll that
 # the cache then freezes as precedent.
-config :meaning_game, :steward,
-  adapter: MeaningGame.Steward.Live,
+config :thereish, :steward,
+  adapter: Thereish.Steward.Live,
   fake: [delay_ms: 0, mode: :grade],
   roles: [
     assayer: [
-      provider: MeaningGame.Steward.Gemini,
+      provider: Thereish.Steward.Gemini,
       model: "gemini-3.8-flash",
       # Thinking cannot be turned off on 3.8 Flash; low is the floor.
       effort: "low",
@@ -94,7 +94,7 @@ config :meaning_game, :steward,
       api_key: nil
     ],
     author: [
-      provider: MeaningGame.Steward.Gemini,
+      provider: Thereish.Steward.Gemini,
       model: "gemini-3.8-flash",
       effort: "low",
       max_tokens: 400,
@@ -105,7 +105,7 @@ config :meaning_game, :steward,
       api_key: nil,
       jobs: [
         flash: [
-          provider: MeaningGame.Steward.Gemini,
+          provider: Thereish.Steward.Gemini,
           model: "gemini-3.8-flash",
           effort: "low",
           max_tokens: 400,
@@ -113,7 +113,7 @@ config :meaning_game, :steward,
           deadline_ms: 8_000
         ],
         astra: [
-          provider: MeaningGame.Steward.OpenAI,
+          provider: Thereish.Steward.OpenAI,
           model: "gpt-6-astra",
           effort: "low",
           max_tokens: 400,
@@ -145,7 +145,7 @@ config :meaning_game, :steward,
           # spent (spec, "Spend and the record").
           # xhigh is kept as a one-line alternative if prose quality requires it:
           # effort: "xhigh",
-          provider: MeaningGame.Steward.Anthropic,
+          provider: Thereish.Steward.Anthropic,
           model: "claude-fable-5-1",
           effort: "low",
           max_tokens: 8_000,
@@ -159,7 +159,7 @@ config :meaning_game, :steward,
           # Gemini 3.8 Flash at low effort, because a table is waiting (spec,
           # "The Scribe's first job"). One request, no hedging, a short timeout
           # and a deadline shorter than the Assayer's.
-          provider: MeaningGame.Steward.Gemini,
+          provider: Thereish.Steward.Gemini,
           model: "gemini-3.8-flash",
           effort: "low",
           max_tokens: 400,
@@ -170,7 +170,7 @@ config :meaning_game, :steward,
         title: [
           # Gemini 3.8 Flash at low effort, a one-field schema, a short timeout
           # and deadline in the naming job's class (spec: The Scribe titles the Track).
-          provider: MeaningGame.Steward.Gemini,
+          provider: Thereish.Steward.Gemini,
           model: "gemini-3.8-flash",
           effort: "low",
           max_tokens: 200,
@@ -188,14 +188,14 @@ config :meaning_game, :steward,
       hume_secret_key: nil,
       jobs: [
         effects: [
-          provider: MeaningGame.Steward.ElevenLabs,
+          provider: Thereish.Steward.ElevenLabs,
           model: "eleven_text_to_sound_v2",
           format: "mp3_44100_128",
           timeout_ms: 30_000,
           api_key: nil
         ],
         music: [
-          provider: MeaningGame.Steward.Mureka,
+          provider: Thereish.Steward.Mureka,
           model: "auto",
           n: 1,
           deadline_ms: 180_000,
@@ -204,7 +204,7 @@ config :meaning_game, :steward,
           api_key: nil
         ],
         ear: [
-          provider: MeaningGame.Steward.Gemini,
+          provider: Thereish.Steward.Gemini,
           model: "gemini-3.8-flash",
           effort: "low",
           max_tokens: 1_000,
@@ -213,12 +213,12 @@ config :meaning_game, :steward,
         ],
         # Either provider is one config line. Dungeon Master (Hume, bake-off winner) with George (ElevenLabs) as alternative.
         voice: [
-          provider: MeaningGame.Steward.Hume,
+          provider: Thereish.Steward.Hume,
           voice_id: "44cb3a51-07b4-4934-83fd-9d9e8d363ce6",
           timeout_ms: 3_000
         ]
         # Alternative:
-        # voice: [provider: MeaningGame.Steward.ElevenLabs, voice_id: "JBFqnCBsd6RMkjVDRZzb", timeout_ms: 3_000]
+        # voice: [provider: Thereish.Steward.ElevenLabs, voice_id: "JBFqnCBsd6RMkjVDRZzb", timeout_ms: 3_000]
       ]
     ]
   ],
@@ -243,14 +243,14 @@ config :meaning_game, :steward,
   seat_cap: 6
 
 # Configure the endpoint
-config :meaning_game, MeaningGameWeb.Endpoint,
+config :thereish, ThereishWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
-    formats: [html: MeaningGameWeb.ErrorHTML, json: MeaningGameWeb.ErrorJSON],
+    formats: [html: ThereishWeb.ErrorHTML, json: ThereishWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: MeaningGame.PubSub,
+  pubsub_server: Thereish.PubSub,
   live_view: [signing_salt: "2WJS9hIh"]
 
 # Configure LiveView
@@ -261,7 +261,7 @@ config :phoenix_live_view,
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",
-  meaning_game: [
+  thereish: [
     args:
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),
     cd: Path.expand("../assets", __DIR__),
@@ -271,7 +271,7 @@ config :esbuild,
 # Configure tailwind (the version is required)
 config :tailwind,
   version: "4.3.0",
-  meaning_game: [
+  thereish: [
     args: ~w(
       --input=assets/css/app.css
       --output=priv/static/assets/css/app.css
@@ -286,7 +286,7 @@ config :logger, :default_formatter,
   metadata: [:request_id]
 
 # Room creation rate limiting: sliding hour in memory per device and per address
-config :meaning_game, :room_creation_rate_limit,
+config :thereish, :room_creation_rate_limit,
   per_device: 10,
   per_address: 30,
   window_seconds: 3600
