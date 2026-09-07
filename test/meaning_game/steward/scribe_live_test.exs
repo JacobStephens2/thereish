@@ -67,6 +67,15 @@ defmodule MeaningGame.Steward.ScribeLiveTest do
       assert {:ok, %{callback: nil}} =
                Steward.recap(page(), "Nothing yet; this is the first Page.")
     end
+
+    test "the configured effort reaches the provider request" do
+      live_scribe()
+      answers([written_recap(callback: "They wrote cairn last month too.")])
+
+      assert {:ok, _recap} = Steward.recap(page(), "Page 1 (candy · cane) — Melded on attempt 2")
+      assert_received {:asked, 1, body}
+      assert body["output_config"]["effort"] == "low"
+    end
   end
 
   describe "the Vale gate, and the one repair pass behind it" do

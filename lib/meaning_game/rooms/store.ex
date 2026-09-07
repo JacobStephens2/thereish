@@ -34,10 +34,11 @@ defmodule MeaningGame.Rooms.Store do
   changeset error, which is the caller's cue to draw another word rather than a
   reason to fail.
   """
-  @spec insert_room(String.t(), pos_integer()) :: {:ok, Room.t()} | {:error, Ecto.Changeset.t()}
-  def insert_room(code, seat_limit) do
+  @spec insert_room(String.t(), pos_integer(), String.t() | nil) ::
+          {:ok, Room.t()} | {:error, Ecto.Changeset.t()}
+  def insert_room(code, seat_limit, quip \\ nil) do
     %Room{}
-    |> Room.changeset(%{slug: code, seat_limit: seat_limit})
+    |> Room.changeset(%{slug: code, seat_limit: seat_limit, quip: quip})
     |> Repo.insert()
   end
 
@@ -157,7 +158,7 @@ defmodule MeaningGame.Rooms.Store do
     |> Repo.update()
   end
 
-  @doc "Updates Room facts (speaker, voice, house_loop_only)."
+  @doc "Updates Room facts (speaker, voice, music)."
   @spec update_room(Room.t(), map()) :: {:ok, Room.t()} | {:error, Ecto.Changeset.t()}
   def update_room(%Room{} = room, attrs) do
     room

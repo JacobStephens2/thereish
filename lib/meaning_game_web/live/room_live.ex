@@ -97,8 +97,15 @@ defmodule MeaningGameWeb.RoomLive do
 
   def handle_event("commit_bridge", %{"bridge" => bridge}, socket) do
     case Rooms.commit_bridge(socket.assigns.slug, socket.assigns.seat.id, bridge) do
-      :ok -> {:noreply, socket |> assign(:bridge_error, nil) |> resync()}
-      {:error, reason} -> {:noreply, assign(socket, :bridge_error, message(reason))}
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:bridge_error, nil)
+         |> MeaningGameWeb.Foley.push_own_commit()
+         |> resync()}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :bridge_error, message(reason))}
     end
   end
 
@@ -221,8 +228,8 @@ defmodule MeaningGameWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
-  def handle_event("toggle_house_loop_only", _params, socket) do
-    Rooms.set_house_loop_only(socket.assigns.slug, !socket.assigns.room.house_loop_only)
+  def handle_event("set_music", %{"music" => music}, socket) do
+    Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}
   end
 
@@ -302,6 +309,9 @@ defmodule MeaningGameWeb.RoomLive do
   defp can_overrule?(%{reveal: %{overruled?: true}}, _seat), do: false
   defp can_overrule?(_room, _seat), do: true
 
+  defp playing_phase?(nil), do: false
+  defp playing_phase?(room), do: room.phase not in [:waiting, :giving]
+
   defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
 
   defp display_url(url), do: String.replace_prefix(url, "https://", "")
@@ -314,56 +324,9 @@ defmodule MeaningGameWeb.RoomLive do
       phx-hook=".ResyncOnWake"
       class="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12"
     >
-      <section
-        :if={@room}
-        data-role="speaker-bar"
-        class="flex items-center justify-between rounded-lg border border-base-300 px-4 py-2"
-      >
-        <button
-          type="button"
-          phx-click="claim_speaker"
-          data-role="speaker-toggle"
-          data-speaker={
-            cond do
-              @room.speaker? -> "self"
-              @room.speaker_claimed? -> "other"
-              true -> "none"
-            end
-          }
-          class="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
-        >
-          <.speaker_icon state={
-            cond do
-              @room.speaker? -> :self
-              @room.speaker_claimed? -> :other
-              true -> :none
-            end
-          } />
-          <span :if={@room.speaker?} class="text-primary font-semibold">This phone is speaker</span>
-          <span :if={@room.speaker_claimed? and not @room.speaker?} class="opacity-60">Speaker elsewhere</span>
-          <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
-        </button>
-
-        <.foley_switches room={@room} />
-      </section>
-
-      <section
-        data-role="room-code"
-        class="flex flex-col items-center gap-1 rounded-lg border border-base-300 px-4 py-6"
-      >
-        <p class="text-sm uppercase tracking-wide opacity-60">Code</p>
-        <p data-role="code" class="font-mono text-5xl font-bold tracking-[0.3em]">
-          {Code.shout(@slug)}
-        </p>
-        <p class="mt-2 text-center text-sm opacity-70">
-          Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.
-        </p>
-        <div class="mt-4">
-          <.button navigate={~p"/r/#{@slug}/stage"} data-role="make-stage" class="btn-sm text-xs">
-            Make this device the Stage
-          </.button>
-        </div>
-      </section>
+      <%= if not playing_phase?(@room) do %>
+        <.speaker_bar_and_code room={@room} code={@slug} join_url={@join_url} />
+      <% end %>
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">
         <.input name="name" value={@name} label="Your name" autocomplete="off" autofocus />
@@ -560,7 +523,7 @@ defmodule MeaningGameWeb.RoomLive do
         <.input
           name="bridge"
           value={nil}
-          label="The word between them"
+          label="Your bridge"
           autocomplete="off"
           autofocus
         />
@@ -572,7 +535,7 @@ defmodule MeaningGameWeb.RoomLive do
 
       <div :if={!@room[:late?] && @room.your_bridge && mid_page?(@room)} class="flex flex-col gap-1">
         <p data-role="your-bridge" class="text-lg">
-          You wrote <span class="font-semibold">{@room.your_bridge}</span>.
+          Your bridge: <span class="font-semibold">{@room.your_bridge}</span>
         </p>
         <p :if={@room.phase == :bridging} class="text-sm opacity-60">Waiting for the others.</p>
       </div>
@@ -613,6 +576,10 @@ defmodule MeaningGameWeb.RoomLive do
         <.button phx-click="next_page" data-role="one-more" variant="primary">One more?</.button>
       </div>
 
+      <%= if playing_phase?(@room) do %>
+        <.speaker_bar_and_code room={@room} code={@slug} join_url={@join_url} />
+      <% end %>
+
       <section class="flex flex-col gap-2">
         <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>
         <.roster room={@room} />
@@ -648,6 +615,76 @@ defmodule MeaningGameWeb.RoomLive do
 
       <.foley_hook speaker={@room && @room.speaker?} />
     </main>
+    """
+  end
+
+  defp speaker_bar_and_code(assigns) do
+    ~H"""
+    <section
+      :if={@room}
+      data-role="speaker-bar"
+      class="flex flex-col gap-2 rounded-lg border border-base-300 px-4 py-2"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            phx-click="claim_speaker"
+            data-role="speaker-toggle"
+            data-speaker={
+              cond do
+                @room.speaker? -> "self"
+                @room.speaker_claimed? -> "other"
+                true -> "none"
+              end
+            }
+            class="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+          >
+            <.speaker_icon state={
+              cond do
+                @room.speaker? -> :self
+                @room.speaker_claimed? -> :other
+                true -> :none
+              end
+            } />
+            <span :if={@room.speaker?} class="text-primary font-semibold">This phone is speaker</span>
+            <span :if={@room.speaker_claimed? and not @room.speaker?} class="opacity-60">Speaker elsewhere</span>
+            <span :if={not @room.speaker_claimed?} class="opacity-60">Tap to claim speaker</span>
+          </button>
+
+          <.local_sound_switch />
+        </div>
+
+        <.foley_switches room={@room} />
+      </div>
+
+      <.now_playing :if={@room.speaker?} room={@room} />
+    </section>
+
+    <section
+      data-role="room-code"
+      class="flex flex-col items-center gap-1 rounded-lg border border-base-300 px-4 py-6"
+    >
+      <p class="text-sm uppercase tracking-wide opacity-60">Code</p>
+      <p data-role="code" class="font-mono text-5xl font-bold tracking-[0.3em]">
+        {Code.shout(@code)}
+      </p>
+      <p
+        :if={@room && @room.quip}
+        data-role="code-quip"
+        class="text-center text-sm italic opacity-70"
+      >
+        {@room.quip}
+      </p>
+      <p class="mt-2 text-center text-sm opacity-70">
+        Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.
+      </p>
+      <div class="mt-4">
+        <.button navigate={~p"/r/#{@code}/stage"} data-role="make-stage" class="btn-sm text-xs">
+          Make this device the Stage
+        </.button>
+      </div>
+    </section>
     """
   end
 end

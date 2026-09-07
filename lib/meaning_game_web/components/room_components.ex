@@ -14,93 +14,199 @@ defmodule MeaningGameWeb.RoomComponents do
   use MeaningGameWeb, :html
 
   attr :room, :map, required: true, doc: "a snapshot from MeaningGame.Rooms.snapshot/2"
+  attr :mode, :atom, default: :phone
 
   def roster(assigns) do
     ~H"""
-    <div data-role="roster">
+    <div
+      data-role="roster"
+      data-mode={if @mode == :stage, do: "stage"}
+      class={[
+        if(@mode == :stage,
+          do: "flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+        )
+      ]}
+    >
       <%= if @room[:sides_mode?] && @room[:sides] do %>
-        <div data-role="sides-roster" class="flex flex-col gap-4">
+        <div
+          data-role="sides-roster"
+          class={
+            if @mode == :stage, do: "flex flex-wrap items-center gap-3", else: "flex flex-col gap-4"
+          }
+        >
           <div
             :for={side <- @room.sides}
             data-side={side.id}
-            class="flex flex-col gap-2 rounded-xl border border-base-300 bg-base-200/30 p-3"
+            class={[
+              if(@mode == :stage,
+                do: "flex items-center gap-2",
+                else: "flex flex-col gap-2 rounded-xl border border-base-300 bg-base-200/30 p-3"
+              )
+            ]}
           >
-            <div class="flex items-center justify-between">
+            <div class={if @mode == :stage, do: "", else: "flex items-center justify-between"}>
               <span class="text-xs font-bold uppercase tracking-wider text-primary">
-                {side.name}
+                {side.name}{if @mode == :stage, do: ":", else: ""}
               </span>
-              <span :if={side.you?} class="text-xs font-semibold text-primary">(your side)</span>
+              <span :if={@mode != :stage and side.you?} class="text-xs font-semibold text-primary">
+                (your side)
+              </span>
             </div>
-            <ul class="flex flex-col gap-1.5">
-              <li
+            <ul class={
+              if @mode == :stage, do: "flex items-center gap-2", else: "flex flex-col gap-1.5"
+            }>
+              <.seat_badge
                 :for={seat <- side.seats}
-                data-seat={seat.id}
-                data-committed={to_string(seat.committed?)}
-                class="flex items-center gap-2 text-base"
-              >
-                <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-                <span class="font-medium">{seat.name}</span>
-                <span :if={seat.you?} class="text-xs opacity-60">(you)</span>
-                <span :if={seat[:late?]} class="text-xs opacity-60">(watching)</span>
-                <span
-                  :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
-                  class="text-xs opacity-60"
-                >
-                  has written a bridge
-                </span>
-              </li>
+                seat={seat}
+                room={@room}
+                mode={@mode}
+                in_side={true}
+              />
             </ul>
           </div>
         </div>
       <% else %>
-        <ul class="flex flex-col gap-2">
-          <li
+        <ul class={
+          if @mode == :stage,
+            do: "flex flex-wrap items-center gap-x-3 gap-y-1",
+            else: "flex flex-col gap-2"
+        }>
+          <.seat_badge
             :for={seat <- @room.seats}
-            data-seat={seat.id}
-            data-committed={to_string(seat.committed?)}
-            data-couple={to_string(Map.get(seat, :couple?, false))}
-            class="flex items-center gap-2 text-lg"
+            seat={seat}
+            room={@room}
+            mode={@mode}
+            in_side={false}
+          />
+          <li
+            :if={@room.seats == []}
+            class={if @mode == :stage, do: "opacity-60", else: "text-lg opacity-60"}
           >
-            <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-            <span>{seat.name}</span>
-            <span
-              :if={Map.get(seat, :couple?) && seat.partner_name}
-              data-role="partner"
-              class="text-sm opacity-70"
-            >
-              (with {seat.partner_name})
-            </span>
-            <span :if={seat.you?} class="text-sm opacity-60">(you)</span>
-            <span :if={seat[:late?]} class="text-sm opacity-60">(watching)</span>
-            <span
-              :if={!seat[:late?] and seat.committed? and mid_page?(@room)}
-              class="text-sm opacity-60"
-            >
-              has written a bridge
-            </span>
+            Nobody yet
           </li>
-          <li :if={@room.seats == []} class="text-lg opacity-60">Nobody yet</li>
         </ul>
       <% end %>
 
-      <p data-role="open-seats" class="mt-3 text-sm opacity-60">{waiting(@room)}</p>
+      <p
+        data-role="open-seats"
+        class={if @mode == :stage, do: "opacity-60", else: "mt-3 text-sm opacity-60"}
+      >
+        {waiting(@room)}
+      </p>
     </div>
     """
   end
 
+  @doc """
+  Small uppercase caption, used for Attempt, Bookends, and section titles.
+  """
+  attr :class, :string, default: nil
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def caption(assigns) do
+    ~H"""
+    <p class={["text-center text-sm uppercase tracking-widest opacity-60", @class]} {@rest}>
+      {render_slot(@inner_block)}
+    </p>
+    """
+  end
+
+  attr :seat, :map, required: true
   attr :room, :map, required: true
+  attr :mode, :atom, default: :phone
+  attr :in_side, :boolean, default: false
+
+  defp seat_badge(assigns) do
+    ~H"""
+    <li
+      data-seat={@seat.id}
+      data-committed={to_string(@seat.committed?)}
+      data-couple={if !@in_side, do: to_string(Map.get(@seat, :couple?, false))}
+      class={[
+        "flex items-center",
+        cond do
+          @mode == :stage and @in_side -> "gap-1"
+          @mode == :stage -> "gap-1.5"
+          @in_side -> "gap-2 text-base"
+          true -> "gap-2 text-lg"
+        end
+      ]}
+    >
+      <span
+        class={[
+          "rounded-full bg-primary",
+          if(@mode == :stage and @in_side, do: "size-1.5", else: "size-2")
+        ]}
+        aria-hidden="true"
+      ></span>
+      <span class={if @mode == :stage or @in_side, do: "font-medium", else: ""}>
+        {@seat.name}
+      </span>
+      <span
+        :if={(!@in_side and Map.get(@seat, :couple?)) && @seat.partner_name}
+        data-role="partner"
+        class={if @mode == :stage, do: "text-xs opacity-70", else: "text-sm opacity-70"}
+      >
+        (with {@seat.partner_name})
+      </span>
+      <span
+        :if={@mode != :stage and @seat.you?}
+        class={if @in_side, do: "text-xs opacity-60", else: "text-sm opacity-60"}
+      >
+        (you)
+      </span>
+      <span
+        :if={@seat[:late?]}
+        class={if @mode == :stage, do: "text-xs opacity-60", else: "text-sm opacity-60"}
+      >
+        (watching)
+      </span>
+      <span
+        :if={!@seat[:late?] and @seat.committed? and mid_page?(@room)}
+        class={[
+          "opacity-60",
+          if(@mode == :stage, do: "text-xs font-semibold", else: "text-sm")
+        ]}
+      >
+        {if @mode == :stage, do: "✓", else: "has written a bridge"}
+      </span>
+    </li>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :mode, :atom, default: :phone
 
   @doc "The two words the Page hangs between, shown to everyone at once."
   def bookends(assigns) do
     ~H"""
-    <div :if={@room.bookends} class="flex flex-col items-center gap-3">
+    <div
+      :if={@room.bookends}
+      class={[
+        "flex flex-col items-center",
+        if(@mode == :stage, do: "gap-2", else: "gap-3")
+      ]}
+    >
+      <.caption data-role="bookends-caption">
+        Bookends
+      </.caption>
       <div
         data-role="bookends"
-        class="flex flex-wrap items-center justify-center gap-4"
+        class={[
+          "flex flex-wrap items-center justify-center",
+          if(@mode == :stage, do: "gap-3 sm:gap-4", else: "gap-4")
+        ]}
       >
         <span
           :for={bookend <- @room.bookends}
-          class="rounded-lg bg-base-200 px-5 py-3 text-3xl font-semibold tracking-tight"
+          class={[
+            "rounded-lg bg-base-200 font-semibold tracking-tight",
+            if(@mode == :stage,
+              do: "px-4 py-2 sm:px-5 sm:py-2.5 text-2xl sm:text-3xl",
+              else: "px-5 py-3 text-3xl"
+            )
+          ]}
         >
           {bookend}
         </span>
@@ -120,13 +226,12 @@ defmodule MeaningGameWeb.RoomComponents do
   """
   def attempt(assigns) do
     ~H"""
-    <p
+    <.caption
       :if={@room.phase in [:bridging, :assaying, :reveal]}
       data-role="attempt"
-      class="text-center text-sm uppercase tracking-widest opacity-60"
     >
       Attempt {@room.attempt.number} of {@room.attempt.of}
-    </p>
+    </.caption>
     """
   end
 
@@ -225,19 +330,29 @@ defmodule MeaningGameWeb.RoomComponents do
       data-role="reveal"
       data-arrival={reveal_arrival(@room.reveal)}
       data-mode={@mode}
-      class="flex flex-col items-center gap-8 w-full max-w-xl mx-auto"
+      class={[
+        "flex flex-col items-center w-full mx-auto",
+        if(@mode == :stage, do: "gap-[clamp(0.5rem,1.8vh,1.5rem)] max-w-4xl", else: "gap-8 max-w-xl")
+      ]}
     >
       <div
         data-role="comparison"
         style="animation: reveal-comparison 0.35s ease-out both;"
-        class="flex flex-wrap items-stretch justify-center gap-3 sm:gap-4 w-full"
+        class={[
+          "flex flex-wrap items-stretch justify-center w-full",
+          if(@mode == :stage, do: "gap-2 sm:gap-3", else: "gap-3 sm:gap-4")
+        ]}
       >
         <div
           :for={bridge <- @room.reveal.bridges}
           data-bridge={bridge.seat_id}
           data-you={to_string(you?(@seat, bridge))}
           class={[
-            "flex flex-1 min-w-[120px] sm:min-w-44 flex-col items-center justify-center gap-1 rounded-xl border p-4 text-center transition-all duration-300",
+            "flex flex-1 flex-col items-center justify-center gap-1 rounded-xl border text-center transition-all duration-300",
+            if(@mode == :stage,
+              do: "min-w-[120px] max-w-[240px] basis-40 sm:basis-48 p-2.5 sm:p-3",
+              else: "min-w-[120px] sm:min-w-44 p-4"
+            ),
             if(you?(@seat, bridge),
               do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
               else: "border-base-300 bg-base-100 shadow-sm"
@@ -250,7 +365,7 @@ defmodule MeaningGameWeb.RoomComponents do
           </div>
           <span class={[
             "font-bold tracking-tight",
-            if(@mode == :stage, do: "text-3xl sm:text-4xl", else: "text-2xl sm:text-3xl")
+            if(@mode == :stage, do: "text-2xl sm:text-3xl md:text-4xl", else: "text-2xl sm:text-3xl")
           ]}>
             {bridge.bridge}
           </span>
@@ -290,7 +405,8 @@ defmodule MeaningGameWeb.RoomComponents do
         data-role="closeness-display"
         style="animation: reveal-closeness 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;"
         class={[
-          "flex flex-col items-center justify-center rounded-2xl px-8 py-6 transition-all duration-500 w-full max-w-sm text-center",
+          "flex flex-col items-center justify-center rounded-2xl transition-all duration-500 w-full max-w-sm text-center",
+          if(@mode == :stage, do: "px-6 py-2 sm:py-3", else: "px-8 py-6"),
           @presentation.container_class
         ]}
       >
@@ -301,19 +417,26 @@ defmodule MeaningGameWeb.RoomComponents do
           data-target={@room.reveal.closeness}
           class={[
             "font-black tracking-tighter tabular-nums leading-none select-none",
-            if(@mode == :stage, do: "text-9xl sm:text-[10rem]", else: "text-7xl sm:text-8xl"),
+            if(@mode == :stage, do: "text-7xl sm:text-8xl md:text-9xl", else: "text-7xl sm:text-8xl"),
             @presentation.number_class
           ]}
         >
           {@room.reveal.closeness}
         </span>
 
-        <div class="mt-3 flex flex-col items-center gap-1.5">
+        <div class={[
+          "flex flex-col items-center",
+          if(@mode == :stage, do: "mt-1 sm:mt-1.5 gap-1", else: "mt-3 gap-1.5")
+        ]}>
           <span
             data-role="band"
             style="animation: band-arrive 0.4s ease-out 0.8s both;"
             class={[
-              "text-lg sm:text-xl font-extrabold uppercase tracking-widest px-4 py-1 rounded-full",
+              "font-extrabold uppercase tracking-widest rounded-full",
+              if(@mode == :stage,
+                do: "text-sm sm:text-base md:text-lg px-3 py-0.5",
+                else: "text-lg sm:text-xl px-4 py-1"
+              ),
               @presentation.badge_class
             ]}
           >
@@ -342,9 +465,9 @@ defmodule MeaningGameWeb.RoomComponents do
         :if={@mode != :quiet && @room.reveal.quip}
         data-role="quip"
         class={[
-          "font-serif italic font-medium leading-snug max-w-prose text-center",
+          "font-serif italic font-medium leading-snug max-w-2xl text-center",
           if(@mode == :stage,
-            do: "text-3xl sm:text-4xl text-base-content",
+            do: "text-xl sm:text-2xl md:text-3xl text-base-content",
             else: "text-xl sm:text-2xl text-base-content/90"
           )
         ]}
@@ -359,7 +482,7 @@ defmodule MeaningGameWeb.RoomComponents do
       />
 
       <section
-        :if={@mode == :stage && @room.reveal[:pairs]}
+        :if={@mode == :stage && @room.reveal[:pairs] && Enum.any?(@room.reveal.pairs, & &1.couple?)}
         data-role="meld-map"
         class="flex flex-col gap-5 w-full"
       >
@@ -486,11 +609,17 @@ defmodule MeaningGameWeb.RoomComponents do
       id="reveal-performance"
       data-role="reveal"
       data-mode={@mode}
-      class="flex flex-col items-center gap-8 w-full max-w-2xl mx-auto"
+      class={[
+        "flex flex-col items-center w-full mx-auto",
+        if(@mode == :stage,
+          do: "gap-[clamp(0.5rem,1.5vh,1.25rem)] max-w-4xl",
+          else: "gap-8 max-w-2xl"
+        )
+      ]}
     >
       <div
         data-role="sides-comparison"
-        class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full"
+        class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full"
       >
         <div
           :for={side <- @room.reveal.sides}
@@ -499,7 +628,8 @@ defmodule MeaningGameWeb.RoomComponents do
           data-closer={to_string(side.closer?)}
           data-melded={to_string(side.melded?)}
           class={[
-            "flex flex-col items-center gap-4 rounded-2xl border p-5 text-center transition-all",
+            "flex flex-col items-center rounded-2xl border text-center transition-all",
+            if(@mode == :stage, do: "gap-3 p-3.5 sm:p-4", else: "gap-4 p-5"),
             if(side_you?(side, @seat),
               do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
               else: "border-base-300 bg-base-100 shadow-sm"
@@ -548,7 +678,8 @@ defmodule MeaningGameWeb.RoomComponents do
             <div
               data-role="closeness-display"
               class={[
-                "flex flex-col items-center justify-center rounded-xl px-6 py-4 w-full",
+                "flex flex-col items-center justify-center rounded-xl w-full",
+                if(@mode == :stage, do: "px-4 py-2 sm:py-3", else: "px-6 py-4"),
                 closeness_presentation(side).container_class
               ]}
             >
@@ -556,7 +687,7 @@ defmodule MeaningGameWeb.RoomComponents do
                 data-role="closeness"
                 class={[
                   "font-black tracking-tighter tabular-nums leading-none select-none",
-                  if(@mode == :stage, do: "text-7xl sm:text-8xl", else: "text-6xl sm:text-7xl"),
+                  if(@mode == :stage, do: "text-6xl sm:text-7xl", else: "text-6xl sm:text-7xl"),
                   closeness_presentation(side).number_class
                 ]}
               >
@@ -821,16 +952,36 @@ defmodule MeaningGameWeb.RoomComponents do
   tries on two words and did not converge, which is the game working.
   """
   attr :seat, :map, default: nil
-  attr :mode, :atom, default: :stage
+  attr :mode, :atom, default: :phone
 
   def ending(assigns) do
     ~H"""
-    <section :if={@room.closed} data-role="ending" class="flex flex-col items-center gap-4">
-      <p data-role="ending-line" class="max-w-prose text-center text-xl">
+    <section
+      :if={@room.closed}
+      data-role="ending"
+      class={[
+        "flex flex-col items-center w-full",
+        if(@mode == :stage, do: "gap-2 sm:gap-3", else: "gap-4")
+      ]}
+    >
+      <p
+        data-role="ending-line"
+        class={[
+          "max-w-prose text-center font-medium",
+          if(@mode == :stage, do: "text-lg sm:text-xl", else: "text-xl")
+        ]}
+      >
         {ending_line(@room.closed)}
       </p>
 
-      <ol :if={@room.played != []} data-role="arc" class="flex flex-col gap-1 text-sm opacity-70">
+      <ol
+        :if={@room.played != []}
+        data-role="arc"
+        class={[
+          "flex flex-col opacity-70",
+          if(@mode == :stage, do: "gap-0.5 sm:gap-1 text-xs sm:text-sm", else: "gap-1 text-sm")
+        ]}
+      >
         <li
           :for={attempt <- @room.played}
           data-attempt={attempt.number}
@@ -1057,47 +1208,210 @@ defmodule MeaningGameWeb.RoomComponents do
     """
   end
 
+  @doc """
+  Per-device sound switch for local commit sounds.
+  Defaults to on in browser storage, toggled by tap, persists across reload.
+  """
+  def local_sound_switch(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id="local-sound-toggle"
+      phx-hook=".LocalSoundToggle"
+      data-role="local-sound-toggle"
+      data-sound="on"
+      aria-label="Toggle commit sound on this device"
+      title="Toggle commit sound on this device"
+      class="flex items-center justify-center p-1 rounded hover:bg-base-200 transition-colors opacity-70 hover:opacity-100 cursor-pointer"
+    >
+      <svg
+        data-state="on"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        class="size-4 inline-block"
+        aria-hidden="true"
+      >
+        <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+      </svg>
+      <svg
+        data-state="off"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        class="size-4 hidden inline-block opacity-40"
+        aria-hidden="true"
+      >
+        <path d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" />
+        <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.064 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+      </svg>
+    </button>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalSoundToggle">
+      export default {
+        mounted() {
+          this.syncUI = () => {
+            let enabled = true
+            try {
+              enabled = localStorage.getItem("foley:local-sounds") !== "off"
+            } catch (_) {}
+
+            this.el.dataset.sound = enabled ? "on" : "off"
+            this.el.setAttribute("aria-checked", enabled ? "true" : "false")
+            const onIcon = this.el.querySelector("[data-state=on]")
+            const offIcon = this.el.querySelector("[data-state=off]")
+            if (onIcon && offIcon) {
+              if (enabled) {
+                onIcon.classList.remove("hidden")
+                offIcon.classList.add("hidden")
+              } else {
+                onIcon.classList.add("hidden")
+                offIcon.classList.remove("hidden")
+              }
+            }
+          }
+
+          this.syncUI()
+
+          this.handleClick = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            let enabled = true
+            try {
+              enabled = localStorage.getItem("foley:local-sounds") !== "off"
+              const next = !enabled
+              localStorage.setItem("foley:local-sounds", next ? "on" : "off")
+            } catch (_) {}
+            this.syncUI()
+          }
+
+          this.el.addEventListener("click", this.handleClick)
+        },
+        updated() {
+          this.syncUI()
+        },
+        destroyed() {
+          if (this.handleClick) {
+            this.el.removeEventListener("click", this.handleClick)
+          }
+        }
+      }
+    </script>
+    """
+  end
+
   attr :room, :map, required: true
 
+  @music_options [
+    {"off", "music-off", "Off"},
+    {"house", "music-house", "House loop"},
+    {"page", "music-page", "Written for this Page"}
+  ]
+
   def foley_switches(assigns) do
+    music = to_string(assigns.room[:music] || "page")
+
+    assigns =
+      assigns
+      |> assign(:current_music, music)
+      |> assign(:music_options, @music_options)
+
     ~H"""
-    <div :if={@room[:speaker?]} class="flex items-center gap-3 text-xs opacity-80">
+    <div class="flex items-center gap-3 text-xs opacity-80">
       <label class="flex items-center gap-1.5 cursor-pointer">
         <input
           type="checkbox"
           data-role="voice-switch"
+          data-active={to_string(@room[:voice] || false)}
           checked={@room[:voice] || false}
           phx-click="toggle_voice"
           class="checkbox checkbox-xs"
         />
         <span>Voice</span>
       </label>
-      <label class="flex items-center gap-1.5 cursor-pointer">
-        <input
-          type="checkbox"
-          data-role="house-loop-switch"
-          checked={@room[:house_loop_only] || false}
-          phx-click="toggle_house_loop_only"
-          class="checkbox checkbox-xs"
-        />
-        <span>House loop only</span>
-      </label>
+      <div data-role="music-control" class="join">
+        <button
+          :for={{mode, role, label} <- @music_options}
+          type="button"
+          phx-click="set_music"
+          phx-value-music={mode}
+          data-role={role}
+          data-music={mode}
+          data-active={to_string(@current_music == mode)}
+          class={"btn btn-xs join-item " <> if(@current_music == mode, do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
+        >
+          {label}
+        </button>
+      </div>
     </div>
     """
   end
 
+  attr :room, :map, required: true
+
+  def now_playing(assigns) do
+    ~H"""
+    <p
+      :if={now_playing_text(@room)}
+      data-role="now-playing"
+      class="text-xs opacity-60 text-center"
+    >
+      {now_playing_text(@room)}
+    </p>
+    """
+  end
+
+  def now_playing_text(nil), do: nil
+
+  def now_playing_text(room) do
+    cond do
+      to_string(room[:music]) == "off" and
+          (room[:loop] != nil or room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
+        "Music is off"
+
+      room[:track] && room.track[:path] ->
+        nil
+
+      room[:loop] ->
+        "Now playing: #{room.loop.name} (the house loop)"
+
+      true ->
+        nil
+    end
+  end
+
   attr :speaker, :boolean, default: false
+  attr :levels, :list, default: nil
+  attr :meld_cue_delay_ms, :integer, default: nil
 
   def foley_hook(assigns) do
+    levels = assigns[:levels] || MeaningGame.Steward.foley_levels()
+
+    meld_cue_delay_ms =
+      assigns[:meld_cue_delay_ms] || MeaningGame.Steward.foley_meld_cue_delay_ms()
+
+    assigns = assigns |> assign(:levels, levels) |> assign(:meld_cue_delay_ms, meld_cue_delay_ms)
+
     ~H"""
-    <div id="foley-container" phx-hook=".Foley" data-speaker={to_string(@speaker)} class="hidden">
+    <div
+      id="foley-container"
+      phx-hook=".Foley"
+      data-speaker={to_string(@speaker)}
+      data-mode={if @speaker, do: "speaker", else: "local"}
+      data-level-music={to_string(@levels[:music] || 0.5)}
+      data-level-stings={to_string(@levels[:stings] || 1.2)}
+      data-level-voice={to_string(@levels[:voice] || 1.2)}
+      data-level-duck={to_string(@levels[:duck] || 0.15)}
+      data-meld-cue-delay-ms={to_string(@meld_cue_delay_ms)}
+      class="hidden"
+    >
     </div>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Foley">
       export default {
         mounted() {
-          this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          this.isReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
           this.speaker = this.el.dataset.speaker === "true"
-          this.canPlay = () => !this.reducedMotion && this.speaker
+          this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
+          this.canPlay = () => !this.isReducedMotion() && this.speaker
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -1106,7 +1420,32 @@ defmodule MeaningGameWeb.RoomComponents do
           this.voiceSource = null
           this.voiceObserver = null
           this.currentVoiceAttempt = null
+          this.musicOff = false
           this.audioBuffers = new Map()
+
+          const parseLevel = (val, fallback) => {
+            const parsed = parseFloat(val)
+            return isNaN(parsed) ? fallback : parsed
+          }
+          this.levels = {
+            music: parseLevel(this.el.dataset.levelMusic, 0.5),
+            stings: parseLevel(this.el.dataset.levelStings, 1.2),
+            voice: parseLevel(this.el.dataset.levelVoice, 1.2),
+            duck: parseLevel(this.el.dataset.levelDuck, 0.15)
+          }
+
+          this.parseDelay = (val, fallback) => {
+            const parsed = parseInt(val, 10)
+            return isNaN(parsed) ? fallback : parsed
+          }
+          this.meldCueDelayMs = this.parseDelay(this.el.dataset.meldCueDelayMs, 1800)
+          this.endingTimeout = null
+          this.clearEndingTimeout = () => {
+            if (this.endingTimeout) {
+              clearTimeout(this.endingTimeout)
+              this.endingTimeout = null
+            }
+          }
 
           this.initAudio = () => {
             if (this.ctx) return
@@ -1118,9 +1457,9 @@ defmodule MeaningGameWeb.RoomComponents do
             this.stingsBus = this.ctx.createGain()
             this.voiceBus = this.ctx.createGain()
 
-            this.musicBus.gain.setValueAtTime(0.7, this.ctx.currentTime)
-            this.stingsBus.gain.setValueAtTime(1.0, this.ctx.currentTime)
-            this.voiceBus.gain.setValueAtTime(1.0, this.ctx.currentTime)
+            this.musicBus.gain.setValueAtTime(this.levels.music, this.ctx.currentTime)
+            this.stingsBus.gain.setValueAtTime(this.levels.stings, this.ctx.currentTime)
+            this.voiceBus.gain.setValueAtTime(this.levels.voice, this.ctx.currentTime)
 
             this.musicBus.connect(this.ctx.destination)
             this.stingsBus.connect(this.ctx.destination)
@@ -1141,7 +1480,6 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.resumeAudio = async () => {
-            this.reducedMotion = false
             this.initAudio()
             if (this.ctx && this.ctx.state !== "running") {
               await this.ctx.resume()
@@ -1159,6 +1497,21 @@ defmodule MeaningGameWeb.RoomComponents do
             speakerToggle.addEventListener("click", () => this.resumeAudio())
           }
 
+          this.onFormSubmit = (e) => {
+            if (e.target && (e.target.id === "bridge-form" || e.target.closest("#bridge-form"))) {
+              this.resumeAudio()
+            }
+          }
+
+          this.onCommitClick = (e) => {
+            if (e.target && e.target.closest("#bridge-form button, [phx-submit=commit_bridge] button")) {
+              this.resumeAudio()
+            }
+          }
+
+          document.addEventListener("submit", this.onFormSubmit)
+          document.addEventListener("click", this.onCommitClick)
+
           this.fetchBuffer = async (url) => {
             if (this.audioBuffers.has(url)) return this.audioBuffers.get(url)
             try {
@@ -1174,18 +1527,18 @@ defmodule MeaningGameWeb.RoomComponents do
           }
 
           this.duckMusic = (durationSeconds = 2.0) => {
-            if (!this.ctx || !this.musicBus) return
+            if (!this.ctx || !this.musicBus || this.musicOff) return
             const now = this.ctx.currentTime
             this.musicBus.gain.cancelScheduledValues(now)
-            this.musicBus.gain.setTargetAtTime(0.15, now, 0.05)
-            this.musicBus.gain.setTargetAtTime(0.7, now + durationSeconds, 0.2)
+            this.musicBus.gain.setTargetAtTime(this.levels.duck, now, 0.05)
+            this.musicBus.gain.setTargetAtTime(this.levels.music, now + durationSeconds, 0.2)
           }
 
           this.restoreMusic = () => {
-            if (!this.ctx || !this.musicBus) return
+            if (!this.ctx || !this.musicBus || this.musicOff) return
             const now = this.ctx.currentTime
             this.musicBus.gain.cancelScheduledValues(now)
-            this.musicBus.gain.setTargetAtTime(0.7, now, 0.1)
+            this.musicBus.gain.setTargetAtTime(this.levels.music, now, 0.1)
           }
 
           this.stopVoice = () => {
@@ -1215,6 +1568,22 @@ defmodule MeaningGameWeb.RoomComponents do
             source.start(0)
           }
 
+          this.fadeMusicOut = (fadeDuration = 2.0) => {
+            if (!this.ctx || !this.musicBus) return
+            const now = this.ctx.currentTime
+            this.musicBus.gain.cancelScheduledValues(now)
+            this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
+            this.musicBus.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
+            const oldMusic = this.currentMusic
+            this.currentMusic = null
+            this.musicSource = null
+            if (oldMusic) {
+              setTimeout(() => {
+                try { oldMusic.source.stop() } catch (_) {}
+              }, fadeDuration * 1000 + 100)
+            }
+          }
+
           this.stopMusic = () => {
             if (this.currentMusic) {
               try { this.currentMusic.source.stop() } catch (_) {}
@@ -1228,13 +1597,26 @@ defmodule MeaningGameWeb.RoomComponents do
 
           this.handleEvent("foley:page", async ({path}) => {
             if (!this.canPlay()) return
-            this.stopVoice()
-            this.currentVoiceAttempt = null
             await this.resumeAudio()
             if (!this.ctx) return
-            const trackUrl = path || "/audio/house-loop.mp3"
+
+            const now = this.ctx.currentTime
+            const fadeDuration = 2.0
+
+            if (!path) {
+              this.musicOff = true
+              this.fadeMusicOut(fadeDuration)
+              return
+            }
+
+            this.musicOff = false
+
+            const trackUrl = path
 
             if (this.currentMusic && this.currentMusic.path === trackUrl) {
+              this.musicBus.gain.cancelScheduledValues(now)
+              this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
+              this.musicBus.gain.linearRampToValueAtTime(this.levels.music, now + 1.0)
               return
             }
 
@@ -1245,8 +1627,9 @@ defmodule MeaningGameWeb.RoomComponents do
               return
             }
 
-            const now = this.ctx.currentTime
-            const fadeDuration = 2.0
+            this.musicBus.gain.cancelScheduledValues(now)
+            this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
+            this.musicBus.gain.linearRampToValueAtTime(this.levels.music, now + fadeDuration)
 
             const newGain = this.ctx.createGain()
             const newSource = this.ctx.createBufferSource()
@@ -1354,16 +1737,56 @@ defmodule MeaningGameWeb.RoomComponents do
             }
           })
 
+          this.playCommitTick = async () => {
+            await this.resumeAudio()
+            if (!this.ctx) return
+            const buf = await this.fetchBuffer("/audio/commit-tick.mp3")
+            if (!buf) return
+            const source = this.ctx.createBufferSource()
+            source.buffer = buf
+            source.connect(this.stingsBus || this.ctx.destination)
+            source.start(0)
+          }
+
+          this.handleEvent("foley:commit", async () => {
+            if (this.isReducedMotion()) return
+            await this.playCommitTick()
+          })
+
+          this.handleEvent("foley:own-commit", async () => {
+            let enabled = true
+            try {
+              enabled = localStorage.getItem("foley:local-sounds") !== "off"
+            } catch (_) {}
+            if (!enabled || this.isReducedMotion()) return
+            await this.playCommitTick()
+          })
+
           this.handleEvent("foley:ending", async ({kind}) => {
-            const endingKind = (kind === "meld") ? "meld" : "unmelded"
-            const delayMs = (kind === "meld") ? 1800 : 0
-            setTimeout(() => {
-              this.playEffect(`/audio/ending-${endingKind}.mp3`, this.stingsBus, 0)
+            this.clearEndingTimeout()
+
+            if (kind === "meld" || kind === "deep_meld") {
+              const cueUrl = (kind === "deep_meld")
+                ? "/audio/victory-deep-meld.mp3"
+                : "/audio/victory-meld.mp3"
+              const delayMs = this.meldCueDelayMs
+
+              // Prefetch buffer during the delay so playback starts instantly when the timer fires
+              this.fetchBuffer(cueUrl)
+
+              this.endingTimeout = setTimeout(() => {
+                this.playEffect(cueUrl, this.stingsBus, 0)
+                this.fadeMusicOut(2.0)
+                this.endingTimeout = null
+              }, delayMs)
+            } else {
+              this.playEffect("/audio/ending-unmelded.mp3", this.stingsBus, 0)
               this.stopMusic()
-            }, delayMs)
+            }
           })
 
           this.handleEvent("foley:stop", () => {
+            this.clearEndingTimeout()
             this.stopVoice()
             this.currentVoiceAttempt = null
             this.stopMusic()
@@ -1374,8 +1797,11 @@ defmodule MeaningGameWeb.RoomComponents do
 
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
+          this.meldCueDelayMs = (this.parseDelay || parseInt)(this.el.dataset.meldCueDelayMs, 1800)
+          this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
           this.updateTapForSound()
           if (!this.speaker) {
+            if (this.clearEndingTimeout) this.clearEndingTimeout()
             this.stopVoice()
             this.currentVoiceAttempt = null
             this.stopMusic()
@@ -1383,6 +1809,9 @@ defmodule MeaningGameWeb.RoomComponents do
         },
 
         destroyed() {
+          if (this.clearEndingTimeout) this.clearEndingTimeout()
+          if (this.onFormSubmit) document.removeEventListener("submit", this.onFormSubmit)
+          if (this.onCommitClick) document.removeEventListener("click", this.onCommitClick)
           this.stopVoice()
           this.currentVoiceAttempt = null
           this.stopMusic()

@@ -74,7 +74,9 @@ defmodule MeaningGame.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:stemmer, "~> 1.2"},
-      {:expletive, "~> 0.1.6"}
+      {:expletive, "~> 0.1.6"},
+      {:swoosh, "~> 1.16"},
+      {:gen_smtp, "~> 1.2"}
     ]
   end
 
