@@ -159,6 +159,7 @@ config :meaning_game, :steward,
       ]
     ],
     foley: [
+      levels: [music: 0.5, stings: 1.2, voice: 1.2, duck: 0.15],
       elevenlabs_api_key: nil,
       hume_api_key: nil,
       hume_secret_key: nil,

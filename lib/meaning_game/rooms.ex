@@ -388,9 +388,9 @@ defmodule MeaningGame.Rooms do
   @spec set_voice(String.t(), boolean()) :: :ok | {:error, term()}
   def set_voice(code, enabled), do: call(code, {:set_voice, enabled})
 
-  @doc "Sets the house-loop-only on/off switch."
-  @spec set_house_loop_only(String.t(), boolean()) :: :ok | {:error, term()}
-  def set_house_loop_only(code, enabled), do: call(code, {:set_house_loop_only, enabled})
+  @doc "Sets the music switch: 'off', 'house', or 'page'."
+  @spec set_music(String.t(), String.t() | atom()) :: :ok | {:error, term()}
+  def set_music(code, music), do: call(code, {:set_music, music})
 
   @doc """
   Fetches the voice audio bytes and format for `attempt` from the Room.

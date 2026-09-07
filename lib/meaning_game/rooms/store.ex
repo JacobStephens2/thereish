@@ -157,7 +157,7 @@ defmodule MeaningGame.Rooms.Store do
     |> Repo.update()
   end
 
-  @doc "Updates Room facts (speaker, voice, house_loop_only)."
+  @doc "Updates Room facts (speaker, voice, music)."
   @spec update_room(Room.t(), map()) :: {:ok, Room.t()} | {:error, Ecto.Changeset.t()}
   def update_room(%Room{} = room, attrs) do
     room
