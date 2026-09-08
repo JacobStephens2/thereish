@@ -2201,16 +2201,27 @@ defmodule Thereish.RoomsTest do
       assert view.track.meta.provider == "fake"
     end
 
-    test "a scored track arriving for a Page that has moved on is dropped", ctx do
+    test "holdover across next_page and a stale score: landed track holds over and stale score is dropped", ctx do
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
       await_phase(ctx.slug, :bridging)
+
+      # Wait for track to land
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.kind == "track" end)
+      landed_view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      landed_track = landed_view.playing
 
       # Play through to closed
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_reveal(ctx.slug)
       await_phase(ctx.slug, :closed)
+
+      # After page closes: snapshot kind is holdover and title is kept
+      view_closed = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_closed.playing.kind == "holdover"
+      assert view_closed.playing.path == landed_track.path
+      assert view_closed.playing.title == landed_track.title
 
       pid = GenServer.whereis(Server.via(ctx.slug))
       stale_ref = make_ref()
@@ -2219,24 +2230,112 @@ defmodule Thereish.RoomsTest do
         path: "/media/tracks/stale.mp3",
         duration: 100,
         format: :mp3,
+        title: "Stale Track",
         meta: %{provider: "fake"}
       }
 
-      # While closed (before next_page), a late scored message is dropped and does not overwrite track
+      # While closed (before next_page), a late scored message is dropped and does not overwrite holdover
       send(pid, {:scored, stale_ref, {:ok, stale_track}})
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:track]) or view.track.path != stale_track.path
+      assert view.playing.kind == "holdover"
+      assert view.playing.path == landed_track.path
+
+      # Move to next page: landed track holds over into giving
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      view_p2 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_p2.playing.kind == "holdover"
+      assert view_p2.playing.path == landed_track.path
+      assert view_p2.playing.title == landed_track.title
+
+      # Send a late scored message with an old page ref directly to the Room Server
+      send(pid, {:scored, stale_ref, {:ok, stale_track}})
+
+      # Stale score is dropped and does not replace holdover
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.playing.kind == "holdover"
+      assert view.playing.path == landed_track.path
+    end
+
+    test "giving and writing keep holdover until new Page's track lands during writing", ctx do
+      # Play Page 1 to closed with landed track
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "mountain sunrise")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "ocean cliff")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.kind == "track" end)
+      p1_track = Rooms.snapshot(ctx.slug, ctx.melissa.id).playing
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "vista")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "vista")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Move to Page 2
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      # Giving keeps Page 1's track as holdover
+      view_p2_giving = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_p2_giving.playing.kind == "holdover"
+      assert view_p2_giving.playing.path == p1_track.path
+      assert view_p2_giving.playing.title == p1_track.title
+
+      # Add delay to author and music scoring so we can observe writing phase
+      set_fake(author_delay_ms: 100, music_delay_ms: 150)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "whispering pines")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "winding river")
+
+      # Writing keeps Page 1's track as holdover
+      view_p2_writing = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_p2_writing.phase == :writing
+      assert view_p2_writing.playing.kind == "holdover"
+      assert view_p2_writing.playing.path == p1_track.path
+      assert view_p2_writing.playing.title == p1_track.title
+
+      # When Page 2's track lands, it seizes the Speaker in writing
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.kind == "track"
+      end)
+
+      view_seized = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_seized.playing.kind == "track"
+      assert view_seized.playing.path != p1_track.path
+    end
+
+    test "if the previous Page never landed a Track, wait music is still a Repertoire draw on next_page", ctx do
+      # Configure fake so scoring fails
+      set_fake(music_mode: :unavailable)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      # In bridging, wait music is a Repertoire draw
+      view_bridging = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_bridging.playing.kind == "repertoire"
+
+      # Play through to closed
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Closed snapshot playing kind is still repertoire (no landed track)
+      view_closed = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_closed.playing.kind == "repertoire"
 
       # Move to next page
       :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
       await_phase(ctx.slug, :giving)
 
-      # Send a late scored message with an old page ref directly to the Room Server
-      send(pid, {:scored, stale_ref, {:ok, stale_track}})
-
-      # The current snapshot should have no track
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:track])
+      # On next_page, wait music is still a Repertoire draw
+      view_p2 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view_p2.playing.kind == "repertoire"
+      assert is_binary(view_p2.playing.path)
+      assert is_binary(view_p2.playing.title)
     end
 
     test "setting page mid-Page with no Track and no task running starts a score task", ctx do
