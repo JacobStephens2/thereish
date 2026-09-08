@@ -1723,20 +1723,20 @@ defmodule ThereishWeb.RoomLiveTest do
       join(melissa, "Melissa")
       join(jacob, "Jacob")
 
-      # The Stage starts the house loop while waiting; later tests look at Page events.
-      assert_push_event(stage, "foley:page", %{kind: "house"})
+      # The Stage starts wait music while waiting; later tests look at Page events.
+      assert_push_event(stage, "foley:page", %{kind: "repertoire"})
 
       %{slug: slug, melissa: melissa, jacob: jacob, stage: stage}
     end
 
-    test "waiting Stage: House loop then tap-for-sound has a foley:page to play" do
+    test "waiting Stage: Repertoire draw then tap-for-sound has a foley:page to play" do
       slug = open_room(seat_limit: 6)
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
       assert has_element?(stage, "[data-role=tap-for-sound]")
       assert has_element?(stage, "[data-role=music-house]")
 
-      assert_push_event(stage, "foley:page", %{kind: "house", path: path})
+      assert_push_event(stage, "foley:page", %{kind: "repertoire", path: path})
       assert String.starts_with?(path, "/audio/house-loop")
 
       stage |> element("[data-role=music-off]") |> render_click()
@@ -1744,7 +1744,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
       stage |> element("[data-role=music-house]") |> render_click()
       assert Rooms.get_room(slug).music == "house"
-      assert_push_event(stage, "foley:page", %{kind: "house", path: house_path})
+      assert_push_event(stage, "foley:page", %{kind: "repertoire", path: house_path})
       assert String.starts_with?(house_path, "/audio/house-loop")
     end
 
@@ -1915,7 +1915,7 @@ defmodule ThereishWeb.RoomLiveTest do
       assert_push_event(ctx.stage, "foley:page", %{
         path: ^expected_path,
         title: ^expected_title,
-        kind: "house"
+        kind: "repertoire"
       })
 
       refute_push_event(ctx.melissa, "foley:page", %{})
@@ -2040,11 +2040,11 @@ defmodule ThereishWeb.RoomLiveTest do
       expected_loop = room_snapshot.loop
       assert expected_loop != nil
 
-      # Stage is speaker: foley:page carries loop's path, title, and kind: "house"
+      # Stage is speaker: foley:page carries loop's path, title, and kind: "repertoire"
       assert_push_event(ctx.stage, "foley:page", %{
         path: loop_path,
         title: loop_title,
-        kind: "house"
+        kind: "repertoire"
       })
 
       assert loop_path == expected_loop.path
@@ -2053,7 +2053,7 @@ defmodule ThereishWeb.RoomLiveTest do
       # "Now playing" line renders below the fold on Stage and on Speaker's phone
       # Since Stage is speaker, Stage shows the line, and non-speaker phones do not
       assert has_element?(ctx.stage, "[data-role=now-playing]", expected_loop.name)
-      assert has_element?(ctx.stage, "[data-role=now-playing]", "the house loop")
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "the Repertoire")
       refute has_element?(ctx.melissa, "[data-role=now-playing]")
       refute has_element?(ctx.jacob, "[data-role=now-playing]")
 
@@ -2068,7 +2068,7 @@ defmodule ThereishWeb.RoomLiveTest do
       # Melissa claims speaker: Melissa's phone now shows the Now playing line below the fold
       ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
       assert has_element?(ctx.melissa, "[data-role=now-playing]", expected_loop.name)
-      assert has_element?(ctx.melissa, "[data-role=now-playing]", "the house loop")
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", "the Repertoire")
       refute has_element?(ctx.jacob, "[data-role=now-playing]")
 
       # Check position on Melissa's phone: now-playing is below the fold (after bridge-form, before In the Room)
@@ -2087,19 +2087,19 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.melissa, "[data-role=now-playing]", "Music is off")
       refute has_element?(ctx.jacob, "[data-role=now-playing]")
 
-      # Setting house: pushes loop with title and kind: "house" to speaker
+      # Setting house: pushes loop with title and kind: "repertoire" to speaker
       ctx.melissa |> element("[data-role=music-house]") |> render_click()
 
       assert_push_event(ctx.melissa, "foley:page", %{
         path: ^loop_path,
         title: ^loop_title,
-        kind: "house"
+        kind: "repertoire"
       })
 
       assert has_element?(ctx.stage, "[data-role=now-playing]", expected_loop.name)
-      assert has_element?(ctx.stage, "[data-role=now-playing]", "the house loop")
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "the Repertoire")
       assert has_element?(ctx.melissa, "[data-role=now-playing]", expected_loop.name)
-      assert has_element?(ctx.melissa, "[data-role=now-playing]", "the house loop")
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", "the Repertoire")
       refute has_element?(ctx.jacob, "[data-role=now-playing]")
     end
 
@@ -2130,9 +2130,9 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "viking beaches")
       await_phase(ctx.slug, :bridging)
 
-      # Initially, house loop is pushed to speaker (Stage)
-      assert_push_event(ctx.stage, "foley:page", %{kind: "house"})
-      assert has_element?(ctx.stage, "[data-role=now-playing]", "the house loop")
+      # Initially, wait music is pushed to speaker (Stage)
+      assert_push_event(ctx.stage, "foley:page", %{kind: "repertoire"})
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "the Repertoire")
 
       # When track lands, foley:page pushes track with title and kind: "track"
       assert_push_event(
@@ -2156,6 +2156,36 @@ defmodule ThereishWeb.RoomLiveTest do
           "Now playing: Summer Camp · Viking Beaches (written for this Page)"
         )
       end)
+    end
+
+    test "ticket 01: wait music plays during giving, pushed to speaker with kind repertoire, and Now playing names it on speaker",
+         ctx do
+      # In giving phase (setup joins Melissa & Jacob)
+      snapshot = Rooms.snapshot(ctx.slug, nil)
+      assert snapshot.playing.kind == "repertoire"
+      title = snapshot.playing.title
+      path = snapshot.playing.path
+      assert is_binary(path) and is_binary(title)
+
+      # Now playing line renders below the fold on speaking Stage
+      assert has_element?(ctx.stage, "[data-role=now-playing]", title)
+      assert has_element?(ctx.stage, "[data-role=now-playing]", "the Repertoire")
+
+      # Non-speaking phones do not show Now playing
+      refute has_element?(ctx.melissa, "[data-role=now-playing]")
+      refute has_element?(ctx.jacob, "[data-role=now-playing]")
+
+      # Melissa claims speaker during giving: Melissa gets foley:page and shows Now playing
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+
+      assert_push_event(ctx.melissa, "foley:page", %{
+        path: ^path,
+        title: ^title,
+        kind: "repertoire"
+      })
+
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", title)
+      assert has_element?(ctx.melissa, "[data-role=now-playing]", "the Repertoire")
     end
 
     test "commit pushes foley:commit to stage and foley:own-commit to nobody when stage is present",

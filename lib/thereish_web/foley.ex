@@ -92,7 +92,8 @@ defmodule ThereishWeb.Foley do
 
     track_changed =
       is_music_phase? and not is_nil(old_room) and
-        (track_info.path != old_track_info.path or track_info.title != old_track_info.title)
+        (track_info.path != old_track_info.path or track_info.title != old_track_info.title or
+           track_info.kind != old_track_info.kind)
 
     if (is_music_phase? and entered_music_phase?) or (is_music_phase? and just_claimed) or
          entered_bridging? or track_changed do
@@ -110,20 +111,40 @@ defmodule ThereishWeb.Foley do
         %{path: nil, title: nil, kind: nil}
 
       "house" ->
-        house_loop_payload(room)
+        repertoire_payload(room)
 
       _ ->
-        if room[:track] && room.track[:path] do
-          %{path: room.track.path, title: room.track[:title], kind: "track"}
-        else
-          house_loop_payload(room)
+        cond do
+          room[:track] && room.track[:path] ->
+            %{path: room.track.path, title: room.track[:title], kind: "track"}
+
+          room[:playing] && room.playing[:path] ->
+            kind = to_string(room.playing[:kind] || "repertoire")
+            %{path: room.playing.path, title: room.playing[:title], kind: kind}
+
+          true ->
+            repertoire_payload(room)
         end
     end
   end
 
-  defp house_loop_payload(room) do
-    loop = room[:loop] || hd(Thereish.Foley.Loops.all())
-    %{path: loop.path, title: loop.name, kind: "house"}
+  defp repertoire_payload(room) do
+    item =
+      cond do
+        room[:playing] && room.playing[:kind] in ["repertoire", :repertoire] && room.playing[:path] ->
+          room.playing
+
+        room[:loop] ->
+          room.loop
+
+        true ->
+          hd(Thereish.Foley.Repertoire.shipped_loops())
+      end
+
+    title = item[:title] || item[:name] || "Track"
+    path = item.path
+
+    %{path: path, title: title, kind: "repertoire"}
   end
 
   defp maybe_push_beat(socket, old_room, new_room) do

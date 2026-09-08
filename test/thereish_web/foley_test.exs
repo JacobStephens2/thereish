@@ -370,7 +370,7 @@ defmodule ThereishWeb.FoleyTest do
              } in events
     end
 
-    test "pushes house loop when the waiting Stage claims the speaker" do
+    test "pushes Repertoire member when the waiting Stage claims the speaker" do
       first = hd(Thereish.Foley.Loops.all())
       socket = test_socket(ThereishWeb.StageLive)
 
@@ -385,10 +385,10 @@ defmodule ThereishWeb.FoleyTest do
       result = Foley.push_foley_events(socket, nil, new_room, stage?: true)
       events = pushed_events(result)
 
-      assert {"foley:page", %{path: first.path, title: first.name, kind: "house"}} in events
+      assert {"foley:page", %{path: first.path, title: first.name, kind: "repertoire"}} in events
     end
 
-    test "pushes house loop when music is switched from off to house while waiting" do
+    test "pushes Repertoire member when music is switched from off to house while waiting" do
       first = hd(Thereish.Foley.Loops.all())
       socket = test_socket(ThereishWeb.StageLive)
 
@@ -409,7 +409,29 @@ defmodule ThereishWeb.FoleyTest do
       result = Foley.push_foley_events(socket, old_room, new_room, stage?: true)
       events = pushed_events(result)
 
-      assert {"foley:page", %{path: first.path, title: first.name, kind: "house"}} in events
+      assert {"foley:page", %{path: first.path, title: first.name, kind: "repertoire"}} in events
+    end
+
+    test "pushes Repertoire draw during giving and writing when room has no landed track" do
+      socket = test_socket()
+
+      giving_room = %{
+        phase: :giving,
+        speaker?: true,
+        music: "page",
+        playing: %{path: "/audio/house-loop-2.mp3", title: "Sunlit Drift", kind: "repertoire"}
+      }
+
+      result = Foley.push_foley_events(socket, nil, giving_room)
+      events = pushed_events(result)
+
+      assert {"foley:page",
+              %{path: "/audio/house-loop-2.mp3", title: "Sunlit Drift", kind: "repertoire"}} in events
+
+      # Transition to writing keeps the wait music without spurious push
+      writing_room = %{giving_room | phase: :writing}
+      result_writing = Foley.push_foley_events(socket, giving_room, writing_room)
+      refute Enum.any?(pushed_events(result_writing), fn {name, _} -> name == "foley:page" end)
     end
   end
 
