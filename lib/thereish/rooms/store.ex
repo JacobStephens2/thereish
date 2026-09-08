@@ -10,6 +10,7 @@ defmodule Thereish.Rooms.Store do
   import Ecto.Query
 
   alias Thereish.Repo
+  alias Thereish.Rooms.Never
   alias Thereish.Rooms.Room
   alias Thereish.Rooms.Seat
 
@@ -255,5 +256,23 @@ defmodule Thereish.Rooms.Store do
   defp clear_partner(room_id, partner_id) do
     from(s in Seat, where: s.id == ^partner_id and s.room_id == ^room_id)
     |> Repo.update_all(set: [partner_id: nil])
+  end
+
+  @doc "Records a Repertoire member path as Never in this Room."
+  @spec record_never(Ecto.UUID.t(), String.t()) :: {:ok, Never.t()} | {:error, term()}
+  def record_never(room_id, path) do
+    %Never{}
+    |> Never.changeset(%{room_id: room_id, path: path})
+    |> Repo.insert(on_conflict: :nothing, conflict_target: [:room_id, :path])
+  end
+
+  @doc "Lists all paths marked Never in this Room."
+  @spec list_nevers(Ecto.UUID.t() | String.t()) :: [String.t()]
+  def list_nevers(room_id) do
+    from(n in Never,
+      where: n.room_id == ^room_id,
+      select: n.path
+    )
+    |> Repo.all()
   end
 end

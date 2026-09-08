@@ -62,6 +62,11 @@ defmodule ThereishWeb.StageLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("never_music", _params, socket) do
+    Rooms.never(socket.assigns.slug, socket.assigns.device_token)
+    {:noreply, resync(socket)}
+  end
+
   @impl true
   def handle_info(:room_changed, socket), do: {:noreply, resync(socket)}
 

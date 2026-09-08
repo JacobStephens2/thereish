@@ -1369,6 +1369,15 @@ defmodule ThereishWeb.RoomComponents do
       >
         Next
       </button>
+      <button
+        :if={@room[:speaker?] and @room[:never?]}
+        type="button"
+        phx-click="never_music"
+        data-role="music-never"
+        class="btn btn-xs btn-ghost opacity-70 hover:opacity-100"
+      >
+        Never
+      </button>
     </div>
     """
   end

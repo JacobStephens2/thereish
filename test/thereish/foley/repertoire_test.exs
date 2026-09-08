@@ -213,5 +213,48 @@ defmodule Thereish.Foley.RepertoireTest do
       refute next_song.path == "/a.mp3"
       assert length(remaining) == 1
     end
+
+    test "members/1 excludes members marked Never for that Room, preserving them in other Rooms" do
+      room_a = create_test_room("never-room-a")
+      room_b = create_test_room("never-room-b")
+
+      loops = Repertoire.shipped_loops()
+      assert length(loops) == 5
+      never_loop = hd(loops)
+
+      # Record Never for room_a
+      {:ok, _} = Thereish.Rooms.Store.record_never(room_a.id, never_loop.path)
+
+      assert Repertoire.nevers(room_a.id) == [never_loop.path]
+      assert Repertoire.nevers(room_b.id) == []
+
+      # Room A excludes the never'd loop
+      members_a = Repertoire.members(room_a.id)
+      assert length(members_a) == 4
+      refute Enum.any?(members_a, fn m -> m.path == never_loop.path end)
+
+      # Room B still includes that loop (cross-Room isolation)
+      members_b = Repertoire.members(room_b.id)
+      assert length(members_b) == 5
+      assert Enum.any?(members_b, fn m -> m.path == never_loop.path end)
+    end
+
+    test "advance_after_never/3 returns the sole remaining member when 1 member remains" do
+      single = %{name: "Only", title: "Only", path: "/only.mp3"}
+      assert {:ok, member, deal} = Repertoire.advance_after_never([single], [], "/nevered.mp3")
+      assert member.path == "/only.mp3"
+      assert deal == []
+    end
+
+    test "advance_after_never/3 advances deal or reshuffles when more than 1 member remains" do
+      members = [
+        %{name: "A", title: "A", path: "/a.mp3"},
+        %{name: "B", title: "B", path: "/b.mp3"}
+      ]
+
+      assert {:ok, member, deal} = Repertoire.advance_after_never(members, [], "/nevered.mp3")
+      assert member.path in ["/a.mp3", "/b.mp3"]
+      assert length(deal) == 1
+    end
   end
 end
