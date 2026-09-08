@@ -592,7 +592,8 @@ defmodule Thereish.Steward do
     Map.update(verdict, :meta, %{latency_ms: latency_ms}, &Map.put(&1, :latency_ms, latency_ms))
   end
 
-  defp adapter do
+  @doc "Returns the configured Steward adapter module (Live or Fake)."
+  def adapter do
     :thereish |> Application.fetch_env!(:steward) |> Keyword.fetch!(:adapter)
   end
 end

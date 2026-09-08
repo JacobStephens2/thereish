@@ -1,5 +1,5 @@
 defmodule Thereish.Steward.MurekaTest do
-  use Thereish.DataCase, async: true
+  use Thereish.DataCase, async: false
 
   @moduletag :capture_log
 
@@ -76,6 +76,75 @@ defmodule Thereish.Steward.MurekaTest do
       assert body["model"] == "auto"
       assert body["prompt"] == "A slow acoustic guitar melody that sits under conversation"
       assert body["n"] == 1
+    end
+
+    test "starts a job with stream: true, polls until stream_url is returned during streaming phase" do
+      poll_count = Agent.start_link(fn -> 0 end) |> elem(1)
+      test_pid = self()
+
+      Req.Test.stub(Mureka, fn conn ->
+        case {conn.method, conn.request_path} do
+          {"POST", "/v1/instrumental/generate"} ->
+            {:ok, body, conn} = Plug.Conn.read_body(conn)
+            decoded = Jason.decode!(body)
+            send(test_pid, {:generate_stream_called, conn.req_headers, decoded})
+
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "application/json")
+            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_stream123"}))
+
+          {"GET", "/v1/instrumental/query/task_stream123"} ->
+            step = Agent.get_and_update(poll_count, &{&1 + 1, &1 + 1})
+
+            response_data =
+              case step do
+                1 ->
+                  %{"id" => "task_stream123", "status" => "preparing"}
+
+                2 ->
+                  %{
+                    "id" => "task_stream123",
+                    "status" => "streaming",
+                    "stream_url" => "https://stream.mureka.ai/live/task_stream123.mp3",
+                    "choices" => [
+                      %{"stream_url" => "https://stream.mureka.ai/live/task_stream123.mp3"}
+                    ]
+                  }
+
+                _ ->
+                  %{
+                    "id" => "task_stream123",
+                    "status" => "succeeded",
+                    "choices" => [%{"url" => "https://cdn.mureka.ai/audio/final.mp3"}]
+                  }
+              end
+
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "application/json")
+            |> Plug.Conn.send_resp(200, Jason.encode!(response_data))
+        end
+      end)
+
+      request = %{
+        prompt: "Fast atmospheric synth pad",
+        model: "auto",
+        api_key: "test-mureka-key",
+        deadline_ms: 2_000,
+        poll_interval_ms: 5
+      }
+
+      assert {:ok, result} = Mureka.stream(request)
+
+      assert result.stream_url == "https://stream.mureka.ai/live/task_stream123.mp3"
+      assert result.status == "streaming"
+      assert result.task_id == "task_stream123"
+      assert is_integer(result.time_to_stream_ms)
+      assert result.time_to_stream_ms >= 0
+
+      assert_receive {:generate_stream_called, headers, body}
+      assert {"authorization", "Bearer test-mureka-key"} in headers
+      assert body["stream"] == true
+      assert body["prompt"] == "Fast atmospheric synth pad"
     end
 
     test "handles job failure" do

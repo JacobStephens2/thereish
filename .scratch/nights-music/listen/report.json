@@ -1,0 +1,109 @@
+{
+  "timestamp": "2026-09-07T23:38:53.489114Z",
+  "prompt": "Gentle, conversational background instrumental music that sits comfortably under spoken conversation. Atmosphere and theme: pine, cold river",
+  "fake": false,
+  "gives": [
+    "pine",
+    "cold river"
+  ],
+  "beds": {
+    "control": {
+      "name": "Control (poll-then-download)",
+      "status": "succeeded",
+      "file": "01-control.mp3",
+      "format": "audio/mpeg",
+      "bytes": 5955962,
+      "url": "https://cdn.mureka.ai/cos-prod/open/instrumental/20260907/156731485323265-3Xvbzo9BLJRJKco4CgTyeX.mp3",
+      "provider": "Mureka",
+      "model": "auto",
+      "time_to_first_audible_ms": 89772,
+      "music_meta_latency_ms": 89772,
+      "codec": "MP3",
+      "playable": true,
+      "cost_usd": 0.04,
+      "notes": "Downloaded complete MP3 after succeeded status.",
+      "duration": 186070
+    },
+    "mureka_stream": {
+      "name": "Mureka stream (stream: true)",
+      "status": "streaming",
+      "file": "02-mureka-stream.aac",
+      "format": "audio/aac",
+      "probe": {
+        "status": 200,
+        "bytes": 1158,
+        "headers": {
+          "access-control-allow-credentials": [
+            "true"
+          ],
+          "access-control-allow-origin": [
+            "*"
+          ],
+          "connection": [
+            "keep-alive"
+          ],
+          "content-type": [
+            "audio/aac"
+          ],
+          "date": [
+            "Mon, 07 Sep 2026 23:38:46 GMT"
+          ],
+          "set-cookie": [
+            "acw_tc=0a093b4e17888243266306922e0d185484717a0476ffadbc4308cb56a4b7a6;path=/;HttpOnly;Max-Age=1800"
+          ],
+          "transfer-encoding": [
+            "chunked"
+          ],
+          "vary": [
+            "Accept-Encoding"
+          ],
+          "via": [
+            "1.1 33aae203c47fd9e0f18a8f3f6d37fbfc.cloudfront.net (CloudFront)"
+          ],
+          "x-amz-cf-id": [
+            "opAdyvpIQJ_WgGPVplizIJqcCM0w47fhu2FfRX2-HU3RRw0E7hp5zg=="
+          ],
+          "x-amz-cf-pop": [
+            "JFK50-P2"
+          ],
+          "x-cache": [
+            "Miss from cloudfront"
+          ]
+        },
+        "playable": true,
+        "ttfb_ms": 24061,
+        "content_type": "audio/aac"
+      },
+      "bytes": 1158,
+      "provider": "Mureka",
+      "model": "auto",
+      "time_to_first_audible_ms": 24061,
+      "music_meta_latency_ms": 23687,
+      "codec": "audio/aac",
+      "playable": true,
+      "cost_usd": 0.04,
+      "notes": "stream_url received at 23687 ms; probe TTFB 24061 ms.",
+      "stream_url": "https://api.mureka.ai/v1/live/stream/3cJmNk9PdmTVm82oubVHZx.aac",
+      "time_to_stream_url_ms": 23687,
+      "task_id": "159689530736641",
+      "final_url": null
+    },
+    "eleven_loop": {
+      "name": "ElevenLabs SFX loop (≤30 s)",
+      "status": "succeeded",
+      "file": "03-elevenlabs-30s-loop.mp3",
+      "loop": true,
+      "format": "audio/mpeg",
+      "bytes": 481115,
+      "provider": "ElevenLabs",
+      "model": "eleven_text_to_sound_v2",
+      "time_to_first_audible_ms": 6625,
+      "music_meta_latency_ms": 6625,
+      "codec": "MP3 (44.1 kHz, seamless loop)",
+      "playable": true,
+      "cost_usd": 0.030000000000000002,
+      "notes": "Generated 30 s seamless audio loop.",
+      "character_cost": 300
+    }
+  }
+}
