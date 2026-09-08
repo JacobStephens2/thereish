@@ -450,6 +450,13 @@ defmodule Thereish.Rooms do
   def next(code, device_token \\ nil), do: call(code, {:next, device_token})
 
   @doc """
+  Refuses the current Repertoire member (wait music, holdover, or this Page's Track) forever in this Room.
+  No-op from a non-speaking device; refused if it is the last remaining playable member.
+  """
+  @spec never(String.t(), String.t() | nil) :: :ok | {:error, term()}
+  def never(code, device_token \\ nil), do: call(code, {:never, device_token})
+
+  @doc """
   Fetches the voice audio bytes and format for `attempt` from the Room.
   Answers `{:ok, audio, format}` or `{:error, :not_found}`.
   """

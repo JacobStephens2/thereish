@@ -3329,6 +3329,247 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  describe "ticket 04: Never" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      :ok = Rooms.claim_speaker(slug, token_a)
+      room = Store.get_room(slug)
+
+      %{
+        slug: slug,
+        room: room,
+        mara: mara,
+        jacob: jacob,
+        token_a: token_a,
+        token_b: token_b
+      }
+    end
+
+    test "Never in this Room leaves the member out of every later draw, including after process restart",
+         ctx do
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view.never? == true
+      assert view.playing.kind == "repertoire"
+      nevered_path = view.playing.path
+
+      # Mara (speaker) taps Never
+      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
+
+      # Song changes immediately to another member, mode stays page
+      new_view = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert new_view.music == "page"
+      refute new_view.playing.path == nevered_path
+      assert new_view.playing.kind == "repertoire"
+
+      # Never is persisted in DB for this room
+      assert nevered_path in Store.list_nevers(ctx.room.id)
+
+      # Kill the room process to test restart recovery
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      # On restart, the nevered member is not in the Repertoire or deal
+      restarted_view =
+        once_restarted(fn ->
+          {:ok, _slug, _pid} = Rooms.ensure_started(ctx.slug)
+          Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+        end)
+
+      refute restarted_view.playing.path == nevered_path
+
+      # Over many draws/skips in the restarted room, nevered_path never returns
+      for _ <- 1..10 do
+        assert :ok = Rooms.next(ctx.slug, ctx.token_a)
+        v = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+        refute v.playing.path == nevered_path
+      end
+    end
+
+    test "The same member remains drawable in another Room (cross-Room isolation)", ctx do
+      slug_b = open_room()
+      token_other = device_token()
+      {:ok, _player_b} = Rooms.join(slug_b, "Other", token_other)
+      :ok = Rooms.claim_speaker(slug_b, token_other)
+      room_b = Store.get_room(slug_b)
+
+      view_a = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      nevered_path = view_a.playing.path
+
+      # Room A nevers the member
+      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
+      assert nevered_path in Store.list_nevers(ctx.room.id)
+      refute nevered_path in Store.list_nevers(room_b.id)
+
+      # Room B's eligible members still include that path
+      members_b = Thereish.Foley.Repertoire.members(room_b.id)
+      assert Enum.any?(members_b, fn m -> m.path == nevered_path end)
+    end
+
+    test "Never on the last remaining playable member is refused; Next stays hidden", ctx do
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      single = %{name: "Only Loop", title: "Only Loop", path: "/audio/only.mp3"}
+
+      :sys.replace_state(pid, fn state ->
+        state
+        |> Map.put(:eligible_members, [single])
+        |> Map.put(:wait_music, single)
+        |> Map.put(:deal, [])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      # Both Next and Never are hidden
+      assert view.next? == false
+      assert view.never? == false
+
+      # Calls to never and next are refused
+      assert {:error, :refused} = Rooms.never(ctx.slug, ctx.token_a)
+      assert {:error, :refused} = Rooms.next(ctx.slug, ctx.token_a)
+
+      # Still playing the only loop
+      view_after = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_after.playing.path == single.path
+    end
+
+    test "Never on this Page's Track refuses it, Speaker advances the deal, mode stays page, and does not hold over",
+         ctx do
+      set_fake(music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a).playing.kind == "track"
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view.playing.kind == "track"
+      # Next is hidden while Page's Track is playing, but Never is shown
+      assert view.next? == false
+      assert view.never? == true
+      track_path = view.playing.path
+
+      # Tap Never on this Page's Track
+      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
+
+      # Never: Speaker plays Repertoire, mode stays page
+      view_after_never = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_after_never.music == "page"
+      assert view_after_never.playing.kind == "repertoire"
+      refute view_after_never.playing.path == track_path
+      assert track_path in Store.list_nevers(ctx.room.id)
+
+      # Complete Attempt and close Page
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Advance to next Page
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+
+      # The nevered Track does NOT hold over!
+      view_p2 = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_p2.playing.kind == "repertoire"
+      refute view_p2.playing.path == track_path
+    end
+
+    test "Never on holdover refuses that old Track here and advances the deal; in-flight Track can still land",
+         ctx do
+      set_fake(music_delay_ms: 0)
+
+      # Page 1 lands track and closes
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a).playing.kind == "track"
+      end)
+
+      p1_track = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a).playing
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Next page -> Page 1's track holds over
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+
+      view_holdover = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_holdover.playing.kind == "holdover"
+      assert view_holdover.playing.path == p1_track.path
+      assert view_holdover.never? == true
+      assert view_holdover.next? == true
+
+      # Never on holdover refuses the old track here
+      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
+
+      view_after_never = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_after_never.music == "page"
+      assert view_after_never.playing.kind == "repertoire"
+      refute view_after_never.playing.path == p1_track.path
+      assert p1_track.path in Store.list_nevers(ctx.room.id)
+
+      # Page 2 Gives submitted and score starts
+      set_fake(author_delay_ms: 100, music_delay_ms: 200)
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "p2 setting 1")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "p2 setting 2")
+      await_phase(ctx.slug, :writing)
+
+      # In-flight Page 2 track lands and seizes the Speaker
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      server_state = :sys.get_state(pid)
+      p2_ref = server_state.current_page_ref
+
+      p2_track = %{
+        path: "/media/tracks/p2-landed-after-never.mp3",
+        duration: 100,
+        format: :mp3,
+        title: "Page Two Fresh",
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:scored, p2_ref, {:ok, p2_track}})
+
+      view_p2_landed = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_p2_landed.playing.kind == "track"
+      assert view_p2_landed.playing.path == p2_track.path
+    end
+
+    test "Never from a non-speaking device is a no-op", ctx do
+      view_before = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      initial_path = view_before.playing.path
+
+      # Jacob (token_b, non-speaker) calls Never -> no-op
+      assert :ok = Rooms.never(ctx.slug, ctx.token_b)
+      view_after_jacob = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_after_jacob.playing.path == initial_path
+      refute initial_path in Store.list_nevers(ctx.room.id)
+
+      # nil token -> no-op
+      assert :ok = Rooms.never(ctx.slug, nil)
+      view_after_nil = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      assert view_after_nil.playing.path == initial_path
+      refute initial_path in Store.list_nevers(ctx.room.id)
+
+      # Mara (speaking device) calls Never -> refuses member
+      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
+      view_after_mara = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+      refute view_after_mara.playing.path == initial_path
+      assert initial_path in Store.list_nevers(ctx.room.id)
+    end
+  end
+
   # The registry entry outlives the process it points at by a moment, so a call
   # made the instant after a kill can land on a corpse.
   defp once_restarted(fun, tries \\ 50) do

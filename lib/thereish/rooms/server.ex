@@ -259,6 +259,7 @@ defmodule Thereish.Rooms.Server do
           |> Map.put(:current_page_id, nil)
           |> Map.put(:wait_music, wait_music)
           |> Map.put(:eligible_members, eligible_members)
+          |> Map.put(:deal, Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path))
           |> Map.put(:current_track, holdover_track)
           |> Map.put(:track_page_ref, if(holdover_track, do: state[:track_page_ref], else: nil))
           |> reset_score_state(keep_track: true)
@@ -402,6 +403,54 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
+  def handle_call({:never, device_token}, _from, state) do
+    if speaking_device?(state, device_token) do
+      wait_music = current_wait_music(state)
+      playing = resolve_playing(state, wait_music)
+
+      cond do
+        playing == nil ->
+          {:reply, {:error, :refused}, state}
+
+        last_playable_member?(state, playing) ->
+          {:reply, {:error, :refused}, state}
+
+        playing[:kind] in ["repertoire", "holdover", "track"] ->
+          path = playing.path
+          {:ok, _} = Store.record_never(state.room.id, path)
+
+          new_eligible =
+            Enum.reject(eligible_members(state), fn m -> m.path == path end)
+
+          clean_deal =
+            Enum.reject(state[:deal] || [], fn m -> m.path == path end)
+
+          case Thereish.Foley.Repertoire.advance_after_never(new_eligible, clean_deal, path) do
+            {:ok, next_member, remaining_deal} ->
+              new_state =
+                %{
+                  state
+                  | wait_music: next_member,
+                    deal: remaining_deal,
+                    eligible_members: new_eligible
+                }
+                |> maybe_clear_track_on_never(playing)
+
+              broadcast(state.room.slug)
+              {:reply, :ok, new_state}
+
+            {:error, :no_members} ->
+              {:reply, {:error, :refused}, state}
+          end
+
+        true ->
+          {:reply, {:error, :refused}, state}
+      end
+    else
+      {:reply, :ok, state}
+    end
+  end
+
   def handle_call({:voice_audio, attempt}, _from, state) do
     case state[:voice_audio] do
       %{attempt: ^attempt, audio: audio, format: format}
@@ -434,6 +483,7 @@ defmodule Thereish.Rooms.Server do
     wait_music = current_wait_music(state)
     playing = resolve_playing(state, wait_music)
     next? = next_offered?(state, playing)
+    never? = never_offered?(state, playing)
 
     view =
       state.game
@@ -450,6 +500,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:loop, if(state.room.music != "off", do: wait_music, else: nil))
       |> Map.put(:playing, playing)
       |> Map.put(:next?, next?)
+      |> Map.put(:never?, never?)
 
     {:reply, view, state}
   end
@@ -830,6 +881,27 @@ defmodule Thereish.Rooms.Server do
       length(eligible_members(state)) > 1
   end
 
+  defp never_offered?(state, playing) do
+    playing != nil and
+      playing[:kind] in ["repertoire", "holdover", "track"] and
+      not last_playable_member?(state, playing)
+  end
+
+  defp last_playable_member?(state, playing) do
+    eligible = eligible_members(state)
+
+    cond do
+      length(eligible) == 0 ->
+        true
+
+      length(eligible) == 1 ->
+        Enum.any?(eligible, fn m -> m.path == playing.path end)
+
+      true ->
+        false
+    end
+  end
+
   defp eligible_members(state) do
     state[:eligible_members] ||
       Thereish.Foley.Repertoire.shipped_loops()
@@ -843,6 +915,12 @@ defmodule Thereish.Rooms.Server do
     not is_nil(state.room.speaker) and not is_nil(device_token) and
       state.room.speaker == device_token
   end
+
+  defp maybe_clear_track_on_never(state, %{kind: kind}) when kind in ["holdover", "track"] do
+    %{state | current_track: nil, track_page_ref: nil}
+  end
+
+  defp maybe_clear_track_on_never(state, _playing), do: state
 
   defp advance(state, game, effects) do
     state = Enum.reduce(effects, opened(%{state | game: game}), &perform/2)

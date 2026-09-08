@@ -73,19 +73,39 @@ defmodule Thereish.Foley.Repertoire do
   end
 
   @doc """
+  Paths that this Room has marked Never.
+  """
+  @spec nevers(Ecto.UUID.t() | String.t() | nil) :: [String.t()]
+  def nevers(nil), do: []
+
+  def nevers(room_id) do
+    Thereish.Rooms.Store.list_nevers(room_id)
+  rescue
+    _ -> []
+  end
+
+  @doc """
   The eligible wait music members of the Repertoire for a Room.
   - Unsettled: shipped loops + every kept Track across the game.
   - Settled: this Room's Chronicle Tracks + the five shipped loops.
+  - Minus this Room's Never list.
   """
-  @spec members(Ecto.UUID.t() | String.t()) :: [member()]
-  def members(room_id) do
-    case chronicle_tracks(room_id) do
-      [] ->
-        Enum.uniq_by(shipped_loops() ++ kept_tracks(), & &1.path)
+  @spec members(Ecto.UUID.t() | String.t() | [member()]) :: [member()]
+  def members(room_id_or_members) when is_list(room_id_or_members), do: room_id_or_members
 
-      room_tracks ->
-        Enum.uniq_by(room_tracks ++ shipped_loops(), & &1.path)
-    end
+  def members(room_id) do
+    never_paths = MapSet.new(nevers(room_id))
+
+    raw_members =
+      case chronicle_tracks(room_id) do
+        [] ->
+          Enum.uniq_by(shipped_loops() ++ kept_tracks(), & &1.path)
+
+        room_tracks ->
+          Enum.uniq_by(room_tracks ++ shipped_loops(), & &1.path)
+      end
+
+    Enum.reject(raw_members, fn m -> MapSet.member?(never_paths, m.path) end)
   end
 
   @doc false
@@ -197,6 +217,23 @@ defmodule Thereish.Foley.Repertoire do
           {:ok, next_member, remaining}
       end
     end
+  end
+
+  @doc """
+  Advances the deal after a member has been marked Never:
+  - If only one eligible member remains, returns that member and an empty deal.
+  - Otherwise, advances the deal or reshuffles using the remaining eligible members.
+  """
+  @spec advance_after_never([member()], [member()] | nil, String.t() | nil) ::
+          {:ok, member(), [member()]} | {:error, :no_members}
+  def advance_after_never([], _deal, _nevered_path), do: {:error, :no_members}
+
+  def advance_after_never([single], _deal, _nevered_path) do
+    {:ok, single, []}
+  end
+
+  def advance_after_never(eligible, current_deal, nevered_path) do
+    next_deal(eligible, current_deal || [], nevered_path)
   end
 
   defp clean_title(title) when is_binary(title) and title != "", do: title
