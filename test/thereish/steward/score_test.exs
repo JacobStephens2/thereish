@@ -113,7 +113,6 @@ defmodule Thereish.Steward.ScoreTest do
       assert stream_track.stream == true
     end
 
-
     test "score_failure builds failure provenance with provider and model" do
       meta = Steward.score_failure(:timeout)
       assert meta.cost_usd == 0.0
@@ -300,4 +299,3 @@ defmodule Thereish.Steward.ScoreTest do
     end
   end
 end
-

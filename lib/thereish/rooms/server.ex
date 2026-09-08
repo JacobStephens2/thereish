@@ -84,7 +84,9 @@ defmodule Thereish.Rooms.Server do
       seats = Store.list_seats(room.id)
       game = Game.init(seat_limit: room.seat_limit, seats: seats)
 
-      wait_music = Thereish.Foley.Repertoire.draw(room.id)
+      eligible_members = Thereish.Foley.Repertoire.members(room.id)
+      wait_music = Thereish.Foley.Repertoire.draw(eligible_members)
+      deal = Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path)
 
       state = %{
         slug: slug,
@@ -103,6 +105,8 @@ defmodule Thereish.Rooms.Server do
         current_title: nil,
         title_meta: nil,
         wait_music: wait_music,
+        deal: deal,
+        eligible_members: eligible_members,
         music_meta: nil,
         voice_audio: nil,
         voice_meta: %{}
@@ -243,7 +247,8 @@ defmodule Thereish.Rooms.Server do
   def handle_call({:next_page, seat_id}, _from, state) do
     case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
       {:ok, game, effects} ->
-        wait_music = Thereish.Foley.Repertoire.draw(state.room.id, state[:wait_music])
+        eligible_members = Thereish.Foley.Repertoire.members(state.room.id)
+        wait_music = Thereish.Foley.Repertoire.draw(eligible_members, state[:wait_music])
 
         # A playing track holds over across next_page until the next page's track lands (ADR-0013)
         holdover_track = state[:current_track]
@@ -253,6 +258,7 @@ defmodule Thereish.Rooms.Server do
           |> Map.put(:current_arm, nil)
           |> Map.put(:current_page_id, nil)
           |> Map.put(:wait_music, wait_music)
+          |> Map.put(:eligible_members, eligible_members)
           |> Map.put(:current_track, holdover_track)
           |> Map.put(:track_page_ref, if(holdover_track, do: state[:track_page_ref], else: nil))
           |> reset_score_state(keep_track: true)
@@ -347,6 +353,55 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
+  def handle_call({:next, device_token}, _from, state) do
+    if speaking_device?(state, device_token) do
+      wait_music = current_wait_music(state)
+      playing = resolve_playing(state, wait_music)
+
+      cond do
+        playing && playing[:kind] == "track" ->
+          {:reply, {:error, :refused}, state}
+
+        playing == nil ->
+          {:reply, {:error, :refused}, state}
+
+        length(eligible_members(state)) <= 1 ->
+          {:reply, {:error, :refused}, state}
+
+        playing[:kind] in ["repertoire", "holdover"] ->
+          current_deal = state[:deal] || []
+          current_path = playing.path
+
+          case advance_deal_for_state(state, current_deal, current_path) do
+            {:ok, next_member, remaining_deal} ->
+              new_state =
+                if playing[:kind] == "holdover" do
+                  %{
+                    state
+                    | current_track: nil,
+                      track_page_ref: nil,
+                      wait_music: next_member,
+                      deal: remaining_deal
+                  }
+                else
+                  %{state | wait_music: next_member, deal: remaining_deal}
+                end
+
+              broadcast(state.room.slug)
+              {:reply, :ok, new_state}
+
+            {:error, :no_other_members} ->
+              {:reply, {:error, :refused}, state}
+          end
+
+        true ->
+          {:reply, {:error, :refused}, state}
+      end
+    else
+      {:reply, :ok, state}
+    end
+  end
+
   def handle_call({:voice_audio, attempt}, _from, state) do
     case state[:voice_audio] do
       %{attempt: ^attempt, audio: audio, format: format}
@@ -378,6 +433,7 @@ defmodule Thereish.Rooms.Server do
     speaker_claimed? = not is_nil(state.room.speaker)
     wait_music = current_wait_music(state)
     playing = resolve_playing(state, wait_music)
+    next? = next_offered?(state, playing)
 
     view =
       state.game
@@ -393,6 +449,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:music_meta, state[:music_meta])
       |> Map.put(:loop, if(state.room.music != "off", do: wait_music, else: nil))
       |> Map.put(:playing, playing)
+      |> Map.put(:next?, next?)
 
     {:reply, view, state}
   end
@@ -716,7 +773,7 @@ defmodule Thereish.Rooms.Server do
 
   defp current_wait_music(state) do
     state[:wait_music] ||
-      (state[:room] && state.room[:id] && Thereish.Foley.Repertoire.draw(state.room.id)) ||
+      (state[:room] && state.room.id && Thereish.Foley.Repertoire.draw(state.room.id)) ||
       hd(Thereish.Foley.Repertoire.shipped_loops())
   end
 
@@ -765,6 +822,26 @@ defmodule Thereish.Rooms.Server do
   defp repertoire_playing(wait_music) do
     title = wait_music[:title] || wait_music[:name] || "Track"
     %{path: wait_music.path, title: title, kind: "repertoire"}
+  end
+
+  defp next_offered?(state, playing) do
+    playing != nil and
+      playing[:kind] in ["repertoire", "holdover"] and
+      length(eligible_members(state)) > 1
+  end
+
+  defp eligible_members(state) do
+    state[:eligible_members] ||
+      Thereish.Foley.Repertoire.shipped_loops()
+  end
+
+  defp advance_deal_for_state(state, current_deal, current_path) do
+    Thereish.Foley.Repertoire.next_deal(eligible_members(state), current_deal, current_path)
+  end
+
+  defp speaking_device?(state, device_token) do
+    not is_nil(state.room.speaker) and not is_nil(device_token) and
+      state.room.speaker == device_token
   end
 
   defp advance(state, game, effects) do
@@ -1113,9 +1190,11 @@ defmodule Thereish.Rooms.Server do
 
   defp start_score_task(state, room, page_ref, gives) do
     start_music_task(state, room, page_ref, :score_task_running, :scored, fn ->
-      Steward.score(gives, on_playable: fn playable ->
-        send(room, {:playable, page_ref, {:ok, playable}})
-      end)
+      Steward.score(gives,
+        on_playable: fn playable ->
+          send(room, {:playable, page_ref, {:ok, playable}})
+        end
+      )
     end)
   end
 

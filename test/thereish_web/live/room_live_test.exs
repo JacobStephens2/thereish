@@ -2425,6 +2425,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # Writing keeps Page 1's track as holdover
       assert has_element?(ctx.melissa, "[data-role=writing-phase]")
+
       assert has_element?(
                ctx.melissa,
                "[data-role=now-playing]",
@@ -2447,6 +2448,113 @@ defmodule ThereishWeb.RoomLiveTest do
           "Now playing: #{p2_title} (written for this Page)"
         )
       end)
+    end
+
+    test "ticket 03: Next renders only on the speaking screen, below the fold with the music control, and pushes new foley:page on tap",
+         ctx do
+      initial_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.path
+
+      # Melissa claims speaker
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+      assert_push_event(ctx.melissa, "foley:page", %{kind: "repertoire", path: ^initial_path})
+
+      # Melissa is now speaker; Jacob and Stage are not
+      assert has_element?(ctx.melissa, "[data-role=music-control]")
+      assert has_element?(ctx.melissa, "[data-role=music-next]")
+
+      refute has_element?(ctx.jacob, "[data-role=music-next]")
+      refute has_element?(ctx.stage, "[data-role=music-next]")
+
+      # Tap Next on Melissa (speaking screen)
+      ctx.melissa |> element("[data-role=music-next]") |> render_click()
+
+      # foley:page is pushed with new path
+      assert_push_event(ctx.melissa, "foley:page", %{
+        kind: "repertoire",
+        path: new_path,
+        title: new_title
+      })
+
+      assert new_path != initial_path
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=now-playing]",
+               "Now playing: #{new_title} (the Repertoire)"
+             )
+
+      # Jacob and Stage do not get foley:page
+      refute_push_event(ctx.jacob, "foley:page", %{})
+      refute_push_event(ctx.stage, "foley:page", %{})
+
+      # Now progress page until this Page's Track lands
+      give_setting(ctx.melissa, "mountain ridge")
+      give_setting(ctx.jacob, "silent valley")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.melissa, "foley:page", %{kind: "track", path: p1_track_path, title: _})
+
+      # Once this Page's Track is playing: Next is hidden on the speaking screen
+      eventually(fn ->
+        not has_element?(ctx.melissa, "[data-role=music-next]")
+      end)
+
+      # Finish Page 1 to closed
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Advance to Page 2 (holdover)
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=one-more]") end)
+      ctx.melissa |> element("[data-role=one-more]") |> render_click()
+      await_phase(ctx.slug, :giving)
+
+      # During holdover on Page 2: Next is visible again on speaking screen
+      eventually(fn ->
+        has_element?(ctx.melissa, "[data-role=music-next]")
+      end)
+
+      # Tap Next to skip holdover
+      ctx.melissa |> element("[data-role=music-next]") |> render_click()
+
+      # Pushes foley:page with repertoire draw
+      assert_push_event(ctx.melissa, "foley:page", %{
+        kind: "repertoire",
+        path: skipped_path,
+        title: skipped_title
+      })
+
+      refute skipped_path == p1_track_path
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=now-playing]",
+               "Now playing: #{skipped_title} (the Repertoire)"
+             )
+    end
+
+    test "ticket 03: Next on Stage as speaker advances the wait music deal", ctx do
+      assert has_element?(ctx.stage, "[data-role=music-next]")
+
+      initial_snapshot = Rooms.snapshot(ctx.slug, nil)
+      initial_path = initial_snapshot.playing.path
+
+      ctx.stage |> element("[data-role=music-next]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{
+        kind: "repertoire",
+        path: new_path,
+        title: new_title
+      })
+
+      assert new_path != initial_path
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               "Now playing: #{new_title} (the Repertoire)"
+             )
     end
 
     test "commit pushes foley:commit to stage and foley:own-commit to nobody when stage is present",

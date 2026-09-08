@@ -136,7 +136,8 @@ defmodule ThereishWeb.Foley do
   defp repertoire_payload(room) do
     item =
       cond do
-        room[:playing] && room.playing[:kind] in ["repertoire", :repertoire] && room.playing[:path] ->
+        room[:playing] && room.playing[:kind] in ["repertoire", :repertoire] &&
+            room.playing[:path] ->
           room.playing
 
         room[:loop] ->

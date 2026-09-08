@@ -156,5 +156,62 @@ defmodule Thereish.Foley.RepertoireTest do
         assert next.path != first.path
       end
     end
+
+    test "deal/2 returns eligible members excluding previous/current member" do
+      room = create_test_room("deal-room")
+      members = Repertoire.members(room.id)
+      first = hd(members)
+
+      deal = Repertoire.deal(room.id, first.path)
+      assert length(deal) == length(members) - 1
+      refute Enum.any?(deal, fn m -> m.path == first.path end)
+    end
+
+    test "next_deal/3 advances through the deal without repeats, then reshuffles never repeating current" do
+      room = create_test_room("session-shuffle-room")
+      members = Repertoire.members(room.id)
+      first = hd(members)
+      deal = Repertoire.deal(room.id, first.path)
+
+      # Step through the deal
+      {played, remaining_deal, last_played} =
+        Enum.reduce(1..(length(members) - 1), {[], deal, first}, fn _,
+                                                                    {seen, current_deal,
+                                                                     current_playing} ->
+          assert {:ok, next_track, new_deal} =
+                   Repertoire.next_deal(room.id, current_deal, current_playing.path)
+
+          refute next_track.path in seen
+          refute next_track.path == current_playing.path
+          {[next_track.path | seen], new_deal, next_track}
+        end)
+
+      # Entire rest of the Repertoire was played exactly once
+      assert length(played) == length(members) - 1
+      assert remaining_deal == []
+
+      # Deal is now exhausted. Next call must reshuffle, never returning the thing now playing
+      assert {:ok, reshuffled_next, new_deal} =
+               Repertoire.next_deal(room.id, remaining_deal, last_played.path)
+
+      refute reshuffled_next.path == last_played.path
+      assert length(new_deal) == length(members) - 2
+    end
+
+    test "deal/2 and next_deal/3 accept an explicit list of members" do
+      custom_members = [
+        %{name: "Song A", title: "Song A", path: "/a.mp3"},
+        %{name: "Song B", title: "Song B", path: "/b.mp3"},
+        %{name: "Song C", title: "Song C", path: "/c.mp3"}
+      ]
+
+      deal = Repertoire.deal(custom_members, "/a.mp3")
+      assert length(deal) == 2
+      refute Enum.any?(deal, &(&1.path == "/a.mp3"))
+
+      assert {:ok, next_song, remaining} = Repertoire.next_deal(custom_members, deal, "/a.mp3")
+      refute next_song.path == "/a.mp3"
+      assert length(remaining) == 1
+    end
   end
 end

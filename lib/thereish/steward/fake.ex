@@ -288,6 +288,7 @@ defmodule Thereish.Steward.Fake do
     case music_mode() do
       :ok ->
         key = fake_music_key(gives)
+
         path =
           Keyword.get(opts, :path) || config_get(:music_path, "/media/tracks/fake-#{key}.mp3")
 
