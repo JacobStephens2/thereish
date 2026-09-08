@@ -287,14 +287,7 @@ defmodule Thereish.Steward.Fake do
 
     case music_mode() do
       :ok ->
-        key =
-          gives
-          |> Enum.map(&to_string/1)
-          |> Enum.map(&String.trim/1)
-          |> Enum.map(&String.downcase/1)
-          |> Enum.sort()
-          |> Enum.join("-")
-
+        key = fake_music_key(gives)
         path =
           Keyword.get(opts, :path) || config_get(:music_path, "/media/tracks/fake-#{key}.mp3")
 
@@ -311,6 +304,54 @@ defmodule Thereish.Steward.Fake do
            }
          }}
 
+      :stream ->
+        key = fake_music_key(gives)
+        stream_delay = config_get(:music_stream_delay_ms, 0)
+        if stream_delay > 0, do: Process.sleep(stream_delay)
+
+        stream_path =
+          Keyword.get(opts, :stream_path) ||
+            config_get(:music_stream_path, "https://stream.mureka.ai/live/fake-#{key}.aac")
+
+        stream_track = %{
+          path: stream_path,
+          duration: config_get(:music_duration, 120),
+          format: :aac,
+          stream: true,
+          meta: %{
+            provider: "fake",
+            model: "fake-music",
+            stream: true,
+            cost_usd: 0.04,
+            latency_ms: stream_delay
+          }
+        }
+
+        on_playable = Keyword.get(opts, :on_playable)
+        if is_function(on_playable, 1), do: on_playable.(stream_track)
+
+        if delay > 0, do: Process.sleep(delay)
+
+        if config_get(:music_fail_after_stream, false) do
+          {:error, :stream_generation_failed}
+        else
+          path =
+            Keyword.get(opts, :path) || config_get(:music_path, "/media/tracks/fake-#{key}.mp3")
+
+          {:ok,
+           %{
+             path: path,
+             duration: config_get(:music_duration, 120),
+             format: :mp3,
+             meta: %{
+               provider: "fake",
+               model: "fake-music",
+               cost_usd: 0.04,
+               latency_ms: delay
+             }
+           }}
+        end
+
       :unavailable ->
         {:error, :music_unavailable}
 
@@ -323,6 +364,15 @@ defmodule Thereish.Steward.Fake do
       :raise ->
         raise "this Foley is having a moment"
     end
+  end
+
+  defp fake_music_key(gives) do
+    gives
+    |> Enum.map(&to_string/1)
+    |> Enum.map(&String.trim/1)
+    |> Enum.map(&String.downcase/1)
+    |> Enum.sort()
+    |> Enum.join("-")
   end
 
   @impl true

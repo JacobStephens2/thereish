@@ -1639,14 +1639,26 @@ defmodule ThereishWeb.RoomComponents do
             this.musicSource = null
             if (oldMusic) {
               setTimeout(() => {
-                try { oldMusic.source.stop() } catch (_) {}
+                try {
+                  if (oldMusic.source && oldMusic.source.stop) oldMusic.source.stop()
+                  if (oldMusic.audio) {
+                    oldMusic.audio.pause()
+                    oldMusic.audio.src = ""
+                  }
+                } catch (_) {}
               }, fadeDuration * 1000 + 100)
             }
           }
 
           this.stopMusic = () => {
             if (this.currentMusic) {
-              try { this.currentMusic.source.stop() } catch (_) {}
+              try {
+                if (this.currentMusic.source && this.currentMusic.source.stop) this.currentMusic.source.stop()
+                if (this.currentMusic.audio) {
+                  this.currentMusic.audio.pause()
+                  this.currentMusic.audio.src = ""
+                }
+              } catch (_) {}
               this.currentMusic = null
             }
             if (this.musicSource) {
@@ -1655,7 +1667,7 @@ defmodule ThereishWeb.RoomComponents do
             }
           }
 
-          this.handleEvent("foley:page", async ({path}) => {
+          this.handleEvent("foley:page", async ({path, stream, title, kind}) => {
             if (!this.canPlay()) return
             await this.resumeAudio()
             if (!this.ctx) return
@@ -1684,12 +1696,49 @@ defmodule ThereishWeb.RoomComponents do
               return
             }
 
-            const buf = await this.fetchBuffer(trackUrl)
-            if (!buf) return
-
-            if (this.currentMusic && this.currentMusic.path === trackUrl) {
+            // If the stream for this track is actively playing, don't restart playback mid-page
+            // when the finalized cached MP3 arrives: update the path reference smoothly.
+            if (this.currentMusic && this.currentMusic.isStream && !stream && kind === "track" && title && this.currentMusic.title === title) {
+              this.currentMusic.path = trackUrl
+              this.currentMusic.isStream = false
               return
             }
+
+            const isStream = Boolean(stream)
+
+            let newSource = null
+            let newAudio = null
+            let newGain = this.ctx.createGain()
+
+            if (isStream) {
+              newAudio = new Audio()
+              newAudio.crossOrigin = "anonymous"
+              newAudio.src = trackUrl
+              newAudio.loop = true
+
+              try {
+                newSource = this.ctx.createMediaElementSource(newAudio)
+                newSource.connect(newGain)
+              } catch (e) {
+                newAudio.volume = this.levels.music
+              }
+
+              newAudio.play().catch(() => {})
+            } else {
+              const buf = await this.fetchBuffer(trackUrl)
+              if (!buf) return
+
+              if (this.currentMusic && this.currentMusic.path === trackUrl) {
+                return
+              }
+
+              newSource = this.ctx.createBufferSource()
+              newSource.buffer = buf
+              newSource.loop = true
+              newSource.connect(newGain)
+            }
+
+            newGain.connect(this.musicBus)
 
             const targetGain = this.isDucked() ? this.levels.duck : this.levels.music
             this.musicBus.gain.cancelScheduledValues(now)
@@ -1698,13 +1747,6 @@ defmodule ThereishWeb.RoomComponents do
             if (this.isDucked() && this.duckUntil > now) {
               this.musicBus.gain.setTargetAtTime(this.levels.music, this.duckUntil, 0.2)
             }
-
-            const newGain = this.ctx.createGain()
-            const newSource = this.ctx.createBufferSource()
-            newSource.buffer = buf
-            newSource.loop = true
-            newSource.connect(newGain)
-            newGain.connect(this.musicBus)
 
             const oldMusic = this.currentMusic
             if (oldMusic) {
@@ -1715,14 +1757,23 @@ defmodule ThereishWeb.RoomComponents do
               oldMusic.gain.gain.setValueAtTime(oldMusic.gain.gain.value, now)
               oldMusic.gain.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
               setTimeout(() => {
-                try { oldMusic.source.stop() } catch (_) {}
+                try {
+                  if (oldMusic.source && oldMusic.source.stop) oldMusic.source.stop()
+                  if (oldMusic.audio) {
+                    oldMusic.audio.pause()
+                    oldMusic.audio.src = ""
+                  }
+                } catch (_) {}
               }, fadeDuration * 1000 + 100)
             } else {
               newGain.gain.setValueAtTime(1.0, now)
             }
 
-            newSource.start(0)
-            this.currentMusic = {source: newSource, gain: newGain, path: trackUrl}
+            if (!isStream && newSource) {
+              newSource.start(0)
+            }
+
+            this.currentMusic = {source: newSource, audio: newAudio, gain: newGain, path: trackUrl, isStream: isStream, title: title, kind: kind}
             this.musicSource = newSource
           })
 

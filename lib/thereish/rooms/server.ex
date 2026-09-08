@@ -561,6 +561,26 @@ defmodule Thereish.Rooms.Server do
 
   def handle_info({:titled, _page_ref, _result}, state), do: {:noreply, state}
 
+  def handle_info({:playable, page_ref, result}, %{current_page_ref: page_ref} = state) do
+    if Thereish.Game.phase(state.game) == :closed do
+      {:noreply, state}
+    else
+      case result do
+        {:ok, track} ->
+          title = track[:title] || state[:current_title]
+          title_meta = state[:title_meta] || %{}
+          state = apply_playable_track(state, track, title, title_meta)
+          broadcast(state.room.slug)
+          {:noreply, state}
+
+        {:error, _reason} ->
+          {:noreply, state}
+      end
+    end
+  end
+
+  def handle_info({:playable, _page_ref, _result}, state), do: {:noreply, state}
+
   def handle_info({:scored, page_ref, result}, %{current_page_ref: page_ref} = state) do
     state = Map.put(state, :score_task_running, false)
 
@@ -579,6 +599,7 @@ defmodule Thereish.Rooms.Server do
           Logger.warning("Foley score failed for room #{state.room.slug}: #{inspect(reason)}")
           failure_meta = Thereish.Steward.score_failure(reason)
           state = %{state | current_track: nil, music_meta: failure_meta}
+          broadcast(state.room.slug)
           {:noreply, state}
       end
     end
@@ -586,7 +607,7 @@ defmodule Thereish.Rooms.Server do
 
   def handle_info({:scored, _page_ref, _result}, state), do: {:noreply, state}
 
-  defp apply_track_and_title(state, track, title, title_meta) do
+  defp apply_playable_track(state, track, title, title_meta) do
     title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
     track = if title, do: Map.put(track, :title, title), else: track
 
@@ -596,11 +617,17 @@ defmodule Thereish.Rooms.Server do
 
     music_meta = build_music_meta(state.music_meta || track[:meta], attrs)
 
-    if not is_nil(title) and not is_nil(state[:current_gives]) do
-      Thereish.Steward.TrackCache.put(state.current_gives, track)
+    %{state | current_track: track, music_meta: music_meta}
+  end
+
+  defp apply_track_and_title(state, track, title, title_meta) do
+    state = apply_playable_track(state, track, title, title_meta)
+
+    if not is_nil(state[:current_gives]) and not Map.get(state.current_track, :stream, false) do
+      Thereish.Steward.TrackCache.put(state.current_gives, state.current_track)
     end
 
-    %{state | current_track: track, music_meta: music_meta}
+    state
   end
 
   defp format_author_error({:max_tokens, _}), do: "too broad or complex"
@@ -690,11 +717,17 @@ defmodule Thereish.Rooms.Server do
       "page" ->
         cond do
           state[:current_track] && state.current_track[:path] ->
-            %{
+            stream? =
+              !!(state.current_track[:stream] ||
+                   get_in(state.current_track, [:meta, :stream]))
+
+            payload = %{
               path: state.current_track.path,
               title: state.current_track[:title] || state[:current_title] || "Track",
               kind: "track"
             }
+
+            if stream?, do: Map.put(payload, :stream, true), else: payload
 
           true ->
             repertoire_playing(wait_music)
@@ -1045,7 +1078,9 @@ defmodule Thereish.Rooms.Server do
 
   defp start_score_task(state, room, page_ref, gives) do
     start_music_task(state, room, page_ref, :score_task_running, :scored, fn ->
-      Steward.score(gives)
+      Steward.score(gives, on_playable: fn playable ->
+        send(room, {:playable, page_ref, {:ok, playable}})
+      end)
     end)
   end
 

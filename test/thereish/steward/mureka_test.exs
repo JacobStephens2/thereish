@@ -147,6 +147,71 @@ defmodule Thereish.Steward.MurekaTest do
       assert body["prompt"] == "Fast atmospheric synth pad"
     end
 
+    test "stream_generate calls on_stream callback when streaming, then downloads final MP3 on succeeded" do
+      poll_count = Agent.start_link(fn -> 0 end) |> elem(1)
+      test_pid = self()
+
+      Req.Test.stub(Mureka, fn conn ->
+        case {conn.method, conn.request_path} do
+          {"POST", "/v1/instrumental/generate"} ->
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "application/json")
+            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_sg123"}))
+
+          {"GET", "/v1/instrumental/query/task_sg123"} ->
+            step = Agent.get_and_update(poll_count, &{&1 + 1, &1 + 1})
+
+            response_data =
+              case step do
+                1 ->
+                  %{
+                    "id" => "task_sg123",
+                    "status" => "streaming",
+                    "stream_url" => "https://stream.mureka.ai/live/sg123.aac",
+                    "choices" => [%{"stream_url" => "https://stream.mureka.ai/live/sg123.aac"}]
+                  }
+
+                _ ->
+                  %{
+                    "id" => "task_sg123",
+                    "status" => "succeeded",
+                    "choices" => [%{"url" => "https://cdn.mureka.ai/audio/final_sg.mp3"}]
+                  }
+              end
+
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "application/json")
+            |> Plug.Conn.send_resp(200, Jason.encode!(response_data))
+
+          {"GET", "/audio/final_sg.mp3"} ->
+            conn
+            |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
+            |> Plug.Conn.send_resp(200, @fake_mp3)
+        end
+      end)
+
+      request = %{
+        prompt: "Flowing stream instrumental",
+        api_key: "test-mureka-key",
+        deadline_ms: 2_000,
+        poll_interval_ms: 5
+      }
+
+      on_stream = fn info ->
+        send(test_pid, {:stream_callback_received, info})
+      end
+
+      assert {:ok, result} = Mureka.stream_generate(request, on_stream)
+
+      assert result.bytes == @fake_mp3
+      assert result.url == "https://cdn.mureka.ai/audio/final_sg.mp3"
+      assert result.cost_usd == 0.04
+
+      assert_receive {:stream_callback_received, stream_info}
+      assert stream_info.stream_url == "https://stream.mureka.ai/live/sg123.aac"
+      assert stream_info.task_id == "task_sg123"
+    end
+
     test "handles job failure" do
       Req.Test.stub(Mureka, fn conn ->
         case {conn.method, conn.request_path} do

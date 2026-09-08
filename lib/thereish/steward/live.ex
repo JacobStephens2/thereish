@@ -274,7 +274,31 @@ defmodule Thereish.Steward.Live do
           |> Map.put(:prompt, prompt)
           |> Map.put(:n, 1)
 
-        with {:ok, result} <- Thereish.Steward.Mureka.generate(params),
+        on_playable = Keyword.get(opts, :on_playable)
+
+        stream_cb =
+          if is_function(on_playable, 1) do
+            fn stream_info ->
+              playable = %{
+                path: stream_info.stream_url,
+                duration: stream_info.duration,
+                format: :aac,
+                stream: true,
+                meta: %{
+                  provider: "mureka",
+                  model: stream_info.model,
+                  stream: true,
+                  task_id: stream_info.task_id,
+                  cost_usd: stream_info.cost_usd,
+                  time_to_stream_ms: stream_info.time_to_stream_ms
+                }
+              }
+
+              on_playable.(playable)
+            end
+          end
+
+        with {:ok, result} <- Thereish.Steward.Mureka.stream_generate(params, stream_cb),
              {:ok, track} <- TrackCache.store(gives, result) do
           {:ok, track}
         end
