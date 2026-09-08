@@ -511,6 +511,42 @@ defmodule ThereishWeb.FoleyTest do
       result_writing = Foley.push_foley_events(socket, giving_room, writing_room)
       refute Enum.any?(pushed_events(result_writing), fn {name, _} -> name == "foley:page" end)
     end
+
+    test "pushes holdover during giving and writing, and pushes new track when it lands during writing" do
+      socket = test_socket()
+
+      giving_room = %{
+        phase: :giving,
+        speaker?: true,
+        music: "page",
+        track: %{path: "/media/tracks/p1.mp3", title: "Previous Track"},
+        playing: %{path: "/media/tracks/p1.mp3", title: "Previous Track", kind: "holdover"}
+      }
+
+      result = Foley.push_foley_events(socket, nil, giving_room)
+      events = pushed_events(result)
+
+      assert {"foley:page",
+              %{path: "/media/tracks/p1.mp3", title: "Previous Track", kind: "holdover"}} in events
+
+      # Transition to writing keeps the holdover track without spurious push
+      writing_room = %{giving_room | phase: :writing}
+      result_writing = Foley.push_foley_events(socket, giving_room, writing_room)
+      refute Enum.any?(pushed_events(result_writing), fn {name, _} -> name == "foley:page" end)
+
+      # When new page's track lands during writing, foley:page seizes the speaker with kind: "track"
+      landed_room = %{
+        writing_room
+        | track: %{path: "/media/tracks/p2.mp3", title: "New Track"},
+          playing: %{path: "/media/tracks/p2.mp3", title: "New Track", kind: "track"}
+      }
+
+      result_landed = Foley.push_foley_events(socket, writing_room, landed_room)
+      events_landed = pushed_events(result_landed)
+
+      assert {"foley:page",
+              %{path: "/media/tracks/p2.mp3", title: "New Track", kind: "track"}} in events_landed
+    end
   end
 
   describe "push_own_commit/1" do

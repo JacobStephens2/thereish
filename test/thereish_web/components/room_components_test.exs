@@ -964,6 +964,21 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ "the Repertoire"
     end
 
+    test "renders last Page's Track and keeps title when playing kind is holdover" do
+      room = %{
+        music: "page",
+        playing: %{title: "Summer Camp · Viking Beaches", path: "/media/tracks/p1.mp3", kind: "holdover"}
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Summer Camp · Viking Beaches"
+      assert html =~ "last Page&#39;s Track"
+      refute html =~ "the Repertoire"
+      refute html =~ "written for this Page"
+    end
+
     test "renders nothing when track has landed without title" do
       room = %{
         music: "page",
