@@ -2557,6 +2557,89 @@ defmodule ThereishWeb.RoomLiveTest do
              )
     end
 
+    test "ticket 04: Never renders only on the speaking screen, including while this Page's Track is playing (when Next is hidden), and pushes new foley:page on tap",
+         ctx do
+      initial_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.path
+
+      # Melissa claims speaker
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+      assert_push_event(ctx.melissa, "foley:page", %{kind: "repertoire", path: ^initial_path})
+
+      # Melissa is speaker; Jacob and Stage are not
+      assert has_element?(ctx.melissa, "[data-role=music-never]")
+      refute has_element?(ctx.jacob, "[data-role=music-never]")
+      refute has_element?(ctx.stage, "[data-role=music-never]")
+
+      # Tap Never on wait music
+      ctx.melissa |> element("[data-role=music-never]") |> render_click()
+
+      assert_push_event(ctx.melissa, "foley:page", %{
+        kind: "repertoire",
+        path: new_path,
+        title: _new_title
+      })
+
+      assert new_path != initial_path
+      assert initial_path in Thereish.Rooms.Store.list_nevers(Rooms.Store.get_room(ctx.slug).id)
+
+      # Progress page until this Page's Track lands
+      give_setting(ctx.melissa, "mountain ridge")
+      give_setting(ctx.jacob, "silent valley")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.melissa, "foley:page", %{kind: "track", path: p1_track_path, title: _})
+
+      # While Page's Track is playing: Next is hidden, but Never is still rendered!
+      eventually(fn ->
+        not has_element?(ctx.melissa, "[data-role=music-next]") and
+          has_element?(ctx.melissa, "[data-role=music-never]")
+      end)
+
+      # Tap Never on this Page's Track
+      ctx.melissa |> element("[data-role=music-never]") |> render_click()
+
+      # Track is refused: pushes foley:page for Repertoire draw
+      assert_push_event(ctx.melissa, "foley:page", %{
+        kind: "repertoire",
+        path: next_rep_path,
+        title: next_rep_title
+      })
+
+      refute next_rep_path == p1_track_path
+      assert p1_track_path in Thereish.Rooms.Store.list_nevers(Rooms.Store.get_room(ctx.slug).id)
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=now-playing]",
+               "Now playing: #{next_rep_title} (the Repertoire)"
+             )
+    end
+
+    test "ticket 04: Never on Stage as speaker refuses the member and pushes new foley:page",
+         ctx do
+      assert has_element?(ctx.stage, "[data-role=music-never]")
+
+      initial_snapshot = Rooms.snapshot(ctx.slug, nil)
+      initial_path = initial_snapshot.playing.path
+
+      ctx.stage |> element("[data-role=music-never]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{
+        kind: "repertoire",
+        path: new_path,
+        title: new_title
+      })
+
+      assert new_path != initial_path
+      assert initial_path in Thereish.Rooms.Store.list_nevers(Rooms.Store.get_room(ctx.slug).id)
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               "Now playing: #{new_title} (the Repertoire)"
+             )
+    end
+
     test "commit pushes foley:commit to stage and foley:own-commit to nobody when stage is present",
          ctx do
       give_setting(ctx.melissa, "setting one")

@@ -491,6 +491,23 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html_non_speaker =~ "Next"
     end
 
+    test "foley_switches renders Never button only when speaker? and never? are both true" do
+      room_speaker_with_never = %{speaker?: true, never?: true, voice: true, music: "page"}
+      html = render_component(&foley_switches/1, room: room_speaker_with_never)
+      assert html =~ ~s(data-role="music-never")
+      assert html =~ "Never"
+
+      room_speaker_no_never = %{speaker?: true, never?: false, voice: true, music: "page"}
+      html_no_never = render_component(&foley_switches/1, room: room_speaker_no_never)
+      refute html_no_never =~ ~s(data-role="music-never")
+      refute html_no_never =~ "Never"
+
+      room_non_speaker = %{speaker?: false, never?: true, voice: true, music: "page"}
+      html_non_speaker = render_component(&foley_switches/1, room: room_non_speaker)
+      refute html_non_speaker =~ ~s(data-role="music-never")
+      refute html_non_speaker =~ "Never"
+    end
+
     test "foley_hook renders hook container for colocated Foley hook with configured levels" do
       configured = Thereish.Steward.foley_levels()
       assert is_list(configured) and length(configured) > 0
