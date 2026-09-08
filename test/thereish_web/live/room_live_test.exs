@@ -2640,6 +2640,243 @@ defmodule ThereishWeb.RoomLiveTest do
              )
     end
 
+    test "ticket 05: with a Stage, the chain holds across pages, transitions, Next/Never, and crossfades",
+         ctx do
+      # Night opens on a named Repertoire draw on Stage
+      assert has_element?(ctx.stage, "[data-role=now-playing]")
+      stage_snapshot = Rooms.snapshot(ctx.slug, nil)
+      assert stage_snapshot.playing.kind == "repertoire"
+      assert is_binary(stage_snapshot.playing.title)
+      assert is_binary(stage_snapshot.playing.path)
+
+      # Next and Never live on the Stage; absent on non-speaking phones
+      assert has_element?(ctx.stage, "[data-role=music-next]")
+      assert has_element?(ctx.stage, "[data-role=music-never]")
+      refute has_element?(ctx.melissa, "[data-role=music-next]")
+      refute has_element?(ctx.melissa, "[data-role=music-never]")
+      refute has_element?(ctx.jacob, "[data-role=music-next]")
+      refute has_element?(ctx.jacob, "[data-role=music-never]")
+
+      # Gives submitted for Page 1
+      give_setting(ctx.melissa, "mountain ridge")
+      give_setting(ctx.jacob, "silent valley")
+      await_phase(ctx.slug, :bridging)
+
+      # Track fades in when it lands
+      assert_push_event(ctx.stage, "foley:page", %{
+        kind: "track",
+        path: p1_track_path,
+        title: _p1_track_title
+      })
+
+      # Once this Page's Track is playing: Next is hidden, Never remains visible
+      eventually(fn ->
+        not has_element?(ctx.stage, "[data-role=music-next]") and
+          has_element?(ctx.stage, "[data-role=music-never]")
+      end)
+
+      # Meld Page 1
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Page closes: landed Track still playing as holdover
+      closed_snapshot = Rooms.snapshot(ctx.slug, nil)
+      assert closed_snapshot.playing.kind == "holdover"
+      assert closed_snapshot.playing.path == p1_track_path
+
+      # "One more?" keeps that Track through giving
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=one-more]") end)
+      ctx.melissa |> element("[data-role=one-more]") |> render_click()
+      await_phase(ctx.slug, :giving)
+
+      giving_snapshot = Rooms.snapshot(ctx.slug, nil)
+      assert giving_snapshot.playing.kind == "holdover"
+      assert giving_snapshot.playing.path == p1_track_path
+
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          "last Page's Track"
+        )
+      end)
+
+      # Next is available again during holdover
+      eventually(fn -> has_element?(ctx.stage, "[data-role=music-next]") end)
+
+      # Gives submitted for Page 2
+      give_setting(ctx.melissa, "deep woods")
+      give_setting(ctx.jacob, "high peak")
+      await_phase(ctx.slug, :bridging)
+
+      # Next Track crossfades when it lands
+      assert_push_event(ctx.stage, "foley:page", %{
+        kind: "track",
+        path: "/media/tracks/fake-deep woods-high peak.mp3"
+      })
+
+      # Next is hidden again on Page 2's Track
+      eventually(fn -> not has_element?(ctx.stage, "[data-role=music-next]") end)
+    end
+
+    test "ticket 05: Next skips wait music only; Next is absent on this Page's Track; Never on a Repertoire member leaves it out in this Room only",
+         ctx do
+      # Initial wait music playing on Stage
+      initial_snapshot = Rooms.snapshot(ctx.slug, nil)
+      initial_path = initial_snapshot.playing.path
+
+      # Tap Next on wait music: advances to a new Repertoire member; mode stays page
+      ctx.stage |> element("[data-role=music-next]") |> render_click()
+
+      assert_push_event(ctx.stage, "foley:page", %{
+        kind: "repertoire",
+        path: next_path,
+        title: _next_title
+      })
+
+      refute next_path == initial_path
+      assert Rooms.snapshot(ctx.slug, nil).music == "page"
+
+      # Tap Never on this wait member: leaves it out of this Room's nevers and later draws
+      ctx.stage |> element("[data-role=music-never]") |> render_click()
+      assert_push_event(ctx.stage, "foley:page", %{kind: "repertoire", path: after_never_path})
+      refute after_never_path == next_path
+
+      room_id = Thereish.Rooms.Store.get_room(ctx.slug).id
+      assert next_path in Thereish.Rooms.Store.list_nevers(room_id)
+      # Refused member is excluded from later draws in this Room
+      refute Enum.any?(Thereish.Foley.Repertoire.members(room_id), fn m -> m.path == next_path end)
+
+      # In another Room: that same member remains eligible in draws
+      other_slug = open_room()
+      {:ok, _other_stage, _} = live(build_conn(), ~p"/r/#{other_slug}/stage")
+      other_room_id = Rooms.Store.get_room(other_slug).id
+      refute next_path in Thereish.Rooms.Store.list_nevers(other_room_id)
+
+      assert Enum.any?(Thereish.Foley.Repertoire.members(other_room_id), fn m ->
+               m.path == next_path
+             end)
+
+      # Now progress Page in ctx to bridging: this Page's Track lands
+      give_setting(ctx.melissa, "setting alpha")
+      give_setting(ctx.jacob, "setting beta")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{
+        kind: "track",
+        path: "/media/tracks/fake-setting alpha-setting beta.mp3"
+      })
+
+      # Next is absent on this Page's Track; Calling Next via API returns error
+      eventually(fn -> not has_element?(ctx.stage, "[data-role=music-next]") end)
+      speaker_token = Thereish.Rooms.Store.get_room(ctx.slug).speaker
+      assert {:error, :refused} = Rooms.next(ctx.slug, speaker_token)
+    end
+
+    test "ticket 05: House plays Repertoire without score; flipping back to Written returns landed Track; Off silences music only",
+         ctx do
+      # 1. Flip to House: plays Repertoire
+      ctx.stage |> element("[data-role=music-house]") |> render_click()
+      eventually(fn -> Rooms.snapshot(ctx.slug, nil).music == "house" end)
+      house_snapshot = Rooms.snapshot(ctx.slug, nil)
+      assert house_snapshot.playing.kind == "repertoire"
+
+      # In House mode: giving does not start a score
+      give_setting(ctx.melissa, "cozy fireplace")
+      give_setting(ctx.jacob, "warm blanket")
+      await_phase(ctx.slug, :bridging)
+      refute Rooms.snapshot(ctx.slug, nil).track
+
+      # 2. Switch to Written for this Page: now starts score and lands track
+      ctx.stage |> element("[data-role=music-page]") |> render_click()
+      eventually(fn -> Rooms.snapshot(ctx.slug, nil).music == "page" end)
+
+      assert_push_event(ctx.stage, "foley:page", %{
+        kind: "track",
+        path: landed_path
+      })
+
+      assert Rooms.snapshot(ctx.slug, nil).playing.kind == "track"
+
+      # 3. Flip to House after Track landed: plays Repertoire, Track is kept
+      ctx.stage |> element("[data-role=music-house]") |> render_click()
+      eventually(fn -> Rooms.snapshot(ctx.slug, nil).music == "house" end)
+      assert Rooms.snapshot(ctx.slug, nil).playing.kind == "repertoire"
+
+      # Flip back to Written for this Page: returns the Track that already landed immediately
+      ctx.stage |> element("[data-role=music-page]") |> render_click()
+      eventually(fn -> Rooms.snapshot(ctx.slug, nil).music == "page" end)
+      assert Rooms.snapshot(ctx.slug, nil).playing.kind == "track"
+      assert Rooms.snapshot(ctx.slug, nil).playing.path == landed_path
+
+      # 4. Off silences music only: playing becomes nil, foley:page pushes path: nil
+      ctx.stage |> element("[data-role=music-off]") |> render_click()
+      eventually(fn -> Rooms.snapshot(ctx.slug, nil).music == "off" end)
+      assert Rooms.snapshot(ctx.slug, nil).playing == nil
+      assert_push_event(ctx.stage, "foley:page", %{path: nil})
+
+      # Stings still work under Off
+      commit(ctx.melissa, "cozy")
+      commit(ctx.jacob, "cozy")
+      await_reveal(ctx.slug)
+      assert_push_event(ctx.stage, "foley:sting", %{})
+    end
+
+    test "ticket 05: without a Stage, the claiming phone is the only one that plays the chain; Next and Never live there" do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      # Before claiming: neither phone plays sound or shows Next/Never
+      refute has_element?(melissa, "[data-role=music-next]")
+      refute has_element?(melissa, "[data-role=music-never]")
+      refute has_element?(jacob, "[data-role=music-next]")
+      refute has_element?(jacob, "[data-role=music-never]")
+      refute_push_event(melissa, "foley:page", %{})
+      refute_push_event(jacob, "foley:page", %{})
+
+      # Melissa claims speaker
+      melissa |> element("[data-role=speaker-toggle]") |> render_click()
+
+      # Only Melissa gets foley:page; Next and Never live on Melissa
+      assert_push_event(melissa, "foley:page", %{kind: "repertoire"})
+      refute_push_event(jacob, "foley:page", %{})
+      assert has_element?(melissa, "[data-role=music-next]")
+      assert has_element?(melissa, "[data-role=music-never]")
+      refute has_element?(jacob, "[data-role=music-next]")
+      refute has_element?(jacob, "[data-role=music-never]")
+
+      # Jacob claims speaker: transfers to Jacob, Melissa is silenced
+      jacob |> element("[data-role=speaker-toggle]") |> render_click()
+
+      assert_push_event(jacob, "foley:page", %{kind: "repertoire"})
+      assert_push_event(melissa, "foley:stop", %{})
+      assert has_element?(jacob, "[data-role=music-next]")
+      assert has_element?(jacob, "[data-role=music-never]")
+      refute has_element?(melissa, "[data-role=music-next]")
+      refute has_element?(melissa, "[data-role=music-never]")
+    end
+
+    test "ticket 05: Foley track generation records charges visible on /spend", ctx do
+      give_setting(ctx.melissa, "setting emerald")
+      give_setting(ctx.jacob, "setting sapphire")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{kind: "track", path: _})
+
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      {:ok, _view, html} = live(build_conn(), ~p"/spend")
+      assert html =~ "Foley"
+    end
+
     test "commit pushes foley:commit to stage and foley:own-commit to nobody when stage is present",
          ctx do
       give_setting(ctx.melissa, "setting one")
