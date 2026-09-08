@@ -26,6 +26,7 @@ defmodule Thereish.Rooms.Room do
     field :quip, :string
 
     has_many :seats, Thereish.Rooms.Seat
+    has_many :nevers, Thereish.Rooms.Never
 
     timestamps(type: :utc_datetime_usec)
   end
