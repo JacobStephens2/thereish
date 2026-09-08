@@ -1387,17 +1387,20 @@ defmodule ThereishWeb.RoomComponents do
              room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
         "Music is off"
 
+      room[:playing] && room.playing[:kind] == "track" && room.playing[:title] ->
+        "Now playing: #{room.playing.title} (written for this Page)"
+
+      room[:playing] && room.playing[:kind] == "holdover" && room.playing[:title] ->
+        "Now playing: #{room.playing.title} (last Page's Track)"
+
+      room[:playing] && room.playing[:kind] == "repertoire" && room.playing[:title] ->
+        "Now playing: #{room.playing.title} (the Repertoire)"
+
       room[:track] && room.track[:path] && room.track[:title] ->
         "Now playing: #{room.track.title} (written for this Page)"
 
       room[:track] && room.track[:path] ->
         nil
-
-      room[:playing] && room.playing[:kind] == "track" && room.playing[:title] ->
-        "Now playing: #{room.playing.title} (written for this Page)"
-
-      room[:playing] && room.playing[:kind] == "repertoire" && room.playing[:title] ->
-        "Now playing: #{room.playing.title} (the Repertoire)"
 
       room[:loop] ->
         title = room.loop[:title] || room.loop[:name]
