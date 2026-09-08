@@ -2373,7 +2373,198 @@ defmodule Thereish.RoomsTest do
       assert page.music_meta[:provider] == "fake" or page.music_meta["provider"] == "fake"
       assert page.music_meta[:cost_usd] != nil or page.music_meta["cost_usd"] != nil
     end
+
+    test "playable-early stream seizes Speaker as soon as playable, before full track download completes, and updates to cached track when complete",
+         ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      # music_mode: :stream, music_stream_delay_ms: 0, music_delay_ms: 200
+      # This causes on_playable to fire immediately, but final scored track to take 200 ms
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config,
+            music_mode: :stream,
+            music_stream_delay_ms: 0,
+            music_delay_ms: 200
+          )
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      Rooms.subscribe(ctx.slug)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "frozen lake")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+
+      # As soon as gives are in, playable stream lands before full download
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        not is_nil(view[:track]) and view.track[:stream] == true
+      end)
+
+      stream_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert stream_view.track.format == :aac
+      assert stream_view.track.stream == true
+      assert String.starts_with?(stream_view.track.path, "https://stream.mureka.ai/live/fake-")
+      assert stream_view.playing.kind == "track"
+      assert stream_view.playing.path == stream_view.track.path
+
+      # Once the full download finishes, the track updates to the cached MP3 file
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view.track.format == :mp3
+      end)
+
+      final_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert final_view.track.format == :mp3
+      assert String.starts_with?(final_view.track.path, "/media/tracks/fake-")
+      assert final_view.playing.kind == "track"
+      assert final_view.playing.path == final_view.track.path
+
+      # The same Gives on another Page immediately return the cached track directly
+      _cached_key = Thereish.Steward.TrackCache.key(["frozen lake", "northern lights"])
+      assert {:ok, cached} = Thereish.Steward.TrackCache.get(["frozen lake", "northern lights"])
+      assert cached.path == final_view.track.path
+    end
+
+    test "same Gives bring back the same Track directly from cache without stream", ctx do
+      # Pre-seed track cache
+      gives = ["quiet library", "old books"]
+      cached_path = "/media/tracks/preseeded-library.mp3"
+
+      {:ok, _} =
+        Thereish.Steward.TrackCache.put(gives, %{
+          title: "Quiet Library",
+          path: cached_path,
+          duration: 120,
+          format: "mp3",
+          meta: %{provider: "fake"}
+        })
+
+      Rooms.subscribe(ctx.slug)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "quiet library")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "old books")
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        not is_nil(view[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert view.track.path == cached_path
+      assert view.track.format == :mp3
+      assert view.playing.path == cached_path
+    end
+
+    test "stale playable message arriving for moved-on Page is dropped", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting alpha")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting beta")
+      await_phase(ctx.slug, :bridging)
+
+      # Play through to closed
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      stale_ref = make_ref()
+
+      stale_stream = %{
+        path: "https://stream.mureka.ai/live/stale.aac",
+        duration: 120,
+        format: :aac,
+        stream: true,
+        meta: %{provider: "fake"}
+      }
+
+      # Dropped while closed
+      send(pid, {:playable, stale_ref, {:ok, stale_stream}})
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert is_nil(view[:track]) or view.track.path != stale_stream.path
+
+      # Move to next page
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+
+      # Send late playable message for old page_ref
+      send(pid, {:playable, stale_ref, {:ok, stale_stream}})
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert is_nil(view[:track]) or view.track.path != stale_stream.path
+    end
+
+    test "score job failing after stream leaves Repertoire playing, records failure in music_meta, and room does not stall",
+         ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config,
+            music_mode: :stream,
+            music_stream_delay_ms: 0,
+            music_delay_ms: 50,
+            music_fail_after_stream: true
+          )
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      Rooms.subscribe(ctx.slug)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "misty forest")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "mountain creek")
+
+      # First stream arrives and plays
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        not is_nil(view[:track]) and view.track[:stream] == true
+      end)
+
+      # When stream generation fails later, track reverts to nil (Repertoire playing)
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        is_nil(view[:track]) and view.playing.kind == "repertoire"
+      end)
+
+      # Room does not stall: players can still bridge, commit, and meld
+      await_phase(ctx.slug, :bridging)
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+
+      eventually(fn ->
+        pages = Thereish.Chronicle.page_views(ctx.slug)
+        pages != [] and hd(pages).music_meta != nil
+      end)
+
+      [page | _] = Thereish.Chronicle.page_views(ctx.slug)
+      assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
+    end
   end
+
 
   describe "the Scribe titles the Track" do
     setup do

@@ -2158,6 +2158,138 @@ defmodule ThereishWeb.RoomLiveTest do
       end)
     end
 
+    test "foley:page pushes playable-early stream, speaker plays it and updates Now playing, then transitions to completed track",
+         ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config,
+            music_mode: :stream,
+            music_stream_delay_ms: 0,
+            music_delay_ms: 150,
+            title_delay_ms: 0
+          )
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      give_setting(ctx.mara, "alpine forest")
+      give_setting(ctx.jacob, "snowy peaks")
+      await_phase(ctx.slug, :bridging)
+
+      # 1. Playable stream arrives early with stream: true
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: stream_path,
+          kind: "track",
+          stream: true
+        },
+        1000
+      )
+
+      assert String.starts_with?(stream_path, "https://stream.mureka.ai/live/fake-")
+
+      # "Now playing" line updates on speaker
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          "Alpine Forest · Snowy Peaks (written for this Page)"
+        )
+      end)
+
+      # 2. Later, completed MP3 track lands and pushes updated foley:page
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: final_path,
+          kind: "track"
+        },
+        1500
+      )
+
+      assert String.starts_with?(final_path, "/media/tracks/fake-")
+      assert String.ends_with?(final_path, ".mp3")
+    end
+
+    test "foley:page reverts to Repertoire when score fails, Room does not stall", ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config,
+            music_mode: :stream,
+            music_stream_delay_ms: 0,
+            music_fail_after_stream: true,
+            music_delay_ms: 100,
+            title_delay_ms: 0
+          )
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      give_setting(ctx.mara, "alpine forest")
+      give_setting(ctx.jacob, "snowy peaks")
+      await_phase(ctx.slug, :bridging)
+
+      # 1. Playable stream lands first
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: _stream_path,
+          kind: "track",
+          stream: true
+        },
+        1000
+      )
+
+      # 2. Score failure lands, foley:page falls back to Repertoire wait music
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: rep_path,
+          kind: "repertoire"
+        },
+        1500
+      )
+
+      assert is_binary(rep_path)
+
+      # Room advances and does not stall; reverts to Repertoire
+      eventually(fn ->
+        snapshot = Rooms.snapshot(ctx.slug, nil)
+        snapshot.phase == :bridging and snapshot.playing.kind == "repertoire"
+      end)
+    end
+
     test "ticket 01: wait music plays during giving, pushed to speaker with kind repertoire, and Now playing names it on speaker",
          ctx do
       # In giving phase (setup joins Mara & Jacob)
