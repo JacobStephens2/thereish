@@ -544,8 +544,7 @@ defmodule ThereishWeb.FoleyTest do
       result_landed = Foley.push_foley_events(socket, writing_room, landed_room)
       events_landed = pushed_events(result_landed)
 
-      assert {"foley:page",
-              %{path: "/media/tracks/p2.mp3", title: "New Track", kind: "track"}} in events_landed
+      assert {"foley:page", %{path: "/media/tracks/p2.mp3", title: "New Track", kind: "track"}} in events_landed
     end
   end
 

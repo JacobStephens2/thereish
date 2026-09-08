@@ -2201,7 +2201,8 @@ defmodule Thereish.RoomsTest do
       assert view.track.meta.provider == "fake"
     end
 
-    test "holdover across next_page and a stale score: landed track holds over and stale score is dropped", ctx do
+    test "holdover across next_page and a stale score: landed track holds over and stale score is dropped",
+         ctx do
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
       await_phase(ctx.slug, :bridging)
@@ -2305,7 +2306,8 @@ defmodule Thereish.RoomsTest do
       assert view_seized.playing.path != p1_track.path
     end
 
-    test "if the previous Page never landed a Track, wait music is still a Repertoire draw on next_page", ctx do
+    test "if the previous Page never landed a Track, wait music is still a Repertoire draw on next_page",
+         ctx do
       # Configure fake so scoring fails
       set_fake(music_mode: :unavailable)
 
@@ -2663,7 +2665,6 @@ defmodule Thereish.RoomsTest do
       assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
     end
   end
-
 
   describe "the Scribe titles the Track" do
     setup do
@@ -3143,6 +3144,188 @@ defmodule Thereish.RoomsTest do
       for loop <- Thereish.Foley.Loops.all() do
         assert loop.path in settled_paths
       end
+    end
+  end
+
+  describe "ticket 03: Next" do
+    setup do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      :ok = Rooms.claim_speaker(slug, token_a)
+      %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
+    end
+
+    test "Next on a Repertoire draw advances the deal without repeating until exhausted, then reshuffles",
+         ctx do
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view.next? == true
+      assert view.playing.kind == "repertoire"
+      initial_path = view.playing.path
+
+      members = Thereish.Foley.Repertoire.members(Store.get_room(ctx.slug).id)
+      repertoire_size = length(members)
+      assert repertoire_size >= 5
+
+      # Step through the remaining deal (repertoire_size - 1 steps)
+      {played_paths, last_path} =
+        Enum.reduce(1..(repertoire_size - 1), {[], initial_path}, fn _, {seen, current_path} ->
+          assert :ok = Rooms.next(ctx.slug, ctx.token_a)
+          v = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+          assert v.next? == true
+          assert v.music == "page"
+          assert v.playing.kind == "repertoire"
+          refute v.playing.path == current_path
+          refute v.playing.path in seen
+          refute v.playing.path == initial_path
+          {[v.playing.path | seen], v.playing.path}
+        end)
+
+      # All remaining members have been played; initial_path was never repeated
+      assert length(played_paths) == repertoire_size - 1
+      refute initial_path in played_paths
+
+      # Deal is exhausted now. Next must reshuffle, never repeating the thing now playing
+      assert :ok = Rooms.next(ctx.slug, ctx.token_a)
+      reshuffled_view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert reshuffled_view.playing.kind == "repertoire"
+      refute reshuffled_view.playing.path == last_path
+    end
+
+    test "Next on holdover leaves last Page's Track and plays a shuffle from the opening draw; mode stays page",
+         ctx do
+      set_fake(music_delay_ms: 0)
+
+      # Give prompts to advance to bridging and land a track
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "track"
+      end)
+
+      landed_track = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing
+
+      # Finish Page 1 to closed
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Advance to Page 2
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      # Landed track from Page 1 holds over
+      view_holdover = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view_holdover.playing.kind == "holdover"
+      assert view_holdover.playing.path == landed_track.path
+      assert view_holdover.next? == true
+
+      # Skip on holdover: leaves last Page's track, plays a Repertoire draw, mode stays page
+      assert :ok = Rooms.next(ctx.slug, ctx.token_a)
+
+      view_after_skip = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view_after_skip.music == "page"
+      assert view_after_skip.playing.kind == "repertoire"
+      refute view_after_skip.playing.path == landed_track.path
+
+      # In-flight track for Page 2 still seizes the Speaker when it lands
+      set_fake(author_delay_ms: 100, music_delay_ms: 200)
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "p2 setting 1")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "p2 setting 2")
+      await_phase(ctx.slug, :writing)
+
+      # During writing before score lands: still playing repertoire
+      assert Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "repertoire"
+
+      # Simulate Page 2 score landing
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      server_state = :sys.get_state(pid)
+      p2_ref = server_state.current_page_ref
+
+      p2_track = %{
+        path: "/media/tracks/p2-landed.mp3",
+        duration: 100,
+        format: :mp3,
+        title: "Page Two Score",
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:scored, p2_ref, {:ok, p2_track}})
+
+      # Seizes the speaker immediately
+      view_p2_landed = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view_p2_landed.playing.kind == "track"
+      assert view_p2_landed.playing.path == p2_track.path
+      assert view_p2_landed.playing.title == p2_track.title
+    end
+
+    test "Next is refused (and is a no-op) while this Page's Track is on the Speaker", ctx do
+      set_fake(music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "track"
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view.playing.kind == "track"
+
+      # Next is not offered
+      assert view.next? == false
+
+      # Next call is refused
+      current_path = view.playing.path
+      assert {:error, :refused} = Rooms.next(ctx.slug, ctx.token_a)
+
+      # Playing track is unchanged
+      view_after = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view_after.playing.kind == "track"
+      assert view_after.playing.path == current_path
+    end
+
+    test "Next is not offered and is refused when only one playable member remains", ctx do
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      single = %{name: "Only Loop", title: "Only Loop", path: "/audio/only.mp3"}
+
+      :sys.replace_state(pid, fn state ->
+        state
+        |> Map.put(:eligible_members, [single])
+        |> Map.put(:wait_music, single)
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view.next? == false
+
+      assert {:error, :refused} = Rooms.next(ctx.slug, ctx.token_a)
+    end
+
+    test "Next from a non-speaking device is a no-op", ctx do
+      initial_view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      initial_path = initial_view.playing.path
+
+      # Jacob (non-speaking device) calls next -> no-op
+      assert :ok = Rooms.next(ctx.slug, ctx.token_b)
+
+      view_after = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view_after.playing.path == initial_path
+
+      # Call without device_token -> no-op
+      assert :ok = Rooms.next(ctx.slug, nil)
+      view_after_nil = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert view_after_nil.playing.path == initial_path
+
+      # Melissa (speaking device) calls next -> advances
+      assert :ok = Rooms.next(ctx.slug, ctx.token_a)
+      view_advanced = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      refute view_advanced.playing.path == initial_path
     end
   end
 

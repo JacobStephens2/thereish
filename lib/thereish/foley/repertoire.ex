@@ -93,12 +93,17 @@ defmodule Thereish.Foley.Repertoire do
   def pool(room_id), do: members(room_id)
 
   @doc """
-  Draws a member from the eligible members for a Room at random.
+  Draws a member from the eligible members for a Room or explicit member list at random.
   If a previous member is given, avoids picking it if more than one candidate exists.
   """
-  @spec draw(Ecto.UUID.t() | String.t(), member() | map() | nil) :: member()
-  def draw(room_id, previous \\ nil) do
-    repertoire_members = members(room_id)
+  @spec draw(Ecto.UUID.t() | String.t() | [member()], member() | map() | nil) :: member()
+  def draw(room_id_or_members, previous \\ nil) do
+    repertoire_members =
+      if is_list(room_id_or_members) do
+        room_id_or_members
+      else
+        members(room_id_or_members)
+      end
 
     candidates =
       if is_map(previous) and length(repertoire_members) > 1 do
@@ -112,6 +117,85 @@ defmodule Thereish.Foley.Repertoire do
       [] -> hd(shipped_loops())
       [single] -> single
       multiple -> Enum.random(multiple)
+    end
+  end
+
+  @doc """
+  Returns a shuffled deal of eligible members for a Room or explicit member list, excluding the given member or path.
+  """
+  @spec deal(Ecto.UUID.t() | String.t() | [member()], String.t() | member() | map() | nil) ::
+          [member()]
+  def deal(room_id_or_members, exclude \\ nil) do
+    eligible =
+      if is_list(room_id_or_members) do
+        room_id_or_members
+      else
+        members(room_id_or_members)
+      end
+
+    exclude_path =
+      case exclude do
+        nil -> nil
+        path when is_binary(path) -> path
+        %{path: path} -> path
+        %{"path" => path} -> path
+      end
+
+    eligible
+    |> Enum.reject(fn m -> m.path == exclude_path end)
+    |> Enum.shuffle()
+  end
+
+  @doc """
+  Advances the session deal:
+  - If `deal` has remaining members, takes the next one.
+  - If `deal` is exhausted or empty, reshuffles from eligible members,
+    excluding `current_path` so it never repeats the thing now playing.
+  - If only one playable member exists in the Repertoire, returns `{:error, :no_other_members}`.
+  """
+  @spec next_deal(
+          Ecto.UUID.t() | String.t() | [member()],
+          [member()] | nil,
+          String.t() | member() | map() | nil
+        ) ::
+          {:ok, member(), [member()]} | {:error, :no_other_members}
+  def next_deal(room_id_or_members, current_deal \\ [], current \\ nil) do
+    eligible =
+      if is_list(room_id_or_members) do
+        room_id_or_members
+      else
+        members(room_id_or_members)
+      end
+
+    if length(eligible) <= 1 do
+      {:error, :no_other_members}
+    else
+      current_path =
+        case current do
+          nil -> nil
+          path when is_binary(path) -> path
+          %{path: path} -> path
+          %{"path" => path} -> path
+        end
+
+      valid_paths = MapSet.new(eligible, & &1.path)
+
+      usable_deal =
+        (current_deal || [])
+        |> Enum.filter(fn m -> MapSet.member?(valid_paths, m.path) and m.path != current_path end)
+
+      case usable_deal do
+        [next_member | remaining] ->
+          {:ok, next_member, remaining}
+
+        [] ->
+          [next_member | remaining] =
+            eligible
+            |> Enum.reject(fn m -> m.path == current_path end)
+            |> Enum.shuffle()
+
+          {:ok, next_member, remaining}
+      end
     end
   end
 

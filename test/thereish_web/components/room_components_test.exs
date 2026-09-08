@@ -474,6 +474,23 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html_without =~ "Written for this Page"
     end
 
+    test "foley_switches renders Next button only when speaker? and next? are both true" do
+      room_speaker_with_next = %{speaker?: true, next?: true, voice: true, music: "page"}
+      html = render_component(&foley_switches/1, room: room_speaker_with_next)
+      assert html =~ ~s(data-role="music-next")
+      assert html =~ "Next"
+
+      room_speaker_no_next = %{speaker?: true, next?: false, voice: true, music: "page"}
+      html_no_next = render_component(&foley_switches/1, room: room_speaker_no_next)
+      refute html_no_next =~ ~s(data-role="music-next")
+      refute html_no_next =~ "Next"
+
+      room_non_speaker = %{speaker?: false, next?: true, voice: true, music: "page"}
+      html_non_speaker = render_component(&foley_switches/1, room: room_non_speaker)
+      refute html_non_speaker =~ ~s(data-role="music-next")
+      refute html_non_speaker =~ "Next"
+    end
+
     test "foley_hook renders hook container for colocated Foley hook with configured levels" do
       configured = Thereish.Steward.foley_levels()
       assert is_list(configured) and length(configured) > 0
@@ -967,7 +984,11 @@ defmodule ThereishWeb.RoomComponentsTest do
     test "renders last Page's Track and keeps title when playing kind is holdover" do
       room = %{
         music: "page",
-        playing: %{title: "Summer Camp · Viking Beaches", path: "/media/tracks/p1.mp3", kind: "holdover"}
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "holdover"
+        }
       }
 
       html = render_component(&now_playing/1, room: room)
