@@ -233,6 +233,11 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("next_music", _params, socket) do
+    Rooms.next(socket.assigns.slug, socket.assigns.device_token)
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
