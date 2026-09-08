@@ -116,16 +116,21 @@ defmodule ThereishWeb.Foley do
       _ ->
         cond do
           room[:track] && room.track[:path] ->
-            %{path: room.track.path, title: room.track[:title], kind: "track"}
+            build_track_payload(room.track, "track")
 
           room[:playing] && room.playing[:path] ->
-            kind = to_string(room.playing[:kind] || "repertoire")
-            %{path: room.playing.path, title: room.playing[:title], kind: kind}
+            build_track_payload(room.playing, room.playing[:kind] || "repertoire")
 
           true ->
             repertoire_payload(room)
         end
     end
+  end
+
+  defp build_track_payload(item, kind) do
+    stream? = !!(item[:stream] || get_in(item, [:meta, :stream]))
+    payload = %{path: item.path, title: item[:title], kind: to_string(kind)}
+    if stream?, do: Map.put(payload, :stream, true), else: payload
   end
 
   defp repertoire_payload(room) do

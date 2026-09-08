@@ -370,6 +370,84 @@ defmodule ThereishWeb.FoleyTest do
              } in events
     end
 
+    test "pushes foley:page with stream: true when playable early stream lands" do
+      socket = test_socket()
+      loop = hd(Thereish.Foley.Loops.all())
+
+      old_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        loop: loop,
+        track: nil
+      }
+
+      new_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        loop: loop,
+        track: %{
+          path: "https://stream.mureka.ai/live/stream123.aac",
+          title: "Summer Camp · Viking Beaches",
+          stream: true,
+          format: :aac
+        }
+      }
+
+      result = Foley.push_foley_events(socket, old_room, new_room)
+      events = pushed_events(result)
+
+      assert {
+               "foley:page",
+               %{
+                 path: "https://stream.mureka.ai/live/stream123.aac",
+                 title: "Summer Camp · Viking Beaches",
+                 kind: "track",
+                 stream: true
+               }
+             } in events
+    end
+
+    test "pushes foley:page when final track lands replacing stream" do
+      socket = test_socket()
+
+      old_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        track: %{
+          path: "https://stream.mureka.ai/live/stream123.aac",
+          title: "Summer Camp · Viking Beaches",
+          stream: true,
+          format: :aac
+        }
+      }
+
+      new_room = %{
+        phase: :bridging,
+        speaker?: true,
+        music: "page",
+        track: %{
+          path: "/media/tracks/final.mp3",
+          title: "Summer Camp · Viking Beaches",
+          format: :mp3
+        }
+      }
+
+      result = Foley.push_foley_events(socket, old_room, new_room)
+      events = pushed_events(result)
+
+      assert {
+               "foley:page",
+               %{
+                 path: "/media/tracks/final.mp3",
+                 title: "Summer Camp · Viking Beaches",
+                 kind: "track"
+               }
+             } in events
+    end
+
     test "pushes Repertoire member when the waiting Stage claims the speaker" do
       first = hd(Thereish.Foley.Loops.all())
       socket = test_socket(ThereishWeb.StageLive)
