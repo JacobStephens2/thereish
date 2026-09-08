@@ -2320,6 +2320,135 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.melissa, "[data-role=now-playing]", "the Repertoire")
     end
 
+    test "ticket 02: holdover across close and next_page, giving/writing keep track, and new track seizes speaker during writing",
+         ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 50, title_delay_ms: 0)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      # Play Page 1 through to closed
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      assert_push_event(ctx.stage, "foley:page", %{
+        path: p1_path,
+        title: p1_title,
+        kind: "track"
+      })
+
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          "Now playing: #{p1_title} (written for this Page)"
+        )
+      end)
+
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # After page closes: snapshot kind is holdover and Now playing keeps that title
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          "Now playing: #{p1_title} (last Page's Track)"
+        )
+      end)
+
+      # Move to next page (Page 2)
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=one-more]") end)
+      ctx.melissa |> element("[data-role=one-more]") |> render_click()
+      await_phase(ctx.slug, :giving)
+
+      # Giving keeps Page 1's track: Now playing still shows holdover
+      assert has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               "Now playing: #{p1_title} (last Page's Track)"
+             )
+
+      refute has_element?(ctx.melissa, "[data-role=now-playing]")
+      refute has_element?(ctx.jacob, "[data-role=now-playing]")
+
+      # Melissa claims speaker during giving: Melissa gets foley:page with holdover
+      ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
+
+      assert_push_event(ctx.melissa, "foley:page", %{
+        path: ^p1_path,
+        title: ^p1_title,
+        kind: "holdover"
+      })
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=now-playing]",
+               "Now playing: #{p1_title} (last Page's Track)"
+             )
+
+      # Add delay to author so we can observe music land during writing phase
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, author_delay_ms: 300, music_delay_ms: 50, title_delay_ms: 0)
+        )
+      )
+
+      # Submit gives for Page 2
+      give_setting(ctx.melissa, "whispering pines")
+      give_setting(ctx.jacob, "winding river")
+
+      # Writing keeps Page 1's track as holdover
+      assert has_element?(ctx.melissa, "[data-role=writing-phase]")
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=now-playing]",
+               "Now playing: #{p1_title} (last Page's Track)"
+             )
+
+      # When Page 2 track lands, it seizes the speaker during writing
+      assert_push_event(ctx.melissa, "foley:page", %{
+        path: p2_path,
+        title: p2_title,
+        kind: "track"
+      })
+
+      assert p2_path != p1_path
+
+      eventually(fn ->
+        has_element?(
+          ctx.melissa,
+          "[data-role=now-playing]",
+          "Now playing: #{p2_title} (written for this Page)"
+        )
+      end)
+    end
+
     test "commit pushes foley:commit to stage and foley:own-commit to nobody when stage is present",
          ctx do
       give_setting(ctx.melissa, "setting one")

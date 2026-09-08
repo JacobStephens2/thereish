@@ -71,7 +71,7 @@ defmodule ThereishWeb.Foley do
   # wait for seats, Gives, and the Author — not only once Bridging starts.
   # Tap-for-sound only resumes the audio context; without this push there is
   # nothing to hear.
-  @music_phases [:waiting, :giving, :writing, :bridging, :assaying, :reveal]
+  @music_phases [:waiting, :giving, :writing, :bridging, :assaying, :reveal, :closed]
 
   defp maybe_push_page(socket, old_room, new_room) do
     is_music_phase? = new_room.phase in @music_phases
@@ -115,11 +115,11 @@ defmodule ThereishWeb.Foley do
 
       _ ->
         cond do
-          room[:track] && room.track[:path] ->
-            build_track_payload(room.track, "track")
-
           room[:playing] && room.playing[:path] ->
             build_track_payload(room.playing, room.playing[:kind] || "repertoire")
+
+          room[:track] && room.track[:path] ->
+            build_track_payload(room.track, "track")
 
           true ->
             repertoire_payload(room)
