@@ -1360,6 +1360,15 @@ defmodule ThereishWeb.RoomComponents do
           {label}
         </button>
       </div>
+      <button
+        :if={@room[:speaker?] and @room[:next?]}
+        type="button"
+        phx-click="next_music"
+        data-role="music-next"
+        class="btn btn-xs btn-ghost opacity-70 hover:opacity-100"
+      >
+        Next
+      </button>
     </div>
     """
   end

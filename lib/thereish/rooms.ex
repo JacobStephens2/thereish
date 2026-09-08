@@ -442,6 +442,14 @@ defmodule Thereish.Rooms do
   def set_music(code, music), do: call(code, {:set_music, music})
 
   @doc """
+  Skips the current wait music (Repertoire draw or holdover) and advances the deal.
+  No-op from a non-speaking device, if only one member remains, or refused if
+  this Page's Track is on the Speaker.
+  """
+  @spec next(String.t(), String.t() | nil) :: :ok | {:error, term()}
+  def next(code, device_token \\ nil), do: call(code, {:next, device_token})
+
+  @doc """
   Fetches the voice audio bytes and format for `attempt` from the Room.
   Answers `{:ok, audio, format}` or `{:error, :not_found}`.
   """
