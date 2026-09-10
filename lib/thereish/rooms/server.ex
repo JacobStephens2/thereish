@@ -1092,6 +1092,7 @@ defmodule Thereish.Rooms.Server do
     page = state.game.page
     seats = state.game.seats
     bridges = state.game.bridges
+    request = with_prior_quips(request, state)
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       main_task = Task.async(fn -> assay(request, page, arm) end)
@@ -1175,6 +1176,12 @@ defmodule Thereish.Rooms.Server do
     room = self()
     arm = state[:current_arm] || :flash
     page = state.game.page
+
+    request = %{
+      side_a: with_prior_quips(request.side_a, state),
+      side_b: with_prior_quips(request.side_b, state),
+      overall: with_prior_quips(request.overall, state)
+    }
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       task_side_a = Task.async(fn -> assay(request.side_a, page, arm) end)
@@ -1418,6 +1425,28 @@ defmodule Thereish.Rooms.Server do
   catch
     :exit, reason -> {:error, {:exit, reason}}
   end
+
+  defp with_prior_quips(request, state) do
+    Map.put(request, :prior_quips, prior_quips(state))
+  end
+
+  defp prior_quips(state) do
+    closed = Chronicle.recent_quips(state.room.id, 5)
+    in_flight = played_quips(state.game)
+    Enum.take(closed ++ in_flight, -5)
+  end
+
+  defp played_quips(%{played: played}) when is_list(played) do
+    for attempt <- played,
+        quip <- attempt_quips(attempt) do
+      quip
+    end
+  end
+
+  defp played_quips(_game), do: []
+
+  defp attempt_quips(%{verdict: %{quip: quip}}) when is_binary(quip) and quip != "", do: [quip]
+  defp attempt_quips(_attempt), do: []
 
   # How long the reveal is held is the Room's to know, because running it is the
   # Room's job. The rules only say that a beat is owed.

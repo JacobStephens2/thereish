@@ -614,6 +614,78 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  describe "the Assayer remembers its Quips (ticket 11)" do
+    test "the assay request carries the Room's last five Quips, oldest dropped" do
+      slug = open_room()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      room = Rooms.get_room(slug)
+
+      quips = [
+        "Oldest quip, the one that should drop.",
+        "Second quip about a lighthouse.",
+        "Third quip about a picnic.",
+        "Fourth quip about a harbour.",
+        "Fifth quip about a cairn.",
+        "Sixth quip, still in the window."
+      ]
+
+      now = DateTime.utc_now()
+
+      for {quip, index} <- Enum.with_index(quips, 1) do
+        entry = remembered_page(melissa.id, jacob.id, quip)
+
+        assert {:ok, _page} =
+                 Chronicle.write(room.id, entry, DateTime.add(now, index, :second))
+      end
+
+      steward(assay_capture: self())
+
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+
+      assert_receive {:assay, request}, 2_000
+      assert request.prior_quips == tl(quips)
+      refute "Oldest quip, the one that should drop." in request.prior_quips
+    end
+
+    defp remembered_page(melissa_id, jacob_id, quip) do
+      %{
+        page: %{bookends: ["lantern", "harbour"]},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 91,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["lantern", "harbour"],
+            closeness: 91,
+            melded?: true,
+            bridges: [
+              %{seat_id: melissa_id, bridge: "cairn"},
+              %{seat_id: jacob_id, bridge: "cairns"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [melissa_id, jacob_id],
+                bridges: ["cairn", "cairns"],
+                graded?: true,
+                closeness: 91,
+                band: :meld,
+                reasoning: "Same root.",
+                quip: quip,
+                meta: %{model: "fake", prompt_version: "assay-3", latency_ms: 10, cost_usd: 0.0}
+              }
+            ]
+          }
+        ]
+      }
+    end
+  end
+
   describe "supervision" do
     test "a crashed Room comes back with its Seats" do
       slug = open_room()
