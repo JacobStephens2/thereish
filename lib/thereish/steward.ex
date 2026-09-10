@@ -93,6 +93,7 @@ defmodule Thereish.Steward do
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   @callback title_track([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
+  @callback draw(String.t() | map(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
 
   @doc """
   Titles one instrumental Track from its Gives, answering %{title: title, meta: meta}.
@@ -114,6 +115,18 @@ defmodule Thereish.Steward do
   def score(gives, opts \\ []) do
     gives = Enum.map(gives, &Thereish.Steward.Author.give_text/1)
     measure_call(fn -> adapter().score(gives, opts) end)
+  end
+
+  @doc """
+  Draws one Mask from a Give and a Seat's colour, answering image bytes and meta.
+
+  Measured here so latency provenance is kept by the seam. A vendor that refuses
+  a dark Give answers `{:error, :refused}` rather than crashing.
+  """
+  @spec draw(String.t() | map(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def draw(give, colour, opts \\ []) do
+    give = Thereish.Steward.Author.give_text(give)
+    measure_call(fn -> adapter().draw(give, colour, opts) end)
   end
 
   defp measure_call(fun) do

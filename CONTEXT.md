@@ -49,7 +49,7 @@ The small picture a Seat wears for one Page, drawn by the Limner from that Seat'
 _Avoid_: avatar, icon (in copy), profile picture, token, sigil, portrait
 
 **Steward**:
-The one seam through which the game talks to generative models — language, music, and sound. The Author, the Assayer, the Scribe, and the Foley are its roles; model choice, caching, hedging, A/B assignment, spend, and guardrails live behind it.
+The one seam through which the game talks to generative models — language, music, sound, and pictures. The Author, the Assayer, the Scribe, the Foley, and the Limner are its roles; model choice, caching, hedging, A/B assignment, spend, and guardrails live behind it.
 _Avoid_: Keeper (the earlier name), AI, "the LLM", model service, brain
 
 **Author**:

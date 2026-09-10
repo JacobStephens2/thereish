@@ -1436,6 +1436,7 @@ defmodule Thereish.ChronicleTest do
       assert line =~ "Assayer $0.0015"
       assert line =~ "Scribe $0.0025"
       assert line =~ "Foley $0.0000"
+      assert line =~ "Limner $0.0000"
     end
 
     test "spend includes Foley from page music_meta", ctx do
