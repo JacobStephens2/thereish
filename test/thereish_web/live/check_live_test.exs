@@ -87,4 +87,19 @@ defmodule ThereishWeb.CheckLiveTest do
     assert html =~ ~s(data-check="database")
     assert html =~ "Database: connected"
   end
+
+  test "database_label formats connected, unmigrated, and disconnected states" do
+    assert ThereishWeb.CheckLive.database_label(:connected) == "connected"
+    assert ThereishWeb.CheckLive.database_label({:unmigrated, 1}) == "unmigrated (1 pending)"
+    assert ThereishWeb.CheckLive.database_label({:unmigrated, 4}) == "unmigrated (4 pending)"
+    assert ThereishWeb.CheckLive.database_label(:disconnected) == "disconnected"
+  end
+
+  test "database_status reports disconnected if the repo query fails" do
+    defmodule FailingRepo do
+      def __adapter__, do: Ecto.Adapters.Postgres
+    end
+
+    assert ThereishWeb.CheckLive.database_status(FailingRepo) == :disconnected
+  end
 end
