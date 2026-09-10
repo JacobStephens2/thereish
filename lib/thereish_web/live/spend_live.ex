@@ -94,7 +94,8 @@ defmodule ThereishWeb.SpendLive do
                   {"Author", :author},
                   {"Assayer", :assayer},
                   {"Scribe", :scribe},
-                  {"Foley", :foley}
+                  {"Foley", :foley},
+                  {"Limner", :limner}
                 ]
               }>
                 <% role_data = @spend.by_role[role_key] %>
@@ -128,7 +129,7 @@ defmodule ThereishWeb.SpendLive do
                   No model calls recorded yet.
                 </td>
               </tr>
-              <%= for {role_name, role_key} <- [{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}, {"Foley", :foley}] do %>
+              <%= for {role_name, role_key} <- [{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}, {"Foley", :foley}, {"Limner", :limner}] do %>
                 <% role_data = @spend.by_role[role_key] %>
                 <%= for {model, stats} <- Enum.sort_by(role_data[:by_model] || %{}, &elem(&1, 0)) do %>
                   <tr>
@@ -198,6 +199,7 @@ defmodule ThereishWeb.SpendLive do
                 <th class="py-3 px-4">Assayer</th>
                 <th class="py-3 px-4">Scribe</th>
                 <th class="py-3 px-4">Foley</th>
+                <th class="py-3 px-4">Limner</th>
                 <th class="py-3 px-4">Unpriced</th>
               </tr>
             </thead>
@@ -223,6 +225,9 @@ defmodule ThereishWeb.SpendLive do
                 </td>
                 <td class="py-2.5 px-4 font-mono text-opacity-80">
                   {Chronicle.format_usd(r.by_role.foley.total_usd)}
+                </td>
+                <td class="py-2.5 px-4 font-mono text-opacity-80">
+                  {Chronicle.format_usd(r.by_role.limner.total_usd)}
                 </td>
                 <td class="py-2.5 px-4 font-mono">{r.unpriced_count}</td>
               </tr>

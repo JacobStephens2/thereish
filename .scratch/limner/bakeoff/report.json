@@ -1,0 +1,201 @@
+{
+  "timestamp": "2026-09-10T03:35:26.953615Z",
+  "fake": false,
+  "vendors": {
+    "bfl": [
+      {
+        "colour": "#c4a35a",
+        "cost_usd": 0.0131072,
+        "error": null,
+        "file": "01-liminal-spaces.png",
+        "give": "Liminal spaces",
+        "latency_ms": 10141,
+        "model": "flux-2-flex",
+        "status": "ok"
+      },
+      {
+        "colour": "#6b3a2a",
+        "cost_usd": 0.0131072,
+        "error": null,
+        "file": "02-vecna.png",
+        "give": "Vecna",
+        "latency_ms": 9138,
+        "model": "flux-2-flex",
+        "status": "ok"
+      },
+      {
+        "colour": "#8a9a6a",
+        "cost_usd": 0.0131072,
+        "error": null,
+        "file": "03-can-of-worms.png",
+        "give": "can of worms",
+        "latency_ms": 8918,
+        "model": "flux-2-flex",
+        "status": "ok"
+      },
+      {
+        "colour": "#7a1f1f",
+        "cost_usd": null,
+        "error": "%Req.TransportError{reason: :closed}",
+        "file": null,
+        "give": "murder",
+        "latency_ms": 3250,
+        "model": null,
+        "status": "failed"
+      },
+      {
+        "colour": "#d8c8a0",
+        "cost_usd": null,
+        "error": "%Req.TransportError{reason: :closed}",
+        "file": null,
+        "give": "lighthouse",
+        "latency_ms": 2525,
+        "model": null,
+        "status": "failed"
+      },
+      {
+        "colour": "#c45c5c",
+        "cost_usd": null,
+        "error": "%Req.TransportError{reason: :closed}",
+        "file": null,
+        "give": "candy cane",
+        "latency_ms": 822,
+        "model": null,
+        "status": "failed"
+      }
+    ],
+    "ideogram": [
+      {
+        "colour": "#c4a35a",
+        "cost_usd": 0.03,
+        "error": null,
+        "file": "01-liminal-spaces.png",
+        "give": "Liminal spaces",
+        "latency_ms": 7663,
+        "model": "ideogram-v3-turbo",
+        "status": "ok"
+      },
+      {
+        "colour": "#6b3a2a",
+        "cost_usd": 0.03,
+        "error": null,
+        "file": "02-vecna.png",
+        "give": "Vecna",
+        "latency_ms": 8291,
+        "model": "ideogram-v3-turbo",
+        "status": "ok"
+      },
+      {
+        "colour": "#8a9a6a",
+        "cost_usd": 0.03,
+        "error": null,
+        "file": "03-can-of-worms.png",
+        "give": "can of worms",
+        "latency_ms": 9688,
+        "model": "ideogram-v3-turbo",
+        "status": "ok"
+      },
+      {
+        "colour": "#7a1f1f",
+        "cost_usd": 0.03,
+        "error": null,
+        "file": "04-murder.png",
+        "give": "murder",
+        "latency_ms": 8506,
+        "model": "ideogram-v3-turbo",
+        "status": "ok"
+      },
+      {
+        "colour": "#d8c8a0",
+        "cost_usd": 0.03,
+        "error": null,
+        "file": "05-lighthouse.png",
+        "give": "lighthouse",
+        "latency_ms": 9912,
+        "model": "ideogram-v3-turbo",
+        "status": "ok"
+      },
+      {
+        "colour": "#c45c5c",
+        "cost_usd": 0.03,
+        "error": null,
+        "file": "06-candy-cane.png",
+        "give": "candy cane",
+        "latency_ms": 8770,
+        "model": "ideogram-v3-turbo",
+        "status": "ok"
+      }
+    ],
+    "recraft": [
+      {
+        "colour": "#c4a35a",
+        "cost_usd": 0.04,
+        "error": null,
+        "file": "01-liminal-spaces.png",
+        "give": "Liminal spaces",
+        "latency_ms": 11690,
+        "model": "recraftv4",
+        "status": "ok"
+      },
+      {
+        "colour": "#6b3a2a",
+        "cost_usd": 0.04,
+        "error": null,
+        "file": "02-vecna.png",
+        "give": "Vecna",
+        "latency_ms": 10527,
+        "model": "recraftv4",
+        "status": "ok"
+      },
+      {
+        "colour": "#8a9a6a",
+        "cost_usd": 0.04,
+        "error": null,
+        "file": "03-can-of-worms.png",
+        "give": "can of worms",
+        "latency_ms": 13309,
+        "model": "recraftv4",
+        "status": "ok"
+      },
+      {
+        "colour": "#7a1f1f",
+        "cost_usd": 0.04,
+        "error": null,
+        "file": "04-murder.png",
+        "give": "murder",
+        "latency_ms": 8667,
+        "model": "recraftv4",
+        "status": "ok"
+      },
+      {
+        "colour": "#d8c8a0",
+        "cost_usd": 0.04,
+        "error": null,
+        "file": "05-lighthouse.png",
+        "give": "lighthouse",
+        "latency_ms": 8642,
+        "model": "recraftv4",
+        "status": "ok"
+      },
+      {
+        "colour": "#c45c5c",
+        "cost_usd": 0.04,
+        "error": null,
+        "file": "06-candy-cane.png",
+        "give": "candy cane",
+        "latency_ms": 9597,
+        "model": "recraftv4",
+        "status": "ok"
+      }
+    ]
+  },
+  "gives": [
+    "Liminal spaces",
+    "Vecna",
+    "can of worms",
+    "murder",
+    "lighthouse",
+    "candy cane"
+  ],
+  "style_brief": "Cubist: the subject broken into overlapping planes seen from several angles at once. A restrained palette of ochre, umber, grey, and bone on a dark ground. Flat, poster-like, no text, no border. One subject centred and readable as a silhouette at thumbnail size. Suggest the setting a step removed — an object or figure it brings to mind, not a picture of the words themselves."
+}

@@ -283,6 +283,64 @@ defmodule Thereish.StewardFixtures do
     Application.put_env(:thereish, :steward, live)
   end
 
+  @doc "Puts the real Recraft provider behind the seam for the smoke test."
+  def let_it_call_recraft do
+    let_it_call_limner_vendor(
+      "RECRAFT_AI_API_KEY",
+      fn live, key ->
+        live
+        |> put_in([:roles, :limner, :provider], Thereish.Steward.Recraft)
+        |> put_in([:roles, :limner, :model], "recraftv4")
+        |> put_in([:roles, :limner, :api_key], key)
+        |> put_in([:roles, :limner, :recraft_api_key], key)
+      end,
+      alt: "RECRAFT_API_TOKEN"
+    )
+  end
+
+  @doc "Puts the real Ideogram provider behind the seam for the smoke test."
+  def let_it_call_ideogram do
+    let_it_call_limner_vendor("IDEOGRAM_API_KEY", fn live, key ->
+      live
+      |> put_in([:roles, :limner, :provider], Thereish.Steward.Ideogram)
+      |> put_in([:roles, :limner, :api_key], key)
+      |> put_in([:roles, :limner, :ideogram_api_key], key)
+    end)
+  end
+
+  @doc "Puts the real BFL provider behind the seam for the smoke test."
+  def let_it_call_bfl do
+    let_it_call_limner_vendor(
+      "BLACK_FOREST_LABS_API_KEY",
+      fn live, key ->
+        live
+        |> put_in([:roles, :limner, :provider], Thereish.Steward.Bfl)
+        |> put_in([:roles, :limner, :api_key], key)
+        |> put_in([:roles, :limner, :bfl_api_key], key)
+      end,
+      alt: "BFL_API_KEY"
+    )
+  end
+
+  defp let_it_call_limner_vendor(env_name, update, opts \\ []) do
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+
+    alt = Keyword.get(opts, :alt)
+
+    key =
+      System.get_env(env_name) ||
+        (alt && System.get_env(alt)) ||
+        flunk("this test calls a provider and needs #{env_name} in the environment")
+
+    live =
+      steward
+      |> Keyword.put(:http_options, [])
+      |> then(&update.(&1, key))
+
+    Application.put_env(:thereish, :steward, live)
+  end
+
   @doc "Puts a recorded response behind the Author's provider for this test."
   def recorded_author(answer) when is_function(answer, 2) do
     Req.Test.stub(Thereish.Steward.Gemini, fn conn ->

@@ -336,6 +336,53 @@ defmodule Thereish.Steward.Live do
   end
 
   @impl true
+  def draw(give, colour, opts \\ []) do
+    role =
+      try do
+        Steward.role(:limner)
+      rescue
+        _ -> %{}
+      end
+
+    prompt = Thereish.Steward.Limner.prompt(give, colour)
+    references = Thereish.Steward.Limner.references(role)
+
+    provider =
+      Keyword.get(opts, :provider) ||
+        role[:provider] ||
+        Thereish.Steward.Fal
+
+    params =
+      role
+      |> Map.merge(Map.new(opts))
+      |> Map.put(:prompt, prompt)
+      |> Map.put(:give, Thereish.Steward.Author.give_text(give))
+      |> Map.put(:colour, colour)
+      |> Map.put(:references, references)
+
+    case provider.generate(params) do
+      {:ok, result} ->
+        {:ok,
+         %{
+           bytes: result.bytes,
+           format: result[:format] || :png,
+           meta: %{
+             provider: provider_name(provider),
+             model: result.model,
+             cost_usd: result.cost_usd
+           }
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp provider_name(mod) when is_atom(mod) do
+    mod |> Module.split() |> List.last() |> Macro.underscore()
+  end
+
+  @impl true
   def title_track(gives, _opts \\ []) do
     role = Steward.role(:scribe, :title)
     prompt = Title.prompt(gives)

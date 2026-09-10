@@ -969,7 +969,13 @@ defmodule Thereish.Chronicle do
 
     roles_summary =
       Enum.map(
-        [{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}, {"Foley", :foley}],
+        [
+          {"Author", :author},
+          {"Assayer", :assayer},
+          {"Scribe", :scribe},
+          {"Foley", :foley},
+          {"Limner", :limner}
+        ],
         fn {name, key} ->
           role_str.(name, key)
         end
@@ -1024,6 +1030,12 @@ defmodule Thereish.Chronicle do
           by_model: %{}
         },
         foley: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
+        },
+        limner: %{
           total_usd: Decimal.new(0),
           calls_count: 0,
           unpriced_count: 0,
@@ -1118,6 +1130,12 @@ defmodule Thereish.Chronicle do
           calls_count: 0,
           unpriced_count: 0,
           by_model: %{}
+        },
+        limner: %{
+          total_usd: Decimal.new(0),
+          calls_count: 0,
+          unpriced_count: 0,
+          by_model: %{}
         }
       },
       by_model: %{}
@@ -1130,7 +1148,8 @@ defmodule Thereish.Chronicle do
     new_unpriced = acc.unpriced_count + item.unpriced_count
 
     merged_roles =
-      Enum.reduce([:author, :assayer, :scribe, :foley], acc.by_role, fn role, roles_acc ->
+      Enum.reduce([:author, :assayer, :scribe, :foley, :limner], acc.by_role, fn role,
+                                                                                 roles_acc ->
         r1 =
           Map.get(roles_acc, role, %{
             total_usd: Decimal.new(0),
