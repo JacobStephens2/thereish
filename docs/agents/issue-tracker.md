@@ -1,32 +1,77 @@
-# Issue tracker: Local Markdown
+# Issue tracker: GitHub
 
-Issues and specs for this repo live as markdown files in `.scratch/`.
+Issues and specs for this repo live as GitHub issues on `JacobStephens2/thereish` (ADR-0014). Use the `gh` CLI for all operations.
 
-## Conventions
+Historical features prior to `#69` remain in `.scratch/` as read-only history; new work no longer lands in `.scratch/`.
 
-- One feature per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
-- Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`, never a single combined tickets file
-- Resolved issues are moved to `.scratch/<feature-slug>/issues/resolved/<NN>-<slug>.md` to keep open issues visible at a glance; the folder is named for the status of what is in it
-- Completed feature directories can be moved to `.scratch/resolved/<feature-slug>/`
-- Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading
+## Shape and conventions
+
+- **Spec (Parent Issue)**: A feature's specification is a parent issue on GitHub (e.g. `#69`), holding the overarching design, scope, and test decisions.
+- **Tickets (Sub-issues)**: Implementation tickets are GitHub sub-issues belonging to the spec's parent issue (e.g. `#70` is ticket 01 of parent `#69`), numbered sequentially in their titles (`(ticket 01)`).
+- **Blocking**: Blocking relationships are represented using GitHub's native blocked-by issue dependency (`gh issue create --blocked-by <number>`) along with a visible `## Blocked by` section (e.g. `Blocked by #N` or `- None (can start immediately)`) in the body for agents and tools that read text. A ticket is unblocked when all blocker issues are closed.
+- **Comments and updates**: Use GitHub issue comments (`gh issue comment <number> --body "..."`) for progress updates and resolution notes.
+
+## Triage labels
+
+Triage state is tracked using repo labels (see `docs/agents/triage-labels.md`):
+
+| Label | Meaning |
+| ----- | ------- |
+| `needs-triage` | Maintainer needs to evaluate this issue |
+| `needs-info` | Waiting on reporter for more information |
+| `ready-for-agent` | Fully specified, ready for an AFK agent |
+| `ready-for-human` | Requires human implementation |
+| `resolved` | Work completed and verified |
+| `wontfix` | Will not be actioned |
+
+## Common CLI operations
+
+Infer the repo from `git remote -v`; `gh` handles this automatically inside a clone.
+
+- **Create a parent issue (spec)**:
+  ```sh
+  gh issue create --title "<feature-name>" --body-file "<path-or-stdin>"
+  ```
+- **Create a ticket (sub-issue)**:
+  ```sh
+  gh issue create --parent <parent-number> --title "<title> (ticket NN)" --label "<triage-label>" --blocked-by <blocker-number> --body "..."
+  ```
+- **Read an issue**:
+  ```sh
+  gh issue view <number> --comments
+  ```
+- **List issues**:
+  ```sh
+  gh issue list --state open
+  ```
+- **Comment on an issue**:
+  ```sh
+  gh issue comment <number> --body "..."
+  ```
+- **Apply / remove labels**:
+  ```sh
+  gh issue edit <number> --add-label "<label>" --remove-label "<label>"
+  ```
+- **Close an issue**:
+  ```sh
+  gh issue close <number> --comment "..."
+  ```
 
 ## When a skill says "publish to the issue tracker"
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+Create a GitHub issue via `gh issue create`. For tickets under a feature spec, specify `--parent <spec-number>`.
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+Read the issue via `gh issue view <number> --comments` or fetch the issue by URL/number.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
+Used by `/wayfinder`. The **map** is a single issue with **child** issues as sub-issues.
 
-- **Map**: `.scratch/<effort>/map.md` (the Notes / Decisions-so-far / Fog body).
-- **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
-- **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked when every file it lists is `resolved`.
-- **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
-- **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body (`gh issue create --label wayfinder:map`).
+- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh issue create --parent <map-number>`). Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev (`gh issue edit <number> --add-assignee @me`).
+- **Blocking**: GitHub's native issue dependencies plus a `Blocked by #N` line in the child body. A ticket is unblocked when every blocker is closed.
+- **Frontier query**: list the map's open child issues (`gh issue list --state open`), drop any with an open blocker or an assignee; first in map order wins.
+- **Claim**: `gh issue edit <number> --add-assignee @me`, the session's first write.
+- **Resolve**: `gh issue comment <number> --body "<answer>"`, then `gh issue close <number>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
