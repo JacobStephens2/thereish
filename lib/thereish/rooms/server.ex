@@ -111,7 +111,8 @@ defmodule Thereish.Rooms.Server do
         gives_landed_at: nil,
         voice_audio: nil,
         voice_meta: %{},
-        giving_ref: make_ref()
+        giving_ref: make_ref(),
+        prologue: nil
       }
 
       {:ok, opened(state)}
@@ -312,6 +313,45 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
+  def handle_call({:start_sound, device_token}, _from, state) do
+    case Store.update_room(state.room, %{speaker: device_token}) do
+      {:ok, room} ->
+        state = %{state | room: room}
+
+        state =
+          if not has_chronicle?(state) and not state.room.prologue_skipped and
+               is_nil(state.prologue) do
+            %{state | prologue: Thereish.Foley.Prologue.draw_take()}
+          else
+            state
+          end
+
+        broadcast(state.room.slug)
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:skip_prologue, _from, state) do
+    case Store.update_room(state.room, %{prologue_skipped: true}) do
+      {:ok, room} ->
+        state = %{state | room: room, prologue: nil}
+        broadcast(state.room.slug)
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:play_prologue, _from, state) do
+    state = %{state | prologue: Thereish.Foley.Prologue.draw_take()}
+    broadcast(state.room.slug)
+    {:reply, :ok, state}
+  end
+
   def handle_call({:release_speaker, device_token}, _from, state) do
     if is_nil(device_token) or state.room.speaker == device_token do
       if is_nil(state.room.speaker) do
@@ -510,6 +550,10 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:playing, playing)
       |> Map.put(:next?, next?)
       |> Map.put(:never?, never?)
+      |> Map.put(:prologue_skipped, state.room.prologue_skipped)
+      |> Map.put(:prologue, state[:prologue])
+      |> Map.put(:prologue_script, Thereish.Foley.Prologue.script())
+      |> Map.put(:has_chronicle?, has_chronicle?(state))
 
     {:reply, view, state}
   end
@@ -1731,4 +1775,8 @@ defmodule Thereish.Rooms.Server do
 
   defp format_page_ref(ref) when is_binary(ref), do: ref
   defp format_page_ref(ref), do: inspect(ref)
+
+  defp has_chronicle?(state) do
+    Chronicle.has_pages?(state.room.id)
+  end
 end

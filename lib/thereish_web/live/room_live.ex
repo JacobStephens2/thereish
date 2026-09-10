@@ -244,6 +244,11 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("skip_prologue", _params, socket) do
+    Rooms.skip_prologue(socket.assigns.slug)
+    {:noreply, resync(socket)}
+  end
+
   # The phone woke up. Ask for the whole view rather than trusting what is on
   # screen, because whatever happened while the screen was off is unknowable
   # from here.
@@ -347,6 +352,38 @@ defmodule ThereishWeb.RoomLive do
           join_url={@join_url}
           stage_present?={@stage_present?}
         />
+
+        <section
+          :if={@room && not @stage_present? && @room.phase == :waiting && not @room.prologue_skipped && not @room[:has_chronicle?]}
+          data-role="prologue-card"
+          class="flex flex-col gap-3 rounded-lg border border-base-300 p-4 text-center"
+        >
+          <p class="text-xs uppercase tracking-widest font-semibold text-primary">The Prologue</p>
+          <p data-role="prologue-words" class="text-sm leading-relaxed opacity-90">
+            {@room[:prologue_script]}
+          </p>
+          <div>
+            <button
+              type="button"
+              phx-click="skip_prologue"
+              data-role="prologue-skip"
+              class="btn btn-ghost btn-xs text-xs opacity-70 hover:opacity-100"
+            >
+              Skip
+            </button>
+          </div>
+        </section>
+
+        <div :if={@room && @stage_present? && @room[:prologue]} class="flex justify-center">
+          <button
+            type="button"
+            phx-click="skip_prologue"
+            data-role="prologue-skip"
+            class="btn btn-ghost btn-xs text-xs opacity-70 hover:opacity-100"
+          >
+            Skip Prologue
+          </button>
+        </div>
       <% end %>
 
       <form :if={@seat == nil} phx-submit="join" class="flex flex-col gap-2">

@@ -815,6 +815,67 @@ defmodule ThereishWeb.RoomComponentsTest do
           assert.strictEqual(hook.isStingsDucked(), false);
         }
 
+        // 4. When voice is on, foley:prologue plays reading and ducks music
+        {
+          storage["foley:voice"] = "on";
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:prologue"]({path: "/audio/prologue-1.mp3"});
+          assert.strictEqual(hook.isDucked(), true);
+          assert.notStrictEqual(hook.voiceSource, null);
+
+          // When voice ends, music is restored
+          hook.voiceSource.onended();
+          assert.strictEqual(hook.isDucked(), false);
+          assert.strictEqual(hook.voiceSource, null);
+        }
+
+        // 5. When voice is off, foley:prologue stays silent and does not duck music
+        {
+          storage["foley:voice"] = "off";
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:prologue"]({path: "/audio/prologue-1.mp3"});
+          assert.strictEqual(hook.isDucked(), false);
+          assert.strictEqual(hook.voiceSource, null);
+        }
+
         console.log('HOOK_TESTS_PASSED');
       })().catch(err => {
         console.error(err);
