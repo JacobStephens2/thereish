@@ -461,8 +461,10 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ ~s(data-role="music-control")
       assert html =~ "Voice"
       assert html =~ "Off"
-      assert html =~ "House loop"
-      assert html =~ "Written for this Page"
+      assert html =~ "House"
+      assert html =~ "This Page"
+      refute html =~ "House loop"
+      refute html =~ "Written for this Page"
 
       # Also renders on a room without speaker
       room_without_speaker = %{speaker?: false, voice: false, music: "off"}
@@ -470,8 +472,10 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html_without =~ ~s(data-role="voice-switch")
       assert html_without =~ ~s(data-role="music-control")
       assert html_without =~ "Off"
-      assert html_without =~ "House loop"
-      assert html_without =~ "Written for this Page"
+      assert html_without =~ "House"
+      assert html_without =~ "This Page"
+      refute html_without =~ "House loop"
+      refute html_without =~ "Written for this Page"
     end
 
     test "foley_switches renders Next button only when speaker? and next? are both true" do

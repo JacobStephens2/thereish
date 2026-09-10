@@ -1321,8 +1321,8 @@ defmodule ThereishWeb.RoomComponents do
 
   @music_options [
     {"off", "music-off", "Off"},
-    {"house", "music-house", "House loop"},
-    {"page", "music-page", "Written for this Page"}
+    {"house", "music-house", "House"},
+    {"page", "music-page", "This Page"}
   ]
 
   def foley_switches(assigns) do
