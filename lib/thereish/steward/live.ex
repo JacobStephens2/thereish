@@ -274,34 +274,62 @@ defmodule Thereish.Steward.Live do
           |> Map.put(:prompt, prompt)
           |> Map.put(:n, 1)
 
-        on_playable = Keyword.get(opts, :on_playable)
-
-        stream_cb =
-          if is_function(on_playable, 1) do
-            fn stream_info ->
-              playable = %{
-                path: stream_info.stream_url,
-                duration: stream_info.duration,
-                format: :aac,
-                stream: true,
-                meta: %{
-                  provider: "mureka",
-                  model: stream_info.model,
-                  stream: true,
-                  task_id: stream_info.task_id,
-                  cost_usd: stream_info.cost_usd,
-                  time_to_stream_ms: stream_info.time_to_stream_ms
-                }
-              }
-
-              on_playable.(playable)
-            end
-          end
-
-        with {:ok, result} <- Thereish.Steward.Mureka.stream_generate(params, stream_cb),
+        with {:ok, result} <- Thereish.Steward.Mureka.generate(params),
              {:ok, track} <- TrackCache.store(gives, result) do
           {:ok, track}
         end
+    end
+  end
+
+  @impl true
+  def vamp(gives, opts \\ []) do
+    role =
+      try do
+        Steward.role(:foley, :vamp)
+      rescue
+        _ -> %{}
+      end
+
+    prompt = Music.prompt(gives)
+
+    params =
+      role
+      |> Map.merge(Map.new(opts))
+      |> Map.put(:job_kind, :vamp)
+      |> Map.put(:text, prompt)
+      |> Map.put(:duration_seconds, 30.0)
+      |> Map.put(:loop, true)
+
+    case Thereish.Steward.ElevenLabs.generate(params) do
+      {:ok, %{bytes: bytes} = result} ->
+        vamp_dir = Path.join(TrackCache.media_dir(), "vamps")
+        File.mkdir_p!(vamp_dir)
+        hash = :crypto.hash(:sha256, prompt) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+        filename = "vamp-#{hash}.mp3"
+        disk_path = Path.join(vamp_dir, filename)
+        File.write!(disk_path, bytes)
+        web_path = "/media/vamps/#{filename}"
+
+        model = result[:model] || Map.get(role, :model, "eleven_text_to_sound_v2")
+        cost_usd = result[:cost_usd] || 0.0
+
+        {:ok,
+         %{
+           path: web_path,
+           duration: 30,
+           format: :mp3,
+           loop: true,
+           meta: %{
+             provider: "eleven_labs",
+             model: model,
+             cost_usd: cost_usd,
+             duration_seconds: 30.0,
+             loop: true
+           }
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

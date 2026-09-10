@@ -534,6 +534,22 @@ defmodule Thereish.Rooms.Server do
     next? = next_offered?(state, playing)
     never? = never_offered?(state, playing)
 
+    phase = Thereish.Game.phase(state.game)
+
+    current_vamp =
+      if state.room.music == "page" and not track_for_current_page?(state) and phase != :closed do
+        state[:current_vamp]
+      else
+        nil
+      end
+
+    current_track =
+      if state.room.music == "page" do
+        state[:current_track]
+      else
+        nil
+      end
+
     view =
       state.game
       |> Game.view(viewer)
@@ -544,7 +560,8 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:quips, state.room.quips)
       |> Map.put(:music, state.room.music)
       |> Map.put(:quip, state.room.quip)
-      |> Map.put(:track, if(state.room.music == "page", do: state[:current_track], else: nil))
+      |> Map.put(:vamp, current_vamp)
+      |> Map.put(:track, current_track)
       |> Map.put(:music_meta, state[:music_meta])
       |> Map.put(:loop, if(state.room.music != "off", do: wait_music, else: nil))
       |> Map.put(:playing, playing)
@@ -728,25 +745,30 @@ defmodule Thereish.Rooms.Server do
 
   def handle_info({:titled, _page_ref, _result}, state), do: {:noreply, state}
 
-  def handle_info({:playable, page_ref, result}, %{current_page_ref: page_ref} = state) do
-    if Thereish.Game.phase(state.game) == :closed do
+  def handle_info({:vamped, page_ref, {:ok, vamp}}, state) do
+    current_page? = state[:current_page_ref] == page_ref
+    closed? = Thereish.Game.phase(state.game) == :closed
+    scoring? = Map.get(state, :score_task_running, false)
+
+    state = Map.put(state, :vamp_task_running, false)
+
+    if current_page? and not closed? and scoring? do
+      log_music_event(state, page_ref, "vamp landed")
+      state = Map.put(state, :current_vamp, vamp)
+      broadcast(state.room.slug)
       {:noreply, state}
     else
-      case result do
-        {:ok, track} ->
-          title = track[:title] || state[:current_title]
-          title_meta = state[:title_meta] || %{}
-          state = apply_playable_track(state, track, title, title_meta, page_ref)
-          broadcast(state.room.slug)
-          {:noreply, state}
-
-        {:error, _reason} ->
-          {:noreply, state}
-      end
+      {:noreply, state}
     end
   end
 
-  def handle_info({:playable, _page_ref, _result}, state), do: {:noreply, state}
+  def handle_info({:vamped, page_ref, {:error, reason}}, %{current_page_ref: page_ref} = state) do
+    state = Map.put(state, :vamp_task_running, false)
+    log_music_event(state, page_ref, {:vamp_failure, reason})
+    {:noreply, state}
+  end
+
+  def handle_info({:vamped, _page_ref, _result}, state), do: {:noreply, state}
 
   def handle_info({:scored, page_ref, {:ok, track}}, state) do
     current_page? = state[:current_page_ref] == page_ref
@@ -788,7 +810,11 @@ defmodule Thereish.Rooms.Server do
 
     if current_page? do
       log_music_event(state, page_ref, "track landed")
-      state = Map.put(state, :score_task_running, false)
+
+      state =
+        state
+        |> Map.put(:score_task_running, false)
+        |> Map.put(:current_vamp, nil)
 
       state =
         if Thereish.Game.phase(state.game) == :closed do
@@ -806,7 +832,10 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_info({:scored, page_ref, {:error, reason}}, %{current_page_ref: page_ref} = state) do
-    state = Map.put(state, :score_task_running, false)
+    state =
+      state
+      |> Map.put(:score_task_running, false)
+      |> Map.put(:current_vamp, nil)
 
     if Thereish.Game.phase(state.game) == :closed do
       {:noreply, state}
@@ -906,7 +935,7 @@ defmodule Thereish.Rooms.Server do
   defp apply_track_and_title(state, track, title, title_meta, page_ref) do
     state = apply_playable_track(state, track, title, title_meta, page_ref)
 
-    if not is_nil(state[:current_gives]) and not Map.get(state.current_track, :stream, false) do
+    if not is_nil(state[:current_gives]) do
       Thereish.Steward.TrackCache.put(state.current_gives, state.current_track)
     end
 
@@ -999,25 +1028,34 @@ defmodule Thereish.Rooms.Server do
 
       "page" ->
         cond do
-          state[:current_track] && state.current_track[:path] ->
-            stream? =
-              !!(state.current_track[:stream] ||
-                   get_in(state.current_track, [:meta, :stream]))
-
+          (track_for_current_page?(state) and state[:current_track]) && state.current_track[:path] ->
             kind =
-              if Thereish.Game.phase(state.game) == :closed or not track_for_current_page?(state) do
+              if Thereish.Game.phase(state.game) == :closed do
                 "holdover"
               else
                 "track"
               end
 
-            payload = %{
+            %{
               path: state.current_track.path,
               title: state.current_track[:title] || state[:current_title] || "Track",
               kind: kind
             }
 
-            if stream?, do: Map.put(payload, :stream, true), else: payload
+          (Thereish.Game.phase(state.game) != :closed and state[:current_vamp]) &&
+              state.current_vamp[:path] ->
+            %{
+              path: state.current_vamp.path,
+              title: nil,
+              kind: "vamp"
+            }
+
+          state[:current_track] && state.current_track[:path] ->
+            %{
+              path: state.current_track.path,
+              title: state.current_track[:title] || state[:current_title] || "Track",
+              kind: "holdover"
+            }
 
           true ->
             repertoire_playing(wait_music)
@@ -1216,6 +1254,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:current_page_ref, page_ref)
       |> Map.put(:current_gives, gives)
       |> Map.put(:gives_landed_at, now)
+      |> Map.put(:current_vamp, nil)
       |> Map.put(:current_title, nil)
       |> Map.put(:title_meta, nil)
       |> Map.put(:music_meta, nil)
@@ -1223,9 +1262,10 @@ defmodule Thereish.Rooms.Server do
 
     state =
       if state.room.music == "page" do
-        start_music_tasks(room, page_ref, gives, state)
+        start_music_tasks(state, page_ref, gives)
       else
         state
+        |> Map.put(:vamp_task_running, false)
         |> Map.put(:score_task_running, false)
         |> Map.put(:title_task_running, false)
       end
@@ -1392,6 +1432,8 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:music_meta, nil)
       |> Map.put(:current_gives, nil)
       |> Map.put(:gives_landed_at, nil)
+      |> Map.put(:current_vamp, nil)
+      |> Map.put(:vamp_task_running, false)
       |> Map.put(:score_task_running, false)
       |> Map.put(:title_task_running, false)
 
@@ -1408,13 +1450,13 @@ defmodule Thereish.Rooms.Server do
     if state.room.music == "page" and not track_for_current_page?(state) and
          not Map.get(state, :score_task_running, false) and
          not is_nil(state[:current_page_ref]) and not is_nil(state[:current_gives]) do
-      start_music_tasks(self(), state.current_page_ref, state.current_gives, state)
+      start_music_tasks(state, state.current_page_ref, state.current_gives)
     else
       state
     end
   end
 
-  defp start_music_tasks(room, page_ref, gives, state) do
+  defp start_music_tasks(state, page_ref, gives) do
     gives_landed_at = state[:gives_landed_at] || System.monotonic_time(:millisecond)
     state = Map.put(state, :gives_landed_at, gives_landed_at)
 
@@ -1434,6 +1476,8 @@ defmodule Thereish.Rooms.Server do
         |> Map.put(:track_page_ref, page_ref)
         |> Map.put(:current_title, cached_track.title)
         |> Map.put(:music_meta, music_meta)
+        |> Map.put(:current_vamp, nil)
+        |> Map.put(:vamp_task_running, false)
         |> Map.put(:score_task_running, false)
         |> Map.put(:title_task_running, false)
 
@@ -1441,49 +1485,59 @@ defmodule Thereish.Rooms.Server do
         log_music_event(state, page_ref, "cache miss")
 
         state
-        |> start_score_task(room, page_ref, gives, gives_landed_at)
-        |> start_title_task(room, page_ref, gives)
+        |> start_vamp_task(page_ref, gives, gives_landed_at)
+        |> start_score_task(page_ref, gives, gives_landed_at)
+        |> start_title_task(page_ref, gives)
     end
   end
 
-  defp start_score_task(state, room, page_ref, gives, gives_landed_at) do
+  defp start_vamp_task(state, page_ref, gives, gives_landed_at) do
     code = state.room.slug
+    log_music_event(code, page_ref, "vamp started", gives_landed_at)
+
+    start_music_task(state, page_ref, :vamp_task_running, :vamped, fn ->
+      Steward.vamp(gives)
+    end)
+  end
+
+  defp start_score_task(state, page_ref, gives, gives_landed_at) do
+    code = state.room.slug
+    room_pid = self()
     log_music_event(code, page_ref, "score queued", gives_landed_at)
 
-    Thereish.Foley.ScoreQueue.enqueue(room, page_ref, gives,
+    Thereish.Foley.ScoreQueue.enqueue(room_pid, page_ref, gives,
       on_start: fn ->
         log_music_event(code, page_ref, "score started", gives_landed_at)
-      end,
-      on_playable: fn playable ->
-        send(room, {:playable, page_ref, {:ok, playable}})
       end
     )
 
     Map.put(state, :score_task_running, true)
   end
 
-  defp start_title_task(state, room, page_ref, gives) do
-    start_music_task(state, room, page_ref, :title_task_running, :titled, fn ->
+  defp start_title_task(state, page_ref, gives) do
+    start_music_task(state, page_ref, :title_task_running, :titled, fn ->
       Steward.title_track(gives)
     end)
   end
 
-  defp start_music_task(state, room, page_ref, running_key, tag, fun) do
+  defp start_music_task(state, page_ref, running_key, tag, fun) do
+    room_pid = self()
+
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       try do
         case fun.() do
           {:ok, result} ->
-            send(room, {tag, page_ref, {:ok, result}})
+            send(room_pid, {tag, page_ref, {:ok, result}})
 
           {:error, reason} ->
-            send(room, {tag, page_ref, {:error, reason}})
+            send(room_pid, {tag, page_ref, {:error, reason}})
         end
       rescue
         error ->
-          send(room, {tag, page_ref, {:error, error}})
+          send(room_pid, {tag, page_ref, {:error, error}})
       catch
         :exit, reason ->
-          send(room, {tag, page_ref, {:error, {:exit, reason}}})
+          send(room_pid, {tag, page_ref, {:error, {:exit, reason}}})
       end
     end)
 
@@ -1748,8 +1802,10 @@ defmodule Thereish.Rooms.Server do
 
   def log_music_event(code, page_ref, event, gives_landed_at \\ nil)
 
-  def log_music_event(code, page_ref, {:failure, reason}, gives_landed_at) do
-    log_music_event(code, page_ref, "failure with reason: #{inspect(reason)}", gives_landed_at)
+  def log_music_event(code, page_ref, {fail_tag, reason}, gives_landed_at)
+      when fail_tag in [:failure, :vamp_failure] do
+    prefix = if fail_tag == :vamp_failure, do: "vamp failure", else: "failure"
+    log_music_event(code, page_ref, "#{prefix} with reason: #{inspect(reason)}", gives_landed_at)
   end
 
   def log_music_event(code, page_ref, event, gives_landed_at) when is_binary(event) do
@@ -1758,7 +1814,7 @@ defmodule Thereish.Rooms.Server do
 
     msg = "Foley music for room #{code} (page #{ref_str}): #{event} (+#{elapsed}ms)"
 
-    if String.starts_with?(event, "failure") do
+    if String.contains?(event, "failure") do
       Logger.warning(msg)
     else
       Logger.info(msg)

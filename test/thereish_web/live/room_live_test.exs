@@ -1954,6 +1954,26 @@ defmodule ThereishWeb.RoomLiveTest do
       join(mara, "Mara")
       join(jacob, "Jacob")
 
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.put(fake_config, :vamp_mode, :unavailable)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
       # The Stage starts wait music from the tap; later tests look at Page events.
       assert_push_event(stage, "foley:page", %{kind: "repertoire"})
 
@@ -2314,7 +2334,7 @@ defmodule ThereishWeb.RoomLiveTest do
         Keyword.put(
           Application.get_env(:thereish, :steward, []),
           :fake,
-          Keyword.put(fake_config, :music_delay_ms, 500)
+          Keyword.merge(fake_config, music_delay_ms: 500, vamp_mode: :unavailable)
         )
       )
 
@@ -2408,7 +2428,11 @@ defmodule ThereishWeb.RoomLiveTest do
         Keyword.put(
           Application.get_env(:thereish, :steward, []),
           :fake,
-          Keyword.merge(fake_config, music_delay_ms: 100, title_delay_ms: 0)
+          Keyword.merge(fake_config,
+            music_delay_ms: 100,
+            title_delay_ms: 0,
+            vamp_mode: :unavailable
+          )
         )
       )
 
@@ -2458,7 +2482,7 @@ defmodule ThereishWeb.RoomLiveTest do
              )
     end
 
-    test "foley:page pushes playable-early stream, speaker plays it and updates Now playing, then transitions to completed track",
+    test "Speaker receives Vamp then Track as two music pushes with kind distinguishing them",
          ctx do
       fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
 
@@ -2469,8 +2493,8 @@ defmodule ThereishWeb.RoomLiveTest do
           Application.get_env(:thereish, :steward, []),
           :fake,
           Keyword.merge(fake_config,
-            music_mode: :stream,
-            music_stream_delay_ms: 0,
+            vamp_mode: :ok,
+            vamp_delay_ms: 0,
             music_delay_ms: 150,
             title_delay_ms: 0
           )
@@ -2489,19 +2513,18 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "snowy peaks")
       await_phase(ctx.slug, :bridging)
 
-      # 1. Playable stream arrives early with stream: true
+      # 1. Vamp arrives early with kind: "vamp"
       assert_push_event(
         ctx.stage,
         "foley:page",
         %{
-          path: stream_path,
-          kind: "track",
-          stream: true
+          path: vamp_path,
+          kind: "vamp"
         },
         1000
       )
 
-      assert String.starts_with?(stream_path, "https://stream.mureka.ai/live/fake-")
+      assert String.starts_with?(vamp_path, "/media/vamps/")
 
       # "Now playing" line updates on speaker
       eventually(fn ->
@@ -2518,7 +2541,7 @@ defmodule ThereishWeb.RoomLiveTest do
                "Alpine Forest · Snowy Peaks"
              )
 
-      # 2. Later, completed MP3 track lands and pushes updated foley:page
+      # 2. Later, completed Track lands and pushes updated foley:page with kind: "track"
       assert_push_event(
         ctx.stage,
         "foley:page",
@@ -2543,9 +2566,9 @@ defmodule ThereishWeb.RoomLiveTest do
           Application.get_env(:thereish, :steward, []),
           :fake,
           Keyword.merge(fake_config,
-            music_mode: :stream,
-            music_stream_delay_ms: 0,
-            music_fail_after_stream: true,
+            vamp_mode: :ok,
+            vamp_delay_ms: 0,
+            music_mode: :unavailable,
             music_delay_ms: 100,
             title_delay_ms: 0
           )
@@ -2564,14 +2587,13 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "snowy peaks")
       await_phase(ctx.slug, :bridging)
 
-      # 1. Playable stream lands first
+      # 1. Vamp lands first
       assert_push_event(
         ctx.stage,
         "foley:page",
         %{
-          path: _stream_path,
-          kind: "track",
-          stream: true
+          path: _vamp_path,
+          kind: "vamp"
         },
         1000
       )
@@ -2653,11 +2675,18 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting two")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.stage, "foley:page", %{
-        path: p1_path,
-        title: p1_title,
-        kind: "track"
-      })
+      assert_push_event(ctx.stage, "foley:page", %{kind: "repertoire"})
+
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: p1_path,
+          title: p1_title,
+          kind: "track"
+        },
+        1000
+      )
 
       eventually(fn ->
         has_element?(
@@ -2810,7 +2839,18 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "silent valley")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.mara, "foley:page", %{kind: "track", path: p1_track_path, title: _})
+      receive do
+        {_ref, {:push_event, "foley:page", %{kind: "repertoire"}}} -> :ok
+      after
+        0 -> :ok
+      end
+
+      assert_push_event(
+        ctx.mara,
+        "foley:page",
+        %{kind: "track", path: p1_track_path, title: _},
+        1000
+      )
 
       # Once this Page's Track is playing: Next is hidden on the speaking screen
       eventually(fn ->
@@ -2905,7 +2945,18 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "silent valley")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.mara, "foley:page", %{kind: "track", path: p1_track_path, title: _})
+      receive do
+        {_ref, {:push_event, "foley:page", %{kind: "repertoire"}}} -> :ok
+      after
+        0 -> :ok
+      end
+
+      assert_push_event(
+        ctx.mara,
+        "foley:page",
+        %{kind: "track", path: p1_track_path, title: _},
+        1000
+      )
 
       # While Page's Track is playing: Next is hidden, but Never is still rendered!
       eventually(fn ->
@@ -3084,6 +3135,12 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting beta")
       await_phase(ctx.slug, :bridging)
 
+      receive do
+        {_ref, {:push_event, "foley:page", %{kind: "repertoire"}}} -> :ok
+      after
+        0 -> :ok
+      end
+
       assert_push_event(ctx.stage, "foley:page", %{
         kind: "track",
         path: "/media/tracks/fake-setting alpha-setting beta.mp3"
@@ -3190,6 +3247,12 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.mara, "setting emerald")
       give_setting(ctx.jacob, "setting sapphire")
       await_phase(ctx.slug, :bridging)
+
+      receive do
+        {_ref, {:push_event, "foley:page", %{kind: "repertoire"}}} -> :ok
+      after
+        0 -> :ok
+      end
 
       assert_push_event(ctx.stage, "foley:page", %{kind: "track", path: _}, 1000)
 

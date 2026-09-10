@@ -1527,7 +1527,7 @@ defmodule ThereishWeb.RoomComponents do
              room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
         "Music is off"
 
-      room[:playing] && room.playing[:kind] == "track" ->
+      room[:playing] && room.playing[:kind] in ["track", "vamp"] ->
         if first_reveal_happened?(room) and room.playing[:title] do
           "Now playing: #{room.playing.title} (written for this Page)"
         else
@@ -1781,10 +1781,6 @@ defmodule ThereishWeb.RoomComponents do
               setTimeout(() => {
                 try {
                   if (oldMusic.source && oldMusic.source.stop) oldMusic.source.stop()
-                  if (oldMusic.audio) {
-                    oldMusic.audio.pause()
-                    oldMusic.audio.src = ""
-                  }
                 } catch (_) {}
               }, fadeDuration * 1000 + 100)
             }
@@ -1794,10 +1790,6 @@ defmodule ThereishWeb.RoomComponents do
             if (this.currentMusic) {
               try {
                 if (this.currentMusic.source && this.currentMusic.source.stop) this.currentMusic.source.stop()
-                if (this.currentMusic.audio) {
-                  this.currentMusic.audio.pause()
-                  this.currentMusic.audio.src = ""
-                }
               } catch (_) {}
               this.currentMusic = null
             }
@@ -1807,7 +1799,7 @@ defmodule ThereishWeb.RoomComponents do
             }
           }
 
-          this.handleEvent("foley:page", async ({path, stream, title, kind}) => {
+          this.handleEvent("foley:page", async ({path, title, kind}) => {
             if (!this.canPlay()) return
             await this.resumeAudio()
             if (!this.ctx) return
@@ -1836,84 +1828,51 @@ defmodule ThereishWeb.RoomComponents do
               return
             }
 
-            // If the stream for this track is actively playing, don't restart playback mid-page
-            // when the finalized cached MP3 arrives: update the path reference smoothly.
-            if (this.currentMusic && this.currentMusic.isStream && !stream && kind === "track" && title && this.currentMusic.title === title) {
-              this.currentMusic.path = trackUrl
-              this.currentMusic.isStream = false
+            const buf = await this.fetchBuffer(trackUrl)
+            if (!buf) return
+
+            if (this.currentMusic && this.currentMusic.path === trackUrl) {
               return
             }
 
-            const isStream = Boolean(stream)
+            const playNow = this.ctx.currentTime
 
-            let newSource = null
-            let newAudio = null
-            let newGain = this.ctx.createGain()
+            const newSource = this.ctx.createBufferSource()
+            newSource.buffer = buf
+            newSource.loop = true
 
-            if (isStream) {
-              newAudio = new Audio()
-              newAudio.crossOrigin = "anonymous"
-              newAudio.src = trackUrl
-              newAudio.loop = true
-
-              try {
-                newSource = this.ctx.createMediaElementSource(newAudio)
-                newSource.connect(newGain)
-              } catch (e) {
-                newAudio.volume = this.levels.music
-              }
-
-              newAudio.play().catch(() => {})
-            } else {
-              const buf = await this.fetchBuffer(trackUrl)
-              if (!buf) return
-
-              if (this.currentMusic && this.currentMusic.path === trackUrl) {
-                return
-              }
-
-              newSource = this.ctx.createBufferSource()
-              newSource.buffer = buf
-              newSource.loop = true
-              newSource.connect(newGain)
-            }
-
+            const newGain = this.ctx.createGain()
+            newSource.connect(newGain)
             newGain.connect(this.musicBus)
 
             const targetGain = this.isDucked() ? this.levels.duck : this.levels.music
-            this.musicBus.gain.cancelScheduledValues(now)
-            this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now)
-            this.musicBus.gain.linearRampToValueAtTime(targetGain, now + fadeDuration)
-            if (this.isDucked() && this.duckUntil > now) {
+            this.musicBus.gain.cancelScheduledValues(playNow)
+            this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, playNow)
+            this.musicBus.gain.linearRampToValueAtTime(targetGain, playNow + fadeDuration)
+            if (this.isDucked() && this.duckUntil > playNow) {
               this.musicBus.gain.setTargetAtTime(this.levels.music, this.duckUntil, 0.2)
             }
 
             const oldMusic = this.currentMusic
             if (oldMusic) {
-              newGain.gain.setValueAtTime(0.001, now)
-              newGain.gain.linearRampToValueAtTime(1.0, now + fadeDuration)
+              newGain.gain.setValueAtTime(0.001, playNow)
+              newGain.gain.linearRampToValueAtTime(1.0, playNow + fadeDuration)
 
-              oldMusic.gain.gain.cancelScheduledValues(now)
-              oldMusic.gain.gain.setValueAtTime(oldMusic.gain.gain.value, now)
-              oldMusic.gain.gain.linearRampToValueAtTime(0.001, now + fadeDuration)
+              oldMusic.gain.gain.cancelScheduledValues(playNow)
+              oldMusic.gain.gain.setValueAtTime(oldMusic.gain.gain.value, playNow)
+              oldMusic.gain.gain.linearRampToValueAtTime(0.001, playNow + fadeDuration)
               setTimeout(() => {
                 try {
                   if (oldMusic.source && oldMusic.source.stop) oldMusic.source.stop()
-                  if (oldMusic.audio) {
-                    oldMusic.audio.pause()
-                    oldMusic.audio.src = ""
-                  }
                 } catch (_) {}
               }, fadeDuration * 1000 + 100)
             } else {
               newGain.gain.setValueAtTime(1.0, now)
             }
 
-            if (!isStream && newSource) {
-              newSource.start(0)
-            }
+            newSource.start(0)
 
-            this.currentMusic = {source: newSource, audio: newAudio, gain: newGain, path: trackUrl, isStream: isStream, title: title, kind: kind}
+            this.currentMusic = {source: newSource, gain: newGain, path: trackUrl, title: title, kind: kind}
             this.musicSource = newSource
           })
 
