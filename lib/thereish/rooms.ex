@@ -433,9 +433,9 @@ defmodule Thereish.Rooms do
   @spec release_speaker(String.t(), String.t() | nil) :: :ok | {:error, term()}
   def release_speaker(code, device_token \\ nil), do: call(code, {:release_speaker, device_token})
 
-  @doc "Sets the voice on/off switch."
-  @spec set_voice(String.t(), boolean()) :: :ok | {:error, term()}
-  def set_voice(code, enabled), do: call(code, {:set_voice, enabled})
+  @doc "Sets the quips on/off switch."
+  @spec set_quips(String.t(), boolean()) :: :ok | {:error, term()}
+  def set_quips(code, enabled), do: call(code, {:set_quips, enabled})
 
   @doc "Sets the music switch: 'off', 'house', or 'page'."
   @spec set_music(String.t(), String.t() | atom()) :: :ok | {:error, term()}
