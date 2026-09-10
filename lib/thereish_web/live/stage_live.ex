@@ -57,7 +57,17 @@ defmodule ThereishWeb.StageLive do
   # claimed and pushes it the music to play.
   @impl true
   def handle_event("start_sound", _params, socket) do
-    Rooms.claim_speaker(socket.assigns.slug, socket.assigns.device_token)
+    Rooms.start_sound(socket.assigns.slug, socket.assigns.device_token)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("play_prologue", _params, socket) do
+    Rooms.play_prologue(socket.assigns.slug)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("skip_prologue", _params, socket) do
+    Rooms.skip_prologue(socket.assigns.slug)
     {:noreply, resync(socket)}
   end
 
@@ -166,6 +176,34 @@ defmodule ThereishWeb.StageLive do
             {Code.shout(@slug)}
           </p>
           <.tap_for_sound :if={offer_tap?(@room)} size={:large} pulse={not @room.speaker_claimed?} />
+
+          <div
+            :if={@room[:prologue]}
+            data-role="prologue-stage"
+            class="flex flex-col items-center gap-3 max-w-lg mx-auto"
+          >
+            <p data-role="prologue-words" class="text-base sm:text-lg leading-relaxed opacity-90">
+              {@room.prologue.text}
+            </p>
+            <button
+              type="button"
+              phx-click="skip_prologue"
+              data-role="prologue-skip"
+              class="btn btn-ghost btn-xs text-xs opacity-70 hover:opacity-100"
+            >
+              Skip
+            </button>
+          </div>
+
+          <button
+            :if={is_nil(@room[:prologue]) and not offer_tap?(@room)}
+            type="button"
+            phx-click="play_prologue"
+            data-role="play-prologue"
+            class="btn btn-outline btn-xs sm:btn-sm opacity-70 hover:opacity-100"
+          >
+            Play the Prologue
+          </button>
         </section>
 
         <section

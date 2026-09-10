@@ -3711,4 +3711,123 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "candle in the window")
     end
   end
+
+  describe "the prologue (ticket 14)" do
+    test "Stage on a Room with no Chronicle plays a reading from the tap when Voice is on, shows words only when off" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      refute has_element?(stage, "[data-role=prologue-words]")
+      refute has_element?(stage, "[data-role=play-prologue]")
+
+      tap_for_sound(stage)
+
+      # Audio reading event pushed to speaking stage
+      assert_push_event(stage, "foley:prologue", %{path: reading})
+      assert String.starts_with?(reading, "/audio/prologue-")
+
+      # Words show on the Stage
+      assert has_element?(stage, "[data-role=prologue-words]")
+      assert has_element?(stage, "[data-role=prologue-words]", "Welcome to Thereish")
+      assert has_element?(stage, "[data-role=prologue-skip]", "Skip")
+    end
+
+    test "\"Play the Prologue\" control present on the waiting screen after prologue ends or on a Room with a Chronicle" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      tap_for_sound(stage)
+
+      assert has_element?(stage, "[data-role=prologue-skip]")
+      stage |> element("[data-role=prologue-skip]") |> render_click()
+
+      # Words disappear and Play the Prologue control appears on waiting screen
+      refute has_element?(stage, "[data-role=prologue-words]")
+      assert has_element?(stage, "[data-role=play-prologue]", "Play the Prologue")
+
+      # Clicking Play the Prologue restarts reading
+      stage |> element("[data-role=play-prologue]") |> render_click()
+      assert_push_event(stage, "foley:prologue", %{path: _})
+      assert has_element?(stage, "[data-role=prologue-words]")
+
+      # On a Room with a Chronicle: opening tap does NOT play prologue, but Play the Prologue is present
+      chronicle_slug = open_room()
+      room = Rooms.Store.get_room(chronicle_slug)
+      Thereish.Repo.insert!(%Thereish.Chronicle.Page{
+        room_id: room.id,
+        opened_at: DateTime.utc_now(),
+        closed_at: DateTime.utc_now(),
+        closed_because: "meld",
+        document: %{"bookends" => ["lantern", "harbour"]},
+        melded: true
+      })
+
+      {:ok, stage_c, _} = live(build_conn(), ~p"/r/#{chronicle_slug}/stage")
+      tap_for_sound(stage_c)
+      refute_push_event(stage_c, "foley:prologue", %{})
+      refute has_element?(stage_c, "[data-role=prologue-words]")
+      assert has_element?(stage_c, "[data-role=play-prologue]", "Play the Prologue")
+
+      # And clicking Play the Prologue plays it on request
+      stage_c |> element("[data-role=play-prologue]") |> render_click()
+      assert_push_event(stage_c, "foley:prologue", %{})
+      assert has_element?(stage_c, "[data-role=prologue-words]")
+    end
+
+    test "Skip ends it for the Room and the Room fact is set; a later open does not play it" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      tap_for_sound(stage)
+
+      assert has_element?(stage, "[data-role=prologue-skip]")
+      stage |> element("[data-role=prologue-skip]") |> render_click()
+
+      refute has_element?(stage, "[data-role=prologue-words]")
+      assert Rooms.get_room(slug).prologue_skipped == true
+
+      # Later open of stage does not play it from the tap
+      {:ok, stage2, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      tap_for_sound(stage2)
+      refute_push_event(stage2, "foley:prologue", %{})
+      refute has_element?(stage2, "[data-role=prologue-words]")
+    end
+
+    test "phone-only Room shows the prologue card on the waiting screen, and skip removes it" do
+      slug = open_room()
+      {:ok, phone, _} = live(phone(slug))
+      join(phone, "Melissa")
+
+      # Phone-only room shows the prologue card on waiting screen
+      assert has_element?(phone, "[data-role=prologue-card]")
+      assert has_element?(phone, "[data-role=prologue-words]", "Welcome to Thereish")
+      assert has_element?(phone, "[data-role=prologue-skip]", "Skip")
+
+      # Skip removes it and sets Room fact
+      phone |> element("[data-role=prologue-skip]") |> render_click()
+      refute has_element?(phone, "[data-role=prologue-card]")
+      assert Rooms.get_room(slug).prologue_skipped == true
+
+      # Stage present: phone does not show the card
+      slug_with_stage = open_room()
+      {:ok, _stage, _} = live(build_conn(), ~p"/r/#{slug_with_stage}/stage")
+      {:ok, phone2, _} = live(phone(slug_with_stage))
+      join(phone2, "Jacob")
+      refute has_element?(phone2, "[data-role=prologue-card]")
+
+      # Room with a Chronicle: phone does not show the card
+      slug_with_chronicle = open_room()
+      room_c = Rooms.Store.get_room(slug_with_chronicle)
+      Thereish.Repo.insert!(%Thereish.Chronicle.Page{
+        room_id: room_c.id,
+        opened_at: DateTime.utc_now(),
+        closed_at: DateTime.utc_now(),
+        closed_because: "meld",
+        document: %{"bookends" => ["lantern", "harbour"]},
+        melded: true
+      })
+      {:ok, phone3, _} = live(phone(slug_with_chronicle))
+      join(phone3, "Nora")
+      refute has_element?(phone3, "[data-role=prologue-card]")
+    end
+  end
 end
+
