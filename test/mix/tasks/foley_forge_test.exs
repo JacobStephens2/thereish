@@ -152,4 +152,22 @@ defmodule Mix.Tasks.Foley.ForgeTest do
       assert output =~ brief.target_filename
     end
   end
+
+  @tag :tmp_dir
+  test "writes three Prologue readings from the Fake", %{tmp_dir: tmp_dir} do
+    output =
+      capture_io(fn ->
+        Mix.Tasks.Foley.Forge.run([
+          "--prologue",
+          "--dest",
+          tmp_dir
+        ])
+      end)
+
+    assert File.exists?(Path.join(tmp_dir, "prologue-1.mp3"))
+    assert File.exists?(Path.join(tmp_dir, "prologue-2.mp3"))
+    assert File.exists?(Path.join(tmp_dir, "prologue-3.mp3"))
+    assert output =~ "Prologue"
+  end
 end
+

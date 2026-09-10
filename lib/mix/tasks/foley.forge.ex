@@ -22,14 +22,16 @@ defmodule Mix.Tasks.Foley.Forge do
     manifest: :string,
     dir: :string,
     dest: :string,
-    only: :string
+    only: :string,
+    prologue: :boolean
   ]
 
   @aliases [
     n: :candidates,
     m: :manifest,
     d: :dir,
-    o: :only
+    o: :only,
+    p: :prologue
   ]
 
   @default_dir ".scratch/foley/candidates"
@@ -42,16 +44,50 @@ defmodule Mix.Tasks.Foley.Forge do
     {opts, _argv, _errors} = OptionParser.parse(args, switches: @switches, aliases: @aliases)
 
     dir = Keyword.get(opts, :dir, @default_dir)
-    dest = Keyword.get(opts, :dest, @default_dest)
+    dest = Keyword.get(opts, :dest) || Keyword.get(opts, :dir, @default_dest)
     manifest_path = Keyword.get(opts, :manifest)
+    only = Keyword.get(opts, :only)
 
-    if manifest_path do
-      copy_manifest(manifest_path, dir, dest)
-    else
-      n = Keyword.get(opts, :candidates, 4)
-      only = Keyword.get(opts, :only)
-      forge_all(n, dir, only)
+    cond do
+      Keyword.get(opts, :prologue, false) or only == "prologue" ->
+        forge_prologue(dest)
+
+      manifest_path ->
+        copy_manifest(manifest_path, dir, dest)
+
+      true ->
+        n = Keyword.get(opts, :candidates, 4)
+        forge_all(n, dir, only)
     end
+  end
+
+  defp forge_prologue(dest) do
+    File.mkdir_p!(dest)
+    script = Thereish.Foley.Prologue.script()
+    filenames = Thereish.Foley.Prologue.filenames()
+
+    Mix.shell().info("=== Foley Forge: Generating 3 Prologue readings ===")
+    Mix.shell().info("Destination: #{dest}\n")
+
+    {total_spend, _} =
+      Enum.reduce(filenames, {0.0, 1}, fn filename, {acc_spend, idx} ->
+        Mix.shell().info("--> Synthesising Prologue reading #{idx} (#{filename})")
+
+        case Steward.speak(script) do
+          {:ok, %{audio: audio} = answer} ->
+            path = Path.join(dest, filename)
+            File.write!(path, audio)
+            Mix.shell().info("    Written: #{path}")
+            cost = (answer[:meta] && answer.meta[:cost_usd]) || 0.0
+            {acc_spend + cost, idx + 1}
+
+          {:error, reason} ->
+            Mix.raise("Failed synthesising Prologue reading #{idx}: #{inspect(reason)}")
+        end
+      end)
+
+    Mix.shell().info("\n=== Prologue Generation Complete ===")
+    Mix.shell().info("Total spend: $#{:erlang.float_to_binary(total_spend, decimals: 4)}")
   end
 
   defp forge_all(n, dir, only) do

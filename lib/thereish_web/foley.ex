@@ -32,6 +32,7 @@ defmodule ThereishWeb.Foley do
         |> maybe_push_beat(old_room, new_room)
         |> maybe_push_sting(old_room, new_room)
         |> maybe_push_ending(old_room, new_room)
+        |> maybe_push_prologue(old_room, new_room)
 
       true ->
         socket
@@ -216,6 +217,27 @@ defmodule ThereishWeb.Foley do
 
       true ->
         nil
+    end
+  end
+
+  defp maybe_push_prologue(socket, old_room, new_room) do
+    prologue_started? =
+      not is_nil(new_room[:prologue]) and
+        (is_nil(old_room) or is_nil(old_room[:prologue]) or !Map.get(old_room, :speaker?))
+
+    prologue_ended? =
+      is_nil(new_room[:prologue]) and
+        not is_nil(old_room) and not is_nil(old_room[:prologue])
+
+    cond do
+      prologue_started? ->
+        push_event(socket, "foley:prologue", %{path: new_room.prologue.reading})
+
+      prologue_ended? ->
+        push_event(socket, "foley:stop_prologue", %{})
+
+      true ->
+        socket
     end
   end
 
