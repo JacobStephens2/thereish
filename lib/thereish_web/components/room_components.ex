@@ -1869,6 +1869,10 @@ defmodule ThereishWeb.RoomComponents do
           })
 
           this.playCommitTick = async () => {
+            // A device whose sound has never been opened by a gesture attempts
+            // nothing: an untapped Stage stays silent rather than reaching for
+            // an audio context the browser will only suspend.
+            if (!this.ctx) return
             await this.resumeAudio()
             if (!this.ctx) return
             const buf = await this.fetchBuffer("/audio/commit-tick.mp3")

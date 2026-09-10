@@ -670,7 +670,7 @@ defmodule ThereishWeb.RoomLiveTest do
       refute_push_event(stage, "foley:page", %{})
       assert has_element?(stage, "[data-role=tap-for-sound]")
 
-      stage |> element("[data-role=tap-for-sound]") |> render_click()
+      tap_for_sound(stage)
 
       refute is_nil(Rooms.get_room(slug).speaker)
       assert_push_event(stage, "foley:page", %{kind: "repertoire", path: path})
@@ -690,11 +690,14 @@ defmodule ThereishWeb.RoomLiveTest do
 
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
-      # Mid-night the Code has moved to the header, but the tap is still offered.
+      # Mid-night the Code has moved to the header, but the tap is still offered,
+      # and until it is taken the Stage is sent nothing to play.
       assert has_element?(stage, "header [data-role=tap-for-sound]")
       refute has_element?(stage, "[data-role=stage-code][data-size=large]")
+      assert is_nil(Rooms.get_room(slug).speaker)
+      refute_push_event(stage, "foley:page", %{})
 
-      stage |> element("[data-role=tap-for-sound]") |> render_click()
+      tap_for_sound(stage)
 
       assert_push_event(stage, "foley:page", %{path: path})
       assert is_binary(path)
