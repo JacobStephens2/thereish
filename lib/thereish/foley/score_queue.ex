@@ -134,19 +134,7 @@ defmodule Thereish.Foley.ScoreQueue do
           on_start.()
         end
 
-        on_playable =
-          case Keyword.get(job.opts, :on_playable) do
-            cb when is_function(cb, 1) ->
-              cb
-
-            _ ->
-              fn playable ->
-                send(job.room, {:playable, job.page_ref, {:ok, playable}})
-              end
-          end
-
-        opts = Keyword.put(job.opts, :on_playable, on_playable)
-        Steward.score(job.gives, opts)
+        Steward.score(job.gives, job.opts)
       end)
 
     %{state | current_job: Map.put(job, :task, task)}

@@ -128,9 +128,7 @@ defmodule ThereishWeb.Foley do
   end
 
   defp build_track_payload(item, kind) do
-    stream? = !!(item[:stream] || get_in(item, [:meta, :stream]))
-    payload = %{path: item.path, title: item[:title], kind: to_string(kind)}
-    if stream?, do: Map.put(payload, :stream, true), else: payload
+    %{path: item.path, title: item[:title], kind: to_string(kind)}
   end
 
   defp repertoire_payload(room) do

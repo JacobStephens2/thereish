@@ -50,69 +50,6 @@ defmodule Thereish.Steward.ScoreTest do
       assert {:error, :music_unavailable} = Fake.score(@gives)
     end
 
-    test "music_mode: :stream calls on_playable callback with stream track, then returns final track" do
-      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
-
-      Application.put_env(
-        :thereish,
-        :steward,
-        Keyword.put(
-          Application.get_env(:thereish, :steward, []),
-          :fake,
-          Keyword.merge(fake_config, music_mode: :stream)
-        )
-      )
-
-      on_exit(fn ->
-        Application.put_env(
-          :thereish,
-          :steward,
-          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
-        )
-      end)
-
-      test_pid = self()
-      on_playable = fn track -> send(test_pid, {:playable_received, track}) end
-
-      assert {:ok, final_track} = Fake.score(@gives, on_playable: on_playable)
-      assert final_track.format == :mp3
-      assert String.ends_with?(final_track.path, ".mp3")
-
-      assert_receive {:playable_received, stream_track}
-      assert stream_track.format == :aac
-      assert stream_track.stream == true
-      assert String.starts_with?(stream_track.path, "https://stream.mureka.ai/live/fake-")
-    end
-
-    test "music_mode: :stream with music_fail_after_stream: true calls on_playable and fails" do
-      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
-
-      Application.put_env(
-        :thereish,
-        :steward,
-        Keyword.put(
-          Application.get_env(:thereish, :steward, []),
-          :fake,
-          Keyword.merge(fake_config, music_mode: :stream, music_fail_after_stream: true)
-        )
-      )
-
-      on_exit(fn ->
-        Application.put_env(
-          :thereish,
-          :steward,
-          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
-        )
-      end)
-
-      test_pid = self()
-      on_playable = fn track -> send(test_pid, {:playable_received, track}) end
-
-      assert {:error, :stream_generation_failed} = Fake.score(@gives, on_playable: on_playable)
-      assert_receive {:playable_received, stream_track}
-      assert stream_track.stream == true
-    end
-
     test "score_failure builds failure provenance with provider and model" do
       meta = Steward.score_failure(:timeout)
       assert meta.cost_usd == 0.0
@@ -243,33 +180,32 @@ defmodule Thereish.Steward.ScoreTest do
       assert {:error, _} = Live.score(fresh_gives)
     end
 
-    test "cache miss invokes on_playable callback when Mureka stream_url arrives, then caches final MP3" do
+    test "cache miss generates track via Mureka non-stream request, then caches final MP3" do
       poll_count = Agent.start_link(fn -> 0 end) |> elem(1)
       test_pid = self()
 
       Req.Test.stub(Mureka, fn conn ->
         case {conn.method, conn.request_path} do
           {"POST", "/v1/instrumental/generate"} ->
+            {:ok, body, conn} = Plug.Conn.read_body(conn)
+            decoded = Jason.decode!(body)
+            send(test_pid, {:mureka_generate_called, decoded})
+
             conn
             |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_live_stream_1"}))
+            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_live_1"}))
 
-          {"GET", "/v1/instrumental/query/task_live_stream_1"} ->
+          {"GET", "/v1/instrumental/query/task_live_1"} ->
             step = Agent.get_and_update(poll_count, &{&1 + 1, &1 + 1})
 
             response_data =
               case step do
                 1 ->
-                  %{
-                    "id" => "task_live_stream_1",
-                    "status" => "streaming",
-                    "stream_url" => "https://stream.mureka.ai/live/live1.aac",
-                    "choices" => [%{"stream_url" => "https://stream.mureka.ai/live/live1.aac"}]
-                  }
+                  %{"id" => "task_live_1", "status" => "preparing"}
 
                 _ ->
                   %{
-                    "id" => "task_live_stream_1",
+                    "id" => "task_live_1",
                     "status" => "succeeded",
                     "choices" => [%{"url" => "https://cdn.mureka.ai/audio/live1_final.mp3"}]
                   }
@@ -287,16 +223,13 @@ defmodule Thereish.Steward.ScoreTest do
       end)
 
       gives = ["crystal cave", "ancient flute"]
-      on_playable = fn playable -> send(test_pid, {:playable_received, playable}) end
 
-      assert {:ok, track} = Live.score(gives, on_playable: on_playable)
+      assert {:ok, track} = Live.score(gives)
       assert String.starts_with?(track.path, "/media/tracks/")
       assert track.format == :mp3
 
-      assert_receive {:playable_received, playable}
-      assert playable.path == "https://stream.mureka.ai/live/live1.aac"
-      assert playable.format == :aac
-      assert playable.stream == true
+      assert_receive {:mureka_generate_called, body}
+      refute Map.has_key?(body, "stream")
 
       # Verified final file cached
       assert {:ok, cached} = TrackCache.get(gives)

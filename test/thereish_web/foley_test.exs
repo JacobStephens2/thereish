@@ -370,7 +370,7 @@ defmodule ThereishWeb.FoleyTest do
              } in events
     end
 
-    test "pushes foley:page with stream: true when playable early stream lands" do
+    test "pushes foley:page with kind: vamp when vamp lands" do
       socket = test_socket()
       loop = hd(Thereish.Foley.Loops.all())
 
@@ -379,6 +379,7 @@ defmodule ThereishWeb.FoleyTest do
         speaker?: true,
         music: "page",
         loop: loop,
+        playing: %{path: loop.path, title: loop.name, kind: "repertoire"},
         track: nil
       }
 
@@ -387,12 +388,12 @@ defmodule ThereishWeb.FoleyTest do
         speaker?: true,
         music: "page",
         loop: loop,
-        track: %{
-          path: "https://stream.mureka.ai/live/stream123.aac",
-          title: "Summer Camp · Viking Beaches",
-          stream: true,
-          format: :aac
-        }
+        playing: %{
+          path: "/media/vamps/vamp-123.mp3",
+          title: nil,
+          kind: "vamp"
+        },
+        track: nil
       }
 
       result = Foley.push_foley_events(socket, old_room, new_room)
@@ -401,33 +402,37 @@ defmodule ThereishWeb.FoleyTest do
       assert {
                "foley:page",
                %{
-                 path: "https://stream.mureka.ai/live/stream123.aac",
-                 title: "Summer Camp · Viking Beaches",
-                 kind: "track",
-                 stream: true
+                 path: "/media/vamps/vamp-123.mp3",
+                 title: nil,
+                 kind: "vamp"
                }
              } in events
     end
 
-    test "pushes foley:page when final track lands replacing stream" do
+    test "pushes foley:page when final track lands replacing vamp" do
       socket = test_socket()
 
       old_room = %{
         phase: :bridging,
         speaker?: true,
         music: "page",
-        track: %{
-          path: "https://stream.mureka.ai/live/stream123.aac",
-          title: "Summer Camp · Viking Beaches",
-          stream: true,
-          format: :aac
-        }
+        playing: %{
+          path: "/media/vamps/vamp-123.mp3",
+          title: nil,
+          kind: "vamp"
+        },
+        track: nil
       }
 
       new_room = %{
         phase: :bridging,
         speaker?: true,
         music: "page",
+        playing: %{
+          path: "/media/tracks/final.mp3",
+          title: "Summer Camp · Viking Beaches",
+          kind: "track"
+        },
         track: %{
           path: "/media/tracks/final.mp3",
           title: "Summer Camp · Viking Beaches",

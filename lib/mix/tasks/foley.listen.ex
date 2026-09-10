@@ -290,151 +290,16 @@ defmodule Mix.Tasks.Foley.Listen do
     end
   end
 
-  defp measure_live_stream(dir, prompt, deadline_ms, probe?) do
-    key = System.get_env("MUREKA_API_KEY")
-
-    if is_nil(key) or key == "" do
-      Mix.shell().error("  Missing MUREKA_API_KEY; skipping stream bed")
-      %{error: "Missing MUREKA_API_KEY", time_to_first_audible_ms: nil}
-    else
-      start_time = System.monotonic_time(:millisecond)
-
-      case Mureka.stream(%{
-             prompt: prompt,
-             model: "auto",
-             n: 1,
-             api_key: key,
-             deadline_ms: deadline_ms
-           }) do
-        {:ok, stream_info} ->
-          stream_url_elapsed = System.monotonic_time(:millisecond) - start_time
-
-          Mix.shell().info(
-            "  stream_url obtained in #{stream_url_elapsed} ms: #{stream_info.stream_url}"
-          )
-
-          File.write!(Path.join(dir, "02-mureka-stream.url"), stream_info.stream_url <> "\n")
-
-          # Probe the stream URL
-          probe_result =
-            if probe? and is_binary(stream_info.stream_url) do
-              probe_stream_url(stream_info.stream_url, start_time, dir)
-            else
-              %{
-                ttfb_ms: stream_url_elapsed,
-                content_type: "unknown",
-                playable: true,
-                bytes: 0,
-                headers: %{}
-              }
-            end
-
-          %{
-            name: "Mureka stream (stream: true)",
-            provider: "Mureka",
-            model: stream_info.model,
-            status: stream_info.status,
-            task_id: stream_info.task_id,
-            stream_url: stream_info.stream_url,
-            final_url: stream_info.url,
-            time_to_stream_url_ms: stream_url_elapsed,
-            time_to_first_audible_ms: probe_result.ttfb_ms || stream_url_elapsed,
-            music_meta_latency_ms: stream_url_elapsed,
-            format: probe_result.content_type,
-            codec: probe_result.content_type,
-            playable: probe_result.playable,
-            cost_usd: stream_info.cost_usd,
-            bytes: probe_result.bytes,
-            file: "02-mureka-stream.aac",
-            probe: probe_result,
-            notes:
-              "stream_url received at #{stream_url_elapsed} ms; probe TTFB #{probe_result.ttfb_ms} ms."
-          }
-
-        {:error, reason} ->
-          Mix.shell().error("  Mureka stream failed: #{inspect(reason)}")
-
-          %{
-            name: "Mureka stream (stream: true)",
-            provider: "Mureka",
-            status: "failed",
-            error: inspect(reason),
-            time_to_first_audible_ms: nil,
-            playable: false
-          }
-      end
-    end
-  end
-
-  defp probe_stream_url(url, start_time, dir) do
-    Mix.shell().info("  Probing stream URL for first playable audio chunk...")
-
-    into_fun = fn {:data, chunk}, {req, resp} ->
-      {:halt, {req, Map.update(resp, :body, chunk, &(&1 <> chunk))}}
-    end
-
-    req_opts = [
-      url: url,
-      into: into_fun,
-      receive_timeout: 10_000,
-      retry: false
-    ]
-
-    case Req.get(req_opts) do
-      {:ok, %Req.Response{status: status, body: body, headers: headers}}
-      when status in [200, 206] ->
-        ttfb = System.monotonic_time(:millisecond) - start_time
-        content_type = get_header(headers, "content-type", "audio/aac")
-        bytes_count = byte_size(body || "")
-
-        Mix.shell().info(
-          "  Probe response: HTTP #{status}, content-type: #{content_type}, received first chunk of #{bytes_count} bytes in #{ttfb} ms"
-        )
-
-        if bytes_count > 0 do
-          File.write!(Path.join(dir, "02-mureka-stream.aac"), body)
-        end
-
-        %{
-          status: status,
-          ttfb_ms: ttfb,
-          content_type: content_type,
-          bytes: bytes_count,
-          playable: bytes_count > 0 and String.contains?(content_type, "audio"),
-          headers: Map.new(headers)
-        }
-
-      {:ok, %Req.Response{status: status, headers: headers}} ->
-        Mix.shell().warn("  Probe returned HTTP #{status}")
-
-        %{
-          status: status,
-          ttfb_ms: System.monotonic_time(:millisecond) - start_time,
-          content_type: get_header(headers, "content-type", "none"),
-          bytes: 0,
-          playable: false,
-          headers: Map.new(headers)
-        }
-
-      {:error, reason} ->
-        Mix.shell().error("  Probe failed: #{inspect(reason)}")
-
-        %{
-          status: :error,
-          ttfb_ms: nil,
-          content_type: "error",
-          bytes: 0,
-          playable: false,
-          error: inspect(reason)
-        }
-    end
+  defp measure_live_stream(_dir, _prompt, _deadline_ms, _probe?) do
+    Mix.shell().info("  Mureka stream removed in favor of ElevenLabs vamp")
+    %{skipped: "Mureka stream removed in favor of ElevenLabs vamp", time_to_first_audible_ms: nil}
   end
 
   defp measure_live_eleven(dir, prompt) do
     key = System.get_env("ELEVENLABS_API_KEY")
 
     if is_nil(key) or key == "" do
-      Mix.shell().error("  Missing ELEVENLABS_API_KEY; skipping ElevenLabs loop bed")
+      Mix.shell().error("  Missing ELEVENLABS_API_KEY; skipping ElevenLabs Vamp")
       %{error: "Missing ELEVENLABS_API_KEY", time_to_first_audible_ms: nil}
     else
       start_time = System.monotonic_time(:millisecond)
@@ -483,16 +348,6 @@ defmodule Mix.Tasks.Foley.Listen do
           }
       end
     end
-  end
-
-  defp get_header(headers, name, default) do
-    target = String.downcase(name)
-
-    Enum.find_value(headers, default, fn {k, v} ->
-      if String.downcase(to_string(k)) == target do
-        if is_list(v), do: Enum.join(v, ", "), else: to_string(v)
-      end
-    end)
   end
 
   # ---------------------------------------------------------------------------
