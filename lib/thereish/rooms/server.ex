@@ -696,35 +696,81 @@ defmodule Thereish.Rooms.Server do
 
   def handle_info({:playable, _page_ref, _result}, state), do: {:noreply, state}
 
-  def handle_info({:scored, page_ref, result}, %{current_page_ref: page_ref} = state) do
+  def handle_info({:scored, page_ref, {:ok, track}}, state) do
+    current_page? = state[:current_page_ref] == page_ref
+
+    title =
+      if current_page? do
+        track[:title] || state[:current_title]
+      else
+        track[:title]
+      end
+
+    title_meta = if current_page?, do: state[:title_meta] || %{}, else: %{}
+    title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
+    track = if title, do: Map.put(track, :title, title), else: track
+
+    attrs =
+      [path: track.path] ++
+        if(title, do: [title: title, title_cost_usd: title_cost], else: [])
+
+    base_meta =
+      if current_page? do
+        case state[:music_meta] do
+          %{} = m when not is_map_key(m, :failure) and not is_map_key(m, "failure") -> m
+          _ -> track[:meta] || %{}
+        end
+      else
+        track[:meta] || %{}
+      end
+
+    music_meta = build_music_meta(base_meta, attrs)
+
+    page_id =
+      (state[:recorded_pages] || %{})[page_ref] ||
+        if current_page?, do: state[:current_page_id]
+
+    if not is_nil(page_id) do
+      Chronicle.replace_page_music(page_id, music_meta)
+    end
+
+    if current_page? do
+      log_music_event(state, page_ref, "track landed")
+      state = Map.put(state, :score_task_running, false)
+
+      state =
+        if Thereish.Game.phase(state.game) == :closed do
+          state
+        else
+          apply_track_and_title(state, track, title, title_meta, page_ref)
+        end
+
+      broadcast(state.room.slug)
+      {:noreply, state}
+    else
+      if not is_nil(page_id), do: broadcast(state.room.slug)
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:scored, page_ref, {:error, reason}}, %{current_page_ref: page_ref} = state) do
     state = Map.put(state, :score_task_running, false)
 
     if Thereish.Game.phase(state.game) == :closed do
       {:noreply, state}
     else
-      case result do
-        {:ok, track} ->
-          log_music_event(state, page_ref, "track landed")
-          title = track[:title] || state[:current_title]
-          title_meta = state[:title_meta] || %{}
-          state = apply_track_and_title(state, track, title, title_meta, page_ref)
-          broadcast(state.room.slug)
-          {:noreply, state}
+      log_music_event(state, page_ref, {:failure, reason})
+      failure_meta = Thereish.Steward.score_failure(reason)
 
-        {:error, reason} ->
-          log_music_event(state, page_ref, {:failure, reason})
-          failure_meta = Thereish.Steward.score_failure(reason)
+      state =
+        if state[:track_page_ref] == page_ref do
+          %{state | current_track: nil, track_page_ref: nil, music_meta: failure_meta}
+        else
+          %{state | music_meta: failure_meta}
+        end
 
-          state =
-            if state[:track_page_ref] == page_ref do
-              %{state | current_track: nil, track_page_ref: nil, music_meta: failure_meta}
-            else
-              %{state | music_meta: failure_meta}
-            end
-
-          broadcast(state.room.slug)
-          {:noreply, state}
-      end
+      broadcast(state.room.slug)
+      {:noreply, state}
     end
   end
 
@@ -738,7 +784,13 @@ defmodule Thereish.Rooms.Server do
       [path: track.path] ++
         if(title, do: [title: title, title_cost_usd: title_cost], else: [])
 
-    music_meta = build_music_meta(state.music_meta || track[:meta], attrs)
+    base_meta =
+      case state[:music_meta] do
+        %{} = m when not is_map_key(m, :failure) and not is_map_key(m, "failure") -> m
+        _ -> track[:meta] || %{}
+      end
+
+    music_meta = build_music_meta(base_meta, attrs)
 
     state = %{state | current_track: track, music_meta: music_meta}
     if page_ref, do: Map.put(state, :track_page_ref, page_ref), else: state
@@ -980,12 +1032,13 @@ defmodule Thereish.Rooms.Server do
     arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
 
-    # A Page that is safely in the log gets written about. It happens somewhere
-    # else and the Room does not wait: nobody at the couch waits for a
-    # paragraph (`Thereish.Scribe`).
     Scribe.write_about(state.room, page)
 
-    Map.put(state, :current_page_id, page.id)
+    recorded_pages = Map.put(state[:recorded_pages] || %{}, state.current_page_ref, page.id)
+
+    state
+    |> Map.put(:current_page_id, page.id)
+    |> Map.put(:recorded_pages, recorded_pages)
   rescue
     error ->
       Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
@@ -1290,15 +1343,16 @@ defmodule Thereish.Rooms.Server do
     code = state.room.slug
     log_music_event(code, page_ref, "score queued", gives_landed_at)
 
-    start_music_task(state, room, page_ref, :score_task_running, :scored, fn ->
-      log_music_event(code, page_ref, "score started", gives_landed_at)
+    Thereish.Foley.ScoreQueue.enqueue(room, page_ref, gives,
+      on_start: fn ->
+        log_music_event(code, page_ref, "score started", gives_landed_at)
+      end,
+      on_playable: fn playable ->
+        send(room, {:playable, page_ref, {:ok, playable}})
+      end
+    )
 
-      Steward.score(gives,
-        on_playable: fn playable ->
-          send(room, {:playable, page_ref, {:ok, playable}})
-        end
-      )
-    end)
+    Map.put(state, :score_task_running, true)
   end
 
   defp start_title_task(state, room, page_ref, gives) do

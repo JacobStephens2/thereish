@@ -14,6 +14,7 @@ defmodule Thereish.DeployEnvTest do
   test "docker-compose.app.yml mounts the media directory into the container" do
     content = File.read!(@compose_app_yml)
 
-    assert content =~ ~r/volumes:\s*\n\s*-\s*\.\/media:\/app\/lib\/thereish-[^\/]+\/priv\/static\/media/
+    assert content =~
+             ~r/volumes:\s*\n\s*-\s*\.\/media:\/app\/lib\/thereish-[^\/]+\/priv\/static\/media/
   end
 end
