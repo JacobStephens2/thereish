@@ -124,7 +124,7 @@ for _ in $(seq 1 30); do
   # here, and printing it every two seconds makes a normal deploy look broken.
   CHECK_HTML=$(curl -fs --max-time 5 "https://${HOST}/check" || true)
   if echo "${CHECK_HTML}" | grep -q 'data-check="socket"' && \
-     echo "${CHECK_HTML}" | grep -q 'data-check="database">Database: connected' && \
+     echo "${CHECK_HTML}" | grep -q 'data-check="database" data-status="connected"' && \
      curl -fs --max-time 5 "https://${HOST}/" > /dev/null; then
     echo "== Live: https://${HOST}/"
     exit 0

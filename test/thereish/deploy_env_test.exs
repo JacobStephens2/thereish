@@ -24,7 +24,7 @@ defmodule Thereish.DeployEnvTest do
     content = File.read!(@bin_deploy)
 
     assert content =~ ~s(grep -q 'data-check="socket"')
-    assert content =~ ~s(grep -q 'data-check="database">Database: connected')
+    assert content =~ ~s(grep -q 'data-check="database" data-status="connected"')
     assert content =~ ~s(curl -fs --max-time 5 "https://${HOST}/")
   end
 end

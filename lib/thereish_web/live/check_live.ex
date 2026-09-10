@@ -66,10 +66,10 @@ defmodule ThereishWeb.CheckLive do
   defp label(:no, _yes_word, no_word), do: no_word
   defp label(:unknown, _yes_word, _no_word), do: "unknown"
 
-  def database_status(repo \\ Thereish.Repo) do
-    case Ecto.Adapters.SQL.query(repo, "SELECT 1") do
+  defp database_status do
+    case Ecto.Adapters.SQL.query(Thereish.Repo, "SELECT 1") do
       {:ok, _} ->
-        case pending_migrations(repo) do
+        case pending_migrations() do
           {:ok, 0} -> :connected
           {:ok, count} -> {:unmigrated, count}
           {:error, _} -> :disconnected
@@ -82,9 +82,9 @@ defmodule ThereishWeb.CheckLive do
     _ -> :disconnected
   end
 
-  def pending_migrations(repo \\ Thereish.Repo) do
+  defp pending_migrations do
     count =
-      repo
+      Thereish.Repo
       |> Ecto.Migrator.migrations()
       |> Enum.count(fn {status, _version, _name} -> status == :down end)
 
@@ -93,9 +93,13 @@ defmodule ThereishWeb.CheckLive do
     e -> {:error, e}
   end
 
-  def database_label(:connected), do: "connected"
-  def database_label({:unmigrated, count}), do: "unmigrated (#{count} pending)"
-  def database_label(:disconnected), do: "disconnected"
+  defp database_state(:connected), do: "connected"
+  defp database_state({:unmigrated, _count}), do: "unmigrated"
+  defp database_state(:disconnected), do: "disconnected"
+
+  defp database_label(:connected), do: "connected"
+  defp database_label({:unmigrated, count}), do: "unmigrated (#{count} pending)"
+  defp database_label(:disconnected), do: "disconnected"
 
   @impl true
   def render(assigns) do
@@ -116,7 +120,7 @@ defmodule ThereishWeb.CheckLive do
         </div>
         <div>
           <dt class="sr-only">Database</dt>
-          <dd data-check="database">
+          <dd data-check="database" data-status={database_state(@database)}>
             Database: {database_label(@database)}
           </dd>
         </div>
