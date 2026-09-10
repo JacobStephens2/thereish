@@ -290,9 +290,14 @@ deployment's proof of life and nothing game-shaped. It reports four things:
   true over LiveView's long-poll fallback, so a vhost missing
   `upgrade=websocket` would still say "Socket connected" while quietly costing
   a round-trip per message. If this ever reads `LongPoll`, the proxy is broken.
+  If Apache access logs show long-polling bursts, check whether a container restart
+  occurred while tabs were open: dropping the connection during a restart triggers
+  LiveView's client-side `longPollFallbackMs` timer to fall back to long-polling
+  for that tab until hard-refreshed.
 - **Secure context: yes** — pushed back by the browser. Required for the Screen
   Wake Lock the stage view takes in ticket 02.
 - **Screen Wake Lock: available** — whether this browser has the API at all.
+
 
 ## Operating
 
