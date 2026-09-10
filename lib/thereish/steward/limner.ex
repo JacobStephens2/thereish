@@ -18,20 +18,57 @@ defmodule Thereish.Steward.Limner do
   @spec style_brief() :: String.t()
   def style_brief, do: String.trim(@style_brief)
 
+  @palette [
+    "#c4a35a",
+    "#6b3a2a",
+    "#8a9a6a",
+    "#7a1f1f",
+    "#d8c8a0",
+    "#c45c5c"
+  ]
+
+  @doc "The six house colours from the style palette."
+  @spec palette() :: [String.t()]
+  def palette, do: @palette
+
+  @doc "Builds a softened prompt for retrying after a refusal or error."
+  @spec softened_prompt(String.t() | map(), String.t()) :: String.t()
+  def softened_prompt(give, colour) when is_binary(colour) do
+    prompt(give, colour, softened: true)
+  end
+
   @doc """
   Builds the Limner's prompt from one Give and a Seat's colour.
   """
-  @spec prompt(String.t() | map(), String.t()) :: String.t()
-  def prompt(give, colour) when is_binary(colour) do
+  @spec prompt(String.t() | map(), String.t(), keyword()) :: String.t()
+  def prompt(give, colour, opts \\ []) when is_binary(colour) do
     text = Thereish.Steward.Author.give_text(give)
+    softened = Keyword.get(opts, :softened, false)
+    softened_note = if softened, do: " Softened, gentle, and abstract.", else: ""
 
-    "A small square Mask. #{style_brief()} A note of #{colour} in the palette. Setting: #{text}."
+    "A small square Mask. #{style_brief()} A note of #{colour} in the palette.#{softened_note} Setting: #{text}."
   end
 
   @doc "PNG magic number."
   @spec png?(binary()) :: boolean()
   def png?(<<0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, _rest::binary>>), do: true
   def png?(_), do: false
+
+  @doc """
+  Saves mask PNG bytes into the media directory and returns its web URL.
+  """
+  @spec store_mask(binary()) :: %{url: String.t(), path: String.t()}
+  def store_mask(bytes) when is_binary(bytes) do
+    hash = :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
+    filename = "mask-#{hash}.png"
+    dir = Path.join(Thereish.Steward.TrackCache.media_dir(), "masks")
+    File.mkdir_p!(dir)
+    file_path = Path.join(dir, filename)
+    File.write!(file_path, bytes)
+    web_path = "/media/masks/#{filename}"
+
+    %{url: web_path, path: web_path}
+  end
 
   @doc """
   Encodes a solid-colour RGB PNG of `size`×`size` pixels.

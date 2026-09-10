@@ -387,6 +387,10 @@ defmodule Thereish.Steward.Fake do
 
   @impl true
   def draw(give, colour, opts \\ []) do
+    if recipient = config_get(:draw_capture, nil) do
+      send(recipient, {:draw, give, colour, opts})
+    end
+
     delay = draw_delay_ms()
     if delay > 0, do: Process.sleep(delay)
 

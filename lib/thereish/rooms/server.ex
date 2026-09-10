@@ -110,7 +110,8 @@ defmodule Thereish.Rooms.Server do
         music_meta: nil,
         gives_landed_at: nil,
         voice_audio: nil,
-        voice_meta: %{}
+        voice_meta: %{},
+        giving_ref: make_ref()
       }
 
       {:ok, opened(state)}
@@ -214,8 +215,13 @@ defmodule Thereish.Rooms.Server do
 
   def handle_call({:give, seat_id, give}, _from, state) do
     case Game.apply(state.game, {:give_committed, %{seat_id: seat_id, give: give}}) do
-      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      {:ok, game, effects} ->
+        state = advance(state, game, effects)
+        state = start_mask_task(state, seat_id, give)
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -238,6 +244,7 @@ defmodule Thereish.Rooms.Server do
       state
       |> author_answered()
       |> reset_score_state(keep_track: true)
+      |> Map.put(:giving_ref, make_ref())
 
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -258,6 +265,7 @@ defmodule Thereish.Rooms.Server do
           %{state | opened_at: nil, voice_audio: nil, voice_meta: %{}}
           |> Map.put(:current_arm, nil)
           |> Map.put(:current_page_id, nil)
+          |> Map.put(:giving_ref, make_ref())
           |> Map.put(:wait_music, wait_music)
           |> Map.put(:eligible_members, eligible_members)
           |> Map.put(:deal, Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path))
@@ -775,6 +783,61 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_info({:scored, _page_ref, _result}, state), do: {:noreply, state}
+
+  def handle_info({:mask_landed, seat_id, giving_ref, page_ref, result}, state) do
+    current_giving? = is_nil(giving_ref) or state[:giving_ref] == giving_ref
+
+    mask =
+      case result do
+        {:ok, mask_data} when is_map(mask_data) -> Map.delete(mask_data, :bytes)
+        mask_data when is_map(mask_data) -> Map.delete(mask_data, :bytes)
+        :dot -> :dot
+        {:error, _reason} -> :dot
+        _ -> :dot
+      end
+
+    if current_giving? do
+      case Game.apply(state.game, {:mask_landed, %{seat_id: seat_id, mask: mask}}) do
+        {:ok, game, effects} ->
+          state = advance(state, game, effects)
+
+          page_id =
+            (state[:recorded_pages] || %{})[page_ref] ||
+              (state[:recorded_pages] || %{})[state.current_page_ref] ||
+              state[:current_page_id]
+
+          if not is_nil(page_id) do
+            Chronicle.replace_page_masks(page_id, game.masks)
+          end
+
+          {:noreply, state}
+
+        {:error, _reason} ->
+          {:noreply, state}
+      end
+    else
+      page_id = (state[:recorded_pages] || %{})[page_ref]
+
+      if not is_nil(page_id) and is_map(mask) do
+        Chronicle.update_page_mask(page_id, seat_id, mask)
+        broadcast(state.room.slug)
+      end
+
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:mask_landed, seat_id, giving_ref, result}, state) do
+    handle_info({:mask_landed, seat_id, giving_ref, nil, result}, state)
+  end
+
+  def handle_info({:mask_landed, seat_id, result}, state) do
+    handle_info({:mask_landed, seat_id, nil, nil, result}, state)
+  end
+
+  def handle_info({:late_mask, seat_id, mask}, state) do
+    handle_info({:mask_landed, seat_id, nil, nil, {:ok, mask}}, state)
+  end
 
   defp apply_playable_track(state, track, title, title_meta, page_ref) do
     title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
@@ -1381,6 +1444,34 @@ defmodule Thereish.Rooms.Server do
     end)
 
     Map.put(state, running_key, true)
+  end
+
+  defp start_mask_task(state, seat_id, give) do
+    room = self()
+    giving_ref = state[:giving_ref]
+    page_ref = state.current_page_ref
+    colour = Game.seat_colour(state.game, seat_id)
+
+    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
+      try do
+        case Steward.draw(give, colour, size: 512) do
+          {:ok, mask_data} ->
+            mask = Map.delete(mask_data, :bytes)
+            send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:ok, mask}})
+
+          {:error, reason} ->
+            send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, reason}})
+        end
+      rescue
+        error ->
+          send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, error}})
+      catch
+        :exit, reason ->
+          send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, {:exit, reason}}})
+      end
+    end)
+
+    state
   end
 
   defp build_music_meta(base, pairs) do

@@ -327,6 +327,11 @@ defmodule ThereishWeb.RoomLive do
 
   defp display_url(url), do: String.replace_prefix(url, "https://", "")
 
+  defp find_seat_colour(room, seat_id) do
+    seat = Enum.find(room[:seats] || [], &(&1.id == seat_id))
+    (seat && seat[:colour]) || "currentColor"
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -420,9 +425,23 @@ defmodule ThereishWeb.RoomLive do
       <div
         :if={@seat && !@room[:late?] && @room.phase == :giving && @room.your_give != nil}
         data-role="your-give"
-        class="flex flex-col gap-1 text-center"
+        class="flex flex-col items-center gap-1 text-center"
       >
         <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your setting</p>
+        <div :if={@room[:your_mask] && @room.your_mask not in [nil, :dot]} data-role="your-mask" class="my-2">
+          <img
+            src={@room.your_mask[:url] || @room.your_mask["url"] || @room.your_mask}
+            alt="Your Mask"
+            class="size-24 rounded-xl shadow-md object-cover border border-base-300"
+          />
+        </div>
+        <div
+          :if={@room[:your_mask] == :dot}
+          data-role="your-mask-dot"
+          class="my-2 size-5 rounded-full"
+          style={"background-color: #{find_seat_colour(@room, @seat.id)}"}
+        >
+        </div>
         <p class="text-xl font-semibold">{@room.your_give}</p>
         <p class="text-sm opacity-60">
           <%= if @room.gives_in >= length(@room.seats) do %>

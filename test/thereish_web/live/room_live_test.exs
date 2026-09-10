@@ -1245,6 +1245,23 @@ defmodule ThereishWeb.RoomLiveTest do
       refute render(ctx.stage) =~ "Setting:"
     end
 
+    test "giving a setting renders Mask on giver's view and face-down on stage", ctx do
+      give_setting(ctx.mara, "candlelit cathedral")
+
+      eventually(fn ->
+        has_element?(ctx.mara, "[data-role=your-mask]")
+      end)
+
+      # Giver's roster also shows mask thumbnail
+      assert has_element?(ctx.mara, "[data-role=seat-mask]")
+
+      # Stage shows face-down mask for Mara
+      assert has_element?(ctx.stage, "[data-role=mask-face-down]")
+
+      # Jacob's phone does not see Mara's mask
+      refute has_element?(ctx.jacob, "[data-role=your-mask]")
+    end
+
     test "next_page returns to giving phase prefilled with the previous give", ctx do
       play_to_bridging(ctx.mara, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
 
@@ -2843,11 +2860,13 @@ defmodule ThereishWeb.RoomLiveTest do
       refute next_rep_path == p1_track_path
       assert p1_track_path in Thereish.Rooms.Store.list_nevers(Rooms.Store.get_room(ctx.slug).id)
 
-      assert has_element?(
-               ctx.mara,
-               "[data-role=now-playing]",
-               "Now playing: #{next_rep_title} (the Repertoire)"
-             )
+      eventually(fn ->
+        has_element?(
+          ctx.mara,
+          "[data-role=now-playing]",
+          "Now playing: #{next_rep_title} (the Repertoire)"
+        )
+      end)
     end
 
     test "ticket 04: Never on Stage as speaker refuses the member and pushes new foley:page",
@@ -3028,10 +3047,15 @@ defmodule ThereishWeb.RoomLiveTest do
       ctx.stage |> element("[data-role=music-page]") |> render_click()
       eventually(fn -> Rooms.snapshot(ctx.slug, nil).music == "page" end)
 
-      assert_push_event(ctx.stage, "foley:page", %{
-        kind: "track",
-        path: landed_path
-      })
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          kind: "track",
+          path: landed_path
+        },
+        1000
+      )
 
       assert Rooms.snapshot(ctx.slug, nil).playing.kind == "track"
 
@@ -3101,7 +3125,7 @@ defmodule ThereishWeb.RoomLiveTest do
       give_setting(ctx.jacob, "setting sapphire")
       await_phase(ctx.slug, :bridging)
 
-      assert_push_event(ctx.stage, "foley:page", %{kind: "track", path: _})
+      assert_push_event(ctx.stage, "foley:page", %{kind: "track", path: _}, 1000)
 
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairn")

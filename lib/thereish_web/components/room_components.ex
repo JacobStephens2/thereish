@@ -134,13 +134,40 @@ defmodule ThereishWeb.RoomComponents do
         end
       ]}
     >
-      <span
-        class={[
-          "rounded-full bg-primary",
-          if(@mode == :stage and @in_side, do: "size-1.5", else: "size-2")
-        ]}
-        aria-hidden="true"
-      ></span>
+      <%= if @seat[:mask] && @seat.mask not in [nil, :dot, :face_down] do %>
+        <img
+          src={@seat.mask[:url] || @seat.mask["url"] || @seat.mask}
+          alt={@seat.name}
+          data-role="seat-mask"
+          class={[
+            "rounded object-cover border border-base-300",
+            if(@mode == :stage and @in_side, do: "size-3.5", else: "size-5")
+          ]}
+        />
+      <% else %>
+        <%= if @seat[:mask] == :face_down do %>
+          <span
+            data-role="mask-face-down"
+            class={[
+              "rounded border border-primary/40 bg-base-300 flex items-center justify-center text-[10px] opacity-70",
+              if(@mode == :stage and @in_side, do: "size-3", else: "size-4")
+            ]}
+            title="Mask face down"
+          >
+            🂠
+          </span>
+        <% else %>
+          <span
+            data-role="seat-colour-dot"
+            class={[
+              "rounded-full",
+              if(@mode == :stage and @in_side, do: "size-1.5", else: "size-2")
+            ]}
+            style={"background-color: #{@seat[:colour] || "var(--color-primary, currentColor)"}"}
+            aria-hidden="true"
+          ></span>
+        <% end %>
+      <% end %>
       <span class={if @mode == :stage or @in_side, do: "font-medium", else: ""}>
         {@seat.name}
       </span>
