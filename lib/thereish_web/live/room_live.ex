@@ -647,7 +647,7 @@ defmodule ThereishWeb.RoomLive do
       data-role="speaker-bar"
       class="flex flex-col gap-2 rounded-lg border border-base-300 px-4 py-2"
     >
-      <div class="flex items-center justify-between">
+      <div data-role="bar-controls" class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <button
             type="button"
@@ -699,7 +699,7 @@ defmodule ThereishWeb.RoomLive do
         {@room.quip}
       </p>
       <p class="mt-2 text-center text-sm opacity-70">
-        Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.
+        <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
       </p>
       <div class="mt-4">
         <.button navigate={~p"/r/#{@code}/stage"} data-role="make-stage" class="btn-sm text-xs">
