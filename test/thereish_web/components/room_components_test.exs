@@ -501,28 +501,57 @@ defmodule ThereishWeb.RoomComponentsTest do
   end
 
   describe "foley components" do
-    test "foley_switches renders voice switch and three-way music control on any view" do
-      room_with_speaker = %{speaker?: true, voice: true, music: "page"}
+    test "foley_switches renders voice switch only on speaker, and quips switch on any view" do
+      room_with_speaker = %{speaker?: true, quips: true, music: "page"}
       html = render_component(&foley_switches/1, room: room_with_speaker)
       assert html =~ ~s(data-role="voice-switch")
+      assert html =~ ~s(data-role="quips-switch")
       assert html =~ ~s(data-role="music-control")
       assert html =~ "Voice"
+      assert html =~ "Quips"
       assert html =~ "Off"
       assert html =~ "House"
       assert html =~ "This Page"
       refute html =~ "House loop"
       refute html =~ "Written for this Page"
 
-      # Also renders on a room without speaker
-      room_without_speaker = %{speaker?: false, voice: false, music: "off"}
+      # Voice switch does NOT render without speaker, but Quips switch does
+      room_without_speaker = %{speaker?: false, quips: false, music: "off"}
       html_without = render_component(&foley_switches/1, room: room_without_speaker)
-      assert html_without =~ ~s(data-role="voice-switch")
+      refute html_without =~ ~s(data-role="voice-switch")
+      refute html_without =~ "Voice"
+      assert html_without =~ ~s(data-role="quips-switch")
+      assert html_without =~ "Quips"
       assert html_without =~ ~s(data-role="music-control")
       assert html_without =~ "Off"
       assert html_without =~ "House"
       assert html_without =~ "This Page"
       refute html_without =~ "House loop"
       refute html_without =~ "Written for this Page"
+    end
+
+    test "reveal quip shows when quips is true and is hidden when quips is false" do
+      reveal_data = %{
+        closeness: 85,
+        band: :meld,
+        quip: "Two minds think alike.",
+        bridges: [
+          %{seat_id: "s1", name: "Melissa", bridge: "cairn"},
+          %{seat_id: "s2", name: "Jacob", bridge: "cairn"}
+        ]
+      }
+
+      html_on =
+        render_component(&reveal/1, room: %{reveal: reveal_data, quips: true}, mode: :stage)
+
+      assert html_on =~ ~s(data-role="quip")
+      assert html_on =~ "Two minds think alike."
+
+      html_off =
+        render_component(&reveal/1, room: %{reveal: reveal_data, quips: false}, mode: :stage)
+
+      refute html_off =~ ~s(data-role="quip")
+      refute html_off =~ "Two minds think alike."
     end
 
     test "foley_switches renders Next button only when speaker? and next? are both true" do
@@ -647,9 +676,16 @@ defmodule ThereishWeb.RoomComponentsTest do
         resume() { return Promise.resolve(); }
       }
 
+      const storage = { "foley:voice": "on" };
+      global.localStorage = {
+        getItem: (k) => storage[k] || null,
+        setItem: (k, v) => { storage[k] = String(v); }
+      };
+
       global.window = {
         AudioContext: MockAudioContext,
-        matchMedia: () => ({ matches: false })
+        matchMedia: () => ({ matches: false }),
+        localStorage: global.localStorage
       };
       global.fetch = () => Promise.resolve({
         ok: true,
@@ -744,6 +780,33 @@ defmodule ThereishWeb.RoomComponentsTest do
           hook.voiceSource.onended();
           assert.strictEqual(hook.isStingsDucked(), false);
           assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
+
+        // 3. When localStorage has voice off, voice does not play / does not duck stings
+        {
+          storage["foley:voice"] = "off";
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), false);
         }
 
         console.log('HOOK_TESTS_PASSED');

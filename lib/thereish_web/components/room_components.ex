@@ -463,7 +463,7 @@ defmodule ThereishWeb.RoomComponents do
       </div>
 
       <p
-        :if={@mode != :quiet && @room.reveal.quip}
+        :if={@mode != :quiet && Map.get(@room, :quips, true) && @room.reveal.quip}
         data-role="quip"
         class={[
           "font-serif italic font-medium leading-snug max-w-2xl text-center",
@@ -734,7 +734,7 @@ defmodule ThereishWeb.RoomComponents do
           <% end %>
 
           <p
-            :if={@mode != :quiet and side.quip}
+            :if={@mode != :quiet and Map.get(@room, :quips, true) and side.quip}
             data-role="quip"
             class="font-serif italic text-sm text-base-content/90 leading-snug"
           >
@@ -1367,16 +1367,27 @@ defmodule ThereishWeb.RoomComponents do
 
     ~H"""
     <div class="flex items-center gap-3 text-xs opacity-80">
-      <label class="flex items-center gap-1.5 cursor-pointer">
+      <label :if={@room[:speaker?]} class="flex items-center gap-1.5 cursor-pointer">
         <input
+          id="voice-switch"
+          phx-hook=".VoiceSwitch"
           type="checkbox"
           data-role="voice-switch"
-          data-active={to_string(@room[:voice] || false)}
-          checked={@room[:voice] || false}
-          phx-click="toggle_voice"
+          data-active="false"
           class="checkbox checkbox-xs"
         />
         <span>Voice</span>
+      </label>
+      <label class="flex items-center gap-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          data-role="quips-switch"
+          data-active={to_string(Map.get(@room, :quips, true))}
+          checked={Map.get(@room, :quips, true)}
+          phx-click="toggle_quips"
+          class="checkbox checkbox-xs"
+        />
+        <span>Quips</span>
       </label>
       <div data-role="music-control" class="join">
         <button
@@ -1411,6 +1422,40 @@ defmodule ThereishWeb.RoomComponents do
         Never
       </button>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".VoiceSwitch">
+      export default {
+        mounted() {
+          this.syncUI = () => {
+            let enabled = false
+            try {
+              enabled = localStorage.getItem("foley:voice") === "on"
+            } catch (_) {}
+            this.el.checked = enabled
+            this.el.dataset.active = enabled ? "true" : "false"
+            this.el.setAttribute("aria-checked", enabled ? "true" : "false")
+          }
+          this.syncUI()
+
+          this.handleChange = () => {
+            const next = !!this.el.checked
+            try {
+              localStorage.setItem("foley:voice", next ? "on" : "off")
+            } catch (_) {}
+            this.syncUI()
+          }
+
+          this.el.addEventListener("change", this.handleChange)
+        },
+        updated() {
+          this.syncUI()
+        },
+        destroyed() {
+          if (this.handleChange) {
+            this.el.removeEventListener("change", this.handleChange)
+          }
+        }
+      }
+    </script>
     """
   end
 
@@ -1869,19 +1914,27 @@ defmodule ThereishWeb.RoomComponents do
 
           this.handleEvent("foley:voice", async ({attempt, url}) => {
             if (!this.canPlay()) return
+            let voiceEnabled = false
+            try {
+              voiceEnabled = localStorage.getItem("foley:voice") === "on"
+            } catch (_) {}
+            if (!voiceEnabled) return
+
             await this.resumeAudio()
             if (!this.ctx) return
 
             this.stopVoice()
             this.currentVoiceAttempt = attempt
 
-            const isQuipReady = () =>
+            const isRevealReady = () =>
               document.querySelector("[data-role=quip]") ||
-              document.querySelector("[data-role=fairness-controls]")
+              document.querySelector("[data-role=fairness-controls]") ||
+              document.querySelector("[data-role=closeness-display]") ||
+              document.querySelector("[data-role=no-verdict]")
 
             const playWhenReady = (buf) => {
               if (!buf || !this.ctx || this.currentVoiceAttempt !== attempt) return
-              if (!isQuipReady()) return
+              if (!isRevealReady()) return
 
               this.stopVoice()
               this.currentVoiceAttempt = attempt
@@ -1908,7 +1961,7 @@ defmodule ThereishWeb.RoomComponents do
             const voiceUrl = url
             const bufPromise = this.fetchBuffer(voiceUrl)
 
-            if (isQuipReady()) {
+            if (isRevealReady()) {
               const buf = await bufPromise
               playWhenReady(buf)
             } else {
@@ -1918,7 +1971,7 @@ defmodule ThereishWeb.RoomComponents do
                   if (this.voiceObserver === obs) this.voiceObserver = null
                   return
                 }
-                if (isQuipReady()) {
+                if (isRevealReady()) {
                   obs.disconnect()
                   if (this.voiceObserver === obs) this.voiceObserver = null
                   const buf = await bufPromise

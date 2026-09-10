@@ -324,8 +324,8 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  def handle_call({:set_voice, enabled}, _from, state) do
-    case Store.update_room(state.room, %{voice: enabled}) do
+  def handle_call({:set_quips, enabled}, _from, state) do
+    case Store.update_room(state.room, %{quips: enabled}) do
       {:ok, room} ->
         state = %{state | room: room}
         broadcast(state.room.slug)
@@ -493,7 +493,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:author_step, author_step(state))
       |> Map.put(:speaker?, speaker?)
       |> Map.put(:speaker_claimed?, speaker_claimed?)
-      |> Map.put(:voice, state.room.voice)
+      |> Map.put(:quips, state.room.quips)
       |> Map.put(:music, state.room.music)
       |> Map.put(:quip, state.room.quip)
       |> Map.put(:track, if(state.room.music == "page", do: state[:current_track], else: nil))
@@ -1452,7 +1452,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp maybe_start_voice_task({:verdict_received, verdict}, state) do
-    if state.room.voice and not is_nil(state.room.speaker) and state.room.speaker != "" do
+    if not is_nil(state.room.speaker) and state.room.speaker != "" do
       closeness = verdict[:closeness] || verdict["closeness"]
 
       band =
@@ -1463,7 +1463,13 @@ defmodule Thereish.Rooms.Server do
       band_word = band |> String.replace("_", " ")
       quip = (verdict[:quip] || verdict["quip"] || "") |> to_string() |> String.trim()
 
-      line = if quip != "", do: "#{band_word}. #{quip}", else: band_word
+      line =
+        if state.room.quips && quip != "" do
+          "#{band_word}. #{quip}"
+        else
+          band_word
+        end
+
       room = self()
       attempt = state.game.attempt
 
