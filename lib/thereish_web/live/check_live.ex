@@ -13,6 +13,10 @@ defmodule ThereishWeb.CheckLive do
   not shown (design law 14). That is exactly the working page hiding a broken
   deployment this module exists to catch.
 
+  It also checks the database: is Postgres reachable and are all migrations
+  applied? A deployment with pending migrations or a missing column can serve
+  static routes and websocket connects while crashing on every query.
+
   The socket answer is the server's own: `connected?/1` is false in the dead
   render and true when mount runs again over the socket. The other facts are
   ones only the browser knows, so the `BrowserReport` hook pushes them back.
@@ -32,7 +36,8 @@ defmodule ThereishWeb.CheckLive do
      |> assign(:transport, nil)
      |> assign(:secure_context, :unknown)
      |> assign(:wake_lock, :unknown)
-     |> assign(:prose_gate, reported(Thereish.Steward.Vale.installed?()))}
+     |> assign(:prose_gate, reported(Thereish.Steward.Vale.installed?()))
+     |> assign(:database, database_status())}
   end
 
   @impl true
@@ -61,6 +66,33 @@ defmodule ThereishWeb.CheckLive do
   defp label(:no, _yes_word, no_word), do: no_word
   defp label(:unknown, _yes_word, _no_word), do: "unknown"
 
+  defp database_status do
+    case Ecto.Adapters.SQL.query(Thereish.Repo, "SELECT 1") do
+      {:ok, _} ->
+        case pending_migrations() do
+          0 -> :connected
+          count -> {:unmigrated, count}
+        end
+
+      {:error, _} ->
+        :disconnected
+    end
+  rescue
+    _ -> :disconnected
+  end
+
+  defp pending_migrations do
+    Thereish.Repo
+    |> Ecto.Migrator.migrations()
+    |> Enum.count(fn {status, _version, _name} -> status == :down end)
+  rescue
+    _ -> 0
+  end
+
+  defp database_label(:connected), do: "connected"
+  defp database_label({:unmigrated, count}), do: "unmigrated (#{count} pending)"
+  defp database_label(:disconnected), do: "disconnected"
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -76,6 +108,12 @@ defmodule ThereishWeb.CheckLive do
           <dt class="sr-only">Live socket</dt>
           <dd data-check="socket">
             {if @connected, do: "Socket connected", else: "Socket not connected"}
+          </dd>
+        </div>
+        <div>
+          <dt class="sr-only">Database</dt>
+          <dd data-check="database">
+            Database: {database_label(@database)}
           </dd>
         </div>
         <div>
