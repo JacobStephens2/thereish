@@ -2,9 +2,15 @@ defmodule ThereishWeb.StageLive do
   @moduledoc """
   The laptop: the Room's public face, holding no Seat.
 
-  It shows the same roster the phones show, and the URL to type to get into it,
-  so the first thing a new player needs is already on the screen they are
-  looking at.
+  It shows the same roster the phones show, the Room's Code — large while the
+  Room is filling, small in the header for the rest of the night — and the URL
+  to type to get into it, so the first thing a new player needs is already on
+  the screen they are looking at.
+
+  Sound starts on one deliberate tap. Opening the Stage claims nothing and
+  plays nothing; the tap claims the Speaker and the Repertoire starts. That is
+  the browser's autoplay rule met on purpose rather than discovered halfway
+  through a Page, and it is the one gesture the Prologue can hang off.
 
   It also holds a Screen Wake Lock for as long as it is open. A reveal performed
   to a screen that went dark thirty seconds ago is not a reveal, and macOS will
@@ -16,6 +22,7 @@ defmodule ThereishWeb.StageLive do
   import ThereishWeb.RoomComponents
 
   alias Thereish.Rooms
+  alias Thereish.Rooms.Code
 
   @impl true
   def mount(params, session, socket) do
@@ -24,7 +31,6 @@ defmodule ThereishWeb.StageLive do
 
     if connected?(socket) do
       Rooms.subscribe(slug)
-      Rooms.claim_speaker(slug, device_token)
       ThereishWeb.Presence.track_stage(socket, slug)
     end
 
@@ -46,7 +52,15 @@ defmodule ThereishWeb.StageLive do
     :ok
   end
 
+  # The one tap that opens the night's sound. Claiming the Speaker is what makes
+  # the Repertoire arrive: the resync that follows sees a view that has just
+  # claimed and pushes it the music to play.
   @impl true
+  def handle_event("start_sound", _params, socket) do
+    Rooms.claim_speaker(socket.assigns.slug, socket.assigns.device_token)
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("toggle_voice", _params, socket) do
     Rooms.set_voice(socket.assigns.slug, !socket.assigns.room.voice)
     {:noreply, resync(socket)}
@@ -107,17 +121,19 @@ defmodule ThereishWeb.StageLive do
       class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5 overflow-y-auto select-none box-border"
     >
       <header class="flex items-center justify-between w-full shrink-0 gap-4">
-        <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
-        <div class="flex items-center gap-3 sm:gap-4">
-          <button
-            :if={@room && @room.speaker?}
-            type="button"
-            id="tap-for-sound"
-            data-role="tap-for-sound"
-            class="btn btn-outline btn-xs sm:btn-sm animate-pulse"
+        <div class="flex items-baseline gap-3 sm:gap-4">
+          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
+          <p
+            :if={@room && not filling?(@room)}
+            data-role="stage-code"
+            data-size="small"
+            class="font-mono text-lg sm:text-xl font-bold tracking-[0.25em] opacity-80"
           >
-            Tap for sound
-          </button>
+            {Code.shout(@slug)}
+          </p>
+        </div>
+        <div class="flex items-center gap-3 sm:gap-4">
+          <.tap_for_sound :if={tap?(@room) and not filling?(@room)} size={:small} />
           <.foley_switches :if={@room} room={@room} />
           <.link
             navigate={chronicle_path(@slug)}
@@ -129,6 +145,25 @@ defmodule ThereishWeb.StageLive do
       </header>
 
       <div class="flex flex-1 flex-col items-center justify-center my-auto min-h-0 w-full gap-[clamp(0.5rem,1.8vh,1.5rem)]">
+        <section
+          :if={@room && filling?(@room)}
+          data-role="waiting-stage"
+          class="flex flex-col items-center justify-center gap-[clamp(0.4rem,1.6vh,1.25rem)] text-center"
+        >
+          <p class="text-xs uppercase tracking-widest font-semibold text-primary">Code</p>
+          <p
+            data-role="stage-code"
+            data-size="large"
+            class="font-mono font-bold leading-none tracking-[0.15em] text-[clamp(4rem,18vw,10rem)]"
+          >
+            {Code.shout(@slug)}
+          </p>
+          <p class="text-base sm:text-xl opacity-70">
+            Join at <span class="font-mono font-semibold">{display_url(@join_url)}</span>
+          </p>
+          <.tap_for_sound :if={tap?(@room)} size={:large} />
+        </section>
+
         <section
           :if={@room.phase == :giving}
           data-role="giving-stage"
@@ -222,4 +257,36 @@ defmodule ThereishWeb.StageLive do
   end
 
   defp display_url(url), do: String.replace_prefix(url, "https://", "")
+
+  # The Room is still filling: nothing is in play yet, so the Code is the
+  # biggest thing on the screen. From the first Give on it moves to the header
+  # and the Page takes the middle.
+  defp filling?(room), do: room.phase == :waiting
+
+  # The tap is offered until this Stage holds the Speaker — including to a Stage
+  # opened halfway through the night, which is how it joins the music.
+  defp tap?(nil), do: false
+  defp tap?(room), do: not room.speaker?
+
+  attr :size, :atom, default: :small
+
+  defp tap_for_sound(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id="tap-for-sound"
+      data-role="tap-for-sound"
+      phx-click="start_sound"
+      class={[
+        "btn animate-pulse",
+        if(@size == :large,
+          do: "btn-primary btn-lg text-lg",
+          else: "btn-outline btn-xs sm:btn-sm"
+        )
+      ]}
+    >
+      Tap for sound
+    </button>
+    """
+  end
 end
