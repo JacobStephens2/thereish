@@ -2201,6 +2201,41 @@ defmodule Thereish.RoomsTest do
       assert view.track.meta.provider == "fake"
     end
 
+    test "music events emit readable info log lines with room code, page ref, event name and timing",
+         ctx do
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
+      Rooms.subscribe(ctx.slug)
+
+      log =
+        capture_log([level: :info], fn ->
+          :ok = Rooms.give(ctx.slug, ctx.melissa.id, "forest lake")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "pine needles")
+
+          await_phase(ctx.slug, :bridging)
+
+          eventually(fn ->
+            view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+            not is_nil(view[:track])
+          end)
+        end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).track_page_ref
+      page_ref_str = inspect(page_ref)
+
+      info_lines =
+        log
+        |> String.split("\n")
+        |> Enum.filter(&(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ page_ref_str))
+
+      assert Enum.any?(info_lines, &(&1 =~ "cache miss" and &1 =~ ~r/\+\d+ms/))
+      assert Enum.any?(info_lines, &(&1 =~ "score queued" and &1 =~ ~r/\+\d+ms/))
+      assert Enum.any?(info_lines, &(&1 =~ "score started" and &1 =~ ~r/\+\d+ms/))
+      assert Enum.any?(info_lines, &(&1 =~ "track landed" and &1 =~ ~r/\+\d+ms/))
+    end
+
     test "holdover across next_page and a stale score: landed track holds over and stale score is dropped",
          ctx do
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
@@ -2448,6 +2483,77 @@ defmodule Thereish.RoomsTest do
 
       [page | _] = Thereish.Chronicle.page_views(ctx.slug)
       assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
+    end
+
+    test "failing score emits readable warning log line carrying room code, page ref, failure reason, and timing",
+         ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.put(fake_config, :music_mode, :unavailable)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      log =
+        capture_log(fn ->
+          :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+          await_phase(ctx.slug, :bridging)
+
+          eventually(fn ->
+            server_state = :sys.get_state(GenServer.whereis(Server.via(ctx.slug)))
+            server_state.music_meta != nil
+          end)
+        end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+      page_ref_str = inspect(page_ref)
+
+      warn_lines =
+        log
+        |> String.split("\n")
+        |> Enum.filter(&(&1 =~ "[warning]" and &1 =~ ctx.slug and &1 =~ page_ref_str and &1 =~ "failure with reason"))
+
+      assert length(warn_lines) == 1
+      [warn_line] = warn_lines
+      assert warn_line =~ ":music_unavailable"
+      assert warn_line =~ ~r/\+\d+ms/
+    end
+
+    test "log_music_event defines and emits vamp landed in the stated shape for when the vamp ticket lands",
+         ctx do
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
+      page_ref = make_ref()
+      gives_landed_at = System.monotonic_time(:millisecond) - 150
+
+      log =
+        capture_log([level: :info], fn ->
+          Server.log_music_event(ctx.slug, page_ref, "vamp landed", gives_landed_at)
+        end)
+
+      ref_str = inspect(page_ref)
+
+      assert log =~ "[info]"
+      assert log =~ ctx.slug
+      assert log =~ ref_str
+      assert log =~ "vamp landed"
+      assert log =~ ~r/\+\d+ms/
     end
 
     test "successful score records music_meta on the closed Chronicle page", ctx do
@@ -2762,6 +2868,44 @@ defmodule Thereish.RoomsTest do
       assert view.track.title == "Frozen Horizon"
       assert view.track.path == "/media/tracks/frozen-glacier-tundra.mp3"
       assert view.music_meta[:title] == "Frozen Horizon"
+    end
+
+    test "cache hit emits readable info log line carrying room code, page ref, and timing", ctx do
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
+      gives = ["glacier", "tundra"]
+
+      cached_track = %{
+        title: "Frozen Horizon",
+        path: "/media/tracks/frozen-glacier-tundra.mp3",
+        duration: 120,
+        format: :mp3,
+        meta: %{provider: "cached", cost_usd: 0.04}
+      }
+
+      {:ok, _} = Thereish.Steward.TrackCache.put(gives, cached_track)
+
+      log =
+        capture_log([level: :info], fn ->
+          :ok = Rooms.give(ctx.slug, ctx.melissa.id, "glacier")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "tundra")
+          await_phase(ctx.slug, :bridging)
+        end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).track_page_ref
+      page_ref_str = inspect(page_ref)
+
+      hit_lines =
+        log
+        |> String.split("\n")
+        |> Enum.filter(&(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ page_ref_str and &1 =~ "cache hit"))
+
+      assert length(hit_lines) == 1
+      [hit_line] = hit_lines
+      assert hit_line =~ ~r/\+\d+ms/
+      refute log =~ "score queued"
     end
 
     test "dropped title: title for a Page that moved on is dropped", ctx do
