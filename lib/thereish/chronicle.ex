@@ -720,6 +720,15 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Returns true if the Room has at least one Page written in its Chronicle.
+  """
+  @spec has_pages?(Ecto.UUID.t()) :: boolean()
+  def has_pages?(room_id) do
+    from(p in Page, where: p.room_id == ^room_id, select: 1, limit: 1)
+    |> Repo.exists?()
+  end
+
+  @doc """
   Computes the book view from the event log for one Room, in reverse
   chronological order (newest Page first).
 

@@ -1901,7 +1901,28 @@ defmodule ThereishWeb.RoomComponents do
             this.playEffect(`/audio/sting-${bandName}.mp3`, this.stingsBus, 2.0)
           })
 
-          this.handleEvent("foley:voice", async ({attempt, url}) => {
+          this.playVoiceBuffer = (buf, duckStings = true) => {
+            this.stopVoice()
+            const source = this.ctx.createBufferSource()
+            source.buffer = buf
+            source.connect(this.voiceBus)
+            this.voiceSource = source
+
+            const duration = buf.duration || 3.0
+            this.duckMusic(duration)
+            if (duckStings) this.duckStings(duration)
+
+            source.onended = () => {
+              if (this.voiceSource === source) {
+                this.voiceSource = null
+                this.restoreMusic()
+                if (duckStings) this.restoreStings()
+              }
+            }
+            source.start(0)
+          }
+
+          this.handleEvent("foley:voice", async ({url, attempt}) => {
             if (!this.canPlay()) return
             let voiceEnabled = false
             try {
@@ -1925,26 +1946,8 @@ defmodule ThereishWeb.RoomComponents do
               if (!buf || !this.ctx || this.currentVoiceAttempt !== attempt) return
               if (!isRevealReady()) return
 
-              this.stopVoice()
               this.currentVoiceAttempt = attempt
-
-              const source = this.ctx.createBufferSource()
-              source.buffer = buf
-              source.connect(this.voiceBus)
-              this.voiceSource = source
-
-              const duration = buf.duration || 3.0
-              this.duckMusic(duration)
-              this.duckStings(duration)
-
-              source.onended = () => {
-                if (this.voiceSource === source) {
-                  this.voiceSource = null
-                  this.restoreMusic()
-                  this.restoreStings()
-                }
-              }
-              source.start(0)
+              this.playVoiceBuffer(buf, true)
             }
 
             const voiceUrl = url
@@ -1977,6 +1980,27 @@ defmodule ThereishWeb.RoomComponents do
                 }
               }, 15000)
             }
+          })
+
+          this.handleEvent("foley:prologue", async ({path}) => {
+            if (!this.canPlay()) return
+            let voiceEnabled = false
+            try {
+              voiceEnabled = localStorage.getItem("foley:voice") === "on"
+            } catch (_) {}
+            if (!voiceEnabled) return
+
+            await this.resumeAudio()
+            if (!this.ctx) return
+
+            const buf = await this.fetchBuffer(path)
+            if (!buf) return
+
+            this.playVoiceBuffer(buf, false)
+          })
+
+          this.handleEvent("foley:stop_prologue", async () => {
+            this.stopVoice()
           })
 
           this.playCommitTick = async () => {
