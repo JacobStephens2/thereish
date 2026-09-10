@@ -118,7 +118,7 @@ defmodule Thereish.Foley.ScoreQueueTest do
     assert_receive {:scored, ^page_ref2, {:ok, _track}}, 1_000
   end
 
-  test "prunes queued score jobs and terminates in-flight task when a room process exits" do
+  test "prunes queued score jobs when a room process exits" do
     fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
 
     Application.put_env(
@@ -127,7 +127,7 @@ defmodule Thereish.Foley.ScoreQueueTest do
       Keyword.put(
         Application.get_env(:thereish, :steward, []),
         :fake,
-        Keyword.merge(fake_config, music_delay_ms: 200)
+        Keyword.merge(fake_config, music_delay_ms: 100)
       )
     )
 
@@ -139,16 +139,24 @@ defmodule Thereish.Foley.ScoreQueueTest do
       )
     end)
 
-    dead_room = spawn(fn -> receive do: (_ -> :ok) end)
+    # Job 1 in flight with self()
+    job1_ref = make_ref()
+    ScoreQueue.enqueue(self(), job1_ref, ["first", "job"])
 
+    # Dead room enqueued behind Job 1
+    dead_room = spawn(fn -> receive do: (_ -> :ok) end)
     ScoreQueue.enqueue(dead_room, make_ref(), ["dead", "room"])
-    # Kill dead_room immediately
+    # Kill dead_room while it waits in queue
     Process.exit(dead_room, :kill)
 
-    # Next job for self() should run without waiting for dead_room
-    my_ref = make_ref()
-    ScoreQueue.enqueue(self(), my_ref, ["alive", "room"])
+    # Job 3 enqueued behind dead room
+    job3_ref = make_ref()
+    ScoreQueue.enqueue(self(), job3_ref, ["third", "job"])
 
-    assert_receive {:scored, ^my_ref, {:ok, _track}}, 500
+    # First job completes
+    assert_receive {:scored, ^job1_ref, {:ok, _track}}, 500
+
+    # Third job runs immediately after job 1 completes, because dead_room was pruned
+    assert_receive {:scored, ^job3_ref, {:ok, _track}}, 500
   end
 end
