@@ -405,6 +405,75 @@ defmodule ThereishWeb.RoomLiveTest do
     end
   end
 
+  describe "Stage Bridge markers" do
+    setup do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
+
+      %{slug: slug, mara: mara, jacob: jacob, stage: stage}
+    end
+
+    test "one dim marker per Seat appears only on the Stage while bridging", ctx do
+      assert has_element?(ctx.stage, "[data-role=bridge-markers]")
+
+      for seat <- Rooms.snapshot(ctx.slug, nil).seats do
+        assert has_element?(
+                 ctx.stage,
+                 "[data-role=bridge-marker][data-seat='#{seat.id}'][data-state=dim]",
+                 seat.name
+               )
+      end
+
+      refute has_element?(ctx.mara, "[data-role=bridge-marker]")
+      refute has_element?(ctx.jacob, "[data-role=bridge-marker]")
+    end
+
+    test "a Seat marker lights in the same Stage update as the commit sting", ctx do
+      mara = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Mara"))
+      jacob = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Jacob"))
+
+      commit(ctx.mara, "cairn")
+
+      assert_push_event(ctx.stage, "foley:commit", %{})
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{mara.id}'][data-state=lit]",
+               "Mara"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{jacob.id}'][data-state=dim]",
+               "Jacob"
+             )
+    end
+
+    test "all markers reset for the next Attempt", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "beacon")
+      await_reveal_on(ctx.stage)
+
+      ctx.mara |> element("[data-role=again]") |> render_click()
+
+      assert has_element?(ctx.stage, "[data-role=attempt]", "Attempt 2 of 5")
+
+      for seat <- Rooms.snapshot(ctx.slug, nil).seats do
+        assert has_element?(
+                 ctx.stage,
+                 "[data-role=bridge-marker][data-seat='#{seat.id}'][data-state=dim]",
+                 seat.name
+               )
+      end
+    end
+  end
+
   describe "a Page that misses, and a Page that ends" do
     setup do
       slug = open_room()
