@@ -2159,4 +2159,260 @@ defmodule Thereish.GameTest do
       assert melissa_new.track.path == "/media/tracks/p2.mp3"
     end
   end
+
+  describe "masks drawn and kept (ticket 16)" do
+    setup do
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+      %{state: state}
+    end
+
+    test "mask_landed records a Mask on the state and rejects unknown seat", %{state: state} do
+      mask = %{url: "/media/masks/mask-1.png", prompt: "A small square Mask."}
+
+      assert {:ok, new_state, []} =
+               Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: mask}})
+
+      assert new_state.masks["seat-Melissa"] == mask
+
+      assert {:error, :no_such_seat} =
+               Game.apply(state, {:mask_landed, %{seat_id: "seat-Ghost", mask: mask}})
+    end
+
+    test "before first reveal: giver sees own mask, stage sees face_down, other player sees nil", %{
+      state: state
+    } do
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      mask = %{url: "/media/masks/mask-melissa.png"}
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: mask}})
+
+      # Giver's view
+      melissa_view = Game.view(state, "seat-Melissa")
+      assert melissa_view.your_mask == mask
+      melissa_seat = Enum.find(melissa_view.seats, &(&1.id == "seat-Melissa"))
+      jacob_seat = Enum.find(melissa_view.seats, &(&1.id == "seat-Jacob"))
+      assert melissa_seat.mask == mask
+      assert jacob_seat.mask == nil
+      assert melissa_seat.colour == "#c4a35a"
+      assert jacob_seat.colour == "#6b3a2a"
+
+      # Other player's view
+      jacob_view = Game.view(state, "seat-Jacob")
+      assert jacob_view.your_mask == nil
+      melissa_seat_from_jacob = Enum.find(jacob_view.seats, &(&1.id == "seat-Melissa"))
+      assert melissa_seat_from_jacob.mask == nil
+
+      # Stage view
+      stage_view = Game.view(state, nil)
+      assert stage_view.your_mask == nil
+      melissa_seat_from_stage = Enum.find(stage_view.seats, &(&1.id == "seat-Melissa"))
+      jacob_seat_from_stage = Enum.find(stage_view.seats, &(&1.id == "seat-Jacob"))
+      assert melissa_seat_from_stage.mask == :face_down
+      assert jacob_seat_from_stage.mask == nil
+    end
+
+    test "dot stands in when limner fails or refuses", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: :dot}})
+
+      melissa_view = Game.view(state, "seat-Melissa")
+      stage_view = Game.view(state, nil)
+
+      assert melissa_view.your_mask == :dot
+      assert Enum.find(melissa_view.seats, &(&1.id == "seat-Melissa")).mask == :dot
+      assert Enum.find(stage_view.seats, &(&1.id == "seat-Melissa")).mask == :face_down
+    end
+
+    test "late mask replaces dot in place", %{state: state} do
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: :dot}})
+
+      assert Game.view(state, "seat-Melissa").your_mask == :dot
+
+      late_mask = %{url: "/media/masks/mask-late.png"}
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: late_mask}})
+
+      assert Game.view(state, "seat-Melissa").your_mask == late_mask
+      assert Enum.find(Game.view(state, "seat-Melissa").seats, &(&1.id == "seat-Melissa")).mask ==
+               late_mask
+    end
+
+    test "all masks visible to everyone after first reveal", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      mask_m = %{url: "/media/masks/m.png"}
+      mask_j = %{url: "/media/masks/j.png"}
+      {:ok, state, []} = Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: mask_m}})
+      {:ok, state, []} = Game.apply(state, {:mask_landed, %{seat_id: "seat-Jacob", mask: mask_j}})
+
+      {:ok, state, []} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: %{}}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "tallow"}})
+
+      verdict = %{
+        closeness: 85,
+        reasoning: "Good match",
+        quip: "Nice!",
+        furthest: ["cairn", "tallow"],
+        meta: %{}
+      }
+
+      {:ok, reveal_state, _} = Game.apply(state, {:verdict_received, verdict})
+
+      m_view = Game.view(reveal_state, "seat-Melissa")
+      j_view = Game.view(reveal_state, "seat-Jacob")
+      s_view = Game.view(reveal_state, nil)
+
+      assert Enum.find(m_view.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(m_view.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      assert Enum.find(j_view.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(j_view.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      assert Enum.find(s_view.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(s_view.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+    end
+
+    test "gives_reset and next_page clear masks", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      mask = %{url: "/media/masks/m.png"}
+      {:ok, state, []} = Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: mask}})
+
+      assert state.masks["seat-Melissa"] == mask
+
+      # On gives_reset
+      {:ok, reset_state, []} = Game.apply(state, {:gives_reset, %{seat_id: "seat-Melissa"}})
+      assert reset_state.masks == %{}
+
+      # On next_page after close
+      {:ok, state, []} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: %{}}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "cairn"}})
+
+      verdict = %{
+        closeness: 95,
+        reasoning: "Meld!",
+        quip: "Meld",
+        furthest: ["cairn", "cairn"],
+        meta: %{}
+      }
+
+      {:ok, meld_state, _} = Game.apply(state, {:verdict_received, verdict})
+      {:ok, next_state, []} = Game.apply(meld_state, {:next_page, %{seat_id: "seat-Melissa"}})
+      assert next_state.masks == %{}
+    end
+
+    test "chronicle entry includes masks map and gives with mask", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      mask_m = %{url: "/media/masks/m.png"}
+      mask_j = %{url: "/media/masks/j.png"}
+      {:ok, state, []} = Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: mask_m}})
+      {:ok, state, []} = Game.apply(state, {:mask_landed, %{seat_id: "seat-Jacob", mask: mask_j}})
+
+      {:ok, state, []} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: %{}}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "cairn"}})
+
+      verdict = %{
+        closeness: 95,
+        reasoning: "Meld!",
+        quip: "Meld",
+        furthest: ["cairn", "cairn"],
+        meta: %{}
+      }
+
+      {:ok, _meld_state, effects} = Game.apply(state, {:verdict_received, verdict})
+      assert {:chronicle, entry} = List.keyfind(effects, :chronicle, 0)
+      assert entry.masks["seat-Melissa"] == mask_m
+      assert entry.masks["seat-Jacob"] == mask_j
+
+      melissa_give = Enum.find(entry.gives, &(&1.seat_id == "seat-Melissa"))
+      jacob_give = Enum.find(entry.gives, &(&1.seat_id == "seat-Jacob"))
+      assert melissa_give.mask == mask_m
+      assert jacob_give.mask == mask_j
+    end
+
+    test "dot visibility matches mask visibility rules before and after reveal", %{state: state} do
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      {:ok, state, []} = Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: :dot}})
+
+      # Before reveal:
+      # Melissa sees her own dot
+      melissa_view = Game.view(state, "seat-Melissa")
+      assert melissa_view.your_mask == :dot
+      assert Enum.find(melissa_view.seats, &(&1.id == "seat-Melissa")).mask == :dot
+
+      # Jacob sees nil for Melissa's mask
+      jacob_view = Game.view(state, "seat-Jacob")
+      melissa_in_jacob_view = Enum.find(jacob_view.seats, &(&1.id == "seat-Melissa"))
+      assert melissa_in_jacob_view.mask == nil
+
+      # Stage sees face_down for Melissa's mask
+      stage_view = Game.view(state, nil)
+      melissa_in_stage_view = Enum.find(stage_view.seats, &(&1.id == "seat-Melissa"))
+      assert melissa_in_stage_view.mask == :face_down
+
+      # After reveal:
+      {:ok, state, []} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: %{}}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "cairn"}})
+
+      verdict = %{
+        closeness: 95,
+        reasoning: "Meld!",
+        quip: "Meld",
+        furthest: ["cairn", "cairn"],
+        meta: %{}
+      }
+
+      {:ok, meld_state, _} = Game.apply(state, {:verdict_received, verdict})
+
+      # Everyone sees the dot after reveal
+      assert Enum.find(Game.view(meld_state, "seat-Melissa").seats, &(&1.id == "seat-Melissa")).mask == :dot
+      assert Enum.find(Game.view(meld_state, "seat-Jacob").seats, &(&1.id == "seat-Melissa")).mask == :dot
+      assert Enum.find(Game.view(meld_state, nil).seats, &(&1.id == "seat-Melissa")).mask == :dot
+    end
+  end
 end

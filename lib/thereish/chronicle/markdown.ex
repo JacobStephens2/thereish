@@ -81,6 +81,28 @@ defmodule Thereish.Chronicle.Markdown do
           []
       end
 
+    mask_lines =
+      cond do
+        page[:gives] && page[:gives] != [] ->
+          page.gives
+          |> Enum.filter(&(is_map(&1[:mask]) and (&1.mask[:url] || &1.mask["url"])))
+          |> Enum.map(fn g ->
+            url = g.mask[:url] || g.mask["url"]
+            "- Mask (#{g.seat_name}): #{url}"
+          end)
+
+        is_map(page[:masks]) and map_size(page.masks) > 0 ->
+          page.masks
+          |> Enum.filter(fn {_seat, m} -> is_map(m) and (m[:url] || m["url"]) end)
+          |> Enum.map(fn {seat_id, mask} ->
+            url = mask[:url] || mask["url"]
+            "- Mask (#{seat_id}): #{url}"
+          end)
+
+        true ->
+          []
+      end
+
     meta_lines =
       [
         "### Page #{index}: #{bookends_str}",
@@ -90,6 +112,7 @@ defmodule Thereish.Chronicle.Markdown do
       ] ++
         give_lines ++
         track_lines ++
+        mask_lines ++
         experiment_lines ++
         [
           "- Opened: #{page.opened_at && DateTime.to_iso8601(page.opened_at)}",

@@ -38,4 +38,24 @@ defmodule ThereishWeb.EndpointTest do
     headers_map = Map.new(headers, fn {k, v} -> {to_string(k), to_string(v)} end)
     assert headers_map["content-type"] =~ "audio/mpeg"
   end
+
+  test "the endpoint serves mask files over real HTTP" do
+    test_dir = Thereish.Steward.TrackCache.media_dir()
+    masks_dir = Path.join(test_dir, "masks")
+    File.mkdir_p!(masks_dir)
+    file_path = Path.join(masks_dir, "test-serve-mask.png")
+    png_bytes = Thereish.Steward.Limner.png("#c4a35a", 32)
+    File.write!(file_path, png_bytes)
+
+    on_exit(fn -> File.rm(file_path) end)
+
+    url = String.to_charlist(ThereishWeb.Endpoint.url() <> "/media/masks/test-serve-mask.png")
+
+    assert {:ok, {{_version, 200, _reason}, headers, body}} =
+             :httpc.request(:get, {url, []}, [], [])
+
+    assert body == :erlang.binary_to_list(png_bytes)
+    headers_map = Map.new(headers, fn {k, v} -> {to_string(k), to_string(v)} end)
+    assert headers_map["content-type"] =~ "image/png"
+  end
 end

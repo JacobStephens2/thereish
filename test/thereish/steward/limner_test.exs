@@ -55,6 +55,40 @@ defmodule Thereish.Steward.LimnerTest do
 
       assert {:error, :refused} = Steward.draw("murder", "#7a1f1f")
     end
+
+    test "a refusal retries once with a softened prompt and stops on second failure" do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          fake_config
+          |> Keyword.put(:draw_mode, :refused)
+          |> Keyword.put(:draw_capture, self())
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      assert {:error, :refused} = Steward.draw("murder", "#7a1f1f")
+
+      assert_receive {:draw, "murder", "#7a1f1f", first_opts}
+      refute Keyword.get(first_opts, :softened, false)
+
+      assert_receive {:draw, "murder", "#7a1f1f", second_opts}
+      assert Keyword.get(second_opts, :softened, false)
+
+      refute_receive {:draw, _, _, _}
+    end
   end
 
   describe "Limner prompt" do
@@ -66,6 +100,14 @@ defmodule Thereish.Steward.LimnerTest do
       assert prompt =~ "ochre"
       assert prompt =~ "overlapping planes"
       refute prompt =~ "Picasso"
+    end
+
+    test "softened prompt softens the Give for safety retry" do
+      prompt = Limner.prompt(@give, @colour, softened: true)
+
+      assert prompt =~ @give
+      assert prompt =~ @colour
+      assert prompt =~ "Softened"
     end
   end
 
