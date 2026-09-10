@@ -44,6 +44,10 @@ _Avoid_: campaign, level, theme pack, world, mode
 A theme a player supplies to open a Page — improv's audience suggestion, at Page scale rather than Chapter scale. Every Seat gives one before a Page is written, each Bookend comes from a different Give, and a Give is secret to its giver until the Page's first reveal. Player-facing copy says "setting".
 _Avoid_: suggestion, request, custom theme, prompt
 
+**Mask**:
+The small picture a Seat wears for one Page, drawn by the Limner from that Seat's Give: abstracted a step away from the Give rather than illustrating it, so it hints without telling. A Mask shows to its own giver at once; on the Stage it lies face-down from the moment the Give lands until the Page's first reveal, then turns over and stays with the Page in the Chronicle. It is also the marker that lights when that Seat's Bridge lands.
+_Avoid_: avatar, icon (in copy), profile picture, token, sigil, portrait
+
 **Steward**:
 The one seam through which the game talks to generative models — language, music, and sound. The Author, the Assayer, the Scribe, and the Foley are its roles; model choice, caching, hedging, A/B assignment, spend, and guardrails live behind it.
 _Avoid_: Keeper (the earlier name), AI, "the LLM", model service, brain
@@ -64,13 +68,29 @@ _Avoid_: logger, narrator, historian
 The machine role that makes what the Room hears — the stings, the Repertoire, and the Track written for a Page's Gives. (Named for the theatre's sound artist; the stage, the beat and the reveal are already its vocabulary.)
 _Avoid_: composer, sound designer, DJ, audio service
 
+**Limner**:
+The machine role that draws — a Mask for every Seat at the top of every Page, in one house style so a night's Masks read as a set. (Named for the illustrator of a manuscript's pages.) Lives behind the Steward like the other roles.
+_Avoid_: illustrator, image model, artist, "the image AI", painter
+
 **Speaker**:
 The one device in a Room that plays what Foley makes — the Stage when one is open, otherwise the phone that claimed it; claiming it silences whoever had it. Held by a device, not a Seat, so a phone with no Seat can hold it.
 _Avoid_: audio device, output, host phone, "the sound", speakerphone
 
+**Voice**:
+Foley speaking the Assayer's band word, and its Quip when Quips are shown, at the reveal. A setting of the device holding the Speaker, off unless that device turns it on; stings sound regardless.
+_Avoid_: narration, TTS, voiceover, announcer, read-aloud
+
 **Track**:
 The instrumental Foley writes for one Page from its Gives. It is titled by the Scribe and kept, so the same Gives bring the same Track back — a song the Chronicle can remember. A Track belongs to its Page; it may still be what the Speaker is playing after that Page has closed, until the next Page's Track lands.
 _Avoid_: song (in code), background music, BGM, soundtrack, loop (a Repertoire draw is not this Page's Track)
+
+**Prologue**:
+The three sentences that tell a table what Thereish is and what a Meld is, spoken by Foley from the Stage's first tap the first time a Room with no Chronicle opens, and on request after that. A fixed script, kept in several readings so a repeat hearing is not the same take. It stays silent when Voice is off and shows its words on the Stage either way; a phone-only Room shows the words as a card instead. Skipping it is the Room's, remembered.
+_Avoid_: tutorial, onboarding, intro (in code), how-to-play, rules screen, narration
+
+**Vamp**:
+The short instrumental Foley gets back in seconds so the Speaker has something written for this Page's Gives while the Track is still being made. Thrown away once the Track lands: never titled, never kept, never a Repertoire member. (Theatre's word for the band playing until the singer is ready.)
+_Avoid_: intro clip, placeholder track, bed (the listen report's word), stopgap, preview
 
 **Repertoire**:
 The instrumentals Foley may play when this night has no Track of its own on the Speaker yet — the five loops shipped with the game, and every Track that has been kept. A Room whose Chronicle already holds a Track is drawn from that Room's Tracks and the five loops; a Room with none is drawn from the whole set. The pick is a shuffle, not a fixed starter. A Room may mark a member Never so it is not drawn there again; the last remaining member cannot be.
