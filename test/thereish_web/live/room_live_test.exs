@@ -32,6 +32,10 @@ defmodule ThereishWeb.RoomLiveTest do
 
   defp phone(slug), do: build_conn() |> get(~p"/r/#{slug}")
 
+  # A Stage claims nothing and plays nothing until someone taps it (ticket 12),
+  # so a test that wants a speaking Stage taps it the way a person would.
+  defp tap_for_sound(stage), do: stage |> element("[data-role=tap-for-sound]") |> render_click()
+
   # The reveal arrives on its own time — a beat, then a verdict — so a view
   # waits for it here the way a phone on the couch does.
   defp await_reveal_on(view) do
@@ -635,6 +639,66 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # Order: header -> play content -> stage-foot
       assert_order(html, ["<header", ~s(data-role="stage-foot")])
+    end
+
+    test "the Code is large while the Room fills and small in the header once a Page is in play" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      code = String.upcase(slug)
+
+      assert has_element?(stage, "[data-role=stage-code][data-size=large]", code)
+      refute has_element?(stage, "header [data-role=stage-code]")
+
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
+
+      assert has_element?(stage, "header [data-role=stage-code][data-size=small]", code)
+      refute has_element?(stage, "[data-role=stage-code][data-size=large]")
+    end
+
+    test "the opening tap claims the Speaker and starts the Repertoire, and nothing sounds before it" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      # A Stage that nobody has tapped holds no Speaker and is sent nothing to
+      # play: the browser's autoplay rule is met on purpose, not discovered.
+      assert is_nil(Rooms.get_room(slug).speaker)
+      refute_push_event(stage, "foley:page", %{})
+      assert has_element?(stage, "[data-role=tap-for-sound]")
+
+      stage |> element("[data-role=tap-for-sound]") |> render_click()
+
+      refute is_nil(Rooms.get_room(slug).speaker)
+      assert_push_event(stage, "foley:page", %{kind: "repertoire", path: path})
+      assert String.starts_with?(path, "/audio/house-loop")
+
+      # The tap has done its one job, so it stops asking.
+      refute has_element?(stage, "[data-role=tap-for-sound]")
+    end
+
+    test "a Stage opened mid-night still offers the tap and joins the music already playing" do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
+
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      # Mid-night the Code has moved to the header, but the tap is still offered.
+      assert has_element?(stage, "header [data-role=tap-for-sound]")
+      refute has_element?(stage, "[data-role=stage-code][data-size=large]")
+
+      stage |> element("[data-role=tap-for-sound]") |> render_click()
+
+      assert_push_event(stage, "foley:page", %{path: path})
+      assert is_binary(path)
+      refute has_element?(stage, "[data-role=tap-for-sound]")
     end
   end
 
@@ -1719,11 +1783,12 @@ defmodule ThereishWeb.RoomLiveTest do
       {:ok, mara, _} = live(phone(slug))
       {:ok, jacob, _} = live(phone(slug))
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      tap_for_sound(stage)
 
       join(mara, "Mara")
       join(jacob, "Jacob")
 
-      # The Stage starts wait music while waiting; later tests look at Page events.
+      # The Stage starts wait music from the tap; later tests look at Page events.
       assert_push_event(stage, "foley:page", %{kind: "repertoire"})
 
       %{slug: slug, mara: mara, jacob: jacob, stage: stage}
@@ -1735,6 +1800,8 @@ defmodule ThereishWeb.RoomLiveTest do
 
       assert has_element?(stage, "[data-role=tap-for-sound]")
       assert has_element?(stage, "[data-role=music-house]")
+
+      tap_for_sound(stage)
 
       assert_push_event(stage, "foley:page", %{kind: "repertoire", path: path})
       assert String.starts_with?(path, "/audio/house-loop")
@@ -1748,8 +1815,10 @@ defmodule ThereishWeb.RoomLiveTest do
       assert String.starts_with?(house_path, "/audio/house-loop")
     end
 
-    test "stage claims speaker on mount; phone claims take it from stage and silence it", ctx do
-      assert has_element?(ctx.stage, "[data-role=tap-for-sound]")
+    test "the tapped stage holds the speaker; phone claims take it from stage and silence it",
+         ctx do
+      # The tap has been taken in setup, so it has stopped asking.
+      refute has_element?(ctx.stage, "[data-role=tap-for-sound]")
       assert has_element?(ctx.mara, "[data-role=speaker-toggle][data-speaker=other]")
       assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
 
@@ -1777,7 +1846,10 @@ defmodule ThereishWeb.RoomLiveTest do
       ctx.mara |> element("[data-role=speaker-toggle]") |> render_click()
 
       assert_push_event(ctx.stage, "foley:stop", %{})
-      refute has_element?(ctx.stage, "[data-role=tap-for-sound]")
+
+      # The Stage is silent again, so the tap is back on offer: one tap takes
+      # the Speaker home.
+      assert has_element?(ctx.stage, "[data-role=tap-for-sound]")
 
       assert has_element?(ctx.stage, "[data-role=voice-switch]")
       assert has_element?(ctx.stage, "[data-role=music-control]")
