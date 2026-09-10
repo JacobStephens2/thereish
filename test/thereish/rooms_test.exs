@@ -2944,6 +2944,227 @@ defmodule Thereish.RoomsTest do
       [page | _] = Thereish.Chronicle.page_views(ctx.slug)
       assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
     end
+
+    test "two Rooms scoring at once run one at a time (Rooms test with the Fake)" do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 120)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      slug1 = open_room()
+      slug2 = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      token_c = device_token()
+      token_d = device_token()
+
+      {:ok, alice} = Rooms.join(slug1, "Alice", token_a)
+      {:ok, bob} = Rooms.join(slug1, "Bob", token_b)
+      {:ok, carol} = Rooms.join(slug2, "Carol", token_c)
+      {:ok, dave} = Rooms.join(slug2, "Dave", token_d)
+
+      :ok = Rooms.give(slug1, alice.id, "glacier peak")
+      :ok = Rooms.give(slug1, bob.id, "frozen tundra")
+      :ok = Rooms.give(slug2, carol.id, "desert dune")
+      :ok = Rooms.give(slug2, dave.id, "sandstorm")
+
+      await_phase(slug1, :bridging)
+      await_phase(slug2, :bridging)
+
+      # Room 1 scores first. When Room 1's track lands, Room 2 is still queued!
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(slug1, alice.id)[:track])
+      end)
+
+      # At the moment Room 1 finishes, Room 2 has not landed its track yet
+      view2_snapshot = Rooms.snapshot(slug2, carol.id)
+      assert is_nil(view2_snapshot[:track])
+
+      # Then Room 2 completes after its own turn
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(slug2, carol.id)[:track])
+      end)
+
+      view2_final = Rooms.snapshot(slug2, carol.id)
+      assert not is_nil(view2_final[:track])
+    end
+
+    test "a queued Page's snapshot keeps playing what it had until its turn", ctx do
+      # Play Page 1 to closed with a landed track
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "ancient stone")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "mossy brook")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.kind == "track"
+      end)
+
+      p1_track = Rooms.snapshot(ctx.slug, ctx.melissa.id).playing
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Move to Page 2
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      # Now occupy the score queue with another Room
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 150)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      slug_other = open_room()
+      {:ok, p1} = Rooms.join(slug_other, "PlayerOne", device_token())
+      {:ok, p2} = Rooms.join(slug_other, "PlayerTwo", device_token())
+      :ok = Rooms.give(slug_other, p1.id, "heavy fog")
+      :ok = Rooms.give(slug_other, p2.id, "dim lanterns")
+      await_phase(slug_other, :bridging)
+
+      # Start Page 2 scoring in ctx.slug - it gets queued behind slug_other
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "autumn woods")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "crackling fire")
+      await_phase(ctx.slug, :bridging)
+
+      # While queued, ctx.slug's snapshot keeps playing what it had (Page 1's holdover track)
+      queued_snapshot = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert queued_snapshot.playing.kind == "holdover"
+      assert queued_snapshot.playing.path == p1_track.path
+
+      # Once turn comes, Page 2 track lands
+      eventually(fn ->
+        snapshot = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+
+        not is_nil(snapshot[:track]) and snapshot.playing.kind == "track" and
+          snapshot.playing.path != p1_track.path
+      end)
+    end
+
+    test "a second music change during an in-flight score starts no second score", ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 100)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "deep canyon")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "echoing wind")
+      await_phase(ctx.slug, :bridging)
+
+      # While score is in flight, toggle music to house and back to page
+      :ok = Rooms.set_music(ctx.slug, "house")
+      :ok = Rooms.set_music(ctx.slug, "page")
+
+      # Track lands without duplicate scoring
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert not is_nil(view.track)
+    end
+
+    test "a success after a recorded failure replaces the Page's music record, and the Chronicle shows the Track",
+         ctx do
+      # Configure fake so initial score fails
+      set_fake(music_mode: :unavailable)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "sprint")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "hoard")
+      await_phase(ctx.slug, :bridging)
+
+      # Solve the page to close it with failure recorded
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "vault")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "vault")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn ->
+        pages = Thereish.Chronicle.page_views(ctx.slug)
+        pages != [] and hd(pages).music_meta != nil
+      end)
+
+      [page_before | _] = Thereish.Chronicle.page_views(ctx.slug)
+      assert page_before.music_meta[:failure] != nil or page_before.music_meta["failure"] != nil
+      assert Thereish.Chronicle.page_track(page_before) == nil
+
+      # Now a score succeeds for this page
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+
+      successful_track = %{
+        path: "/media/tracks/fake-sprint-hoard.mp3",
+        duration: 120,
+        format: :mp3,
+        title: "Sprint and Hoard",
+        meta: %{provider: "fake", model: "fake-music", cost_usd: 0.04}
+      }
+
+      send(pid, {:scored, page_ref, {:ok, successful_track}})
+
+      # The Page's music record in Chronicle is replaced by the success
+      eventually(fn ->
+        [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+        page_after.music_meta[:path] != nil or page_after.music_meta["path"] != nil
+      end)
+
+      [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+      assert is_nil(page_after.music_meta[:failure]) and is_nil(page_after.music_meta["failure"])
+
+      assert page_after.music_meta[:path] == "/media/tracks/fake-sprint-hoard.mp3" or
+               page_after.music_meta["path"] == "/media/tracks/fake-sprint-hoard.mp3"
+
+      # The Chronicle shows the Track
+      assert track = Thereish.Chronicle.page_track(page_after)
+      assert track.path == "/media/tracks/fake-sprint-hoard.mp3"
+      assert track.title == "Sprint and Hoard"
+    end
   end
 
   describe "the Scribe titles the Track" do
