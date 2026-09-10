@@ -1484,11 +1484,24 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, token_a: token_a, token_b: token_b, mara: mara, jacob: jacob}
     end
 
-    test "a new Room has no speaker, voice off, and music page by default", ctx do
+    test "a new Room has no speaker, quips on, music page by default, and no voice column", ctx do
       room = Store.get_room(ctx.slug)
       assert is_nil(room.speaker)
-      assert room.voice == false
+      assert room.quips == true
       assert room.music == "page"
+      refute :voice in Thereish.Rooms.Room.__schema__(:fields)
+    end
+
+    test "migration drops voice and adds quips column" do
+      migrations_dir = Application.app_dir(:thereish, "priv/repo/migrations")
+
+      migration_file =
+        Path.join(migrations_dir, "20260909160000_drop_voice_and_add_quips_to_rooms.exs")
+
+      assert File.exists?(migration_file)
+      content = File.read!(migration_file)
+      assert content =~ "remove :voice"
+      assert content =~ "add :quips, :boolean"
     end
 
     test "migration pair converts house_loop_only true to house and drops house_loop_only" do
@@ -1620,12 +1633,12 @@ defmodule Thereish.RoomsTest do
       assert is_nil(Store.get_room(ctx.slug).speaker)
     end
 
-    test "voice and music switches update the Room and broadcast", ctx do
+    test "quips and music switches update the Room and broadcast", ctx do
       Rooms.subscribe(ctx.slug)
 
-      assert :ok = Rooms.set_voice(ctx.slug, true)
+      assert :ok = Rooms.set_quips(ctx.slug, false)
       assert_receive :room_changed
-      assert Store.get_room(ctx.slug).voice == true
+      assert Store.get_room(ctx.slug).quips == false
 
       assert :ok = Rooms.set_music(ctx.slug, "off")
       assert_receive :room_changed
@@ -1639,14 +1652,14 @@ defmodule Thereish.RoomsTest do
       assert_receive :room_changed
       assert Store.get_room(ctx.slug).music == "page"
 
-      assert :ok = Rooms.set_voice(ctx.slug, false)
+      assert :ok = Rooms.set_quips(ctx.slug, true)
       assert_receive :room_changed
-      assert Store.get_room(ctx.slug).voice == false
+      assert Store.get_room(ctx.slug).quips == true
     end
 
-    test "speaker, voice and music survive a Room process restart", ctx do
+    test "speaker, quips and music survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      assert :ok = Rooms.set_voice(ctx.slug, true)
+      assert :ok = Rooms.set_quips(ctx.slug, false)
       assert :ok = Rooms.set_music(ctx.slug, "off")
 
       pid = GenServer.whereis(Server.via(ctx.slug))
@@ -1661,8 +1674,9 @@ defmodule Thereish.RoomsTest do
         end)
 
       assert room.speaker == ctx.token_a
-      assert room.voice == true
+      assert room.quips == false
       assert room.music == "off"
+      refute Map.has_key?(room, :voice)
     end
 
     test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
@@ -1674,15 +1688,16 @@ defmodule Thereish.RoomsTest do
       for view <- [view_a, view_b, view_stage] do
         assert view.speaker? == false
         assert view.speaker_claimed? == false
-        assert view.voice == false
+        assert view.quips == true
         assert view.music == "page"
+        refute Map.has_key?(view, :voice)
         refute Map.has_key?(view, :house_loop_only)
         refute Map.has_key?(view, :speaker)
         refute Map.has_key?(view, :device_token)
       end
 
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
+      :ok = Rooms.set_quips(ctx.slug, false)
       :ok = Rooms.set_music(ctx.slug, "house")
 
       view_a = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
@@ -1691,15 +1706,21 @@ defmodule Thereish.RoomsTest do
 
       assert view_a.speaker? == true
       assert view_a.speaker_claimed? == true
-      assert view_a.voice == true
+      assert view_a.quips == false
       assert view_a.music == "house"
+      refute Map.has_key?(view_a, :voice)
 
       assert view_b.speaker? == false
       assert view_b.speaker_claimed? == true
-      assert view_b.voice == true
+      assert view_b.quips == false
       assert view_b.music == "house"
+      refute Map.has_key?(view_b, :voice)
+
       assert view_stage.speaker? == false
       assert view_stage.speaker_claimed? == true
+      assert view_stage.quips == false
+      assert view_stage.music == "house"
+      refute Map.has_key?(view_stage, :voice)
 
       json = Jason.encode!(view_a)
       refute json =~ ctx.token_a
@@ -1863,11 +1884,9 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, mara: mara, jacob: jacob, token_a: token_a, token_b: token_b}
     end
 
-    test "when voice is on and a speaker exists, broadcasts voice_ready and holds audio for attempt",
-         ctx do
+    test "when a speaker exists, broadcasts voice_ready and holds audio for attempt", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -1879,12 +1898,8 @@ defmodule Thereish.RoomsTest do
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 2)
     end
 
-    test "voice is not spoken when voice switch is off or no speaker exists", ctx do
+    test "voice is not spoken when no speaker exists", ctx do
       Rooms.subscribe(ctx.slug)
-
-      # Voice switch off, speaker exists
-      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      assert Rooms.snapshot(ctx.slug, nil).voice == false
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -1894,11 +1909,50 @@ defmodule Thereish.RoomsTest do
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
     end
 
+    test "with quips hidden, spoken line handed to speak is the band word only; with quips on, line includes quip",
+         ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_recipient, self()))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      # Attempt 1: quips is default on
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      assert_receive {:fake_speak, line1}, 2000
+      assert line1 =~ "miss."
+      assert line1 =~ "walk into a bar"
+
+      # Attempt 2: turn quips off
+      :ok = Rooms.set_quips(ctx.slug, false)
+      :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :bridging)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "valley")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "valley")
+      await_reveal(ctx.slug)
+
+      assert_receive {:fake_speak, line2}, 2000
+      assert line2 == "deep meld"
+    end
+
     test "advancing to next attempt clears past attempt's audio and serves only new attempt's audio",
          ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       # Attempt 1: miss
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
@@ -1942,7 +1996,6 @@ defmodule Thereish.RoomsTest do
 
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -1972,7 +2025,6 @@ defmodule Thereish.RoomsTest do
 
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -2010,7 +2062,6 @@ defmodule Thereish.RoomsTest do
 
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       # Attempt 1: miss
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
@@ -2031,7 +2082,6 @@ defmodule Thereish.RoomsTest do
     test "voice_meta is recorded on the Verdict in Chronicle when Page closes", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -2058,7 +2108,6 @@ defmodule Thereish.RoomsTest do
     test "voice_audio and voice_meta do not leak across next_page", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       # Attempt 1: meld closes the page
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")

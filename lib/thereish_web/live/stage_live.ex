@@ -47,8 +47,9 @@ defmodule ThereishWeb.StageLive do
   end
 
   @impl true
-  def handle_event("toggle_voice", _params, socket) do
-    Rooms.set_voice(socket.assigns.slug, !socket.assigns.room.voice)
+  def handle_event("toggle_quips", _params, socket) do
+    current = Map.get(socket.assigns.room, :quips, true)
+    Rooms.set_quips(socket.assigns.slug, !current)
     {:noreply, resync(socket)}
   end
 
