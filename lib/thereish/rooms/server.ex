@@ -735,6 +735,7 @@ defmodule Thereish.Rooms.Server do
     end
 
     if current_page? do
+      log_music_event(state, page_ref, "track landed")
       state = Map.put(state, :score_task_running, false)
 
       state =
