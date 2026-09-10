@@ -234,6 +234,8 @@ defmodule ThereishWeb.StageLive do
 
   attr :room, :map, required: true
 
+  # Issue #82 establishes the Stage marker with a name chip. Issue #86 replaces
+  # this chip with the Seat's Mask once Masks exist.
   defp bridge_markers(assigns) do
     assigns =
       assign(assigns, :markers, Enum.zip(assigns.room.seats, @seat_colors))

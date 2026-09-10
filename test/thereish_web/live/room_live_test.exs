@@ -32,6 +32,16 @@ defmodule ThereishWeb.RoomLiveTest do
 
   defp phone(slug), do: build_conn() |> get(~p"/r/#{slug}")
 
+  defp assert_all_markers_dim(stage, slug) do
+    for seat <- Rooms.snapshot(slug, nil).seats do
+      assert has_element?(
+               stage,
+               "[data-role=bridge-marker][data-seat='#{seat.id}'][data-state=dim]",
+               seat.name
+             )
+    end
+  end
+
   # The reveal arrives on its own time — a beat, then a verdict — so a view
   # waits for it here the way a phone on the couch does.
   defp await_reveal_on(view) do
@@ -421,14 +431,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
     test "one dim marker per Seat appears only on the Stage while bridging", ctx do
       assert has_element?(ctx.stage, "[data-role=bridge-markers]")
-
-      for seat <- Rooms.snapshot(ctx.slug, nil).seats do
-        assert has_element?(
-                 ctx.stage,
-                 "[data-role=bridge-marker][data-seat='#{seat.id}'][data-state=dim]",
-                 seat.name
-               )
-      end
+      assert_all_markers_dim(ctx.stage, ctx.slug)
 
       refute has_element?(ctx.melissa, "[data-role=bridge-marker]")
       refute has_element?(ctx.jacob, "[data-role=bridge-marker]")
@@ -463,14 +466,7 @@ defmodule ThereishWeb.RoomLiveTest do
       ctx.melissa |> element("[data-role=again]") |> render_click()
 
       assert has_element?(ctx.stage, "[data-role=attempt]", "Attempt 2 of 5")
-
-      for seat <- Rooms.snapshot(ctx.slug, nil).seats do
-        assert has_element?(
-                 ctx.stage,
-                 "[data-role=bridge-marker][data-seat='#{seat.id}'][data-state=dim]",
-                 seat.name
-               )
-      end
+      assert_all_markers_dim(ctx.stage, ctx.slug)
     end
   end
 
