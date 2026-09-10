@@ -1404,18 +1404,15 @@ defmodule ThereishWeb.RoomComponents do
           }
           this.syncUI()
 
-          this.handleChange = (e) => {
-            let enabled = false
+          this.handleChange = () => {
+            const next = !!this.el.checked
             try {
-              enabled = localStorage.getItem("foley:voice") === "on"
-              const next = !enabled
               localStorage.setItem("foley:voice", next ? "on" : "off")
             } catch (_) {}
             this.syncUI()
           }
 
           this.el.addEventListener("change", this.handleChange)
-          this.el.addEventListener("click", this.handleChange)
         },
         updated() {
           this.syncUI()
@@ -1423,7 +1420,6 @@ defmodule ThereishWeb.RoomComponents do
         destroyed() {
           if (this.handleChange) {
             this.el.removeEventListener("change", this.handleChange)
-            this.el.removeEventListener("click", this.handleChange)
           }
         }
       }

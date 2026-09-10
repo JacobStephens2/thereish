@@ -2050,7 +2050,7 @@ defmodule ThereishWeb.RoomLiveTest do
       # Room quip still shows on Stage footer
       assert has_element?(stage, "[data-role=stage-quip]", "A gentle word for quiet hours.")
 
-      # Next round: confirm quips stays false and reveal quip stays hidden
+      # Next Page: confirm quips stays false and reveal quip stays hidden
       mara |> element("[data-role=again]") |> render_click()
       await_phase(slug, :bridging)
       eventually(fn -> has_element?(mara, "[data-role=bridge-form]") end)
