@@ -1498,7 +1498,7 @@ defmodule Thereish.RoomsTest do
       # Other seat and stage before reveal
       jacob_view = Rooms.snapshot(ctx.slug, ctx.jacob.id)
       assert jacob_view.your_mask == nil
-      assert Enum.find(jacob_view.seats, &(&1.id == ctx.mara.id)).mask == nil
+      assert Enum.find(jacob_view.seats, &(&1.id == ctx.mara.id)).mask == :face_down
 
       stage_view = Rooms.snapshot(ctx.slug, nil)
       assert Enum.find(stage_view.seats, &(&1.id == ctx.mara.id)).mask == :face_down
