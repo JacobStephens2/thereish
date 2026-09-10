@@ -3284,6 +3284,8 @@ defmodule Thereish.RoomsTest do
         meta: %{provider: "cached", cost_usd: 0.04}
       }
 
+      # A cache row whose file is gone is a miss (ticket 04), so the row this
+      # hit is read from needs its file on disk.
       cached_file = Thereish.Steward.TrackCache.disk_path(cached_track.path)
       File.mkdir_p!(Path.dirname(cached_file))
       File.write!(cached_file, "mp3-bytes")

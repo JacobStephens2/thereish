@@ -73,7 +73,7 @@ The machine role that draws — a Mask for every Seat at the top of every Page, 
 _Avoid_: illustrator, image model, artist, "the image AI", painter
 
 **Speaker**:
-The one device in a Room that plays what Foley makes — the Stage when one is open, otherwise the phone that claimed it; claiming it silences whoever had it. Held by a device, not a Seat, so a phone with no Seat can hold it.
+The one device in a Room that plays what Foley makes — the Stage from the one tap that opens its sound, otherwise the phone that claimed it; claiming it silences whoever had it. A Stage nobody has tapped holds no Speaker: the browser's autoplay rule is met on purpose rather than discovered. Held by a device, not a Seat, so a phone with no Seat can hold it.
 _Avoid_: audio device, output, host phone, "the sound", speakerphone
 
 **Voice**:
