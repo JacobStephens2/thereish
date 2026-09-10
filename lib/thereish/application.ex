@@ -34,6 +34,9 @@ defmodule Thereish.Application do
       # Notice tasks run under their own supervisor so room creation never
       # blocks or fails on mail delivery.
       {Task.Supervisor, name: Thereish.Notice.Tasks},
+      # Foley score requests go through a single application-wide queue with
+      # one worker because Mureka allows at most one concurrent job per key.
+      Thereish.Foley.ScoreQueue,
       Thereish.Rooms.RateLimit,
       # Start to serve requests, typically the last entry
       ThereishWeb.Endpoint

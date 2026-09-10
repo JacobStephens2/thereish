@@ -141,7 +141,9 @@ defmodule Thereish.Steward.TrackCacheTest do
       assert track.path == "/media/tracks/forest.mp3"
     end
 
-    test "subsequent put with title updates title on existing untitled row", %{media_dir: media_dir} do
+    test "subsequent put with title updates title on existing untitled row", %{
+      media_dir: media_dir
+    } do
       gives = ["fog", "lighthouse"]
 
       track_attrs = %{
@@ -211,7 +213,9 @@ defmodule Thereish.Steward.TrackCacheTest do
   end
 
   describe "prune_dangling/0" do
-    test "deletes all rows whose files are missing on disk and reports count", %{media_dir: media_dir} do
+    test "deletes all rows whose files are missing on disk and reports count", %{
+      media_dir: media_dir
+    } do
       # Row 1: missing file
       TrackCache.put(["desert", "mirage"], %{
         title: "Desert Mirage",
