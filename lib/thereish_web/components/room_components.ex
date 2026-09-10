@@ -556,6 +556,23 @@ defmodule ThereishWeb.RoomComponents do
         </div>
       </section>
 
+      <div
+        :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
+        data-role="gives"
+        class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm opacity-80"
+      >
+        <span class="text-xs uppercase tracking-wider font-semibold opacity-60">Settings:</span>
+        <div
+          :for={give <- gives_list(@room)}
+          data-role="give"
+          data-seat={give[:seat_id]}
+          class="flex items-center gap-1.5"
+        >
+          <span class="font-semibold">{give[:name] || give[:seat_name]}:</span>
+          <span>{give[:text] || give[:give]}</span>
+        </div>
+      </div>
+
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
       </p>
@@ -740,6 +757,23 @@ defmodule ThereishWeb.RoomComponents do
         seat={@seat}
         side_mode?={true}
       />
+
+      <div
+        :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
+        data-role="gives"
+        class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm opacity-80"
+      >
+        <span class="text-xs uppercase tracking-wider font-semibold opacity-60">Settings:</span>
+        <div
+          :for={give <- gives_list(@room)}
+          data-role="give"
+          data-seat={give[:seat_id]}
+          class="flex items-center gap-1.5"
+        >
+          <span class="font-semibold">{give[:name] || give[:seat_name]}:</span>
+          <span>{give[:text] || give[:give]}</span>
+        </div>
+      </div>
 
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
@@ -1394,6 +1428,24 @@ defmodule ThereishWeb.RoomComponents do
     """
   end
 
+  defp first_reveal_happened?(room) do
+    room[:phase] in [:reveal, :closed, :revealed] or
+      (is_list(room[:played]) and room.played != [])
+  end
+
+  defp gives_list(room) do
+    cond do
+      is_map(room[:reveal]) and is_list(room.reveal[:gives]) ->
+        room.reveal.gives
+
+      is_list(room[:gives]) ->
+        room.gives
+
+      true ->
+        []
+    end
+  end
+
   def now_playing_text(nil), do: nil
 
   def now_playing_text(room) do
@@ -1403,8 +1455,12 @@ defmodule ThereishWeb.RoomComponents do
              room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
         "Music is off"
 
-      room[:playing] && room.playing[:kind] == "track" && room.playing[:title] ->
-        "Now playing: #{room.playing.title} (written for this Page)"
+      room[:playing] && room.playing[:kind] == "track" ->
+        if first_reveal_happened?(room) and room.playing[:title] do
+          "Now playing: #{room.playing.title} (written for this Page)"
+        else
+          "Now playing: written for this Page"
+        end
 
       room[:playing] && room.playing[:kind] == "holdover" && room.playing[:title] ->
         "Now playing: #{room.playing.title} (last Page's Track)"
@@ -1413,7 +1469,11 @@ defmodule ThereishWeb.RoomComponents do
         "Now playing: #{room.playing.title} (the Repertoire)"
 
       room[:track] && room.track[:path] && room.track[:title] ->
-        "Now playing: #{room.track.title} (written for this Page)"
+        if first_reveal_happened?(room) do
+          "Now playing: #{room.track.title} (written for this Page)"
+        else
+          "Now playing: written for this Page"
+        end
 
       room[:track] && room.track[:path] ->
         nil

@@ -1079,6 +1079,79 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "written for this Page"
     end
 
+    test "renders 'written for this Page' without title before reveal when playing kind is track" do
+      room = %{
+        music: "page",
+        phase: :bridging,
+        played: [],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: written for this Page"
+      refute html =~ "Summer Camp · Viking Beaches"
+    end
+
+    test "renders title and 'written for this Page' during reveal when playing kind is track" do
+      room = %{
+        music: "page",
+        phase: :reveal,
+        played: [],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+    end
+
+    test "renders title and 'written for this Page' after first reveal on subsequent attempt" do
+      room = %{
+        music: "page",
+        phase: :bridging,
+        played: [%{attempt: 1}],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+    end
+
+    test "renders title and 'written for this Page' on closed page" do
+      room = %{
+        music: "page",
+        phase: :closed,
+        played: [%{attempt: 1}],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+    end
+
     test "renders nothing when track has landed without title" do
       room = %{
         music: "page",
@@ -1104,6 +1177,84 @@ defmodule ThereishWeb.RoomComponentsTest do
       html = render_component(&now_playing/1, room: room)
 
       refute html =~ ~s(data-role="now-playing")
+    end
+  end
+
+  describe "closed page reveal gives" do
+    test "renders every Seat's Give with Seat name on closed page (standard mode)" do
+      room = %{
+        phase: :closed,
+        closed: %{because: :meld, attempt: 1},
+        reveal: %{
+          mode: :standard,
+          bridges: [%{seat_id: "s1", name: "Melissa", bridge: "cairn"}],
+          closeness: 95,
+          band: :deep_meld,
+          quip: "one mind",
+          gives: [
+            %{seat_id: "s1", name: "Melissa", text: "lighthouse"},
+            %{seat_id: "s2", name: "Jacob", text: "candle"}
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: room, mode: :stage, seat: nil)
+
+      assert html =~ ~s(data-role="gives")
+      assert html =~ ~s(data-role="give")
+      assert html =~ "Melissa:"
+      assert html =~ "lighthouse"
+      assert html =~ "Jacob:"
+      assert html =~ "candle"
+    end
+
+    test "renders every Seat's Give with Seat name on closed page (sides mode)" do
+      room = %{
+        phase: :closed,
+        closed: %{because: :meld, attempt: 1},
+        reveal: %{
+          mode: :sides,
+          sides: [],
+          closeness: 95,
+          band: :deep_meld,
+          quip: "one mind",
+          gives: [
+            %{seat_id: "s1", name: "Melissa", text: "lighthouse"},
+            %{seat_id: "s2", name: "Jacob", text: "candle"}
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: room, mode: :phone, seat: nil)
+
+      assert html =~ ~s(data-role="gives")
+      assert html =~ ~s(data-role="give")
+      assert html =~ "Melissa:"
+      assert html =~ "lighthouse"
+      assert html =~ "Jacob:"
+      assert html =~ "candle"
+    end
+
+    test "does not render gives before page is closed" do
+      room = %{
+        phase: :reveal,
+        closed: nil,
+        reveal: %{
+          mode: :standard,
+          bridges: [%{seat_id: "s1", name: "Melissa", bridge: "cairn"}],
+          closeness: 85,
+          band: :warm,
+          quip: "close enough",
+          gives: [
+            %{seat_id: "s1", name: "Melissa", text: "lighthouse"},
+            %{seat_id: "s2", name: "Jacob", text: "candle"}
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: room, mode: :stage, seat: nil)
+
+      refute html =~ ~s(data-role="gives")
     end
   end
 end
