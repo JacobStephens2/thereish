@@ -72,4 +72,19 @@ defmodule ThereishWeb.CheckLiveTest do
 
     assert html =~ "Transport: LongPoll (the websocket upgrade is not working)"
   end
+
+  test "the database status is rendered as connected when migrated", %{conn: conn} do
+    {:ok, _live, html} = live(conn, ~p"/check")
+
+    assert html =~ ~s(data-check="database")
+    assert html =~ "Database: connected"
+  end
+
+  test "the dead render reports database connected", %{conn: conn} do
+    conn = get(conn, ~p"/check")
+    html = html_response(conn, 200)
+
+    assert html =~ ~s(data-check="database")
+    assert html =~ "Database: connected"
+  end
 end

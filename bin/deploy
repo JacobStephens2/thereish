@@ -117,18 +117,21 @@ REMOTE
 
 echo "== Waiting for ${HOST} to answer"
 for _ in $(seq 1 30); do
-  # Gated on the marker attribute rather than on the page's prose, which is
-  # there to be reworded. ThereishWeb.CheckLive names this as load-bearing.
+  # Gated on the marker attributes rather than on the page's prose, which is
+  # there to be reworded. ThereishWeb.CheckLive names these as load-bearing.
   #
   # -s not -sS: a 502 while the old container is still going down is expected
   # here, and printing it every two seconds makes a normal deploy look broken.
-  if curl -fs --max-time 5 "https://${HOST}/check" | grep -q 'data-check="socket"'; then
+  CHECK_HTML=$(curl -fs --max-time 5 "https://${HOST}/check" || true)
+  if echo "${CHECK_HTML}" | grep -q 'data-check="socket"' && \
+     echo "${CHECK_HTML}" | grep -q 'data-check="database">Database: connected' && \
+     curl -fs --max-time 5 "https://${HOST}/" > /dev/null; then
     echo "== Live: https://${HOST}/"
     exit 0
   fi
   sleep 2
 done
 
-echo "Deployed, but https://${HOST}/check did not serve the check page within 60s." >&2
+echo "Deployed, but https://${HOST}/check or https://${HOST}/ did not answer healthy within 60s." >&2
 echo "Logs: ssh ${SERVER} 'cd ${APP_DIR} && ${COMPOSE} logs --tail=50 app'" >&2
 exit 1
