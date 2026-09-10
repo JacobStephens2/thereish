@@ -26,4 +26,6 @@ services:
       - ${ENV_FILE:-.env}
     ports:
       - "127.0.0.1:${APP_PORT:-3530}:4000"
+    volumes:
+      - ./media:/app/lib/thereish-0.1.0/priv/static/media
     restart: unless-stopped

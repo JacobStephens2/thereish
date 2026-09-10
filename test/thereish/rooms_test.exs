@@ -2534,6 +2534,11 @@ defmodule Thereish.RoomsTest do
       assert final_view.playing.path == final_view.track.path
 
       # The same Gives on another Page immediately return the cached track directly
+      disk_path = Thereish.Steward.TrackCache.disk_path(final_view.track.path)
+      File.mkdir_p!(Path.dirname(disk_path))
+      File.write!(disk_path, "mp3-bytes")
+      on_exit(fn -> File.rm(disk_path) end)
+
       _cached_key = Thereish.Steward.TrackCache.key(["frozen lake", "northern lights"])
       assert {:ok, cached} = Thereish.Steward.TrackCache.get(["frozen lake", "northern lights"])
       assert cached.path == final_view.track.path
@@ -2543,6 +2548,10 @@ defmodule Thereish.RoomsTest do
       # Pre-seed track cache
       gives = ["quiet library", "old books"]
       cached_path = "/media/tracks/preseeded-library.mp3"
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
 
       {:ok, _} =
         Thereish.Steward.TrackCache.put(gives, %{
@@ -2567,6 +2576,47 @@ defmodule Thereish.RoomsTest do
       assert view.track.path == cached_path
       assert view.track.format == :mp3
       assert view.playing.path == cached_path
+    end
+
+    test "a cache row with a missing file is a miss, is removed, and scores fresh", ctx do
+      gives = ["lost temple", "ancient ruins"]
+      missing_path = "/media/tracks/missing-temple-ruins.mp3"
+      cache_key = Thereish.Steward.TrackCache.key(gives)
+
+      # Ensure the file is not on disk
+      disk_path = Thereish.Steward.TrackCache.disk_path(missing_path)
+      File.rm(disk_path)
+
+      {:ok, _} =
+        Thereish.Steward.TrackCache.put(gives, %{
+          title: "Lost Temple",
+          path: missing_path,
+          duration: 120,
+          format: "mp3",
+          meta: %{provider: "fake"}
+        })
+
+      assert Thereish.Repo.get_by(Thereish.Steward.TrackCache, key: cache_key) != nil
+
+      Rooms.subscribe(ctx.slug)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "lost temple")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "ancient ruins")
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        not is_nil(view[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      # Fresh score instead of the missing cached file
+      refute view.track.path == missing_path
+      assert view.track.path =~ "ancient ruins-lost temple"
+      # The dangling row was replaced: TrackCache now holds the newly scored track
+      cached_row = Thereish.Repo.get_by(Thereish.Steward.TrackCache, key: cache_key)
+      assert cached_row != nil
+      assert cached_row.path != missing_path
+      assert cached_row.path == view.track.path
     end
 
     test "stale playable message arriving for moved-on Page is dropped", ctx do
@@ -2747,6 +2797,11 @@ defmodule Thereish.RoomsTest do
         format: :mp3,
         meta: %{provider: "cached", cost_usd: 0.04}
       }
+
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_track.path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
 
       {:ok, _} = Thereish.Steward.TrackCache.put(gives, cached_track)
 
