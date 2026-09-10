@@ -415,6 +415,15 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert carried_text =~ "cairn"
       assert carried_text =~ "beacon"
     end
+
+    test "book view displays each Seat's Mask on the Page", %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairns")
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=chronicle-page]")
+      assert has_element?(view, "[data-role=page-mask]")
+    end
   end
 
   describe "spend foot line (ticket 09)" do

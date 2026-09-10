@@ -1468,6 +1468,116 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  describe "masks drawn and kept (ticket 16)" do
+    setup do
+      slug = open_room()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+
+      steward = Application.fetch_env!(:thereish, :steward)
+      on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, steward: steward}
+    end
+
+    test "a Mask lands on the snapshot for the giving Seat when a Give lands (Fake)", ctx do
+      assert :ok = Rooms.give(ctx.slug, ctx.melissa.id, "candlelit cathedral")
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        view.your_mask != nil && view
+      end)
+
+      melissa_view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert melissa_view.your_mask != nil
+      assert melissa_view.your_mask.url =~ "/media/masks/mask-"
+
+      melissa_seat = Enum.find(melissa_view.seats, &(&1.id == ctx.melissa.id))
+      assert melissa_seat.mask.url =~ "/media/masks/mask-"
+
+      # Other seat and stage before reveal
+      jacob_view = Rooms.snapshot(ctx.slug, ctx.jacob.id)
+      assert jacob_view.your_mask == nil
+      assert Enum.find(jacob_view.seats, &(&1.id == ctx.melissa.id)).mask == nil
+
+      stage_view = Rooms.snapshot(ctx.slug, nil)
+      assert Enum.find(stage_view.seats, &(&1.id == ctx.melissa.id)).mask == :face_down
+    end
+
+    test "refusal retries once with a softened prompt then yields the dot; no third call", ctx do
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, draw_mode: :refused, draw_capture: self())
+        )
+      )
+
+      assert :ok = Rooms.give(ctx.slug, ctx.melissa.id, "candlelit cathedral")
+
+      assert_receive {:draw, "candlelit cathedral", _colour, opts}
+      refute opts[:softened]
+
+      assert_receive {:draw, "candlelit cathedral", _colour, retry_opts}
+      assert retry_opts[:softened] == true
+
+      refute_receive {:draw, _, _, _}, 100
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        view.your_mask == :dot && view
+      end)
+
+      melissa_view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert melissa_view.your_mask == :dot
+      assert Enum.find(melissa_view.seats, &(&1.id == ctx.melissa.id)).mask == :dot
+    end
+
+    test "late Mask replaces the dot in place without a page reload", ctx do
+      :ok = Rooms.subscribe(ctx.slug)
+
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, draw_mode: :refused)
+        )
+      )
+
+      assert :ok = Rooms.give(ctx.slug, ctx.melissa.id, "candlelit cathedral")
+
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.melissa.id).your_mask == :dot
+      end)
+
+      # Drain existing messages
+      receive do
+        :room_changed -> :ok
+      after
+        0 -> :ok
+      end
+
+      # Now simulate a late mask arriving
+      room_pid = GenServer.whereis(Server.via(ctx.slug))
+      late_mask = %{url: "/media/masks/mask-late.png", meta: %{}}
+      send(room_pid, {:mask_landed, ctx.melissa.id, nil, {:ok, late_mask}})
+
+      assert_receive :room_changed
+
+      melissa_view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert melissa_view.your_mask == late_mask
+      assert Enum.find(melissa_view.seats, &(&1.id == ctx.melissa.id)).mask == late_mask
+    end
+  end
+
   describe "A/B experiments harness" do
     setup do
       slug = open_room()

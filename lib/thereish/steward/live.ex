@@ -344,7 +344,13 @@ defmodule Thereish.Steward.Live do
         _ -> %{}
       end
 
-    prompt = Thereish.Steward.Limner.prompt(give, colour)
+    prompt =
+      Keyword.get(opts, :prompt) ||
+        if(Keyword.get(opts, :softened, false),
+          do: Thereish.Steward.Limner.softened_prompt(give, colour),
+          else: Thereish.Steward.Limner.prompt(give, colour)
+        )
+
     references = Thereish.Steward.Limner.references(role)
 
     provider =

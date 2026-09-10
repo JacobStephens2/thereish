@@ -126,7 +126,31 @@ defmodule Thereish.Steward do
   @spec draw(String.t() | map(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def draw(give, colour, opts \\ []) do
     give = Thereish.Steward.Author.give_text(give)
-    measure_call(fn -> adapter().draw(give, colour, opts) end)
+    retry? = Keyword.get(opts, :retry, true)
+
+    measure_call(fn ->
+      res =
+        case adapter().draw(give, colour, opts) do
+          {:ok, result} ->
+            {:ok, result}
+
+          {:error, _reason} when retry? ->
+            softened_opts = Keyword.merge(opts, [retry: false, softened: true])
+            adapter().draw(give, colour, softened_opts)
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      case res do
+        {:ok, %{bytes: bytes} = answer} when not is_map_key(answer, :url) ->
+          stored = Thereish.Steward.Limner.store_mask(bytes)
+          {:ok, Map.merge(answer, stored)}
+
+        other ->
+          other
+      end
+    end)
   end
 
   defp measure_call(fun) do
