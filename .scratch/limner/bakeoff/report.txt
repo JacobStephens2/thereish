@@ -1,0 +1,36 @@
+================================================================================
+LIMNER BAKE-OFF REPORT
+================================================================================
+Timestamp: 2026-09-10T03:35:26.953615Z
+Mode: Live Providers
+Gives: Liminal spaces, Vecna, can of worms, murder, lighthouse, candy cane
+
+Style: Cubist: the subject broken into overlapping planes seen from several angles at once. A restrained palette of ochre, umber, grey, and bone on a dark ground. Flat, poster-like, no text, no border. One subject centred and readable as a silhouette at thumbnail size. Suggest the setting a step removed — an object or figure it brings to mind, not a picture of the words themselves.
+
+--------------------------------------------------------------------------------
+TIMINGS
+--------------------------------------------------------------------------------
+Recraft V4 Styles
+  Liminal spaces: 11690 ms · $0.04
+  Vecna: 10527 ms · $0.04
+  can of worms: 13309 ms · $0.04
+  murder: 8667 ms · $0.04
+  lighthouse: 8642 ms · $0.04
+  candy cane: 9597 ms · $0.04
+
+Ideogram 3.0 turbo
+  Liminal spaces: 7663 ms · $0.03
+  Vecna: 8291 ms · $0.03
+  can of worms: 9688 ms · $0.03
+  murder: 8506 ms · $0.03
+  lighthouse: 9912 ms · $0.03
+  candy cane: 8770 ms · $0.03
+
+BFL FLUX.2
+  Liminal spaces: 10141 ms · $0.0131072
+  Vecna: 9138 ms · $0.0131072
+  can of worms: 8918 ms · $0.0131072
+  murder: FAILED %Req.TransportError{reason: :closed} (3250 ms)
+  lighthouse: FAILED %Req.TransportError{reason: :closed} (2525 ms)
+  candy cane: FAILED %Req.TransportError{reason: :closed} (822 ms)
+

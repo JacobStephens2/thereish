@@ -220,6 +220,33 @@ config :thereish, :steward,
         # Alternative:
         # voice: [provider: Thereish.Steward.ElevenLabs, voice_id: "JBFqnCBsd6RMkjVDRZzb", timeout_ms: 3_000]
       ]
+    ],
+    # The Limner draws a Mask from one Give. Recraft V4 Styles won the bake-off
+    # on house style (ticket 84); ~9–13 s from this Mac, so hosted FLUX.1
+    # schnell on fal remains the one-line fallback if that wait disappoints.
+    limner: [
+      provider: Thereish.Steward.Recraft,
+      model: "recraftv4_styles",
+      size: 512,
+      seed: 84,
+      timeout_ms: 30_000,
+      deadline_ms: 60_000,
+      poll_interval_ms: 500,
+      safety_tolerance: 5,
+      rendering_speed: "TURBO",
+      style_type: "DESIGN",
+      api_key: nil,
+      references: [
+        "01-liminal-spaces.png",
+        "02-vecna.png",
+        "03-can-of-worms.png",
+        "05-lighthouse.png"
+      ]
+      # Fallback if Recraft's wait disappoints in play:
+      # provider: Thereish.Steward.Fal, model: "fal-ai/flux/schnell"
+      # Other bake-off arms:
+      # provider: Thereish.Steward.Ideogram, model: "ideogram-v3-turbo"
+      # provider: Thereish.Steward.Bfl, model: "flux-2-flex"
     ]
   ],
   # Dollars per million tokens, {input, output}, from each provider's pricing
@@ -235,7 +262,13 @@ config :thereish, :steward,
     # Mureka instrumental music ($0.04 / track; Mureka's model identifier is "auto")
     "auto" => {:track, 0.04},
     "eleven_v3_conversational" => 0.00010,
-    "octave-2" => 0.00015
+    "octave-2" => 0.00015,
+    # Limner image models (research 2026-09-09).
+    "recraftv4_styles" => {:image, 0.035},
+    "recraftv4" => {:image, 0.04},
+    "ideogram-v3-turbo" => {:image, 0.03},
+    "flux-2-flex" => {:megapixel, 0.05},
+    "fal-ai/flux/schnell" => {:megapixel, 0.003}
   },
   # The most Seats a Room may hold, because live grading is N choose 2 requests
   # per attempt and six Seats is already fifteen of them. A limit on what a

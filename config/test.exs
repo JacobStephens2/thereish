@@ -84,6 +84,17 @@ config :thereish, :steward,
           timeout_ms: 3_000
         ]
       ]
+    ],
+    limner: [
+      provider: Thereish.Steward.Fal,
+      model: "fal-ai/flux/schnell",
+      size: 64,
+      seed: 84,
+      timeout_ms: 1_000,
+      deadline_ms: 2_000,
+      poll_interval_ms: 5,
+      api_key: "recorded-responses-need-no-key",
+      references: []
     ]
   ],
   http_options: [plug: {Req.Test, Thereish.Steward.Gemini}]
