@@ -92,6 +92,37 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(view_no_quip, "[data-role=code-quip]")
     end
 
+    test "ticket 02: bar controls wrap at phone widths and wrapper carries the wrap class" do
+      code = open_room()
+      {:ok, view, _html} = live(phone(code))
+
+      assert has_element?(view, "[data-role=speaker-bar] [data-role=bar-controls].flex-wrap")
+    end
+
+    test "ticket 02: music switch labels are Off, House, This Page on phone and Stage" do
+      code = open_room()
+      {:ok, phone_view, _html} = live(phone(code))
+      {:ok, stage, _html} = live(build_conn(), ~p"/r/#{code}/stage")
+
+      for view <- [phone_view, stage] do
+        assert has_element?(view, "[data-role=music-off]", "Off")
+        assert has_element?(view, "[data-role=music-house]", "House")
+        assert has_element?(view, "[data-role=music-page]", "This Page")
+        refute has_element?(view, "[data-role=music-house]", "House loop")
+        refute has_element?(view, "[data-role=music-page]", "Written for this Page")
+      end
+    end
+
+    test "ticket 02: Code card copy is the Code, the address, and the Stage button only" do
+      code = open_room(quip: nil)
+      {:ok, view, _html} = live(phone(code))
+
+      assert has_element?(view, "[data-role=room-code] [data-role=code]")
+      assert has_element?(view, "[data-role=room-code] [data-role=join-url]")
+      assert has_element?(view, "[data-role=room-code] [data-role=make-stage]")
+      refute element(view, "[data-role=room-code]") |> render() =~ "Read it aloud, or send"
+    end
+
     test "Stage header renders the Room's quip beside the join line when present, and nothing when absent" do
       slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
       {:ok, stage, _html} = live(build_conn(), ~p"/r/#{slug_with_quip}/stage")
