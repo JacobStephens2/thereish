@@ -31,18 +31,6 @@ defmodule Thereish.Steward.Mureka do
           cost_usd: float()
         }
 
-  @typedoc "An instrumental music streaming response"
-  @type stream_response :: %{
-          task_id: String.t(),
-          stream_url: String.t(),
-          url: String.t() | nil,
-          status: String.t(),
-          duration: non_neg_integer(),
-          model: String.t(),
-          time_to_stream_ms: non_neg_integer(),
-          cost_usd: float()
-        }
-
   @spec generate(request() | keyword() | map()) :: {:ok, response()} | {:error, term()}
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
 
@@ -65,77 +53,8 @@ defmodule Thereish.Steward.Mureka do
     end
   end
 
-  @doc """
-  Starts an instrumental generation job with `stream: true`, polls until a `stream_url`
-  is available, and returns stream metadata without waiting for the full file download.
-  """
-  @spec stream(request() | keyword() | map()) :: {:ok, stream_response()} | {:error, term()}
-  def stream(request) when is_list(request), do: request |> Map.new() |> stream()
-
-  def stream(request) when is_map(request) do
-    start_time = System.monotonic_time(:millisecond)
-
-    with {:ok, key} <- api_key(request) do
-      opts = parse_job_opts(request, key)
-
-      with {:ok, task_id} <-
-             start_job(opts.prompt, opts.model, opts.n, key, opts.timeout_ms, true),
-           {:ok, info} <- poll_stream_job(task_id, opts.poll_opts) do
-        elapsed = System.monotonic_time(:millisecond) - start_time
-
-        {:ok,
-         %{
-           task_id: task_id,
-           stream_url: info.stream_url,
-           url: info.url,
-           status: info.status,
-           duration: info.duration,
-           model: opts.model,
-           time_to_stream_ms: elapsed,
-           cost_usd: Provider.track_cost(opts.model)
-         }}
-      end
-    end
-  end
-
-  @doc """
-  Starts an instrumental generation job with `stream: true`, notifies `on_stream`
-  when a `stream_url` is returned during generation, and polls until completion
-  to download and return the final audio file bytes.
-  """
-  @spec stream_generate(request() | keyword() | map(), (map() -> any()) | nil) ::
-          {:ok, response()} | {:error, term()}
-  def stream_generate(request, on_stream \\ nil)
-
-  def stream_generate(request, on_stream) when is_list(request),
-    do: request |> Map.new() |> stream_generate(on_stream)
-
-  def stream_generate(request, on_stream) when is_map(request) do
-    start_time = System.monotonic_time(:millisecond)
-
-    with {:ok, key} <- api_key(request) do
-      opts = parse_job_opts(request, key)
-
-      with {:ok, task_id} <-
-             start_job(opts.prompt, opts.model, opts.n, key, opts.timeout_ms, true),
-           {:ok, choice} <-
-             poll_and_notify_stream(task_id, opts.poll_opts, start_time, opts.model, on_stream),
-           {:ok, bytes} <- download_url(choice.url, opts.timeout_ms) do
-        {:ok,
-         %{
-           bytes: bytes,
-           url: choice.url,
-           duration: choice.duration,
-           model: opts.model,
-           cost_usd: Provider.track_cost(opts.model)
-         }}
-      end
-    end
-  end
-
-  defp start_job(prompt, model, n, key, timeout_ms, stream \\ false) do
+  defp start_job(prompt, model, n, key, timeout_ms) do
     body = %{prompt: prompt, model: model, n: n}
-    body = if stream, do: Map.put(body, :stream, true), else: body
     url = "#{@base_url}/v1/instrumental/generate"
 
     opts =
@@ -195,119 +114,6 @@ defmodule Thereish.Steward.Mureka do
     end
   end
 
-  defp poll_stream_job(task_id, %{deadline_time: deadline_time} = opts) do
-    if System.monotonic_time(:millisecond) >= deadline_time do
-      {:error, :timeout}
-    else
-      case query_task(task_id, opts) do
-        {:ok, parsed} ->
-          %{status: status, stream_url: stream_url, url: url, duration: duration} =
-            parse_job_payload(parsed)
-
-          cond do
-            is_binary(stream_url) and stream_url != "" ->
-              {:ok,
-               %{
-                 stream_url: stream_url,
-                 url: url,
-                 status: status,
-                 duration: duration
-               }}
-
-            status == "succeeded" and is_binary(url) and url != "" ->
-              {:ok,
-               %{
-                 stream_url: url,
-                 url: url,
-                 status: status,
-                 duration: duration
-               }}
-
-            status in ["failed", "cancelled", "timeouted"] ->
-              {:error, {:failed, status}}
-
-            true ->
-              Process.sleep(opts.poll_interval_ms)
-              poll_stream_job(task_id, opts)
-          end
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    end
-  end
-
-  defp poll_and_notify_stream(
-         task_id,
-         %{deadline_time: deadline_time} = opts,
-         start_time,
-         model,
-         on_stream,
-         streamed? \\ false
-       ) do
-    if System.monotonic_time(:millisecond) >= deadline_time do
-      {:error, :timeout}
-    else
-      case query_task(task_id, opts) do
-        {:ok, parsed} ->
-          %{status: status, stream_url: stream_url, url: url, duration: duration} =
-            parse_job_payload(parsed)
-
-          streamed? =
-            if not streamed? and is_binary(stream_url) and stream_url != "" and
-                 is_function(on_stream, 1) do
-              elapsed = System.monotonic_time(:millisecond) - start_time
-
-              try do
-                on_stream.(%{
-                  task_id: task_id,
-                  stream_url: stream_url,
-                  duration: duration,
-                  model: model,
-                  time_to_stream_ms: elapsed,
-                  cost_usd: Provider.track_cost(model)
-                })
-              rescue
-                err -> Logger.warning("on_stream callback raised: #{inspect(err)}")
-              end
-
-              true
-            else
-              streamed?
-            end
-
-          case status do
-            "succeeded" ->
-              case url do
-                url when is_binary(url) and url != "" ->
-                  {:ok, %{url: url, duration: duration}}
-
-                _ ->
-                  {:error, :no_choices}
-              end
-
-            failed when failed in ["failed", "cancelled", "timeouted"] ->
-              {:error, {:failed, failed}}
-
-            _other ->
-              Process.sleep(opts.poll_interval_ms)
-
-              poll_and_notify_stream(
-                task_id,
-                opts,
-                start_time,
-                model,
-                on_stream,
-                streamed?
-              )
-          end
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    end
-  end
-
   defp query_task(task_id, opts) do
     url = "#{@base_url}/v1/instrumental/query/#{task_id}"
 
@@ -337,7 +143,6 @@ defmodule Thereish.Steward.Mureka do
 
     %{
       status: parsed["status"],
-      stream_url: choice["stream_url"] || parsed["stream_url"],
       url: choice["url"] || parsed["url"],
       duration: choice["duration"] || parsed["duration"] || 120
     }

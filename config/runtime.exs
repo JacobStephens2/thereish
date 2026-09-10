@@ -61,7 +61,10 @@ if key = System.get_env("ELEVENLABS_API_KEY") do
     roles: [
       foley: [
         elevenlabs_api_key: key,
-        jobs: [effects: [api_key: key]]
+        jobs: [
+          effects: [api_key: key],
+          vamp: [api_key: key]
+        ]
       ]
     ]
 end

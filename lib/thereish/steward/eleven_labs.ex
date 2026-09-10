@@ -109,7 +109,9 @@ defmodule Thereish.Steward.ElevenLabs do
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
 
   def generate(request) when is_map(request) do
-    with {:ok, key} <- api_key(request, :effects) do
+    job_kind = Map.get(request, :job_kind) || Map.get(request, :job) || :effects
+
+    with {:ok, key} <- api_key(request, job_kind) do
       model = Map.get(request, :model) || Map.get(request, "model", "eleven_text_to_sound_v2")
 
       output_format =
