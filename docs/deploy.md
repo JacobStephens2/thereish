@@ -50,8 +50,15 @@ of that reaches the server anyway.
 | App | `mix phx.server` on `:4000` | the release image, container port 4000 published on `127.0.0.1:3530` |
 | Postgres | `docker-compose.yml`, published on `127.0.0.1:5432` | the host's own Postgres 16 cluster, database `meaning_game` |
 | TLS | none | Apache vhost + certbot, `deploy/thereish.app.conf` |
+| Media | `./media` in repo root | `/var/www/thereish.app/media`, bind-mounted into container |
 
 The OTP application is `thereish`; the database it talks to is still `meaning_game`. Renaming the database is a separate job — a failed rename here loses the Chronicle.
+
+Generated media (Foley Track audio files written by Mureka, and future Masks) lives in the media directory on the host:
+- **On the VPS**: `/var/www/thereish.app/media` (created in `/var/www/thereish.app`).
+- **On the Mac**: `./media` (at the repository root).
+
+`docker-compose.app.yml` bind-mounts `./media` into the release container at `/app/lib/thereish-0.1.0/priv/static/media`, so files survive container recreations and image rebuilds. If a cache row's file is missing on disk, `Thereish.Steward.TrackCache.get/1` treats it as a miss and removes the row so the Track is scored again. Dangling rows can also be pruned via `mix track_cache.prune`.
 
 `docker-compose.app.yml` runs the release image and is the same file in both
 places. It never contains Postgres: the container reaches whichever cluster the
@@ -290,9 +297,14 @@ deployment's proof of life and nothing game-shaped. It reports four things:
   true over LiveView's long-poll fallback, so a vhost missing
   `upgrade=websocket` would still say "Socket connected" while quietly costing
   a round-trip per message. If this ever reads `LongPoll`, the proxy is broken.
+  If Apache access logs show long-polling bursts, check whether a container restart
+  occurred while tabs were open: dropping the connection during a restart triggers
+  LiveView's client-side `longPollFallbackMs` timer to fall back to long-polling
+  for that tab until hard-refreshed.
 - **Secure context: yes** — pushed back by the browser. Required for the Screen
   Wake Lock the stage view takes in ticket 02.
 - **Screen Wake Lock: available** — whether this browser has the API at all.
+
 
 ## Operating
 

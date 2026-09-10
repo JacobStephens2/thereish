@@ -223,8 +223,9 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
-  def handle_event("toggle_voice", _params, socket) do
-    Rooms.set_voice(socket.assigns.slug, !socket.assigns.room.voice)
+  def handle_event("toggle_quips", _params, socket) do
+    current = Map.get(socket.assigns.room, :quips, true)
+    Rooms.set_quips(socket.assigns.slug, !current)
     {:noreply, resync(socket)}
   end
 
@@ -603,6 +604,15 @@ defmodule ThereishWeb.RoomLive do
       <section class="flex flex-col gap-2">
         <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>
         <.roster room={@room} />
+        <div class="mt-1">
+          <.link
+            navigate={~p"/new"}
+            data-role="start-another-room"
+            class="text-sm font-medium underline opacity-70 hover:opacity-100"
+          >
+            Start another Room
+          </.link>
+        </div>
       </section>
 
       <footer class="flex flex-col gap-3 border-t border-base-300 pt-6">
@@ -647,7 +657,7 @@ defmodule ThereishWeb.RoomLive do
       data-role="speaker-bar"
       class="flex flex-col gap-2 rounded-lg border border-base-300 px-4 py-2"
     >
-      <div class="flex items-center justify-between">
+      <div data-role="bar-controls" class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <button
             type="button"
@@ -699,7 +709,7 @@ defmodule ThereishWeb.RoomLive do
         {@room.quip}
       </p>
       <p class="mt-2 text-center text-sm opacity-70">
-        Read it aloud, or send <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>.
+        <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
       </p>
       <div class="mt-4">
         <.button navigate={~p"/r/#{@code}/stage"} data-role="make-stage" class="btn-sm text-xs">

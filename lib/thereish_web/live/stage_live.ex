@@ -61,8 +61,9 @@ defmodule ThereishWeb.StageLive do
     {:noreply, resync(socket)}
   end
 
-  def handle_event("toggle_voice", _params, socket) do
-    Rooms.set_voice(socket.assigns.slug, !socket.assigns.room.voice)
+  def handle_event("toggle_quips", _params, socket) do
+    current = Map.get(socket.assigns.room, :quips, true)
+    Rooms.set_quips(socket.assigns.slug, !current)
     {:noreply, resync(socket)}
   end
 
@@ -122,7 +123,9 @@ defmodule ThereishWeb.StageLive do
     >
       <header class="flex items-center justify-between w-full shrink-0 gap-4">
         <div class="flex items-baseline gap-3 sm:gap-4">
-          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
+          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">
+            <.link navigate={~p"/"} class="hover:opacity-80">Thereish</.link>
+          </h1>
           <p
             :if={@room && not filling?(@room)}
             data-role="stage-code"

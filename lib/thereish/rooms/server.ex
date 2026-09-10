@@ -108,6 +108,7 @@ defmodule Thereish.Rooms.Server do
         deal: deal,
         eligible_members: eligible_members,
         music_meta: nil,
+        gives_landed_at: nil,
         voice_audio: nil,
         voice_meta: %{}
       }
@@ -323,8 +324,8 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  def handle_call({:set_voice, enabled}, _from, state) do
-    case Store.update_room(state.room, %{voice: enabled}) do
+  def handle_call({:set_quips, enabled}, _from, state) do
+    case Store.update_room(state.room, %{quips: enabled}) do
       {:ok, room} ->
         state = %{state | room: room}
         broadcast(state.room.slug)
@@ -492,7 +493,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:author_step, author_step(state))
       |> Map.put(:speaker?, speaker?)
       |> Map.put(:speaker_claimed?, speaker_claimed?)
-      |> Map.put(:voice, state.room.voice)
+      |> Map.put(:quips, state.room.quips)
       |> Map.put(:music, state.room.music)
       |> Map.put(:quip, state.room.quip)
       |> Map.put(:track, if(state.room.music == "page", do: state[:current_track], else: nil))
@@ -703,6 +704,7 @@ defmodule Thereish.Rooms.Server do
     else
       case result do
         {:ok, track} ->
+          log_music_event(state, page_ref, "track landed")
           title = track[:title] || state[:current_title]
           title_meta = state[:title_meta] || %{}
           state = apply_track_and_title(state, track, title, title_meta, page_ref)
@@ -710,7 +712,7 @@ defmodule Thereish.Rooms.Server do
           {:noreply, state}
 
         {:error, reason} ->
-          Logger.warning("Foley score failed for room #{state.room.slug}: #{inspect(reason)}")
+          log_music_event(state, page_ref, {:failure, reason})
           failure_meta = Thereish.Steward.score_failure(reason)
 
           state =
@@ -1046,11 +1048,14 @@ defmodule Thereish.Rooms.Server do
 
     gives = extract_give_strings(request)
 
+    now = System.monotonic_time(:millisecond)
+
     state =
       state
       |> Map.put(:current_arm, arm)
       |> Map.put(:current_page_ref, page_ref)
       |> Map.put(:current_gives, gives)
+      |> Map.put(:gives_landed_at, now)
       |> Map.put(:current_title, nil)
       |> Map.put(:title_meta, nil)
       |> Map.put(:music_meta, nil)
@@ -1092,6 +1097,7 @@ defmodule Thereish.Rooms.Server do
     page = state.game.page
     seats = state.game.seats
     bridges = state.game.bridges
+    request = with_prior_quips(request, state)
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       main_task = Task.async(fn -> assay(request, page, arm) end)
@@ -1176,6 +1182,12 @@ defmodule Thereish.Rooms.Server do
     arm = state[:current_arm] || :flash
     page = state.game.page
 
+    request = %{
+      side_a: with_prior_quips(request.side_a, state),
+      side_b: with_prior_quips(request.side_b, state),
+      overall: with_prior_quips(request.overall, state)
+    }
+
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       task_side_a = Task.async(fn -> assay(request.side_a, page, arm) end)
       task_side_b = Task.async(fn -> assay(request.side_b, page, arm) end)
@@ -1219,6 +1231,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:title_meta, nil)
       |> Map.put(:music_meta, nil)
       |> Map.put(:current_gives, nil)
+      |> Map.put(:gives_landed_at, nil)
       |> Map.put(:score_task_running, false)
       |> Map.put(:title_task_running, false)
 
@@ -1242,8 +1255,13 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp start_music_tasks(room, page_ref, gives, state) do
+    gives_landed_at = state[:gives_landed_at] || System.monotonic_time(:millisecond)
+    state = Map.put(state, :gives_landed_at, gives_landed_at)
+
     case Thereish.Steward.TrackCache.get(gives) do
       {:ok, cached_track} when not is_nil(cached_track.title) ->
+        log_music_event(state, page_ref, "cache hit")
+
         music_meta =
           build_music_meta(cached_track.meta,
             title: cached_track.title,
@@ -1260,14 +1278,21 @@ defmodule Thereish.Rooms.Server do
         |> Map.put(:title_task_running, false)
 
       _ ->
+        log_music_event(state, page_ref, "cache miss")
+
         state
-        |> start_score_task(room, page_ref, gives)
+        |> start_score_task(room, page_ref, gives, gives_landed_at)
         |> start_title_task(room, page_ref, gives)
     end
   end
 
-  defp start_score_task(state, room, page_ref, gives) do
+  defp start_score_task(state, room, page_ref, gives, gives_landed_at) do
+    code = state.room.slug
+    log_music_event(code, page_ref, "score queued", gives_landed_at)
+
     start_music_task(state, room, page_ref, :score_task_running, :scored, fn ->
+      log_music_event(code, page_ref, "score started", gives_landed_at)
+
       Steward.score(gives,
         on_playable: fn playable ->
           send(room, {:playable, page_ref, {:ok, playable}})
@@ -1419,6 +1444,28 @@ defmodule Thereish.Rooms.Server do
     :exit, reason -> {:error, {:exit, reason}}
   end
 
+  defp with_prior_quips(request, state) do
+    Map.put(request, :prior_quips, prior_quips(state))
+  end
+
+  defp prior_quips(state) do
+    closed = Chronicle.recent_quips(state.room.id, 5)
+    in_flight = played_quips(state.game)
+    Enum.take(closed ++ in_flight, -5)
+  end
+
+  defp played_quips(%{played: played}) when is_list(played) do
+    for attempt <- played,
+        quip <- attempt_quips(attempt) do
+      quip
+    end
+  end
+
+  defp played_quips(_game), do: []
+
+  defp attempt_quips(%{verdict: %{quip: quip}}) when is_binary(quip) and quip != "", do: [quip]
+  defp attempt_quips(_attempt), do: []
+
   # How long the reveal is held is the Room's to know, because running it is the
   # Room's job. The rules only say that a beat is owed.
   defp beat_ms, do: Application.fetch_env!(:thereish, :reveal_beat_ms)
@@ -1434,7 +1481,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp maybe_start_voice_task({:verdict_received, verdict}, state) do
-    if state.room.voice and not is_nil(state.room.speaker) and state.room.speaker != "" do
+    if not is_nil(state.room.speaker) and state.room.speaker != "" do
       closeness = verdict[:closeness] || verdict["closeness"]
 
       band =
@@ -1445,7 +1492,13 @@ defmodule Thereish.Rooms.Server do
       band_word = band |> String.replace("_", " ")
       quip = (verdict[:quip] || verdict["quip"] || "") |> to_string() |> String.trim()
 
-      line = if quip != "", do: "#{band_word}. #{quip}", else: band_word
+      line =
+        if state.room.quips && quip != "" do
+          "#{band_word}. #{quip}"
+        else
+          band_word
+        end
+
       room = self()
       attempt = state.game.attempt
 
@@ -1495,4 +1548,42 @@ defmodule Thereish.Rooms.Server do
 
   # Device tokens are the browser's business and never leave this module.
   defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name, partner_id: seat.partner_id}
+
+  @doc """
+  Logs a music event carrying the Room's Code, Page reference, event name,
+  and milliseconds since Gives landed.
+  """
+  def log_music_event(%{room: %{slug: code}} = state, page_ref, event) do
+    log_music_event(code, page_ref, event, state[:gives_landed_at])
+  end
+
+  def log_music_event(code, page_ref, event, gives_landed_at \\ nil)
+
+  def log_music_event(code, page_ref, {:failure, reason}, gives_landed_at) do
+    log_music_event(code, page_ref, "failure with reason: #{inspect(reason)}", gives_landed_at)
+  end
+
+  def log_music_event(code, page_ref, event, gives_landed_at) when is_binary(event) do
+    elapsed = elapsed_ms(gives_landed_at)
+    ref_str = format_page_ref(page_ref)
+
+    msg = "Foley music for room #{code} (page #{ref_str}): #{event} (+#{elapsed}ms)"
+
+    if String.starts_with?(event, "failure") do
+      Logger.warning(msg)
+    else
+      Logger.info(msg)
+    end
+
+    :ok
+  end
+
+  defp elapsed_ms(time) when is_integer(time) do
+    max(0, System.monotonic_time(:millisecond) - time)
+  end
+
+  defp elapsed_ms(_), do: 0
+
+  defp format_page_ref(ref) when is_binary(ref), do: ref
+  defp format_page_ref(ref), do: inspect(ref)
 end

@@ -96,6 +96,37 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(view_no_quip, "[data-role=code-quip]")
     end
 
+    test "ticket 02: bar controls wrap at phone widths and wrapper carries the wrap class" do
+      code = open_room()
+      {:ok, view, _html} = live(phone(code))
+
+      assert has_element?(view, "[data-role=speaker-bar] [data-role=bar-controls].flex-wrap")
+    end
+
+    test "ticket 02: music switch labels are Off, House, This Page on phone and Stage" do
+      code = open_room()
+      {:ok, phone_view, _html} = live(phone(code))
+      {:ok, stage, _html} = live(build_conn(), ~p"/r/#{code}/stage")
+
+      for view <- [phone_view, stage] do
+        assert has_element?(view, "[data-role=music-off]", "Off")
+        assert has_element?(view, "[data-role=music-house]", "House")
+        assert has_element?(view, "[data-role=music-page]", "This Page")
+        refute has_element?(view, "[data-role=music-house]", "House loop")
+        refute has_element?(view, "[data-role=music-page]", "Written for this Page")
+      end
+    end
+
+    test "ticket 02: Code card copy is the Code, the address, and the Stage button only" do
+      code = open_room(quip: nil)
+      {:ok, view, _html} = live(phone(code))
+
+      assert has_element?(view, "[data-role=room-code] [data-role=code]")
+      assert has_element?(view, "[data-role=room-code] [data-role=join-url]")
+      assert has_element?(view, "[data-role=room-code] [data-role=make-stage]")
+      refute element(view, "[data-role=room-code]") |> render() =~ "Read it aloud, or send"
+    end
+
     test "Stage header renders the Room's quip beside the join line when present, and nothing when absent" do
       slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
       {:ok, stage, _html} = live(build_conn(), ~p"/r/#{slug_with_quip}/stage")
@@ -119,9 +150,53 @@ defmodule ThereishWeb.RoomLiveTest do
       for view <- [melissa, jacob, stage] do
         assert has_element?(view, "[data-seat]", "Melissa")
         assert has_element?(view, "[data-seat]", "Jacob")
+        refute has_element?(view, "[data-role=open-seats]")
       end
 
-      assert render(stage) =~ "All 2 seats taken"
+      refute render(stage) =~ "All 2 seats taken"
+    end
+
+    test "fill line renders 'Waiting for 1 more' at one Seat, and no fill line at two or more before and during play" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      {:ok, melissa, _} = live(phone(slug))
+
+      # Before anyone joins, no fill line
+      refute has_element?(stage, "[data-role=open-seats]")
+
+      # One Seat joined: "Waiting for 1 more" on phone and stage
+      join(melissa, "Melissa")
+      assert has_element?(melissa, "[data-role=open-seats]", "Waiting for 1 more")
+      assert has_element?(stage, "[data-role=open-seats]", "Waiting for 1 more")
+
+      # Two Seats joined: no fill line on either phone or stage
+      {:ok, jacob, _} = live(phone(slug))
+      join(jacob, "Jacob")
+      refute has_element?(melissa, "[data-role=open-seats]")
+      refute has_element?(jacob, "[data-role=open-seats]")
+      refute has_element?(stage, "[data-role=open-seats]")
+    end
+
+    test "'Start another Room' link is present at the bottom of the phone view below the Seat list, and absent on the Stage" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      {:ok, melissa, _} = live(phone(slug))
+
+      # On phone, link is present below roster
+      assert has_element?(melissa, "[data-role=start-another-room]", "Start another Room")
+      assert has_element?(melissa, "a[href='/new']", "Start another Room")
+      html = render(melissa)
+      assert_order(html, [~s(data-role="roster"), ~s(data-role="start-another-room")])
+
+      # Even after joining, it stays present at the bottom below the Seat list
+      join(melissa, "Melissa")
+      assert has_element?(melissa, "[data-role=start-another-room]", "Start another Room")
+      assert_order(render(melissa), [~s(data-role="roster"), ~s(data-role="start-another-room")])
+
+      # On Stage, it is absent
+      refute has_element?(stage, "[data-role=start-another-room]")
+      refute has_element?(stage, "a[href='/new']")
+      refute render(stage) =~ "Start another Room"
     end
 
     test "each phone is told which Seat is its own, and the stage holds none" do
@@ -237,11 +312,16 @@ defmodule ThereishWeb.RoomLiveTest do
       %{slug: slug, melissa: melissa, melissa_conn: melissa_conn, jacob: jacob}
     end
 
-    test "the Bookends are up on both phones and the stage", ctx do
+    test "the Bookends are up on both phones and the stage, with label on Stage only", ctx do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
 
+      assert has_element?(stage, "[data-role=bookends-caption]", "Bookends")
+
+      for phone <- [ctx.melissa, ctx.jacob] do
+        refute has_element?(phone, "[data-role=bookends-caption]")
+      end
+
       for view <- [ctx.melissa, ctx.jacob, stage] do
-        assert has_element?(view, "[data-role=bookends-caption]", "Bookends")
         assert has_element?(view, "[data-role=bookends]", "lantern")
         assert has_element?(view, "[data-role=bookends]", "harbour")
       end
@@ -628,11 +708,8 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(stage, "footer [data-seat]", "Melissa")
       assert has_element?(stage, "footer [data-seat]", "Jacob")
 
-      assert has_element?(
-               stage,
-               "[data-role=stage-foot] [data-role=open-seats]",
-               "All 2 seats taken"
-             )
+      refute has_element?(stage, "[data-role=stage-foot] [data-role=open-seats]")
+      refute html =~ "All 2 seats taken"
 
       refute has_element?(stage, "h2", "In the Room")
       refute html =~ "In the Room"
@@ -880,11 +957,14 @@ defmodule ThereishWeb.RoomLiveTest do
 
       assert has_element?(ctx.melissa, "footer [data-role=you]", "Melissa")
       assert has_element?(ctx.melissa, "footer h1", "Thereish")
+      refute has_element?(ctx.melissa, "footer h1 a")
+      refute has_element?(ctx.melissa, "footer a[href='/']", "Thereish")
       assert has_element?(ctx.melissa, "footer a", "The Chronicle")
 
-      # Stage has public stage mode and no private (you) attribution
+      # Stage has public stage mode and no private (you) attribution; wordmark links home
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
       assert has_element?(stage, "header h1", "Thereish")
+      assert has_element?(stage, "header h1 a[href='/']", "Thereish")
       assert has_element?(stage, "[data-mode=stage]")
       refute has_element?(stage, "[data-bridge][data-you=true]")
     end
@@ -1827,8 +1907,10 @@ defmodule ThereishWeb.RoomLiveTest do
 
       assert has_element?(ctx.stage, "[data-role=voice-switch]")
       assert has_element?(ctx.stage, "[data-role=music-control]")
-      assert has_element?(ctx.melissa, "[data-role=voice-switch]")
+      assert has_element?(ctx.stage, "[data-role=quips-switch]")
+      refute has_element?(ctx.melissa, "[data-role=voice-switch]")
       assert has_element?(ctx.melissa, "[data-role=music-control]")
+      assert has_element?(ctx.melissa, "[data-role=quips-switch]")
       assert has_element?(ctx.melissa, "[data-role=local-sound-toggle]")
 
       assert has_element?(
@@ -1836,12 +1918,16 @@ defmodule ThereishWeb.RoomLiveTest do
                "[data-role=local-sound-toggle][title=\"Commit sound plays from the Stage while connected\"]"
              )
 
-      assert has_element?(ctx.jacob, "[data-role=voice-switch]")
+      refute has_element?(ctx.jacob, "[data-role=voice-switch]")
       assert has_element?(ctx.jacob, "[data-role=music-control]")
+      assert has_element?(ctx.jacob, "[data-role=quips-switch]")
       assert has_element?(ctx.jacob, "[data-role=local-sound-toggle]")
       refute has_element?(ctx.stage, "[data-role=local-sound-toggle]")
 
       assert has_element?(ctx.stage, "[data-role=voice-switch][data-active=false]")
+      assert has_element?(ctx.stage, "[data-role=quips-switch][data-active=true]")
+      assert has_element?(ctx.melissa, "[data-role=quips-switch][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=quips-switch][data-active=true]")
       assert has_element?(ctx.stage, "[data-role=music-page][data-active=true]")
       assert has_element?(ctx.melissa, "[data-role=music-page][data-active=true]")
       assert has_element?(ctx.jacob, "[data-role=music-page][data-active=true]")
@@ -1854,19 +1940,21 @@ defmodule ThereishWeb.RoomLiveTest do
       # the Speaker home.
       assert has_element?(ctx.stage, "[data-role=tap-for-sound]")
 
-      assert has_element?(ctx.stage, "[data-role=voice-switch]")
+      refute has_element?(ctx.stage, "[data-role=voice-switch]")
       assert has_element?(ctx.stage, "[data-role=music-control]")
       assert has_element?(ctx.melissa, "[data-role=speaker-toggle][data-speaker=self]")
       assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
 
       assert has_element?(ctx.melissa, "[data-role=voice-switch]")
+      refute has_element?(ctx.jacob, "[data-role=voice-switch]")
       assert has_element?(ctx.melissa, "[data-role=music-control]")
 
-      ctx.melissa |> element("[data-role=voice-switch]") |> render_click()
-      assert Rooms.get_room(ctx.slug).voice == true
-      assert has_element?(ctx.melissa, "[data-role=voice-switch][data-active=true]")
-      assert has_element?(ctx.stage, "[data-role=voice-switch][data-active=true]")
-      assert has_element?(ctx.jacob, "[data-role=voice-switch][data-active=true]")
+      # Quips fact toggles from any device and updates all views
+      ctx.melissa |> element("[data-role=quips-switch]") |> render_click()
+      assert Rooms.get_room(ctx.slug).quips == false
+      assert has_element?(ctx.melissa, "[data-role=quips-switch][data-active=false]")
+      assert has_element?(ctx.stage, "[data-role=quips-switch][data-active=false]")
+      assert has_element?(ctx.jacob, "[data-role=quips-switch][data-active=false]")
 
       ctx.jacob |> element("[data-role=music-off]") |> render_click()
       assert Rooms.get_room(ctx.slug).music == "off"
@@ -2036,10 +2124,6 @@ defmodule ThereishWeb.RoomLiveTest do
       refute_push_event(ctx.melissa, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
-      # Stage is speaker; enable voice switch
-      ctx.stage |> element("[data-role=voice-switch]") |> render_click()
-      assert Rooms.get_room(ctx.slug).voice == true
-
       commit(ctx.melissa, "cairn")
       commit(ctx.jacob, "cairo")
 
@@ -2059,9 +2143,8 @@ defmodule ThereishWeb.RoomLiveTest do
       refute_push_event(ctx.melissa, "foley:voice", %{})
       refute_push_event(ctx.jacob, "foley:voice", %{})
 
-      # Phone claims speaker; voice switch persists
+      # Phone claims speaker
       ctx.melissa |> element("[data-role=speaker-toggle]") |> render_click()
-      assert Rooms.get_room(ctx.slug).voice == true
 
       ctx.melissa |> element("[data-role=again]") |> render_click()
       await_phase(ctx.slug, :bridging)
@@ -2082,6 +2165,59 @@ defmodule ThereishWeb.RoomLiveTest do
       refute_push_event(ctx.stage, "foley:sting", %{})
       refute_push_event(ctx.stage, "foley:voice", %{})
       refute_push_event(ctx.jacob, "foley:voice", %{})
+    end
+
+    test "ticket 10: quips toggle hides reveal quip everywhere while room quip still shows, and stings still push with voice off" do
+      slug = open_room(quip: "A gentle word for quiet hours.")
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      tap_for_sound(stage)
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      give_setting(melissa, "setting one")
+      give_setting(jacob, "setting two")
+      await_phase(slug, :bridging)
+
+      commit(melissa, "cairn")
+      commit(jacob, "cairo")
+
+      await_reveal_on(stage)
+      await_reveal_on(melissa)
+
+      # Initially quips is true: reveal quip is present on stage, room quip shows on stage footer
+      assert has_element?(stage, "[data-role=quip]")
+      assert has_element?(stage, "[data-role=stage-quip]", "A gentle word for quiet hours.")
+
+      # Stings still push to speaker (stage) even with voice off
+      assert_push_event(stage, "foley:sting", %{band: _})
+
+      # Toggle quips switch from a phone device
+      melissa |> element("[data-role=quips-switch]") |> render_click()
+      assert Rooms.get_room(slug).quips == false
+
+      # Reveal quip is hidden everywhere
+      refute has_element?(stage, "[data-role=quip]")
+      refute has_element?(melissa, "[data-role=quip]")
+      refute has_element?(jacob, "[data-role=quip]")
+
+      # Room quip still shows on Stage footer
+      assert has_element?(stage, "[data-role=stage-quip]", "A gentle word for quiet hours.")
+
+      # Next Page: confirm quips stays false and reveal quip stays hidden
+      melissa |> element("[data-role=again]") |> render_click()
+      await_phase(slug, :bridging)
+      eventually(fn -> has_element?(melissa, "[data-role=bridge-form]") end)
+
+      commit(melissa, "stone")
+      commit(jacob, "stone")
+
+      await_reveal_on(stage)
+      refute has_element?(stage, "[data-role=quip]")
+      assert has_element?(stage, "[data-role=stage-quip]", "A gentle word for quiet hours.")
+      assert_push_event(stage, "foley:sting", %{band: _})
     end
 
     test "ticket 03: foley:page carries title and kind: house before track lands, and Now playing line renders below the fold",
@@ -2228,9 +2364,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.stage,
           "[data-role=now-playing]",
-          "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               "Summer Camp · Viking Beaches"
+             )
     end
 
     test "foley:page pushes playable-early stream, speaker plays it and updates Now playing, then transitions to completed track",
@@ -2283,9 +2425,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.stage,
           "[data-role=now-playing]",
-          "Alpine Forest · Snowy Peaks (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               "Alpine Forest · Snowy Peaks"
+             )
 
       # 2. Later, completed MP3 track lands and pushes updated foley:page
       assert_push_event(
@@ -2432,9 +2580,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.stage,
           "[data-role=now-playing]",
-          "Now playing: #{p1_title} (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               p1_title
+             )
 
       eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
       eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
@@ -2520,9 +2674,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.melissa,
           "[data-role=now-playing]",
-          "Now playing: #{p2_title} (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.melissa,
+               "[data-role=now-playing]",
+               p2_title
+             )
     end
 
     test "ticket 03: Next renders only on the speaking screen, below the fold with the music control, and pushes new foley:page on tap",
@@ -3452,6 +3612,103 @@ defmodule ThereishWeb.RoomLiveTest do
         eventually(fn -> has_element?(phone, "[data-role=setting-form]") end)
         refute has_element?(phone, "[data-role=late-seat]")
       end
+    end
+  end
+
+  describe "the title keeps the secret, the end screen tells it (ticket 09)" do
+    setup do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      tap_for_sound(stage)
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage}
+    end
+
+    test "\"Now playing\" reads \"written for this Page\" before reveal and shows title after; Gives with Seat names render on closed Page reveal on phone and Stage",
+         ctx do
+      # 1. Giving phase: Melissa and Jacob give settings
+      give_setting(ctx.melissa, "lighthouse on the rocks")
+      give_setting(ctx.jacob, "candle in the window")
+      await_phase(ctx.slug, :bridging)
+
+      # Track lands for the page
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: _track_path,
+          title: track_title,
+          kind: "track"
+        },
+        1000
+      )
+
+      # 2. Before reveal: "Now playing" reads "written for this Page" on Stage
+      # Excludes Track's title
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          "Now playing: written for this Page"
+        )
+      end)
+
+      refute has_element?(ctx.stage, "[data-role=now-playing]", track_title)
+
+      # Both players commit bridges and close the page with a meld
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.melissa, "beacon")
+      commit(ctx.jacob, "beacon")
+      await_reveal(ctx.slug)
+
+      # 3. After reveal: title is now visible in "Now playing"
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          track_title
+        )
+      end)
+
+      await_phase(ctx.slug, :closed)
+
+      # On closed page, the title is still visible
+      assert has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               track_title
+             )
+
+      # 4. Gives with Seat names render on the closed Page's reveal on phone and Stage
+      eventually(fn ->
+        has_element?(ctx.stage, "[data-role=gives]") and
+          has_element?(ctx.melissa, "[data-role=gives]") and
+          has_element?(ctx.jacob, "[data-role=gives]")
+      end)
+
+      # Stage shows every Seat's Give with Seat name
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "Melissa")
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "lighthouse on the rocks")
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "Jacob")
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "candle in the window")
+
+      # Phones also show every Seat's Give with Seat name
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "Melissa")
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "lighthouse on the rocks")
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "Jacob")
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "candle in the window")
+
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "Melissa")
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "lighthouse on the rocks")
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "Jacob")
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "candle in the window")
     end
   end
 end
