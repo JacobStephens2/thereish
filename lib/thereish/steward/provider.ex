@@ -87,6 +87,92 @@ defmodule Thereish.Steward.Provider do
     end
   end
 
+  @doc """
+  What an image cost, in dollars (Limner vendors).
+
+  Flat per-image prices are `{:image, dollars}`. Per-megapixel prices are
+  `{:megapixel, dollars}` and billed on `width * height / 1_000_000`.
+  """
+  @spec image_cost(String.t(), pos_integer(), pos_integer()) :: float()
+  def image_cost(model, width \\ 512, height \\ 512) do
+    case Map.get(prices(), model) do
+      {:image, price} ->
+        price
+
+      {:megapixel, per_mp} ->
+        megapixels = width * height / 1_000_000
+        megapixels * per_mp
+
+      _ ->
+        0.0
+    end
+  end
+
+  @doc """
+  Downloads bytes from a URL, using the same HTTP options the providers share.
+  """
+  @spec get_bytes(String.t(), keyword()) :: {:ok, binary()} | {:error, term()}
+  def get_bytes(url, opts \\ []) do
+    timeout_ms = Keyword.get(opts, :timeout_ms, 30_000)
+    provider = Keyword.get(opts, :provider)
+
+    req_opts =
+      [
+        url: url,
+        receive_timeout: timeout_ms,
+        retry: false
+      ]
+      |> Keyword.merge(http_options(provider))
+
+    case Req.get(req_opts) do
+      {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
+        {:ok, body}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:download_failed, {:http, status, decode_body(body)}}}
+
+      {:error, reason} ->
+        {:error, {:download_failed, reason}}
+    end
+  end
+
+  @doc """
+  True when a vendor response is a content refusal rather than a transport error.
+  """
+  @spec refused?(term(), term()) :: boolean()
+  def refused?(status, body) when is_integer(status) do
+    status in [400, 403, 422, 451] and moderation_message?(body)
+  end
+
+  def refused?(status, _body) when is_binary(status) do
+    String.downcase(status) in [
+      "request moderated",
+      "content moderated",
+      "moderated"
+    ]
+  end
+
+  def refused?(_, _), do: false
+
+  defp moderation_message?(body) do
+    text = body |> inspect() |> String.downcase()
+
+    Enum.any?(
+      [
+        "moderat",
+        "safety",
+        "nsfw",
+        "content policy",
+        "content_policy",
+        "refused",
+        "not allowed",
+        "prohibited",
+        "blocked"
+      ],
+      &String.contains?(text, &1)
+    )
+  end
+
   @doc "Decodes JSON body if binary, returning decoded map or original body on failure."
   def decode_body(body) when is_binary(body) do
     case Jason.decode(body) do

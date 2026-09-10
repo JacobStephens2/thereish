@@ -42,3 +42,6 @@ npm-debug.log
 
 # Foley candidate audio files
 .scratch/**/candidates/
+
+# Local media directory for generated audio/tracks/masks
+/media/

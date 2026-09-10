@@ -88,6 +88,7 @@ defmodule ThereishWeb.RoomComponents do
       <% end %>
 
       <p
+        :if={waiting(@room)}
         data-role="open-seats"
         class={if @mode == :stage, do: "opacity-60", else: "mt-3 text-sm opacity-60"}
       >
@@ -188,7 +189,7 @@ defmodule ThereishWeb.RoomComponents do
         if(@mode == :stage, do: "gap-2", else: "gap-3")
       ]}
     >
-      <.caption data-role="bookends-caption">
+      <.caption :if={@mode == :stage} data-role="bookends-caption">
         Bookends
       </.caption>
       <div
@@ -462,7 +463,7 @@ defmodule ThereishWeb.RoomComponents do
       </div>
 
       <p
-        :if={@mode != :quiet && @room.reveal.quip}
+        :if={@mode != :quiet && Map.get(@room, :quips, true) && @room.reveal.quip}
         data-role="quip"
         class={[
           "font-serif italic font-medium leading-snug max-w-2xl text-center",
@@ -554,6 +555,23 @@ defmodule ThereishWeb.RoomComponents do
           </div>
         </div>
       </section>
+
+      <div
+        :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
+        data-role="gives"
+        class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm opacity-80"
+      >
+        <span class="text-xs uppercase tracking-wider font-semibold opacity-60">Settings:</span>
+        <div
+          :for={give <- gives_list(@room)}
+          data-role="give"
+          data-seat={give[:seat_id]}
+          class="flex items-center gap-1.5"
+        >
+          <span class="font-semibold">{give[:name] || give[:seat_name]}:</span>
+          <span>{give[:text] || give[:give]}</span>
+        </div>
+      </div>
 
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
@@ -716,7 +734,7 @@ defmodule ThereishWeb.RoomComponents do
           <% end %>
 
           <p
-            :if={@mode != :quiet and side.quip}
+            :if={@mode != :quiet and Map.get(@room, :quips, true) and side.quip}
             data-role="quip"
             class="font-serif italic text-sm text-base-content/90 leading-snug"
           >
@@ -739,6 +757,23 @@ defmodule ThereishWeb.RoomComponents do
         seat={@seat}
         side_mode?={true}
       />
+
+      <div
+        :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
+        data-role="gives"
+        class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm opacity-80"
+      >
+        <span class="text-xs uppercase tracking-wider font-semibold opacity-60">Settings:</span>
+        <div
+          :for={give <- gives_list(@room)}
+          data-role="give"
+          data-seat={give[:seat_id]}
+          class="flex items-center gap-1.5"
+        >
+          <span class="font-semibold">{give[:name] || give[:seat_name]}:</span>
+          <span>{give[:text] || give[:give]}</span>
+        </div>
+      </div>
 
       <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
         The couch has the call · Use your phones to continue or overrule
@@ -1098,11 +1133,8 @@ defmodule ThereishWeb.RoomComponents do
   defp waiting_line(:slow), do: "The Assayer is still reading. It does this sometimes."
   defp waiting_line(_), do: waiting_line(nil)
 
-  defp waiting(%{open_seats: 0, seat_limit: seat_limit}),
-    do: "All #{seat_limit} seats taken"
-
-  defp waiting(%{open_seats: 1}), do: "Waiting for 1 more"
-  defp waiting(%{open_seats: open}), do: "Waiting for #{open} more"
+  defp waiting(%{seats: [_]}), do: "Waiting for 1 more"
+  defp waiting(_), do: nil
 
   defp reveal_arrival(%{melded?: true}), do: "meld"
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
@@ -1321,8 +1353,8 @@ defmodule ThereishWeb.RoomComponents do
 
   @music_options [
     {"off", "music-off", "Off"},
-    {"house", "music-house", "House loop"},
-    {"page", "music-page", "Written for this Page"}
+    {"house", "music-house", "House"},
+    {"page", "music-page", "This Page"}
   ]
 
   def foley_switches(assigns) do
@@ -1335,16 +1367,27 @@ defmodule ThereishWeb.RoomComponents do
 
     ~H"""
     <div class="flex items-center gap-3 text-xs opacity-80">
-      <label class="flex items-center gap-1.5 cursor-pointer">
+      <label :if={@room[:speaker?]} class="flex items-center gap-1.5 cursor-pointer">
         <input
+          id="voice-switch"
+          phx-hook=".VoiceSwitch"
           type="checkbox"
           data-role="voice-switch"
-          data-active={to_string(@room[:voice] || false)}
-          checked={@room[:voice] || false}
-          phx-click="toggle_voice"
+          data-active="false"
           class="checkbox checkbox-xs"
         />
         <span>Voice</span>
+      </label>
+      <label class="flex items-center gap-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          data-role="quips-switch"
+          data-active={to_string(Map.get(@room, :quips, true))}
+          checked={Map.get(@room, :quips, true)}
+          phx-click="toggle_quips"
+          class="checkbox checkbox-xs"
+        />
+        <span>Quips</span>
       </label>
       <div data-role="music-control" class="join">
         <button
@@ -1379,6 +1422,40 @@ defmodule ThereishWeb.RoomComponents do
         Never
       </button>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".VoiceSwitch">
+      export default {
+        mounted() {
+          this.syncUI = () => {
+            let enabled = false
+            try {
+              enabled = localStorage.getItem("foley:voice") === "on"
+            } catch (_) {}
+            this.el.checked = enabled
+            this.el.dataset.active = enabled ? "true" : "false"
+            this.el.setAttribute("aria-checked", enabled ? "true" : "false")
+          }
+          this.syncUI()
+
+          this.handleChange = () => {
+            const next = !!this.el.checked
+            try {
+              localStorage.setItem("foley:voice", next ? "on" : "off")
+            } catch (_) {}
+            this.syncUI()
+          }
+
+          this.el.addEventListener("change", this.handleChange)
+        },
+        updated() {
+          this.syncUI()
+        },
+        destroyed() {
+          if (this.handleChange) {
+            this.el.removeEventListener("change", this.handleChange)
+          }
+        }
+      }
+    </script>
     """
   end
 
@@ -1396,6 +1473,24 @@ defmodule ThereishWeb.RoomComponents do
     """
   end
 
+  defp first_reveal_happened?(room) do
+    room[:phase] in [:reveal, :closed, :revealed] or
+      (is_list(room[:played]) and room.played != [])
+  end
+
+  defp gives_list(room) do
+    cond do
+      is_map(room[:reveal]) and is_list(room.reveal[:gives]) ->
+        room.reveal.gives
+
+      is_list(room[:gives]) ->
+        room.gives
+
+      true ->
+        []
+    end
+  end
+
   def now_playing_text(nil), do: nil
 
   def now_playing_text(room) do
@@ -1405,8 +1500,12 @@ defmodule ThereishWeb.RoomComponents do
              room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
         "Music is off"
 
-      room[:playing] && room.playing[:kind] == "track" && room.playing[:title] ->
-        "Now playing: #{room.playing.title} (written for this Page)"
+      room[:playing] && room.playing[:kind] == "track" ->
+        if first_reveal_happened?(room) and room.playing[:title] do
+          "Now playing: #{room.playing.title} (written for this Page)"
+        else
+          "Now playing: written for this Page"
+        end
 
       room[:playing] && room.playing[:kind] == "holdover" && room.playing[:title] ->
         "Now playing: #{room.playing.title} (last Page's Track)"
@@ -1415,7 +1514,11 @@ defmodule ThereishWeb.RoomComponents do
         "Now playing: #{room.playing.title} (the Repertoire)"
 
       room[:track] && room.track[:path] && room.track[:title] ->
-        "Now playing: #{room.track.title} (written for this Page)"
+        if first_reveal_happened?(room) do
+          "Now playing: #{room.track.title} (written for this Page)"
+        else
+          "Now playing: written for this Page"
+        end
 
       room[:track] && room.track[:path] ->
         nil
@@ -1462,7 +1565,10 @@ defmodule ThereishWeb.RoomComponents do
           this.isReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
           this.speaker = this.el.dataset.speaker === "true"
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
-          this.canPlay = () => !this.isReducedMotion() && this.speaker
+          // Read the speaker off the DOM rather than off the last `updated()`:
+          // the tap that claims the Speaker is answered with the patch and the
+          // first `foley:page` together, and a stale flag would swallow it.
+          this.canPlay = () => !this.isReducedMotion() && this.el.dataset.speaker === "true"
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -1516,19 +1622,6 @@ defmodule ThereishWeb.RoomComponents do
             this.musicBus.connect(this.ctx.destination)
             this.stingsBus.connect(this.ctx.destination)
             this.voiceBus.connect(this.ctx.destination)
-
-            this.updateTapForSound()
-          }
-
-          this.updateTapForSound = () => {
-            const tapBtn = document.getElementById("tap-for-sound")
-            if (tapBtn) {
-              if (this.ctx && this.ctx.state === "running") {
-                tapBtn.style.display = "none"
-              } else {
-                tapBtn.style.display = ""
-              }
-            }
           }
 
           this.resumeAudio = async () => {
@@ -1536,18 +1629,17 @@ defmodule ThereishWeb.RoomComponents do
             if (this.ctx && this.ctx.state !== "running") {
               await this.ctx.resume()
             }
-            this.updateTapForSound()
           }
 
-          const tapBtn = document.getElementById("tap-for-sound")
-          if (tapBtn) {
-            tapBtn.addEventListener("click", () => this.resumeAudio())
+          // The tap and the speaker toggle are rendered by the view, so they
+          // come and go and move between the header and the waiting screen.
+          // One delegated listener outlives all of that.
+          this.onTapClick = (e) => {
+            if (e.target && e.target.closest("#tap-for-sound, [data-role=speaker-toggle]")) {
+              this.resumeAudio()
+            }
           }
-
-          const speakerToggle = document.querySelector("[data-role=speaker-toggle]")
-          if (speakerToggle) {
-            speakerToggle.addEventListener("click", () => this.resumeAudio())
-          }
+          document.addEventListener("click", this.onTapClick)
 
           this.onFormSubmit = (e) => {
             if (e.target && (e.target.id === "bridge-form" || e.target.closest("#bridge-form"))) {
@@ -1811,19 +1903,27 @@ defmodule ThereishWeb.RoomComponents do
 
           this.handleEvent("foley:voice", async ({attempt, url}) => {
             if (!this.canPlay()) return
+            let voiceEnabled = false
+            try {
+              voiceEnabled = localStorage.getItem("foley:voice") === "on"
+            } catch (_) {}
+            if (!voiceEnabled) return
+
             await this.resumeAudio()
             if (!this.ctx) return
 
             this.stopVoice()
             this.currentVoiceAttempt = attempt
 
-            const isQuipReady = () =>
+            const isRevealReady = () =>
               document.querySelector("[data-role=quip]") ||
-              document.querySelector("[data-role=fairness-controls]")
+              document.querySelector("[data-role=fairness-controls]") ||
+              document.querySelector("[data-role=closeness-display]") ||
+              document.querySelector("[data-role=no-verdict]")
 
             const playWhenReady = (buf) => {
               if (!buf || !this.ctx || this.currentVoiceAttempt !== attempt) return
-              if (!isQuipReady()) return
+              if (!isRevealReady()) return
 
               this.stopVoice()
               this.currentVoiceAttempt = attempt
@@ -1850,7 +1950,7 @@ defmodule ThereishWeb.RoomComponents do
             const voiceUrl = url
             const bufPromise = this.fetchBuffer(voiceUrl)
 
-            if (isQuipReady()) {
+            if (isRevealReady()) {
               const buf = await bufPromise
               playWhenReady(buf)
             } else {
@@ -1860,7 +1960,7 @@ defmodule ThereishWeb.RoomComponents do
                   if (this.voiceObserver === obs) this.voiceObserver = null
                   return
                 }
-                if (isQuipReady()) {
+                if (isRevealReady()) {
                   obs.disconnect()
                   if (this.voiceObserver === obs) this.voiceObserver = null
                   const buf = await bufPromise
@@ -1880,6 +1980,10 @@ defmodule ThereishWeb.RoomComponents do
           })
 
           this.playCommitTick = async () => {
+            // A device whose sound has never been opened by a gesture attempts
+            // nothing: an untapped Stage stays silent rather than reaching for
+            // an audio context the browser will only suspend.
+            if (!this.ctx) return
             await this.resumeAudio()
             if (!this.ctx) return
             const buf = await this.fetchBuffer("/audio/commit-tick.mp3")
@@ -1933,15 +2037,12 @@ defmodule ThereishWeb.RoomComponents do
             this.currentVoiceAttempt = null
             this.stopMusic()
           })
-
-          this.updateTapForSound()
         },
 
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
           this.meldCueDelayMs = (this.parseDelay || parseInt)(this.el.dataset.meldCueDelayMs, 1800)
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
-          this.updateTapForSound()
           if (!this.speaker) {
             if (this.clearEndingTimeout) this.clearEndingTimeout()
             this.stopVoice()
@@ -1954,6 +2055,7 @@ defmodule ThereishWeb.RoomComponents do
           if (this.clearEndingTimeout) this.clearEndingTimeout()
           if (this.onFormSubmit) document.removeEventListener("submit", this.onFormSubmit)
           if (this.onCommitClick) document.removeEventListener("click", this.onCommitClick)
+          if (this.onTapClick) document.removeEventListener("click", this.onTapClick)
           this.stopVoice()
           this.currentVoiceAttempt = null
           this.stopMusic()

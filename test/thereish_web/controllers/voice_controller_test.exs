@@ -23,7 +23,6 @@ defmodule ThereishWeb.VoiceControllerTest do
          %{conn: conn} = ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -48,7 +47,6 @@ defmodule ThereishWeb.VoiceControllerTest do
     test "past attempt audio answers 404 after advancing", %{conn: conn} = ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")

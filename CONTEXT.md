@@ -49,7 +49,7 @@ The small picture a Seat wears for one Page, drawn by the Limner from that Seat'
 _Avoid_: avatar, icon (in copy), profile picture, token, sigil, portrait
 
 **Steward**:
-The one seam through which the game talks to generative models — language, music, and sound. The Author, the Assayer, the Scribe, and the Foley are its roles; model choice, caching, hedging, A/B assignment, spend, and guardrails live behind it.
+The one seam through which the game talks to generative models — language, music, sound, and pictures. The Author, the Assayer, the Scribe, the Foley, and the Limner are its roles; model choice, caching, hedging, A/B assignment, spend, and guardrails live behind it.
 _Avoid_: Keeper (the earlier name), AI, "the LLM", model service, brain
 
 **Author**:
@@ -73,7 +73,7 @@ The machine role that draws — a Mask for every Seat at the top of every Page, 
 _Avoid_: illustrator, image model, artist, "the image AI", painter
 
 **Speaker**:
-The one device in a Room that plays what Foley makes — the Stage when one is open, otherwise the phone that claimed it; claiming it silences whoever had it. Held by a device, not a Seat, so a phone with no Seat can hold it.
+The one device in a Room that plays what Foley makes — the Stage from the one tap that opens its sound, otherwise the phone that claimed it; claiming it silences whoever had it. A Stage nobody has tapped holds no Speaker: the browser's autoplay rule is met on purpose rather than discovered. Held by a device, not a Seat, so a phone with no Seat can hold it.
 _Avoid_: audio device, output, host phone, "the sound", speakerphone
 
 **Voice**:

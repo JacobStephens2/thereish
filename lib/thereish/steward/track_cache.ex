@@ -73,14 +73,24 @@ defmodule Thereish.Steward.TrackCache do
         :miss
 
       row ->
-        {:ok,
-         %{
-           title: row.title,
-           path: row.path,
-           duration: row.duration,
-           format: format_atom(row.format),
-           meta: row.meta
-         }}
+        if file_exists?(row.path) do
+          {:ok,
+           %{
+             title: row.title,
+             path: row.path,
+             duration: row.duration,
+             format: format_atom(row.format),
+             meta: row.meta
+           }}
+        else
+          try do
+            Repo.delete(row)
+          rescue
+            Ecto.StaleEntryError -> :ok
+          end
+
+          :miss
+        end
     end
   end
 
@@ -167,11 +177,53 @@ defmodule Thereish.Steward.TrackCache do
     end
   end
 
+  @doc "Prunes all track cache rows whose files do not exist on disk, reporting the count deleted."
+  @spec prune_dangling() :: {:ok, non_neg_integer()}
+  def prune_dangling do
+    dangling_ids =
+      from(t in TrackCache, select: {t.id, t.path})
+      |> Repo.all()
+      |> Enum.filter(fn {_id, path} -> not file_exists?(path) end)
+      |> Enum.map(fn {id, _path} -> id end)
+
+    case dangling_ids do
+      [] ->
+        {:ok, 0}
+
+      ids ->
+        {count, _} =
+          from(t in TrackCache, where: t.id in ^ids)
+          |> Repo.delete_all()
+
+        {:ok, count}
+    end
+  end
+
   @doc "Returns the configured media directory on the server volume."
   def media_dir do
     Application.get_env(:thereish, :media_dir) ||
       Path.join([:code.priv_dir(:thereish) || "priv", "static", "media"])
   end
+
+  @doc "Returns the local disk path for a cached track's web path."
+  def disk_path(web_path) when is_binary(web_path) do
+    case web_path do
+      "/media/" <> rel -> Path.join(media_dir(), rel)
+      path -> Path.join(media_dir(), path)
+    end
+  end
+
+  def disk_path(_), do: nil
+
+  @doc "Returns whether the file for a cached track exists on disk."
+  def file_exists?(path) when is_binary(path) do
+    case disk_path(path) do
+      nil -> false
+      full_path -> File.regular?(full_path)
+    end
+  end
+
+  def file_exists?(_), do: false
 
   @doc "Generates a hex filename from a cache key."
   def filename_for_key(key) when is_binary(key) do

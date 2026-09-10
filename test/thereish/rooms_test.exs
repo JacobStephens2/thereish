@@ -614,6 +614,78 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  describe "the Assayer remembers its Quips (ticket 11)" do
+    test "the assay request carries the Room's last five Quips, oldest dropped" do
+      slug = open_room()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      room = Rooms.get_room(slug)
+
+      quips = [
+        "Oldest quip, the one that should drop.",
+        "Second quip about a lighthouse.",
+        "Third quip about a picnic.",
+        "Fourth quip about a harbour.",
+        "Fifth quip about a cairn.",
+        "Sixth quip, still in the window."
+      ]
+
+      now = DateTime.utc_now()
+
+      for {quip, index} <- Enum.with_index(quips, 1) do
+        entry = remembered_page(melissa.id, jacob.id, quip)
+
+        assert {:ok, _page} =
+                 Chronicle.write(room.id, entry, DateTime.add(now, index, :second))
+      end
+
+      steward(assay_capture: self())
+
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
+
+      assert_receive {:assay, request}, 2_000
+      assert request.prior_quips == tl(quips)
+      refute "Oldest quip, the one that should drop." in request.prior_quips
+    end
+
+    defp remembered_page(melissa_id, jacob_id, quip) do
+      %{
+        page: %{bookends: ["lantern", "harbour"]},
+        closed_because: :meld,
+        melded?: true,
+        closeness: 91,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["lantern", "harbour"],
+            closeness: 91,
+            melded?: true,
+            bridges: [
+              %{seat_id: melissa_id, bridge: "cairn"},
+              %{seat_id: jacob_id, bridge: "cairns"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [melissa_id, jacob_id],
+                bridges: ["cairn", "cairns"],
+                graded?: true,
+                closeness: 91,
+                band: :meld,
+                reasoning: "Same root.",
+                quip: quip,
+                meta: %{model: "fake", prompt_version: "assay-3", latency_ms: 10, cost_usd: 0.0}
+              }
+            ]
+          }
+        ]
+      }
+    end
+  end
+
   describe "supervision" do
     test "a crashed Room comes back with its Seats" do
       slug = open_room()
@@ -1484,11 +1556,24 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, token_a: token_a, token_b: token_b, melissa: melissa, jacob: jacob}
     end
 
-    test "a new Room has no speaker, voice off, and music page by default", ctx do
+    test "a new Room has no speaker, quips on, music page by default, and no voice column", ctx do
       room = Store.get_room(ctx.slug)
       assert is_nil(room.speaker)
-      assert room.voice == false
+      assert room.quips == true
       assert room.music == "page"
+      refute :voice in Thereish.Rooms.Room.__schema__(:fields)
+    end
+
+    test "migration drops voice and adds quips column" do
+      migrations_dir = Application.app_dir(:thereish, "priv/repo/migrations")
+
+      migration_file =
+        Path.join(migrations_dir, "20260909160000_drop_voice_and_add_quips_to_rooms.exs")
+
+      assert File.exists?(migration_file)
+      content = File.read!(migration_file)
+      assert content =~ "remove :voice"
+      assert content =~ "add :quips, :boolean"
     end
 
     test "migration pair converts house_loop_only true to house and drops house_loop_only" do
@@ -1620,12 +1705,12 @@ defmodule Thereish.RoomsTest do
       assert is_nil(Store.get_room(ctx.slug).speaker)
     end
 
-    test "voice and music switches update the Room and broadcast", ctx do
+    test "quips and music switches update the Room and broadcast", ctx do
       Rooms.subscribe(ctx.slug)
 
-      assert :ok = Rooms.set_voice(ctx.slug, true)
+      assert :ok = Rooms.set_quips(ctx.slug, false)
       assert_receive :room_changed
-      assert Store.get_room(ctx.slug).voice == true
+      assert Store.get_room(ctx.slug).quips == false
 
       assert :ok = Rooms.set_music(ctx.slug, "off")
       assert_receive :room_changed
@@ -1639,14 +1724,14 @@ defmodule Thereish.RoomsTest do
       assert_receive :room_changed
       assert Store.get_room(ctx.slug).music == "page"
 
-      assert :ok = Rooms.set_voice(ctx.slug, false)
+      assert :ok = Rooms.set_quips(ctx.slug, true)
       assert_receive :room_changed
-      assert Store.get_room(ctx.slug).voice == false
+      assert Store.get_room(ctx.slug).quips == true
     end
 
-    test "speaker, voice and music survive a Room process restart", ctx do
+    test "speaker, quips and music survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      assert :ok = Rooms.set_voice(ctx.slug, true)
+      assert :ok = Rooms.set_quips(ctx.slug, false)
       assert :ok = Rooms.set_music(ctx.slug, "off")
 
       pid = GenServer.whereis(Server.via(ctx.slug))
@@ -1661,8 +1746,9 @@ defmodule Thereish.RoomsTest do
         end)
 
       assert room.speaker == ctx.token_a
-      assert room.voice == true
+      assert room.quips == false
       assert room.music == "off"
+      refute Map.has_key?(room, :voice)
     end
 
     test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
@@ -1674,15 +1760,16 @@ defmodule Thereish.RoomsTest do
       for view <- [view_a, view_b, view_stage] do
         assert view.speaker? == false
         assert view.speaker_claimed? == false
-        assert view.voice == false
+        assert view.quips == true
         assert view.music == "page"
+        refute Map.has_key?(view, :voice)
         refute Map.has_key?(view, :house_loop_only)
         refute Map.has_key?(view, :speaker)
         refute Map.has_key?(view, :device_token)
       end
 
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
+      :ok = Rooms.set_quips(ctx.slug, false)
       :ok = Rooms.set_music(ctx.slug, "house")
 
       view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
@@ -1691,15 +1778,21 @@ defmodule Thereish.RoomsTest do
 
       assert view_a.speaker? == true
       assert view_a.speaker_claimed? == true
-      assert view_a.voice == true
+      assert view_a.quips == false
       assert view_a.music == "house"
+      refute Map.has_key?(view_a, :voice)
 
       assert view_b.speaker? == false
       assert view_b.speaker_claimed? == true
-      assert view_b.voice == true
+      assert view_b.quips == false
       assert view_b.music == "house"
+      refute Map.has_key?(view_b, :voice)
+
       assert view_stage.speaker? == false
       assert view_stage.speaker_claimed? == true
+      assert view_stage.quips == false
+      assert view_stage.music == "house"
+      refute Map.has_key?(view_stage, :voice)
 
       json = Jason.encode!(view_a)
       refute json =~ ctx.token_a
@@ -1863,11 +1956,9 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
     end
 
-    test "when voice is on and a speaker exists, broadcasts voice_ready and holds audio for attempt",
-         ctx do
+    test "when a speaker exists, broadcasts voice_ready and holds audio for attempt", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -1879,12 +1970,8 @@ defmodule Thereish.RoomsTest do
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 2)
     end
 
-    test "voice is not spoken when voice switch is off or no speaker exists", ctx do
+    test "voice is not spoken when no speaker exists", ctx do
       Rooms.subscribe(ctx.slug)
-
-      # Voice switch off, speaker exists
-      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      assert Rooms.snapshot(ctx.slug, nil).voice == false
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -1894,11 +1981,50 @@ defmodule Thereish.RoomsTest do
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
     end
 
+    test "with quips hidden, spoken line handed to speak is the band word only; with quips on, line includes quip",
+         ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_recipient, self()))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      # Attempt 1: quips is default on
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      assert_receive {:fake_speak, line1}, 2000
+      assert line1 =~ "miss."
+      assert line1 =~ "walk into a bar"
+
+      # Attempt 2: turn quips off
+      :ok = Rooms.set_quips(ctx.slug, false)
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :bridging)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "valley")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "valley")
+      await_reveal(ctx.slug)
+
+      assert_receive {:fake_speak, line2}, 2000
+      assert line2 == "deep meld"
+    end
+
     test "advancing to next attempt clears past attempt's audio and serves only new attempt's audio",
          ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       # Attempt 1: miss
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
@@ -1942,7 +2068,6 @@ defmodule Thereish.RoomsTest do
 
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -1972,7 +2097,6 @@ defmodule Thereish.RoomsTest do
 
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -2010,7 +2134,6 @@ defmodule Thereish.RoomsTest do
 
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       # Attempt 1: miss
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
@@ -2031,7 +2154,6 @@ defmodule Thereish.RoomsTest do
     test "voice_meta is recorded on the Verdict in Chronicle when Page closes", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -2058,7 +2180,6 @@ defmodule Thereish.RoomsTest do
     test "voice_audio and voice_meta do not leak across next_page", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_voice(ctx.slug, true)
 
       # Attempt 1: meld closes the page
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
@@ -2199,6 +2320,41 @@ defmodule Thereish.RoomsTest do
       assert is_binary(view.track.path)
       assert view.track.format == :mp3
       assert view.track.meta.provider == "fake"
+    end
+
+    test "music events emit readable info log lines with room code, page ref, event name and timing",
+         ctx do
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
+      Rooms.subscribe(ctx.slug)
+
+      log =
+        capture_log([level: :info], fn ->
+          :ok = Rooms.give(ctx.slug, ctx.melissa.id, "forest lake")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "pine needles")
+
+          await_phase(ctx.slug, :bridging)
+
+          eventually(fn ->
+            view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+            not is_nil(view[:track])
+          end)
+        end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).track_page_ref
+      page_ref_str = inspect(page_ref)
+
+      info_lines =
+        log
+        |> String.split("\n")
+        |> Enum.filter(&(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ page_ref_str))
+
+      assert Enum.any?(info_lines, &(&1 =~ "cache miss" and &1 =~ ~r/\+\d+ms/))
+      assert Enum.any?(info_lines, &(&1 =~ "score queued" and &1 =~ ~r/\+\d+ms/))
+      assert Enum.any?(info_lines, &(&1 =~ "score started" and &1 =~ ~r/\+\d+ms/))
+      assert Enum.any?(info_lines, &(&1 =~ "track landed" and &1 =~ ~r/\+\d+ms/))
     end
 
     test "holdover across next_page and a stale score: landed track holds over and stale score is dropped",
@@ -2450,6 +2606,80 @@ defmodule Thereish.RoomsTest do
       assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
     end
 
+    test "failing score emits readable warning log line carrying room code, page ref, failure reason, and timing",
+         ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.put(fake_config, :music_mode, :unavailable)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      log =
+        capture_log(fn ->
+          :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+          await_phase(ctx.slug, :bridging)
+
+          eventually(fn ->
+            server_state = :sys.get_state(GenServer.whereis(Server.via(ctx.slug)))
+            server_state.music_meta != nil
+          end)
+        end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+      page_ref_str = inspect(page_ref)
+
+      warn_lines =
+        log
+        |> String.split("\n")
+        |> Enum.filter(
+          &(&1 =~ "[warning]" and &1 =~ ctx.slug and &1 =~ page_ref_str and
+              &1 =~ "failure with reason")
+        )
+
+      assert length(warn_lines) == 1
+      [warn_line] = warn_lines
+      assert warn_line =~ ":music_unavailable"
+      assert warn_line =~ ~r/\+\d+ms/
+    end
+
+    test "log_music_event defines and emits vamp landed in the stated shape for when the vamp ticket lands",
+         ctx do
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
+      page_ref = make_ref()
+      gives_landed_at = System.monotonic_time(:millisecond) - 150
+
+      log =
+        capture_log([level: :info], fn ->
+          Server.log_music_event(ctx.slug, page_ref, "vamp landed", gives_landed_at)
+        end)
+
+      ref_str = inspect(page_ref)
+
+      assert log =~ "[info]"
+      assert log =~ ctx.slug
+      assert log =~ ref_str
+      assert log =~ "vamp landed"
+      assert log =~ ~r/\+\d+ms/
+    end
+
     test "successful score records music_meta on the closed Chronicle page", ctx do
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "ancient ruins")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "starry night")
@@ -2534,6 +2764,11 @@ defmodule Thereish.RoomsTest do
       assert final_view.playing.path == final_view.track.path
 
       # The same Gives on another Page immediately return the cached track directly
+      disk_path = Thereish.Steward.TrackCache.disk_path(final_view.track.path)
+      File.mkdir_p!(Path.dirname(disk_path))
+      File.write!(disk_path, "mp3-bytes")
+      on_exit(fn -> File.rm(disk_path) end)
+
       _cached_key = Thereish.Steward.TrackCache.key(["frozen lake", "northern lights"])
       assert {:ok, cached} = Thereish.Steward.TrackCache.get(["frozen lake", "northern lights"])
       assert cached.path == final_view.track.path
@@ -2543,6 +2778,10 @@ defmodule Thereish.RoomsTest do
       # Pre-seed track cache
       gives = ["quiet library", "old books"]
       cached_path = "/media/tracks/preseeded-library.mp3"
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
 
       {:ok, _} =
         Thereish.Steward.TrackCache.put(gives, %{
@@ -2567,6 +2806,47 @@ defmodule Thereish.RoomsTest do
       assert view.track.path == cached_path
       assert view.track.format == :mp3
       assert view.playing.path == cached_path
+    end
+
+    test "a cache row with a missing file is a miss, is removed, and scores fresh", ctx do
+      gives = ["lost temple", "ancient ruins"]
+      missing_path = "/media/tracks/missing-temple-ruins.mp3"
+      cache_key = Thereish.Steward.TrackCache.key(gives)
+
+      # Ensure the file is not on disk
+      disk_path = Thereish.Steward.TrackCache.disk_path(missing_path)
+      File.rm(disk_path)
+
+      {:ok, _} =
+        Thereish.Steward.TrackCache.put(gives, %{
+          title: "Lost Temple",
+          path: missing_path,
+          duration: 120,
+          format: "mp3",
+          meta: %{provider: "fake"}
+        })
+
+      assert Thereish.Repo.get_by(Thereish.Steward.TrackCache, key: cache_key) != nil
+
+      Rooms.subscribe(ctx.slug)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "lost temple")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "ancient ruins")
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      # Fresh score instead of the missing cached file
+      refute view.track.path == missing_path
+      assert view.track.path =~ "ancient ruins-lost temple"
+      # The dangling row was replaced: TrackCache now holds the newly scored track
+      cached_row = Thereish.Repo.get_by(Thereish.Steward.TrackCache, key: cache_key)
+      assert cached_row != nil
+      assert cached_row.path != missing_path
+      assert cached_row.path == view.track.path
     end
 
     test "stale playable message arriving for moved-on Page is dropped", ctx do
@@ -2664,6 +2944,227 @@ defmodule Thereish.RoomsTest do
       [page | _] = Thereish.Chronicle.page_views(ctx.slug)
       assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
     end
+
+    test "two Rooms scoring at once run one at a time (Rooms test with the Fake)" do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 120)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      slug1 = open_room()
+      slug2 = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      token_c = device_token()
+      token_d = device_token()
+
+      {:ok, alice} = Rooms.join(slug1, "Alice", token_a)
+      {:ok, bob} = Rooms.join(slug1, "Bob", token_b)
+      {:ok, carol} = Rooms.join(slug2, "Carol", token_c)
+      {:ok, dave} = Rooms.join(slug2, "Dave", token_d)
+
+      :ok = Rooms.give(slug1, alice.id, "glacier peak")
+      :ok = Rooms.give(slug1, bob.id, "frozen tundra")
+      :ok = Rooms.give(slug2, carol.id, "desert dune")
+      :ok = Rooms.give(slug2, dave.id, "sandstorm")
+
+      await_phase(slug1, :bridging)
+      await_phase(slug2, :bridging)
+
+      # Room 1 scores first. When Room 1's track lands, Room 2 is still queued!
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(slug1, alice.id)[:track])
+      end)
+
+      # At the moment Room 1 finishes, Room 2 has not landed its track yet
+      view2_snapshot = Rooms.snapshot(slug2, carol.id)
+      assert is_nil(view2_snapshot[:track])
+
+      # Then Room 2 completes after its own turn
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(slug2, carol.id)[:track])
+      end)
+
+      view2_final = Rooms.snapshot(slug2, carol.id)
+      assert not is_nil(view2_final[:track])
+    end
+
+    test "a queued Page's snapshot keeps playing what it had until its turn", ctx do
+      # Play Page 1 to closed with a landed track
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "ancient stone")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "mossy brook")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.kind == "track"
+      end)
+
+      p1_track = Rooms.snapshot(ctx.slug, ctx.melissa.id).playing
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Move to Page 2
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      # Now occupy the score queue with another Room
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 150)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      slug_other = open_room()
+      {:ok, p1} = Rooms.join(slug_other, "PlayerOne", device_token())
+      {:ok, p2} = Rooms.join(slug_other, "PlayerTwo", device_token())
+      :ok = Rooms.give(slug_other, p1.id, "heavy fog")
+      :ok = Rooms.give(slug_other, p2.id, "dim lanterns")
+      await_phase(slug_other, :bridging)
+
+      # Start Page 2 scoring in ctx.slug - it gets queued behind slug_other
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "autumn woods")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "crackling fire")
+      await_phase(ctx.slug, :bridging)
+
+      # While queued, ctx.slug's snapshot keeps playing what it had (Page 1's holdover track)
+      queued_snapshot = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert queued_snapshot.playing.kind == "holdover"
+      assert queued_snapshot.playing.path == p1_track.path
+
+      # Once turn comes, Page 2 track lands
+      eventually(fn ->
+        snapshot = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+
+        not is_nil(snapshot[:track]) and snapshot.playing.kind == "track" and
+          snapshot.playing.path != p1_track.path
+      end)
+    end
+
+    test "a second music change during an in-flight score starts no second score", ctx do
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config, music_delay_ms: 100)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "deep canyon")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "echoing wind")
+      await_phase(ctx.slug, :bridging)
+
+      # While score is in flight, toggle music to house and back to page
+      :ok = Rooms.set_music(ctx.slug, "house")
+      :ok = Rooms.set_music(ctx.slug, "page")
+
+      # Track lands without duplicate scoring
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert not is_nil(view.track)
+    end
+
+    test "a success after a recorded failure replaces the Page's music record, and the Chronicle shows the Track",
+         ctx do
+      # Configure fake so initial score fails
+      set_fake(music_mode: :unavailable)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "sprint")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "hoard")
+      await_phase(ctx.slug, :bridging)
+
+      # Solve the page to close it with failure recorded
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "vault")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "vault")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn ->
+        pages = Thereish.Chronicle.page_views(ctx.slug)
+        pages != [] and hd(pages).music_meta != nil
+      end)
+
+      [page_before | _] = Thereish.Chronicle.page_views(ctx.slug)
+      assert page_before.music_meta[:failure] != nil or page_before.music_meta["failure"] != nil
+      assert Thereish.Chronicle.page_track(page_before) == nil
+
+      # Now a score succeeds for this page
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+
+      successful_track = %{
+        path: "/media/tracks/fake-sprint-hoard.mp3",
+        duration: 120,
+        format: :mp3,
+        title: "Sprint and Hoard",
+        meta: %{provider: "fake", model: "fake-music", cost_usd: 0.04}
+      }
+
+      send(pid, {:scored, page_ref, {:ok, successful_track}})
+
+      # The Page's music record in Chronicle is replaced by the success
+      eventually(fn ->
+        [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+        page_after.music_meta[:path] != nil or page_after.music_meta["path"] != nil
+      end)
+
+      [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+      assert is_nil(page_after.music_meta[:failure]) and is_nil(page_after.music_meta["failure"])
+
+      assert page_after.music_meta[:path] == "/media/tracks/fake-sprint-hoard.mp3" or
+               page_after.music_meta["path"] == "/media/tracks/fake-sprint-hoard.mp3"
+
+      # The Chronicle shows the Track
+      assert track = Thereish.Chronicle.page_track(page_after)
+      assert track.path == "/media/tracks/fake-sprint-hoard.mp3"
+      assert track.title == "Sprint and Hoard"
+    end
   end
 
   describe "the Scribe titles the Track" do
@@ -2748,6 +3249,11 @@ defmodule Thereish.RoomsTest do
         meta: %{provider: "cached", cost_usd: 0.04}
       }
 
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_track.path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
+
       {:ok, _} = Thereish.Steward.TrackCache.put(gives, cached_track)
 
       # Break provider calls to prove cache hit requires no provider call
@@ -2762,6 +3268,53 @@ defmodule Thereish.RoomsTest do
       assert view.track.title == "Frozen Horizon"
       assert view.track.path == "/media/tracks/frozen-glacier-tundra.mp3"
       assert view.music_meta[:title] == "Frozen Horizon"
+    end
+
+    test "cache hit emits readable info log line carrying room code, page ref, and timing", ctx do
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
+      gives = ["glacier", "tundra"]
+
+      cached_track = %{
+        title: "Frozen Horizon",
+        path: "/media/tracks/frozen-glacier-tundra.mp3",
+        duration: 120,
+        format: :mp3,
+        meta: %{provider: "cached", cost_usd: 0.04}
+      }
+
+      # A cache row whose file is gone is a miss (ticket 04), so the row this
+      # hit is read from needs its file on disk.
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_track.path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
+
+      {:ok, _} = Thereish.Steward.TrackCache.put(gives, cached_track)
+
+      log =
+        capture_log([level: :info], fn ->
+          :ok = Rooms.give(ctx.slug, ctx.melissa.id, "glacier")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "tundra")
+          await_phase(ctx.slug, :bridging)
+        end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).track_page_ref
+      page_ref_str = inspect(page_ref)
+
+      hit_lines =
+        log
+        |> String.split("\n")
+        |> Enum.filter(
+          &(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ page_ref_str and &1 =~ "cache hit")
+        )
+
+      assert length(hit_lines) == 1
+      [hit_line] = hit_lines
+      assert hit_line =~ ~r/\+\d+ms/
+      refute log =~ "score queued"
     end
 
     test "dropped title: title for a Page that moved on is dropped", ctx do
