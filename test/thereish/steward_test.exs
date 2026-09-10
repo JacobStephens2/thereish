@@ -358,6 +358,45 @@ defmodule Thereish.StewardTest do
       assayer(requests: 1, retries: 0)
     end
 
+    test "a Precedent hit's fresh-Quip request carries prior Quips in user content" do
+      test_pid = self()
+
+      request = %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["beacon", "cairn"],
+        player_bridges: [
+          %{player: "Jacob", bridge: "beacon"},
+          %{player: "Melissa", bridge: "cairn"}
+        ],
+        prior_quips: ["Jacob brought the lighthouse, Melissa brought the dock."]
+      }
+
+      recorded(fn conn, body ->
+        [%{"content" => user}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
+
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            send(test_pid, {:quip_user, user})
+            Req.Test.json(conn, quip_response("A fresh joke about tonight."))
+
+          "verdict" ->
+            send(test_pid, {:verdict_user, user})
+            Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
+        end
+      end)
+
+      assert {:ok, _first} = Live.assay(request)
+      assert_receive {:verdict_user, graded_user}
+      assert graded_user =~ "Jacob brought the lighthouse, Melissa brought the dock."
+      assert graded_user =~ ~r/constructions already used/i
+
+      assert {:ok, second} = Live.assay(request)
+      assert second.meta.precedent_hit == true
+      assert_receive {:quip_user, quip_user}
+      assert quip_user =~ "Jacob brought the lighthouse, Melissa brought the dock."
+      assert quip_user =~ ~r/constructions already used/i
+    end
+
     test "a repeated Attempt inherits closeness, reasoning and furthest Bridges, and writes a fresh quip" do
       counts = counts()
 
@@ -701,6 +740,61 @@ defmodule Thereish.StewardTest do
 
       assert {:error, {:rejected, why}} = Live.assay(request)
       assert why =~ "furthest"
+    end
+
+    test "prior Quips appear in user content of the grading prompt; system prompt and version are unchanged" do
+      without = %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["beacon", "cairn"],
+        player_bridges: [
+          %{player: "Jacob", bridge: "beacon"},
+          %{player: "Melissa", bridge: "cairn"}
+        ]
+      }
+
+      prior = [
+        "Jacob brought the lighthouse, Melissa brought the dock.",
+        "One of you packed the picnic, the other packed the ants."
+      ]
+
+      with_quips = Map.put(without, :prior_quips, prior)
+
+      bare = Thereish.Steward.Assay.prompt(without, without.player_bridges)
+      prompted = Thereish.Steward.Assay.prompt(with_quips, with_quips.player_bridges)
+
+      assert Thereish.Steward.Assay.version() == "assay-3"
+      assert prompted.system == bare.system
+      refute prompted.user == bare.user
+
+      for quip <- prior do
+        assert prompted.user =~ quip
+        refute bare.user =~ quip
+      end
+
+      assert prompted.user =~ ~r/constructions already used/i
+    end
+
+    test "prior Quips appear in user content of the fresh-Quip prompt; system prompt is unchanged" do
+      without = %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["beacon", "cairn"],
+        player_bridges: [
+          %{player: "Jacob", bridge: "beacon"},
+          %{player: "Melissa", bridge: "cairn"}
+        ]
+      }
+
+      prior = ["Jacob brought the lighthouse, Melissa brought the dock."]
+      with_quips = Map.put(without, :prior_quips, prior)
+
+      bare = Thereish.Steward.Assay.quip_prompt(without, without.player_bridges)
+      prompted = Thereish.Steward.Assay.quip_prompt(with_quips, with_quips.player_bridges)
+
+      assert prompted.system == bare.system
+      assert prompted.schema_name == "quip"
+      assert prompted.user =~ hd(prior)
+      assert prompted.user =~ ~r/constructions already used/i
+      refute bare.user =~ hd(prior)
     end
 
     test "quip_prompt carries Bookends, Bridges, earlier Attempts, and Gives" do
