@@ -256,6 +256,10 @@ defmodule Thereish.Steward.Fake do
 
     case voice_mode() do
       :ok ->
+        if recipient = config_get(:voice_recipient, nil) do
+          send(recipient, {:fake_speak, line})
+        end
+
         {:ok,
          %{
            audio: mp3_fixture(),
