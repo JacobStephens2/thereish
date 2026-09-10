@@ -619,5 +619,12 @@ defmodule ThereishWeb.ChronicleLiveTest do
 
       refute has_element?(view, ~s([data-role=chronicle-page][data-page-id="#{p4.id}"] audio))
     end
+
+    test "Thereish wordmark links home to front page on the Chronicle" do
+      slug = open_room()
+      {:ok, view, _html} = live(build_conn(), ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "header a[href='/']", "Thereish")
+    end
   end
 end
