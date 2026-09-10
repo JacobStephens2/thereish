@@ -185,7 +185,16 @@ defmodule ThereishWeb.ChronicleLive do
     <main class="mx-auto flex min-h-screen max-w-xl flex-col gap-6 px-4 py-8">
       <header class="flex flex-col gap-2 border-b border-base-300 pb-4">
         <div class="flex items-center justify-between">
-          <h1 class="text-3xl font-bold tracking-tight">The Chronicle</h1>
+          <div class="flex items-baseline gap-3">
+            <.link
+              navigate={~p"/"}
+              class="text-xl font-semibold tracking-tight hover:opacity-80"
+            >
+              Thereish
+            </.link>
+            <span class="opacity-40">·</span>
+            <h1 class="text-3xl font-bold tracking-tight">The Chronicle</h1>
+          </div>
           <.link
             navigate={room_path(@slug)}
             class="text-sm font-medium underline opacity-70 hover:opacity-100"

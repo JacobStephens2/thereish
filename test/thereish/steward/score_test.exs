@@ -164,8 +164,13 @@ defmodule Thereish.Steward.ScoreTest do
     end
 
     test "cache hit answers without a provider call" do
+      cached_path = "/media/tracks/already-cached.mp3"
+      file_path = TrackCache.disk_path(cached_path)
+      File.mkdir_p!(Path.dirname(file_path))
+      File.write!(file_path, "audio-bytes")
+
       TrackCache.put(@gives, %{
-        path: "/media/tracks/already-cached.mp3",
+        path: cached_path,
         duration: 150,
         format: :mp3,
         meta: %{"provider" => "mureka", "cost_usd" => 0.04}

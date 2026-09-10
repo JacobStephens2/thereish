@@ -41,7 +41,12 @@ defmodule Thereish.Steward.Fake do
   @behaviour Thereish.Steward
 
   @impl true
-  def assay(%{bookends: [_, _], bridges: bridges}) when length(bridges) >= 2 do
+  def assay(%{bookends: [_, _], bridges: bridges} = request) when length(bridges) >= 2 do
+    case config_get(:assay_capture, nil) do
+      pid when is_pid(pid) -> send(pid, {:assay, request})
+      _ -> :ok
+    end
+
     delay_ms() |> Process.sleep()
 
     case mode() do
@@ -256,6 +261,10 @@ defmodule Thereish.Steward.Fake do
 
     case voice_mode() do
       :ok ->
+        if recipient = config_get(:voice_recipient, nil) do
+          send(recipient, {:fake_speak, line})
+        end
+
         {:ok,
          %{
            audio: mp3_fixture(),
@@ -377,6 +386,47 @@ defmodule Thereish.Steward.Fake do
   end
 
   @impl true
+  def draw(give, colour, opts \\ []) do
+    delay = draw_delay_ms()
+    if delay > 0, do: Process.sleep(delay)
+
+    case draw_mode() do
+      :ok ->
+        size = Keyword.get(opts, :size, 64)
+        bytes = Thereish.Steward.Limner.png(colour, size)
+
+        {:ok,
+         %{
+           bytes: bytes,
+           format: :png,
+           meta: %{
+             provider: "fake",
+             model: "fake-limner",
+             cost_usd: 0.0,
+             latency_ms: delay,
+             give: Thereish.Steward.Author.give_text(give),
+             colour: colour
+           }
+         }}
+
+      :refused ->
+        {:error, :refused}
+
+      :unavailable ->
+        {:error, :draw_unavailable}
+
+      :timeout ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :raise ->
+        raise "this Limner is having a moment"
+    end
+  end
+
+  @impl true
   def title_track(gives, opts \\ []) do
     delay = title_delay_ms()
     if delay > 0, do: Process.sleep(delay)
@@ -444,6 +494,8 @@ defmodule Thereish.Steward.Fake do
   defp music_mode, do: config_get(:music_mode, :ok)
   defp title_delay_ms, do: config_get(:title_delay_ms, 0)
   defp title_mode, do: config_get(:title_mode, :ok)
+  defp draw_delay_ms, do: config_get(:draw_delay_ms, 0)
+  defp draw_mode, do: config_get(:draw_mode, :ok)
 
   defp config_get(key, default) do
     :thereish
