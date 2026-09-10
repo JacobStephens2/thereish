@@ -4,6 +4,8 @@ defmodule Thereish.DeployEnvTest do
   @env_sh Path.expand("../../deploy/env.sh", __DIR__)
   @compose_app_yml Path.expand("../../docker-compose.app.yml", __DIR__)
 
+  @bin_deploy Path.expand("../../bin/deploy", __DIR__)
+
   test "deploy/env.sh sets REPO to thereish.git" do
     content = File.read!(@env_sh)
 
@@ -16,5 +18,13 @@ defmodule Thereish.DeployEnvTest do
 
     assert content =~
              ~r/volumes:\s*\n\s*-\s*\.\/media:\/app\/lib\/thereish-[^\/]+\/priv\/static\/media/
+  end
+
+  test "bin/deploy verifies socket, database connection, and root page" do
+    content = File.read!(@bin_deploy)
+
+    assert content =~ ~s(grep -q 'data-check="socket"')
+    assert content =~ ~s(grep -q 'data-check="database" data-status="connected"')
+    assert content =~ ~s(curl -fs --max-time 5 "https://${HOST}/")
   end
 end
