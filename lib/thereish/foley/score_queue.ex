@@ -79,53 +79,17 @@ defmodule Thereish.Foley.ScoreQueue do
   @impl true
   def handle_info({ref, result}, %{current_job: %{task: %Task{ref: ref}}} = state) do
     Process.demonitor(ref, [:flush])
-
-    if state.current_job[:room_ref] do
-      Process.demonitor(state.current_job.room_ref, [:flush])
-    end
-
-    if room_alive?(state.current_job.room) do
-      send(state.current_job.room, {:scored, state.current_job.page_ref, result})
-    end
-
-    in_flight = MapSet.delete(state.in_flight, state.current_job.page_ref)
-    state = %{state | current_job: nil, in_flight: in_flight}
-    state = maybe_start_next_job(state)
-
-    {:noreply, state}
+    {:noreply, finish_current_job(state, result)}
   end
 
   def handle_info(
         {:DOWN, ref, :process, _pid, reason},
         %{current_job: %{task: %Task{ref: ref}}} = state
       ) do
-    if state.current_job[:room_ref] do
-      Process.demonitor(state.current_job.room_ref, [:flush])
-    end
-
-    if room_alive?(state.current_job.room) do
-      send(state.current_job.room, {:scored, state.current_job.page_ref, {:error, reason}})
-    end
-
-    in_flight = MapSet.delete(state.in_flight, state.current_job.page_ref)
-    state = %{state | current_job: nil, in_flight: in_flight}
-    state = maybe_start_next_job(state)
-
-    {:noreply, state}
+    {:noreply, finish_current_job(state, {:error, reason})}
   end
 
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    state =
-      case state.current_job do
-        %{room_ref: ^ref, task: task, page_ref: page_ref} ->
-          Task.shutdown(task, :brutal_kill)
-          in_flight = MapSet.delete(state.in_flight, page_ref)
-          maybe_start_next_job(%{state | current_job: nil, in_flight: in_flight})
-
-        _ ->
-          state
-      end
-
     {remaining_jobs, dropped_jobs} =
       state.queue
       |> :queue.to_list()
@@ -148,6 +112,20 @@ defmodule Thereish.Foley.ScoreQueue do
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
+
+  defp finish_current_job(state, result) do
+    if state.current_job[:room_ref] do
+      Process.demonitor(state.current_job.room_ref, [:flush])
+    end
+
+    if room_alive?(state.current_job.room) do
+      send(state.current_job.room, {:scored, state.current_job.page_ref, result})
+    end
+
+    in_flight = MapSet.delete(state.in_flight, state.current_job.page_ref)
+    state = %{state | current_job: nil, in_flight: in_flight}
+    maybe_start_next_job(state)
+  end
 
   defp start_job(job, state) do
     task =

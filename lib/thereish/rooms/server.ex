@@ -697,8 +697,16 @@ defmodule Thereish.Rooms.Server do
   def handle_info({:playable, _page_ref, _result}, state), do: {:noreply, state}
 
   def handle_info({:scored, page_ref, {:ok, track}}, state) do
-    title = track[:title] || state[:current_title]
-    title_meta = state[:title_meta] || %{}
+    current_page? = state[:current_page_ref] == page_ref
+
+    title =
+      if current_page? do
+        track[:title] || state[:current_title]
+      else
+        track[:title]
+      end
+
+    title_meta = if current_page?, do: state[:title_meta] || %{}, else: %{}
     title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
     track = if title, do: Map.put(track, :title, title), else: track
 
@@ -707,22 +715,26 @@ defmodule Thereish.Rooms.Server do
         if(title, do: [title: title, title_cost_usd: title_cost], else: [])
 
     base_meta =
-      case state[:music_meta] do
-        %{} = m when not is_map_key(m, :failure) and not is_map_key(m, "failure") -> m
-        _ -> track[:meta] || %{}
+      if current_page? do
+        case state[:music_meta] do
+          %{} = m when not is_map_key(m, :failure) and not is_map_key(m, "failure") -> m
+          _ -> track[:meta] || %{}
+        end
+      else
+        track[:meta] || %{}
       end
 
     music_meta = build_music_meta(base_meta, attrs)
 
     page_id =
       (state[:recorded_pages] || %{})[page_ref] ||
-        if state[:current_page_ref] == page_ref, do: state[:current_page_id]
+        if current_page?, do: state[:current_page_id]
 
-    if not is_nil(page_id) and (state.room.music == "page" or not is_nil(state[:music_meta])) do
+    if not is_nil(page_id) do
       Chronicle.replace_page_music(page_id, music_meta)
     end
 
-    if state[:current_page_ref] == page_ref do
+    if current_page? do
       state = Map.put(state, :score_task_running, false)
 
       state =
