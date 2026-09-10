@@ -88,6 +88,7 @@ defmodule ThereishWeb.RoomComponents do
       <% end %>
 
       <p
+        :if={waiting(@room)}
         data-role="open-seats"
         class={if @mode == :stage, do: "opacity-60", else: "mt-3 text-sm opacity-60"}
       >
@@ -188,7 +189,7 @@ defmodule ThereishWeb.RoomComponents do
         if(@mode == :stage, do: "gap-2", else: "gap-3")
       ]}
     >
-      <.caption data-role="bookends-caption">
+      <.caption :if={@mode == :stage} data-role="bookends-caption">
         Bookends
       </.caption>
       <div
@@ -1098,11 +1099,8 @@ defmodule ThereishWeb.RoomComponents do
   defp waiting_line(:slow), do: "The Assayer is still reading. It does this sometimes."
   defp waiting_line(_), do: waiting_line(nil)
 
-  defp waiting(%{open_seats: 0, seat_limit: seat_limit}),
-    do: "All #{seat_limit} seats taken"
-
-  defp waiting(%{open_seats: 1}), do: "Waiting for 1 more"
-  defp waiting(%{open_seats: open}), do: "Waiting for #{open} more"
+  defp waiting(%{seats: [_]}), do: "Waiting for 1 more"
+  defp waiting(_), do: nil
 
   defp reveal_arrival(%{melded?: true}), do: "meld"
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
