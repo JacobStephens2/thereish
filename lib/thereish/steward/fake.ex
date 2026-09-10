@@ -41,7 +41,12 @@ defmodule Thereish.Steward.Fake do
   @behaviour Thereish.Steward
 
   @impl true
-  def assay(%{bookends: [_, _], bridges: bridges}) when length(bridges) >= 2 do
+  def assay(%{bookends: [_, _], bridges: bridges} = request) when length(bridges) >= 2 do
+    case config_get(:assay_capture, nil) do
+      pid when is_pid(pid) -> send(pid, {:assay, request})
+      _ -> :ok
+    end
+
     delay_ms() |> Process.sleep()
 
     case mode() do
@@ -256,6 +261,10 @@ defmodule Thereish.Steward.Fake do
 
     case voice_mode() do
       :ok ->
+        if recipient = config_get(:voice_recipient, nil) do
+          send(recipient, {:fake_speak, line})
+        end
+
         {:ok,
          %{
            audio: mp3_fixture(),

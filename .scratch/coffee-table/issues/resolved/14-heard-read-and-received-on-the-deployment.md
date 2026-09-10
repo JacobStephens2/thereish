@@ -4,7 +4,9 @@
 
 **Blocked by:** 01 through 13.
 
-**Status:** ready-for-human
+**Status:** resolved
+
+Recreated on GitHub as [#89](https://github.com/JacobStephens2/thereish/issues/89) per ADR-0014; see the GitHub issue for tracking and checklist execution.
 
 - [ ] With a Stage: the music control from a phone changes what the laptop plays; Off leaves the stings and voice; a different loop on each of three Pages, named on the "Now playing" line; the title arriving before the Track and the line changing once; every commit sounding from the Stage and phones staying quiet (ticket 15); a Meld's cue with the Track fading beneath, and a deep meld's if one happens; "Bookends" and "Your bridge" on both screens; the quip on the Code card and the Stage header
 - [ ] Without a Stage: each phone ticks its own commit and the Speaker phone relays none; the control on a non-Speaker phone changes the Speaker's sound
@@ -25,4 +27,7 @@
   - SES production access was granted on 2026-09-07, DKIM and custom MAIL FROM are verified, and initial notices for new-device rooms (`odyl`, `oxen`) were received at `jacob@stephens.page`.
   - Chronicle track playback and Markdown export round-tripping (`Track: <title>`) are deployed and ready for tonight's recorded tracks.
 - The ticket remains `Status: ready-for-human` for the physical playtest session on deployment to verify the checklist items above.
+
+### Migration (ADR-0014)
+- **2026-09-09**: Recreated as GitHub issue [#89](https://github.com/JacobStephens2/thereish/issues/89) labelled `ready-for-human`. Local tracking moved to `resolved/` with this pointer; checklist execution and live tracking happen on GitHub.
 

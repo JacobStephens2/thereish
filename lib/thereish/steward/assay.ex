@@ -75,7 +75,8 @@ defmodule Thereish.Steward.Assay do
 
   @doc """
   Everything one grading request is made of: the Bookends and every Bridge, in the
-  order they are to be shown to the model, along with Gives and earlier Attempts.
+  order they are to be shown to the model, along with Gives, earlier Attempts, and
+  prior Quips (in user content, so the system prompt and its version stay put).
 
   The order is the caller's business rather than this module's, because both
   orderings get asked and the disagreement between them is a number the game
@@ -98,7 +99,7 @@ defmodule Thereish.Steward.Assay do
 
   @doc """
   Prompt for asking the Assayer's model for one new quip on a Precedent hit.
-  Carries the Bookends, Bridges, names, earlier Attempts, and Gives.
+  Carries the Bookends, Bridges, names, earlier Attempts, Gives, and prior Quips.
   """
   @spec quip_prompt(map() | [String.t()], list()) :: map()
   def quip_prompt(%{bookends: [left_bookend, right_bookend]} = request, ordering)
@@ -114,6 +115,7 @@ defmodule Thereish.Steward.Assay do
   defp format_user_content(request, [left_bookend, right_bookend], ordering) do
     gives_section = format_gives(request[:gives] || request["gives"])
     earlier_section = format_earlier(request[:earlier_attempts] || request["earlier_attempts"])
+    prior_section = format_prior_quips(request[:prior_quips] || request["prior_quips"])
 
     written_bridges =
       ordering
@@ -136,7 +138,7 @@ defmodule Thereish.Steward.Assay do
       "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <>
         written_bridges
 
-    [gives_section, earlier_section, current_attempt]
+    [gives_section, earlier_section, current_attempt, prior_section]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n\n")
   end
@@ -378,6 +380,32 @@ defmodule Thereish.Steward.Assay do
   end
 
   defp format_earlier(_), do: nil
+
+  defp format_prior_quips(nil), do: nil
+  defp format_prior_quips([]), do: nil
+
+  defp format_prior_quips(quips) when is_list(quips) do
+    lines =
+      quips
+      |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+      |> Enum.map(&"- #{&1}")
+
+    case lines do
+      [] ->
+        nil
+
+      _ ->
+        """
+        Constructions already used:
+        #{Enum.join(lines, "\n")}
+
+        Reach for a different form: a reversal, a single shared image, a question, a callback to an earlier attempt, or the gap between the words — not "this player brought X, that player brought Y".
+        """
+        |> String.trim()
+    end
+  end
+
+  defp format_prior_quips(_), do: nil
 
   defp object(pairs), do: Jason.OrderedObject.new(pairs)
 end

@@ -328,7 +328,54 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ "Mara"
       assert html =~ ~s(data-seat="s2")
       assert html =~ "Jacob"
-      assert html =~ ~s(data-role="open-seats")
+      refute html =~ ~s(data-role="open-seats")
+    end
+
+    test "renders 'Waiting for 1 more' at one Seat, and no fill line at two or more" do
+      one_seat_room = %{
+        seats: [%{id: "s1", name: "Mara", committed?: false, you?: false}],
+        open_seats: 5,
+        seat_limit: 6
+      }
+
+      html1 = render_component(&roster/1, room: one_seat_room)
+      assert html1 =~ ~s(data-role="open-seats")
+      assert html1 =~ "Waiting for 1 more"
+
+      two_seat_room = %{
+        seats: [
+          %{id: "s1", name: "Mara", committed?: false, you?: false},
+          %{id: "s2", name: "Jacob", committed?: false, you?: false}
+        ],
+        open_seats: 4,
+        seat_limit: 6
+      }
+
+      html2 = render_component(&roster/1, room: two_seat_room)
+      refute html2 =~ ~s(data-role="open-seats")
+      refute html2 =~ "Waiting for"
+
+      three_seat_room = %{
+        seats: [
+          %{id: "s1", name: "Mara", committed?: false, you?: false},
+          %{id: "s2", name: "Jacob", committed?: false, you?: false},
+          %{id: "s3", name: "Ada", committed?: false, you?: false}
+        ],
+        open_seats: 3,
+        seat_limit: 6
+      }
+
+      html3 = render_component(&roster/1, room: three_seat_room)
+      refute html3 =~ ~s(data-role="open-seats")
+
+      empty_room = %{
+        seats: [],
+        open_seats: 6,
+        seat_limit: 6
+      }
+
+      html0 = render_component(&roster/1, room: empty_room)
+      refute html0 =~ ~s(data-role="open-seats")
     end
   end
 
@@ -454,24 +501,63 @@ defmodule ThereishWeb.RoomComponentsTest do
   end
 
   describe "foley components" do
-    test "foley_switches renders voice switch and three-way music control on any view" do
-      room_with_speaker = %{speaker?: true, voice: true, music: "page"}
+    test "foley_switches renders voice switch only on speaker, and quips switch on any view" do
+      room_with_speaker = %{speaker?: true, quips: true, music: "page"}
       html = render_component(&foley_switches/1, room: room_with_speaker)
       assert html =~ ~s(data-role="voice-switch")
+      assert html =~ ~s(data-role="quips-switch")
       assert html =~ ~s(data-role="music-control")
       assert html =~ "Voice"
+      assert html =~ "Quips"
       assert html =~ "Off"
-      assert html =~ "House loop"
-      assert html =~ "Written for this Page"
+      assert html =~ "House"
+      assert html =~ "This Page"
+      refute html =~ "House loop"
+      refute html =~ "Written for this Page"
 
-      # Also renders on a room without speaker
-      room_without_speaker = %{speaker?: false, voice: false, music: "off"}
+      # Voice switch does NOT render without speaker, but Quips switch does
+      room_without_speaker = %{speaker?: false, quips: false, music: "off"}
       html_without = render_component(&foley_switches/1, room: room_without_speaker)
-      assert html_without =~ ~s(data-role="voice-switch")
+      refute html_without =~ ~s(data-role="voice-switch")
+      refute html_without =~ "Voice"
+      assert html_without =~ ~s(data-role="quips-switch")
+      assert html_without =~ "Quips"
       assert html_without =~ ~s(data-role="music-control")
       assert html_without =~ "Off"
-      assert html_without =~ "House loop"
-      assert html_without =~ "Written for this Page"
+      assert html_without =~ "House"
+      assert html_without =~ "This Page"
+      refute html_without =~ "House loop"
+      refute html_without =~ "Written for this Page"
+    end
+
+    test "reveal quip shows when quips is true and is hidden when quips is false" do
+      reveal_data = %{
+        closeness: 85,
+        band: :meld,
+        quip: "Two minds think alike.",
+        bridges: [
+          %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+          %{seat_id: "s2", name: "Jacob", bridge: "cairn"}
+        ]
+      }
+
+      html_on =
+        render_component(&reveal/1,
+          room: %{reveal: reveal_data, quips: true, phase: :reveal},
+          mode: :stage
+        )
+
+      assert html_on =~ ~s(data-role="quip")
+      assert html_on =~ "Two minds think alike."
+
+      html_off =
+        render_component(&reveal/1,
+          room: %{reveal: reveal_data, quips: false, phase: :reveal},
+          mode: :stage
+        )
+
+      refute html_off =~ ~s(data-role="quip")
+      refute html_off =~ "Two minds think alike."
     end
 
     test "foley_switches renders Next button only when speaker? and next? are both true" do
@@ -596,9 +682,16 @@ defmodule ThereishWeb.RoomComponentsTest do
         resume() { return Promise.resolve(); }
       }
 
+      const storage = { "foley:voice": "on" };
+      global.localStorage = {
+        getItem: (k) => storage[k] || null,
+        setItem: (k, v) => { storage[k] = String(v); }
+      };
+
       global.window = {
         AudioContext: MockAudioContext,
-        matchMedia: () => ({ matches: false })
+        matchMedia: () => ({ matches: false }),
+        localStorage: global.localStorage
       };
       global.fetch = () => Promise.resolve({
         ok: true,
@@ -693,6 +786,33 @@ defmodule ThereishWeb.RoomComponentsTest do
           hook.voiceSource.onended();
           assert.strictEqual(hook.isStingsDucked(), false);
           assert.strictEqual(hook.stingsBus.gain.value, 1.2);
+        }
+
+        // 3. When localStorage has voice off, voice does not play / does not duck stings
+        {
+          storage["foley:voice"] = "off";
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:voice"]({attempt: 1, url: "/voice/1"});
+          assert.strictEqual(hook.isStingsDucked(), false);
         }
 
         console.log('HOOK_TESTS_PASSED');
@@ -918,17 +1038,28 @@ defmodule ThereishWeb.RoomComponentsTest do
   end
 
   describe "bookends component" do
-    test "renders a 'Bookends' caption over the Bookends in the caption style" do
+    test "renders a 'Bookends' caption on the Stage, but no label on phones" do
       room = %{
         bookends: ["lantern", "harbour"]
       }
 
-      html = render_component(&bookends/1, room: room)
+      stage_html = render_component(&bookends/1, room: room, mode: :stage)
+      assert stage_html =~ "Bookends"
+      assert stage_html =~ ~s(data-role="bookends-caption")
+      assert stage_html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert stage_html =~ "lantern"
+      assert stage_html =~ "harbour"
 
-      assert html =~ "Bookends"
-      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
-      assert html =~ "lantern"
-      assert html =~ "harbour"
+      phone_html = render_component(&bookends/1, room: room, mode: :phone)
+      refute phone_html =~ "Bookends"
+      refute phone_html =~ ~s(data-role="bookends-caption")
+      assert phone_html =~ "lantern"
+      assert phone_html =~ "harbour"
+
+      # Default mode is :phone
+      default_html = render_component(&bookends/1, room: room)
+      refute default_html =~ "Bookends"
+      refute default_html =~ ~s(data-role="bookends-caption")
     end
   end
 
@@ -1017,6 +1148,79 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "written for this Page"
     end
 
+    test "renders 'written for this Page' without title before reveal when playing kind is track" do
+      room = %{
+        music: "page",
+        phase: :bridging,
+        played: [],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: written for this Page"
+      refute html =~ "Summer Camp · Viking Beaches"
+    end
+
+    test "renders title and 'written for this Page' during reveal when playing kind is track" do
+      room = %{
+        music: "page",
+        phase: :reveal,
+        played: [],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+    end
+
+    test "renders title and 'written for this Page' after first reveal on subsequent attempt" do
+      room = %{
+        music: "page",
+        phase: :bridging,
+        played: [%{attempt: 1}],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+    end
+
+    test "renders title and 'written for this Page' on closed page" do
+      room = %{
+        music: "page",
+        phase: :closed,
+        played: [%{attempt: 1}],
+        playing: %{
+          title: "Summer Camp · Viking Beaches",
+          path: "/media/tracks/p1.mp3",
+          kind: "track"
+        }
+      }
+
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+    end
+
     test "renders nothing when track has landed without title" do
       room = %{
         music: "page",
@@ -1042,6 +1246,84 @@ defmodule ThereishWeb.RoomComponentsTest do
       html = render_component(&now_playing/1, room: room)
 
       refute html =~ ~s(data-role="now-playing")
+    end
+  end
+
+  describe "closed page reveal gives" do
+    test "renders every Seat's Give with Seat name on closed page (standard mode)" do
+      room = %{
+        phase: :closed,
+        closed: %{because: :meld, attempt: 1},
+        reveal: %{
+          mode: :standard,
+          bridges: [%{seat_id: "s1", name: "Mara", bridge: "cairn"}],
+          closeness: 95,
+          band: :deep_meld,
+          quip: "one mind",
+          gives: [
+            %{seat_id: "s1", name: "Mara", text: "lighthouse"},
+            %{seat_id: "s2", name: "Jacob", text: "candle"}
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: room, mode: :stage, seat: nil)
+
+      assert html =~ ~s(data-role="gives")
+      assert html =~ ~s(data-role="give")
+      assert html =~ "Mara:"
+      assert html =~ "lighthouse"
+      assert html =~ "Jacob:"
+      assert html =~ "candle"
+    end
+
+    test "renders every Seat's Give with Seat name on closed page (sides mode)" do
+      room = %{
+        phase: :closed,
+        closed: %{because: :meld, attempt: 1},
+        reveal: %{
+          mode: :sides,
+          sides: [],
+          closeness: 95,
+          band: :deep_meld,
+          quip: "one mind",
+          gives: [
+            %{seat_id: "s1", name: "Mara", text: "lighthouse"},
+            %{seat_id: "s2", name: "Jacob", text: "candle"}
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: room, mode: :phone, seat: nil)
+
+      assert html =~ ~s(data-role="gives")
+      assert html =~ ~s(data-role="give")
+      assert html =~ "Mara:"
+      assert html =~ "lighthouse"
+      assert html =~ "Jacob:"
+      assert html =~ "candle"
+    end
+
+    test "does not render gives before page is closed" do
+      room = %{
+        phase: :reveal,
+        closed: nil,
+        reveal: %{
+          mode: :standard,
+          bridges: [%{seat_id: "s1", name: "Mara", bridge: "cairn"}],
+          closeness: 85,
+          band: :warm,
+          quip: "close enough",
+          gives: [
+            %{seat_id: "s1", name: "Mara", text: "lighthouse"},
+            %{seat_id: "s2", name: "Jacob", text: "candle"}
+          ]
+        }
+      }
+
+      html = render_component(&reveal/1, room: room, mode: :stage, seat: nil)
+
+      refute html =~ ~s(data-role="gives")
     end
   end
 end

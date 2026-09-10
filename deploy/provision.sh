@@ -80,6 +80,10 @@ ENV
   echo "wrote ${ENV_FILE}"
 fi
 
+say "Media directory"
+sudo install -d -m 0777 "${APP_DIR}/media"
+echo "ensured ${APP_DIR}/media exists"
+
 say "Apache proxy fragment"
 # Always synced, because this is the file that changes. Both the :80 vhost and
 # certbot's :443 vhost include it, so one copy configures both.
