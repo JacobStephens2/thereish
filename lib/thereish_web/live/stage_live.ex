@@ -17,6 +17,15 @@ defmodule ThereishWeb.StageLive do
 
   alias Thereish.Rooms
 
+  @seat_colors [
+    {"coral", "#e76f51"},
+    {"teal", "#2a9d8f"},
+    {"blue", "#3a86ff"},
+    {"amber", "#e9a23b"},
+    {"violet", "#9b5de5"},
+    {"green", "#43aa8b"}
+  ]
+
   @impl true
   def mount(params, session, socket) do
     slug = Rooms.open!(params["slug"])
@@ -163,6 +172,8 @@ defmodule ThereishWeb.StageLive do
 
         <.bookends room={@room} mode={:stage} />
 
+        <.bridge_markers room={@room} />
+
         <.assaying room={@room} />
 
         <.reveal room={@room} mode={:stage} />
@@ -218,6 +229,34 @@ defmodule ThereishWeb.StageLive do
 
       <.foley_hook speaker={@room && @room.speaker?} />
     </main>
+    """
+  end
+
+  attr :room, :map, required: true
+
+  defp bridge_markers(assigns) do
+    assigns =
+      assign(assigns, :markers, Enum.zip(assigns.room.seats, @seat_colors))
+
+    ~H"""
+    <section
+      :if={@room.phase in [:bridging, :assaying]}
+      data-role="bridge-markers"
+      class="flex flex-wrap items-center justify-center gap-3"
+      aria-label="Bridges landed"
+    >
+      <div
+        :for={{seat, {color_name, color}} <- @markers}
+        data-role="bridge-marker"
+        data-seat={seat.id}
+        data-color={color_name}
+        data-state={if seat.committed?, do: "lit", else: "dim"}
+        class="bridge-marker rounded-full border-2 px-4 py-2 text-base font-semibold"
+        style={"--seat-color: #{color}"}
+      >
+        {seat.name}
+      </div>
+    </section>
     """
   end
 

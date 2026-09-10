@@ -136,3 +136,36 @@
     transform: scale(1);
   }
 }
+
+.bridge-marker {
+  color: var(--seat-color);
+  border-color: color-mix(in oklab, var(--seat-color) 55%, transparent);
+  background-color: color-mix(in oklab, var(--seat-color) 12%, transparent);
+  box-shadow: 0 0 0 0 transparent;
+  opacity: 0.42;
+  transform: translateY(0) scale(0.96);
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1.25),
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.bridge-marker[data-state="lit"] {
+  border-color: var(--seat-color);
+  background-color: color-mix(in oklab, var(--seat-color) 24%, transparent);
+  box-shadow: 0 0 0 0.2rem color-mix(in oklab, var(--seat-color) 18%, transparent);
+  opacity: 1;
+  transform: translateY(-0.25rem) scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bridge-marker {
+    transition: none;
+  }
+
+  .bridge-marker[data-state="lit"] {
+    transform: none;
+  }
+}
