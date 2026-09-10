@@ -32,6 +32,16 @@ defmodule ThereishWeb.RoomLiveTest do
 
   defp phone(slug), do: build_conn() |> get(~p"/r/#{slug}")
 
+  defp assert_all_markers_dim(stage, slug) do
+    for seat <- Rooms.snapshot(slug, nil).seats do
+      assert has_element?(
+               stage,
+               "[data-role=bridge-marker][data-seat='#{seat.id}'][data-state=dim]",
+               seat.name
+             )
+    end
+  end
+
   # A Stage claims nothing and plays nothing until someone taps it (ticket 12),
   # so a test that wants a speaking Stage taps it the way a person would.
   defp tap_for_sound(stage), do: stage |> element("[data-role=tap-for-sound]") |> render_click()
@@ -486,6 +496,62 @@ defmodule ThereishWeb.RoomLiveTest do
       assert html =~ "cairn"
       assert html =~ "No verdict"
       refute has_element?(ctx.melissa, "[data-role=closeness]")
+    end
+  end
+
+  describe "Stage Bridge markers" do
+    setup do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+      play_to_bridging(melissa, jacob, slug)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage}
+    end
+
+    test "one dim marker per Seat appears only on the Stage while bridging", ctx do
+      assert has_element?(ctx.stage, "[data-role=bridge-markers]")
+      assert_all_markers_dim(ctx.stage, ctx.slug)
+
+      refute has_element?(ctx.melissa, "[data-role=bridge-marker]")
+      refute has_element?(ctx.jacob, "[data-role=bridge-marker]")
+    end
+
+    test "a Seat marker lights in the same Stage update as the commit sting", ctx do
+      melissa = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Melissa"))
+      jacob = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Jacob"))
+      tap_for_sound(ctx.stage)
+
+      commit(ctx.melissa, "cairn")
+
+      assert_push_event(ctx.stage, "foley:commit", %{})
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{melissa.id}'][data-state=lit]",
+               "Melissa"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{jacob.id}'][data-state=dim]",
+               "Jacob"
+             )
+    end
+
+    test "all markers reset for the next Attempt", ctx do
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "beacon")
+      await_reveal_on(ctx.stage)
+
+      ctx.melissa |> element("[data-role=again]") |> render_click()
+
+      assert has_element?(ctx.stage, "[data-role=attempt]", "Attempt 2 of 5")
+      assert_all_markers_dim(ctx.stage, ctx.slug)
     end
   end
 
