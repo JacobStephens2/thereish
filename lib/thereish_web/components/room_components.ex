@@ -1565,7 +1565,10 @@ defmodule ThereishWeb.RoomComponents do
           this.isReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
           this.speaker = this.el.dataset.speaker === "true"
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
-          this.canPlay = () => !this.isReducedMotion() && this.speaker
+          // Read the speaker off the DOM rather than off the last `updated()`:
+          // the tap that claims the Speaker is answered with the patch and the
+          // first `foley:page` together, and a stale flag would swallow it.
+          this.canPlay = () => !this.isReducedMotion() && this.el.dataset.speaker === "true"
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -1619,19 +1622,6 @@ defmodule ThereishWeb.RoomComponents do
             this.musicBus.connect(this.ctx.destination)
             this.stingsBus.connect(this.ctx.destination)
             this.voiceBus.connect(this.ctx.destination)
-
-            this.updateTapForSound()
-          }
-
-          this.updateTapForSound = () => {
-            const tapBtn = document.getElementById("tap-for-sound")
-            if (tapBtn) {
-              if (this.ctx && this.ctx.state === "running") {
-                tapBtn.style.display = "none"
-              } else {
-                tapBtn.style.display = ""
-              }
-            }
           }
 
           this.resumeAudio = async () => {
@@ -1639,18 +1629,17 @@ defmodule ThereishWeb.RoomComponents do
             if (this.ctx && this.ctx.state !== "running") {
               await this.ctx.resume()
             }
-            this.updateTapForSound()
           }
 
-          const tapBtn = document.getElementById("tap-for-sound")
-          if (tapBtn) {
-            tapBtn.addEventListener("click", () => this.resumeAudio())
+          // The tap and the speaker toggle are rendered by the view, so they
+          // come and go and move between the header and the waiting screen.
+          // One delegated listener outlives all of that.
+          this.onTapClick = (e) => {
+            if (e.target && e.target.closest("#tap-for-sound, [data-role=speaker-toggle]")) {
+              this.resumeAudio()
+            }
           }
-
-          const speakerToggle = document.querySelector("[data-role=speaker-toggle]")
-          if (speakerToggle) {
-            speakerToggle.addEventListener("click", () => this.resumeAudio())
-          }
+          document.addEventListener("click", this.onTapClick)
 
           this.onFormSubmit = (e) => {
             if (e.target && (e.target.id === "bridge-form" || e.target.closest("#bridge-form"))) {
@@ -1991,6 +1980,10 @@ defmodule ThereishWeb.RoomComponents do
           })
 
           this.playCommitTick = async () => {
+            // A device whose sound has never been opened by a gesture attempts
+            // nothing: an untapped Stage stays silent rather than reaching for
+            // an audio context the browser will only suspend.
+            if (!this.ctx) return
             await this.resumeAudio()
             if (!this.ctx) return
             const buf = await this.fetchBuffer("/audio/commit-tick.mp3")
@@ -2044,15 +2037,12 @@ defmodule ThereishWeb.RoomComponents do
             this.currentVoiceAttempt = null
             this.stopMusic()
           })
-
-          this.updateTapForSound()
         },
 
         updated() {
           this.speaker = this.el.dataset.speaker === "true"
           this.meldCueDelayMs = (this.parseDelay || parseInt)(this.el.dataset.meldCueDelayMs, 1800)
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
-          this.updateTapForSound()
           if (!this.speaker) {
             if (this.clearEndingTimeout) this.clearEndingTimeout()
             this.stopVoice()
@@ -2065,6 +2055,7 @@ defmodule ThereishWeb.RoomComponents do
           if (this.clearEndingTimeout) this.clearEndingTimeout()
           if (this.onFormSubmit) document.removeEventListener("submit", this.onFormSubmit)
           if (this.onCommitClick) document.removeEventListener("click", this.onCommitClick)
+          if (this.onTapClick) document.removeEventListener("click", this.onTapClick)
           this.stopVoice()
           this.currentVoiceAttempt = null
           this.stopMusic()

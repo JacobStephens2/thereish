@@ -542,13 +542,19 @@ defmodule ThereishWeb.RoomComponentsTest do
       }
 
       html_on =
-        render_component(&reveal/1, room: %{reveal: reveal_data, quips: true}, mode: :stage)
+        render_component(&reveal/1,
+          room: %{reveal: reveal_data, quips: true, phase: :reveal},
+          mode: :stage
+        )
 
       assert html_on =~ ~s(data-role="quip")
       assert html_on =~ "Two minds think alike."
 
       html_off =
-        render_component(&reveal/1, room: %{reveal: reveal_data, quips: false}, mode: :stage)
+        render_component(&reveal/1,
+          room: %{reveal: reveal_data, quips: false, phase: :reveal},
+          mode: :stage
+        )
 
       refute html_off =~ ~s(data-role="quip")
       refute html_off =~ "Two minds think alike."
