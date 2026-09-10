@@ -78,6 +78,24 @@ if key = System.get_env("MUREKA_API_KEY") do
   config :thereish, :steward, roles: [foley: [jobs: [music: [api_key: key]]]]
 end
 
+if key =
+     System.get_env("RECRAFT_API_TOKEN") || System.get_env("RECRAFT_API_KEY") ||
+       System.get_env("RECRAFT_AI_API_KEY") do
+  config :thereish, :steward, roles: [limner: [recraft_api_key: key]]
+end
+
+if key = System.get_env("IDEOGRAM_API_KEY") do
+  config :thereish, :steward, roles: [limner: [ideogram_api_key: key]]
+end
+
+if key = System.get_env("BFL_API_KEY") || System.get_env("BLACK_FOREST_LABS_API_KEY") do
+  config :thereish, :steward, roles: [limner: [bfl_api_key: key]]
+end
+
+if key = System.get_env("FAL_KEY") || System.get_env("FAL_AI_API_KEY") do
+  config :thereish, :steward, roles: [limner: [fal_key: key]]
+end
+
 if script_url = System.get_env("UMAMI_SCRIPT_URL") do
   config :thereish, :umami, script_url: script_url
 end
