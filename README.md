@@ -65,8 +65,9 @@ Scribe's prose before the couple do (design law 14).
 - `docs/research/` — the reading behind the laws: LLM referees in word games,
   why group word games fail at two, model selection for a 2.5-second beat,
   name clearance
-- `.scratch/` — the tracker: one `spec.md` and numbered issues per feature,
-  resolved ones moved aside (`docs/agents/issue-tracker.md`)
+- GitHub issues — the tracker: specs are parent issues and tickets are
+  sub-issues (`docs/agents/issue-tracker.md`); historical features remain in
+  `.scratch/`
 
 ## The code
 
