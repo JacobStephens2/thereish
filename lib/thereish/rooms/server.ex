@@ -108,6 +108,7 @@ defmodule Thereish.Rooms.Server do
         deal: deal,
         eligible_members: eligible_members,
         music_meta: nil,
+        gives_landed_at: nil,
         voice_audio: nil,
         voice_meta: %{}
       }
@@ -703,6 +704,7 @@ defmodule Thereish.Rooms.Server do
     else
       case result do
         {:ok, track} ->
+          log_music_event(state, page_ref, "track landed")
           title = track[:title] || state[:current_title]
           title_meta = state[:title_meta] || %{}
           state = apply_track_and_title(state, track, title, title_meta, page_ref)
@@ -710,7 +712,7 @@ defmodule Thereish.Rooms.Server do
           {:noreply, state}
 
         {:error, reason} ->
-          Logger.warning("Foley score failed for room #{state.room.slug}: #{inspect(reason)}")
+          log_music_event(state, page_ref, {:failure, reason})
           failure_meta = Thereish.Steward.score_failure(reason)
 
           state =
@@ -1046,11 +1048,14 @@ defmodule Thereish.Rooms.Server do
 
     gives = extract_give_strings(request)
 
+    now = System.monotonic_time(:millisecond)
+
     state =
       state
       |> Map.put(:current_arm, arm)
       |> Map.put(:current_page_ref, page_ref)
       |> Map.put(:current_gives, gives)
+      |> Map.put(:gives_landed_at, now)
       |> Map.put(:current_title, nil)
       |> Map.put(:title_meta, nil)
       |> Map.put(:music_meta, nil)
@@ -1219,6 +1224,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:title_meta, nil)
       |> Map.put(:music_meta, nil)
       |> Map.put(:current_gives, nil)
+      |> Map.put(:gives_landed_at, nil)
       |> Map.put(:score_task_running, false)
       |> Map.put(:title_task_running, false)
 
@@ -1242,8 +1248,13 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp start_music_tasks(room, page_ref, gives, state) do
+    gives_landed_at = state[:gives_landed_at] || System.monotonic_time(:millisecond)
+    state = Map.put(state, :gives_landed_at, gives_landed_at)
+
     case Thereish.Steward.TrackCache.get(gives) do
       {:ok, cached_track} when not is_nil(cached_track.title) ->
+        log_music_event(state, page_ref, "cache hit")
+
         music_meta =
           build_music_meta(cached_track.meta,
             title: cached_track.title,
@@ -1260,14 +1271,21 @@ defmodule Thereish.Rooms.Server do
         |> Map.put(:title_task_running, false)
 
       _ ->
+        log_music_event(state, page_ref, "cache miss")
+
         state
-        |> start_score_task(room, page_ref, gives)
+        |> start_score_task(room, page_ref, gives, gives_landed_at)
         |> start_title_task(room, page_ref, gives)
     end
   end
 
-  defp start_score_task(state, room, page_ref, gives) do
+  defp start_score_task(state, room, page_ref, gives, gives_landed_at) do
+    code = state.room.slug
+    log_music_event(code, page_ref, "score queued", gives_landed_at)
+
     start_music_task(state, room, page_ref, :score_task_running, :scored, fn ->
+      log_music_event(code, page_ref, "score started", gives_landed_at)
+
       Steward.score(gives,
         on_playable: fn playable ->
           send(room, {:playable, page_ref, {:ok, playable}})
@@ -1495,4 +1513,42 @@ defmodule Thereish.Rooms.Server do
 
   # Device tokens are the browser's business and never leave this module.
   defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name, partner_id: seat.partner_id}
+
+  @doc """
+  Logs a music event carrying the Room's Code, Page reference, event name,
+  and milliseconds since Gives landed.
+  """
+  def log_music_event(%{room: %{slug: code}} = state, page_ref, event) do
+    log_music_event(code, page_ref, event, state[:gives_landed_at])
+  end
+
+  def log_music_event(code, page_ref, event, gives_landed_at \\ nil)
+
+  def log_music_event(code, page_ref, {:failure, reason}, gives_landed_at) do
+    log_music_event(code, page_ref, "failure with reason: #{inspect(reason)}", gives_landed_at)
+  end
+
+  def log_music_event(code, page_ref, event, gives_landed_at) when is_binary(event) do
+    elapsed = elapsed_ms(gives_landed_at)
+    ref_str = format_page_ref(page_ref)
+
+    msg = "Foley music for room #{code} (page #{ref_str}): #{event} (+#{elapsed}ms)"
+
+    if String.starts_with?(event, "failure") do
+      Logger.warning(msg)
+    else
+      Logger.info(msg)
+    end
+
+    :ok
+  end
+
+  defp elapsed_ms(time) when is_integer(time) do
+    max(0, System.monotonic_time(:millisecond) - time)
+  end
+
+  defp elapsed_ms(_), do: 0
+
+  defp format_page_ref(ref) when is_binary(ref), do: ref
+  defp format_page_ref(ref), do: inspect(ref)
 end

@@ -17,13 +17,20 @@ defmodule Thereish.Steward.TitleTest do
     steward = Application.fetch_env!(:thereish, :steward)
     on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
-    title_job = Keyword.merge(steward[:roles][:scribe][:jobs][:title], role_opts)
+    title_job =
+      steward[:roles][:scribe][:jobs][:title]
+      |> Keyword.put_new(:api_key, "recorded-responses-need-no-key")
+      |> Keyword.merge(role_opts)
+
+    scribe_role =
+      steward[:roles][:scribe]
+      |> Keyword.delete(:api_key)
+      |> put_in([:jobs, :title], title_job)
 
     live =
       steward
       |> Keyword.put(:adapter, Thereish.Steward.Live)
-      |> put_in([:roles, :scribe, :api_key], "recorded-responses-need-no-key")
-      |> put_in([:roles, :scribe, :jobs, :title], title_job)
+      |> put_in([:roles, :scribe], scribe_role)
 
     Application.put_env(:thereish, :steward, live)
   end
@@ -97,6 +104,22 @@ defmodule Thereish.Steward.TitleTest do
       assert job.timeout_ms <= 3_000
       assert job.deadline_ms <= 6_000
       assert job.provider == Thereish.Steward.Gemini
+    end
+
+    test "runtime configuration wires GEMINI_API_KEY to title job the way naming is wired" do
+      prev_key = System.get_env("GEMINI_API_KEY")
+      System.put_env("GEMINI_API_KEY", "gemini-runtime-key-for-title")
+
+      on_exit(fn ->
+        if prev_key,
+          do: System.put_env("GEMINI_API_KEY", prev_key),
+          else: System.delete_env("GEMINI_API_KEY")
+      end)
+
+      config = Config.Reader.read!("config/runtime.exs", env: :test, imports: :disabled)
+      scribe_jobs = config[:thereish][:steward][:roles][:scribe][:jobs] || []
+
+      assert scribe_jobs[:title][:api_key] == "gemini-runtime-key-for-title"
     end
   end
 
@@ -196,6 +219,24 @@ defmodule Thereish.Steward.TitleTest do
 
       assert meta[:fallback] == true
       assert Agent.get(counts, &Map.get(&1, :title)) == 2
+    end
+
+    test "proves no fallback when key is present on title job, and falls back to Gives joined with a dot when absent" do
+      recorded(fn conn, _body ->
+        Req.Test.json(conn, title_response("Emerald Glade"))
+      end)
+
+      assert {:ok, %{title: "Emerald Glade", meta: meta}} =
+               Live.title_track(["summer camp", "viking beaches"])
+
+      refute meta[:fallback]
+
+      live_title(api_key: nil)
+
+      assert {:ok, %{title: "Summer Camp · Viking Beaches", meta: fallback_meta}} =
+               Live.title_track(["summer camp", "viking beaches"])
+
+      assert fallback_meta[:fallback] == true
     end
   end
 end
