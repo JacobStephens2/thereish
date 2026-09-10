@@ -1679,4 +1679,103 @@ defmodule Thereish.ChronicleTest do
       assert spend.by_role.author.unpriced_count == 0
     end
   end
+
+  describe "masks in Chronicle (ticket 16)" do
+    test "Chronicle.write persists masks_meta and page_views includes masks and give masks", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        gives: [
+          %{seat_id: ctx.mara.id, text: "cactus"},
+          %{seat_id: ctx.jacob.id, text: "dune"}
+        ],
+        masks: %{
+          ctx.mara.id => %{url: "/media/masks/mask-mara.png", meta: %{model: "imagen-3", cost_usd: 0.04}},
+          ctx.jacob.id => %{url: "/media/masks/mask-jacob.png", meta: %{model: "imagen-3", cost_usd: 0.04}}
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: []
+      }
+
+      assert {:ok, page} = Chronicle.write(room.id, entry, now)
+      assert is_map(page.masks_meta)
+      mara_mask = page.masks_meta[to_string(ctx.mara.id)] || page.masks_meta[ctx.mara.id]
+      assert (mara_mask[:url] || mara_mask["url"]) == "/media/masks/mask-mara.png"
+
+      [view] = Chronicle.page_views(room.id)
+      assert is_map(view.masks)
+      assert view.masks[to_string(ctx.mara.id)]["url"] == "/media/masks/mask-mara.png"
+      assert [give1, give2] = view.gives
+      assert give1.mask["url"] == "/media/masks/mask-mara.png"
+      assert give2.mask["url"] == "/media/masks/mask-jacob.png"
+    end
+
+    test "replace_page_masks/2 updates masks_meta on a Page and spend reflects it", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        masks: %{
+          ctx.mara.id => :dot
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: []
+      }
+
+      assert {:ok, page} = Chronicle.write(room.id, entry, now)
+      assert Chronicle.spend(room.id).by_role.limner.calls_count == 0
+
+      updated_masks = %{
+        to_string(ctx.mara.id) => %{
+          "url" => "/media/masks/mask-late.png",
+          "meta" => %{"model" => "imagen-3", "cost_usd" => 0.0400}
+        }
+      }
+
+      assert {:ok, updated_page} = Chronicle.replace_page_masks(page.id, updated_masks)
+      assert updated_page.masks_meta[to_string(ctx.mara.id)]["url"] == "/media/masks/mask-late.png"
+
+      spend = Chronicle.spend(room.id)
+      assert spend.by_role.limner.calls_count == 1
+      assert Decimal.equal?(spend.by_role.limner.total_usd, Decimal.new("0.0400"))
+      assert spend.by_role.limner.by_model["imagen-3"].calls_count == 1
+
+      line = Chronicle.spend_line(spend)
+      assert line =~ "Limner $0.0400"
+    end
+
+    test "Markdown.render includes masks when present", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        gives: [
+          %{seat_id: ctx.mara.id, text: "cactus"}
+        ],
+        masks: %{
+          ctx.mara.id => %{url: "/media/masks/mask-mara.png"}
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: []
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+
+      markdown = Thereish.Chronicle.Markdown.render(room.id)
+      assert markdown =~ "/media/masks/mask-mara.png"
+    end
+  end
 end

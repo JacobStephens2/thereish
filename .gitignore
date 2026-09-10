@@ -45,3 +45,4 @@ npm-debug.log
 
 # Local media directory for generated audio/tracks/masks
 /media/
+/priv/static/media/

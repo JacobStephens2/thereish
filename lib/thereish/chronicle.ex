@@ -837,6 +837,55 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Replaces the masks_meta on an existing Chronicle page with the latest masks record.
+  """
+  @spec replace_page_masks(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
+  def replace_page_masks(%Page{} = page, masks_meta) do
+    page
+    |> Page.changeset(%{masks_meta: sanitize_masks(masks_meta)})
+    |> Repo.update()
+  end
+
+  def replace_page_masks(page_id, masks_meta) when is_binary(page_id) do
+    case Repo.get(Page, page_id) do
+      nil -> {:error, :not_found}
+      page -> replace_page_masks(page, masks_meta)
+    end
+  end
+
+  @doc """
+  Updates or adds a single seat's mask on a Page's masks_meta.
+  """
+  @spec update_page_mask(Ecto.UUID.t() | Page.t(), String.t() | atom(), map() | atom()) ::
+          {:ok, Page.t()} | {:error, term()}
+  def update_page_mask(%Page{} = page, seat_id, mask) do
+    current = page.masks_meta || %{}
+    updated = Map.put(current, to_string(seat_id), sanitize_mask(mask))
+    replace_page_masks(page, updated)
+  end
+
+  def update_page_mask(page_id, seat_id, mask) when is_binary(page_id) do
+    case Repo.get(Page, page_id) do
+      nil -> {:error, :not_found}
+      page -> update_page_mask(page, seat_id, mask)
+    end
+  end
+
+  defp sanitize_masks(nil), do: nil
+
+  defp sanitize_masks(masks) when is_map(masks) do
+    Map.new(masks, fn {k, v} -> {to_string(k), sanitize_mask(v)} end)
+  end
+
+  defp sanitize_masks(other), do: other
+
+  defp sanitize_mask(mask) when is_map(mask) do
+    mask |> Map.delete(:bytes) |> Map.delete("bytes")
+  end
+
+  defp sanitize_mask(other), do: other
+
+  @doc """
   Answers spend for all Rooms across Author, Assayer, and Scribe calls.
   """
   @spec spend() :: map()
@@ -858,7 +907,8 @@ defmodule Thereish.Chronicle do
           select: %{
             room_id: p.room_id,
             author_meta: p.author_meta,
-            music_meta: p.music_meta
+            music_meta: p.music_meta,
+            masks_meta: p.masks_meta
           }
         )
       )
@@ -919,7 +969,11 @@ defmodule Thereish.Chronicle do
       Repo.all(
         from(p in Page,
           where: p.room_id == ^room.id,
-          select: %{author_meta: p.author_meta, music_meta: p.music_meta}
+          select: %{
+            author_meta: p.author_meta,
+            music_meta: p.music_meta,
+            masks_meta: p.masks_meta
+          }
         )
       )
 
@@ -1067,13 +1121,33 @@ defmodule Thereish.Chronicle do
 
         music_meta = Map.get(page, :music_meta)
 
-        if is_map(music_meta) and map_size(music_meta) > 0 do
-          model =
-            music_meta["model"] || music_meta[:model] ||
-              music_meta["provider"] || music_meta[:provider] || "unknown"
+        acc =
+          if is_map(music_meta) and map_size(music_meta) > 0 do
+            model =
+              music_meta["model"] || music_meta[:model] ||
+                music_meta["provider"] || music_meta[:provider] || "unknown"
 
-          cost = to_decimal(music_meta["cost_usd"] || music_meta[:cost_usd])
-          record_call(acc, :foley, model, cost)
+            cost = to_decimal(music_meta["cost_usd"] || music_meta[:cost_usd])
+            record_call(acc, :foley, model, cost)
+          else
+            acc
+          end
+
+        masks_meta = Map.get(page, :masks_meta)
+
+        if is_map(masks_meta) and map_size(masks_meta) > 0 do
+          Enum.reduce(masks_meta, acc, fn {_seat_id, mask}, acc_m ->
+            cond do
+              is_map(mask) ->
+                meta = mask[:meta] || mask["meta"] || mask
+                model = meta[:model] || meta["model"] || "unknown"
+                cost = to_decimal(meta[:cost_usd] || meta["cost_usd"])
+                record_call(acc_m, :limner, model, cost)
+
+              true ->
+                acc_m
+            end
+          end)
         else
           acc
         end
@@ -1680,13 +1754,25 @@ defmodule Thereish.Chronicle do
           []
 
         list when is_list(list) ->
+          masks = page.masks_meta || %{}
+
           Enum.map(list, fn g ->
+            seat_mask =
+              Map.get(masks, g.seat_id) ||
+                Map.get(masks, to_string(g.seat_id)) ||
+                (is_binary(g.seat_id) &&
+                   case Integer.parse(g.seat_id) do
+                     :error -> Map.get(masks, String.to_atom(g.seat_id))
+                     _ -> nil
+                   end)
+
             %{
               id: g.id,
               seat_id: g.seat_id,
               seat_name: (g.seat && g.seat.name) || "Seat",
               text: g.text,
-              order: g.order
+              order: g.order,
+              mask: seat_mask
             }
           end)
       end
@@ -1729,6 +1815,8 @@ defmodule Thereish.Chronicle do
       gives: formatted_gives,
       author_meta: page.author_meta,
       music_meta: page.music_meta,
+      masks_meta: page.masks_meta,
+      masks: page.masks_meta,
       give: page.document["give"] || page.document[:give],
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
@@ -1909,6 +1997,17 @@ defmodule Thereish.Chronicle do
         Map.get(entry, :music_meta) ||
         Map.get(entry, "music_meta")
 
+    masks_meta =
+      (Map.get(page_data, :masks_meta) ||
+         Map.get(page_data, "masks_meta") ||
+         Map.get(page_data, :masks) ||
+         Map.get(page_data, "masks") ||
+         Map.get(entry, :masks_meta) ||
+         Map.get(entry, "masks_meta") ||
+         Map.get(entry, :masks) ||
+         Map.get(entry, "masks"))
+      |> sanitize_masks()
+
     page =
       %Page{}
       |> Page.changeset(%{
@@ -1916,6 +2015,7 @@ defmodule Thereish.Chronicle do
         document: page_data,
         author_meta: author_meta,
         music_meta: music_meta,
+        masks_meta: masks_meta,
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,
         closeness: entry.closeness,
@@ -1926,7 +2026,7 @@ defmodule Thereish.Chronicle do
 
     raw_gives =
       entry[:gives] || entry["gives"] ||
-        (is_map(page_data) && (page_data[:gives] || page_data["gives"]))
+        page_data[:gives] || page_data["gives"]
 
     gives =
       cond do

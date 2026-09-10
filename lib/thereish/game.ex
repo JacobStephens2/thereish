@@ -71,7 +71,8 @@ defmodule Thereish.Game do
     sides_mode: false,
     page_seat_ids: nil,
     track: nil,
-    track_held_over: false
+    track_held_over: false,
+    masks: %{}
   ]
 
   @type seat :: %{
@@ -137,7 +138,8 @@ defmodule Thereish.Game do
           sides_mode: boolean(),
           page_seat_ids: [String.t()] | nil,
           track: map() | nil,
-          track_held_over: boolean()
+          track_held_over: boolean(),
+          masks: %{String.t() => term()}
         }
 
   @type viewer :: String.t() | nil
@@ -150,6 +152,12 @@ defmodule Thereish.Game do
                required(:seat_id) => String.t(),
                required(:give) => String.t()
              }}
+          | {:mask_landed,
+             %{
+               required(:seat_id) => String.t(),
+               required(:mask) => term()
+             }}
+          | {:mask_landed, String.t(), term()}
           | {:start_page, %{required(:seat_id) => String.t()}}
           | {:page_written,
              %{
@@ -280,7 +288,8 @@ defmodule Thereish.Game do
       page_seat_ids: page_seat_ids,
       sides_mode: Keyword.get(opts, :sides_mode, false),
       track: track,
-      track_held_over: track_held_over
+      track_held_over: track_held_over,
+      masks: %{}
     }
   end
 
@@ -435,6 +444,27 @@ defmodule Thereish.Game do
     end
   end
 
+  def apply(%__MODULE__{} = state, {:mask_landed, %{seat_id: seat_id} = attrs}) do
+    cond do
+      not seated?(state, seat_id) ->
+        {:error, :no_such_seat}
+
+      true ->
+        mask =
+          case Map.get(attrs, :mask) do
+            m when is_map(m) -> Map.delete(m, :bytes)
+            other -> other
+          end
+
+        masks = Map.put(state.masks || %{}, seat_id, mask)
+        {:ok, %{state | masks: masks}, []}
+    end
+  end
+
+  def apply(%__MODULE__{} = state, {:mask_landed, seat_id, mask}) when is_binary(seat_id) do
+    apply(state, {:mask_landed, %{seat_id: seat_id, mask: mask}})
+  end
+
   def apply(%__MODULE__{} = state, {:start_page, %{seat_id: seat_id}}) do
     cond do
       not seated?(state, seat_id) ->
@@ -531,7 +561,7 @@ defmodule Thereish.Game do
         {:error, :not_writing}
 
       true ->
-        {:ok, %{state | gives: %{}, author_failure: nil, page_seat_ids: nil}, []}
+        {:ok, %{state | gives: %{}, masks: %{}, author_failure: nil, page_seat_ids: nil}, []}
     end
   end
 
@@ -885,7 +915,8 @@ defmodule Thereish.Game do
            author_failure: nil,
            page_seat_ids: nil,
            track: state.track,
-           track_held_over: not is_nil(state.track)
+           track_held_over: not is_nil(state.track),
+           masks: %{}
        }, []}
     end
   end
@@ -925,6 +956,7 @@ defmodule Thereish.Game do
       page_theme: state.page && (state.page[:theme] || state.page["theme"]),
       your_give: Map.get(state.gives, viewer),
       your_last_give: Map.get(state.last_gives, viewer),
+      your_mask: if(viewer, do: Map.get(state.masks || %{}, viewer)),
       gives_in: map_size(state.gives),
       author_failure: state.author_failure,
       your_bridge: Map.get(state.bridges, viewer),
@@ -1361,7 +1393,12 @@ defmodule Thereish.Game do
 
   defp gives_view(state) do
     Enum.map(page_seats(state), fn seat ->
-      %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
+      %{
+        seat_id: seat.id,
+        name: seat.name,
+        text: state.gives[seat.id],
+        mask: Map.get(state.masks || %{}, seat.id)
+      }
     end)
   end
 
@@ -1568,8 +1605,14 @@ defmodule Thereish.Game do
       bookends: state.bookends,
       gives:
         Enum.map(page_seats(state), fn seat ->
-          %{seat_id: seat.id, seat_name: seat.name, text: state.gives[seat.id] || ""}
+          %{
+            seat_id: seat.id,
+            seat_name: seat.name,
+            text: state.gives[seat.id] || "",
+            mask: Map.get(state.masks || %{}, seat.id)
+          }
         end),
+      masks: state.masks || %{},
       author_meta: state.page && (state.page[:meta] || state.page["meta"]),
       closed_because: closed_because(state),
       melded?: melded?(state),
@@ -1793,6 +1836,15 @@ defmodule Thereish.Game do
     })
   end
 
+  @doc "A Seat's house colour from the Limner palette by roster position."
+  @spec seat_colour(t(), seat() | String.t()) :: String.t()
+  def seat_colour(%__MODULE__{} = state, seat_or_id) do
+    seat_id = if is_binary(seat_or_id), do: seat_or_id, else: seat_or_id.id
+    palette = Thereish.Steward.Limner.palette()
+    index = Enum.find_index(state.seats, &(&1.id == seat_id)) || 0
+    Enum.at(palette, rem(index, length(palette)))
+  end
+
   defp seat_view(state, seat, viewer) do
     seat_late? = state.page_seat_ids != nil and seat.id not in state.page_seat_ids
     partner = find_partner(state, seat)
@@ -1800,6 +1852,8 @@ defmodule Thereish.Game do
     %{
       id: seat.id,
       name: seat.name,
+      colour: seat_colour(state, seat),
+      mask: mask_for_viewer(state, seat, viewer),
       you?: seat.id == viewer,
       committed?: committed?(state, seat.id),
       late?: seat_late?,
@@ -1807,6 +1861,27 @@ defmodule Thereish.Game do
       partner_name: partner && partner.name,
       couple?: partner != nil
     }
+  end
+
+  defp mask_for_viewer(state, seat, viewer) do
+    raw_mask = Map.get(state.masks || %{}, seat.id)
+
+    cond do
+      is_nil(raw_mask) ->
+        nil
+
+      phase(state) in [:reveal, :closed] or state.played != [] ->
+        raw_mask
+
+      seat.id == viewer ->
+        raw_mask
+
+      is_nil(viewer) ->
+        :face_down
+
+      true ->
+        nil
+    end
   end
 
   defp find_partner(state, seat) do

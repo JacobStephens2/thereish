@@ -353,9 +353,16 @@ defmodule ThereishWeb.ChronicleLive do
                 <span
                   :for={g <- page[:gives] || []}
                   data-role="give-tag"
-                  class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+                  class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
-                  Give ({g.seat_name}): {g.text}
+                  <img
+                    :if={is_map(g[:mask]) and (g.mask[:url] || g.mask["url"])}
+                    src={g.mask[:url] || g.mask["url"]}
+                    alt={"Mask for " <> g.seat_name}
+                    class="h-4 w-4 rounded-full object-cover"
+                    data-role="page-mask"
+                  />
+                  <span>Give ({g.seat_name}): {g.text}</span>
                 </span>
                 <span
                   :if={(page[:gives] == nil or page[:gives] == []) and page[:give]}
@@ -403,6 +410,25 @@ defmodule ThereishWeb.ChronicleLive do
               >
                 Unmelded
               </span>
+            </div>
+          </div>
+
+          <!-- Masks if present -->
+          <div
+            :if={is_map(page[:masks]) and map_size(page.masks) > 0 and Enum.any?(page.masks, fn {_, m} -> is_map(m) and (m[:url] || m["url"]) end)}
+            data-role="page-masks"
+            class="flex items-center gap-3 rounded-lg bg-base-200/50 p-3"
+          >
+            <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Masks</span>
+            <div class="flex flex-wrap items-center gap-2">
+              <img
+                :for={{_seat_id, mask} <- page.masks}
+                :if={is_map(mask) and (mask[:url] || mask["url"])}
+                src={mask[:url] || mask["url"]}
+                alt="Mask"
+                class="h-8 w-8 rounded-md border border-base-300 object-cover shadow-sm"
+                data-role="page-mask"
+              />
             </div>
           </div>
 
