@@ -75,6 +75,18 @@ defmodule Thereish.Steward.PrecedentTest do
 
       refute m1 == m2
     end
+
+    test "a request with and without prior Quips hashes to the same key" do
+      without = %{bookends: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
+
+      with_quips =
+        Map.put(without, :prior_quips, [
+          "Jacob brought the lighthouse, Mara brought the dock."
+        ])
+
+      assert Precedent.key("gemini-3.8-flash", "assay-3", without) ==
+               Precedent.key("gemini-3.8-flash", "assay-3", with_quips)
+    end
   end
 
   describe "storing and fetching precedent" do
