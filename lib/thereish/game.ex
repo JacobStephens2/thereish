@@ -69,7 +69,9 @@ defmodule Thereish.Game do
     fairness_taps: %{},
     bookends_taps: %{},
     sides_mode: false,
-    page_seat_ids: nil
+    page_seat_ids: nil,
+    track: nil,
+    track_held_over: false
   ]
 
   @type seat :: %{
@@ -133,13 +135,16 @@ defmodule Thereish.Game do
           fairness_taps: %{String.t() => String.t()},
           bookends_taps: %{String.t() => String.t()},
           sides_mode: boolean(),
-          page_seat_ids: [String.t()] | nil
+          page_seat_ids: [String.t()] | nil,
+          track: map() | nil,
+          track_held_over: boolean()
         }
 
   @type viewer :: String.t() | nil
 
   @type event ::
           {:seat_joined, seat()}
+          | {:track_landed, map() | String.t()}
           | {:give_committed,
              %{
                required(:seat_id) => String.t(),
@@ -261,6 +266,9 @@ defmodule Thereish.Game do
         nil
       end
 
+    track = normalize_track(Keyword.get(opts, :track))
+    track_held_over = not is_nil(track) and is_nil(page)
+
     %__MODULE__{
       seat_limit: seat_limit,
       seats: seats,
@@ -270,7 +278,9 @@ defmodule Thereish.Game do
       last_gives: %{},
       author_failure: nil,
       page_seat_ids: page_seat_ids,
-      sides_mode: Keyword.get(opts, :sides_mode, false)
+      sides_mode: Keyword.get(opts, :sides_mode, false),
+      track: track,
+      track_held_over: track_held_over
     }
   end
 
@@ -295,6 +305,14 @@ defmodule Thereish.Game do
   and must not have to remember whether it already did.
   """
   @spec apply(t(), event()) :: {:ok, t(), [effect()]} | {:error, error()}
+  def apply(%__MODULE__{} = state, {:track_landed, track}) when is_map(track) do
+    {:ok, %{state | track: track, track_held_over: false}, []}
+  end
+
+  def apply(%__MODULE__{} = state, {:track_landed, track}) when is_binary(track) do
+    {:ok, %{state | track: %{title: track}, track_held_over: false}, []}
+  end
+
   def apply(%__MODULE__{} = state, {:seat_joined, seat}) do
     seat = seat(seat)
 
@@ -865,7 +883,9 @@ defmodule Thereish.Game do
            fairness_taps: %{},
            bookends_taps: %{},
            author_failure: nil,
-           page_seat_ids: nil
+           page_seat_ids: nil,
+           track: state.track,
+           track_held_over: not is_nil(state.track)
        }, []}
     end
   end
@@ -926,7 +946,9 @@ defmodule Thereish.Game do
       fairness_taps: fairness_taps,
       your_bookends_tap: Map.get(state.bookends_taps || %{}, viewer),
       bookends_taps: state.bookends_taps || %{},
-      barred_words: if(phase != :waiting, do: barred_words(state))
+      barred_words: if(phase != :waiting, do: barred_words(state)),
+      track: track_view(state),
+      gives: if(phase in [:reveal, :closed] or state.played != [], do: gives_view(state))
     }
   end
 
@@ -1282,10 +1304,7 @@ defmodule Thereish.Game do
     if sides_mode?(state) do
       sides_reveal_view(state)
     else
-      gives =
-        Enum.map(page_seats(state), fn seat ->
-          %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
-        end)
+      gives = gives_view(state)
 
       base =
         state.verdict
@@ -1315,10 +1334,7 @@ defmodule Thereish.Game do
 
     closer_side = determine_closer(verdict_a, verdict_b)
 
-    gives =
-      Enum.map(page_seats(state), fn seat ->
-        %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
-      end)
+    gives = gives_view(state)
 
     %{
       mode: :sides,
@@ -1332,6 +1348,26 @@ defmodule Thereish.Game do
       gives: gives
     }
   end
+
+  defp track_view(%{track: nil}), do: nil
+
+  defp track_view(%{track: track} = state) do
+    if state.track_held_over or phase(state) in [:reveal, :closed] or state.played != [] do
+      track
+    else
+      Map.delete(track, :title)
+    end
+  end
+
+  defp gives_view(state) do
+    Enum.map(page_seats(state), fn seat ->
+      %{seat_id: seat.id, name: seat.name, text: state.gives[seat.id]}
+    end)
+  end
+
+  defp normalize_track(nil), do: nil
+  defp normalize_track(track) when is_binary(track), do: %{title: track}
+  defp normalize_track(track) when is_map(track), do: track
 
   defp determine_closer(verdict_a, verdict_b) do
     closeness_a = verdict_a && verdict_a[:closeness]
