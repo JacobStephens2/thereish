@@ -426,6 +426,13 @@ defmodule Thereish.Rooms do
   def claim_speaker(code, device_token), do: call(code, {:claim_speaker, device_token})
 
   @doc """
+  Starts sound on the Stage's opening tap, claiming the speaker and,
+  on a Room with no Chronicle behind it, beginning the Prologue.
+  """
+  @spec start_sound(String.t(), String.t()) :: :ok | {:error, term()}
+  def start_sound(code, device_token), do: call(code, {:start_sound, device_token})
+
+  @doc """
   Releases the speaker.
 
   Releasing with a token other than the current speaker is a no-op.
@@ -436,6 +443,14 @@ defmodule Thereish.Rooms do
   @doc "Sets the quips on/off switch."
   @spec set_quips(String.t(), boolean()) :: :ok | {:error, term()}
   def set_quips(code, enabled), do: call(code, {:set_quips, enabled})
+
+  @doc "Skips the Prologue for this Room, remembering the skip as a Room fact."
+  @spec skip_prologue(String.t()) :: :ok | {:error, term()}
+  def skip_prologue(code), do: call(code, :skip_prologue)
+
+  @doc "Plays the Prologue on demand for this Room."
+  @spec play_prologue(String.t()) :: :ok | {:error, term()}
+  def play_prologue(code), do: call(code, :play_prologue)
 
   @doc "Sets the music switch: 'off', 'house', or 'page'."
   @spec set_music(String.t(), String.t() | atom()) :: :ok | {:error, term()}
