@@ -107,7 +107,9 @@ defmodule ThereishWeb.StageLive do
       class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5 overflow-y-auto select-none box-border"
     >
       <header class="flex items-center justify-between w-full shrink-0 gap-4">
-        <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Thereish</h1>
+        <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">
+          <.link navigate={~p"/"} class="hover:opacity-80">Thereish</.link>
+        </h1>
         <div class="flex items-center gap-3 sm:gap-4">
           <button
             :if={@room && @room.speaker?}

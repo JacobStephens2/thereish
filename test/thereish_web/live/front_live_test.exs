@@ -232,7 +232,7 @@ defmodule ThereishWeb.FrontLiveTest do
         end
 
       for view <- phones do
-        assert has_element?(view, "[data-role=open-seats]", "All 4 seats taken")
+        refute has_element?(view, "[data-role=open-seats]")
         assert has_element?(view, "[data-role=room-code]")
       end
 
@@ -252,7 +252,7 @@ defmodule ThereishWeb.FrontLiveTest do
       # The Room's own URL, so a latecomer can be sent one thing rather than
       # a host and a Code to type into it.
       assert has_element?(view, "[data-role=join-url]", "/r/#{slug}")
-      assert has_element?(view, "[data-role=open-seats]", "Waiting for 3 more")
+      assert has_element?(view, "[data-role=open-seats]", "Waiting for 1 more")
     end
   end
 end
