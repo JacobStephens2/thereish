@@ -194,6 +194,15 @@ config :thereish, :steward,
           timeout_ms: 30_000,
           api_key: nil
         ],
+        vamp: [
+          provider: Thereish.Steward.ElevenLabs,
+          model: "eleven_text_to_sound_v2",
+          duration_seconds: 30.0,
+          loop: true,
+          format: "mp3_44100_128",
+          timeout_ms: 30_000,
+          api_key: nil
+        ],
         music: [
           provider: Thereish.Steward.Mureka,
           model: "auto",

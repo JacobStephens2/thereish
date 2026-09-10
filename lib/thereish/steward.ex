@@ -92,6 +92,7 @@ defmodule Thereish.Steward do
   @callback quip_code(String.t()) :: {:ok, String.t() | nil} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
+  @callback vamp([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   @callback title_track([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   @callback draw(String.t() | map(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
 
@@ -115,6 +116,17 @@ defmodule Thereish.Steward do
   def score(gives, opts \\ []) do
     gives = Enum.map(gives, &Thereish.Steward.Author.give_text/1)
     measure_call(fn -> adapter().score(gives, opts) end)
+  end
+
+  @doc """
+  Vamps one Page from its Gives, answering a short looping instrumental and meta.
+
+  Measured here so latency provenance is kept by the seam.
+  """
+  @spec vamp([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
+  def vamp(gives, opts \\ []) do
+    gives = Enum.map(gives, &Thereish.Steward.Author.give_text/1)
+    measure_call(fn -> adapter().vamp(gives, opts) end)
   end
 
   @doc """
