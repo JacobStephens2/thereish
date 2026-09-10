@@ -1561,7 +1561,19 @@ defmodule Thereish.RoomsTest do
       assert is_nil(room.speaker)
       assert room.quips == true
       assert room.music == "page"
+      assert room.prologue_skipped == false
       refute :voice in Thereish.Rooms.Room.__schema__(:fields)
+    end
+
+    test "migration adds prologue_skipped column" do
+      migrations_dir = Application.app_dir(:thereish, "priv/repo/migrations")
+
+      migration_file =
+        Path.join(migrations_dir, "20260910120000_add_prologue_skipped_to_rooms.exs")
+
+      assert File.exists?(migration_file)
+      content = File.read!(migration_file)
+      assert content =~ "add :prologue_skipped, :boolean"
     end
 
     test "migration drops voice and adds quips column" do
@@ -1749,6 +1761,54 @@ defmodule Thereish.RoomsTest do
       assert room.quips == false
       assert room.music == "off"
       refute Map.has_key?(room, :voice)
+    end
+
+    test "skip_prologue sets the Room fact and broadcasts", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      assert :ok = Rooms.skip_prologue(ctx.slug)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).prologue_skipped == true
+
+      view = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
+      assert view.prologue_skipped == true
+      assert is_nil(view.prologue)
+    end
+
+    test "prologue_skipped survives a Room process restart", ctx do
+      assert :ok = Rooms.skip_prologue(ctx.slug)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      room =
+        once_restarted(fn ->
+          {:ok, _slug, _pid} = Rooms.ensure_started(ctx.slug)
+          Store.get_room(ctx.slug)
+        end)
+
+      assert room.prologue_skipped == true
+    end
+
+    test "play_prologue starts active prologue and snapshot exposes it, skip ends it", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      assert :ok = Rooms.play_prologue(ctx.slug)
+      assert_receive :room_changed
+
+      view = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
+      assert is_map(view.prologue)
+      assert is_binary(view.prologue.reading)
+      assert is_binary(view.prologue.text)
+
+      assert :ok = Rooms.skip_prologue(ctx.slug)
+      assert_receive :room_changed
+
+      view_after = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
+      assert is_nil(view_after.prologue)
+      assert view_after.prologue_skipped == true
     end
 
     test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
