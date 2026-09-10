@@ -2153,9 +2153,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.stage,
           "[data-role=now-playing]",
-          "Now playing: Summer Camp · Viking Beaches (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               "Summer Camp · Viking Beaches"
+             )
     end
 
     test "foley:page pushes playable-early stream, speaker plays it and updates Now playing, then transitions to completed track",
@@ -2208,9 +2214,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.stage,
           "[data-role=now-playing]",
-          "Alpine Forest · Snowy Peaks (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               "Alpine Forest · Snowy Peaks"
+             )
 
       # 2. Later, completed MP3 track lands and pushes updated foley:page
       assert_push_event(
@@ -2357,9 +2369,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.stage,
           "[data-role=now-playing]",
-          "Now playing: #{p1_title} (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               p1_title
+             )
 
       eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
       eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
@@ -2445,9 +2463,15 @@ defmodule ThereishWeb.RoomLiveTest do
         has_element?(
           ctx.melissa,
           "[data-role=now-playing]",
-          "Now playing: #{p2_title} (written for this Page)"
+          "Now playing: written for this Page"
         )
       end)
+
+      refute has_element?(
+               ctx.melissa,
+               "[data-role=now-playing]",
+               p2_title
+             )
     end
 
     test "ticket 03: Next renders only on the speaking screen, below the fold with the music control, and pushes new foley:page on tap",
@@ -3377,6 +3401,102 @@ defmodule ThereishWeb.RoomLiveTest do
         eventually(fn -> has_element?(phone, "[data-role=setting-form]") end)
         refute has_element?(phone, "[data-role=late-seat]")
       end
+    end
+  end
+
+  describe "the title keeps the secret, the end screen tells it (ticket 09)" do
+    setup do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      %{slug: slug, melissa: melissa, jacob: jacob, stage: stage}
+    end
+
+    test "\"Now playing\" reads \"written for this Page\" before reveal and shows title after; Gives with Seat names render on closed Page reveal on phone and Stage",
+         ctx do
+      # 1. Giving phase: Melissa and Jacob give settings
+      give_setting(ctx.melissa, "lighthouse on the rocks")
+      give_setting(ctx.jacob, "candle in the window")
+      await_phase(ctx.slug, :bridging)
+
+      # Track lands for the page
+      assert_push_event(
+        ctx.stage,
+        "foley:page",
+        %{
+          path: _track_path,
+          title: track_title,
+          kind: "track"
+        },
+        1000
+      )
+
+      # 2. Before reveal: "Now playing" reads "written for this Page" on Stage
+      # Excludes Track's title
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          "Now playing: written for this Page"
+        )
+      end)
+
+      refute has_element?(ctx.stage, "[data-role=now-playing]", track_title)
+
+      # Both players commit bridges and close the page with a meld
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
+
+      commit(ctx.melissa, "beacon")
+      commit(ctx.jacob, "beacon")
+      await_reveal(ctx.slug)
+
+      # 3. After reveal: title is now visible in "Now playing"
+      eventually(fn ->
+        has_element?(
+          ctx.stage,
+          "[data-role=now-playing]",
+          track_title
+        )
+      end)
+
+      await_phase(ctx.slug, :closed)
+
+      # On closed page, the title is still visible
+      assert has_element?(
+               ctx.stage,
+               "[data-role=now-playing]",
+               track_title
+             )
+
+      # 4. Gives with Seat names render on the closed Page's reveal on phone and Stage
+      eventually(fn ->
+        has_element?(ctx.stage, "[data-role=gives]") and
+          has_element?(ctx.melissa, "[data-role=gives]") and
+          has_element?(ctx.jacob, "[data-role=gives]")
+      end)
+
+      # Stage shows every Seat's Give with Seat name
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "Melissa")
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "lighthouse on the rocks")
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "Jacob")
+      assert has_element?(ctx.stage, "[data-role=give][data-seat]", "candle in the window")
+
+      # Phones also show every Seat's Give with Seat name
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "Melissa")
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "lighthouse on the rocks")
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "Jacob")
+      assert has_element?(ctx.melissa, "[data-role=give][data-seat]", "candle in the window")
+
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "Melissa")
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "lighthouse on the rocks")
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "Jacob")
+      assert has_element?(ctx.jacob, "[data-role=give][data-seat]", "candle in the window")
     end
   end
 end
