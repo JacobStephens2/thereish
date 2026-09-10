@@ -133,7 +133,11 @@ defmodule ThereishWeb.StageLive do
           </p>
         </div>
         <div class="flex items-center gap-3 sm:gap-4">
-          <.tap_for_sound :if={tap?(@room) and not filling?(@room)} size={:small} />
+          <.tap_for_sound
+            :if={offer_tap?(@room) and not filling?(@room)}
+            size={:small}
+            pulse={not @room.speaker_claimed?}
+          />
           <.foley_switches :if={@room} room={@room} />
           <.link
             navigate={chronicle_path(@slug)}
@@ -158,10 +162,7 @@ defmodule ThereishWeb.StageLive do
           >
             {Code.shout(@slug)}
           </p>
-          <p class="text-base sm:text-xl opacity-70">
-            Join at <span class="font-mono font-semibold">{display_url(@join_url)}</span>
-          </p>
-          <.tap_for_sound :if={tap?(@room)} size={:large} />
+          <.tap_for_sound :if={offer_tap?(@room)} size={:large} pulse={not @room.speaker_claimed?} />
         </section>
 
         <section
@@ -213,7 +214,7 @@ defmodule ThereishWeb.StageLive do
         data-role="stage-foot"
         class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-base-content/10 pt-2 shrink-0 text-xs sm:text-sm opacity-80"
       >
-        <p class="opacity-70">
+        <p class={["opacity-70", filling?(@room) && "text-base sm:text-2xl"]}>
           Join at
           <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
           <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
@@ -261,14 +262,20 @@ defmodule ThereishWeb.StageLive do
   # The Room is still filling: nothing is in play yet, so the Code is the
   # biggest thing on the screen. From the first Give on it moves to the header
   # and the Page takes the middle.
+  defp filling?(nil), do: false
   defp filling?(room), do: room.phase == :waiting
 
   # The tap is offered until this Stage holds the Speaker — including to a Stage
   # opened halfway through the night, which is how it joins the music.
-  defp tap?(nil), do: false
-  defp tap?(room), do: not room.speaker?
+  defp offer_tap?(nil), do: false
+  defp offer_tap?(room), do: not room.speaker?
 
   attr :size, :atom, default: :small
+
+  # It pulses while nobody is speaking, because then it is the thing to do
+  # next. Once a phone holds the Speaker the Stage is quiet on purpose, so the
+  # tap waits there without asking for attention.
+  attr :pulse, :boolean, default: true
 
   defp tap_for_sound(assigns) do
     ~H"""
@@ -278,7 +285,8 @@ defmodule ThereishWeb.StageLive do
       data-role="tap-for-sound"
       phx-click="start_sound"
       class={[
-        "btn animate-pulse",
+        "btn",
+        @pulse && "animate-pulse",
         if(@size == :large,
           do: "btn-primary btn-lg text-lg",
           else: "btn-outline btn-xs sm:btn-sm"
