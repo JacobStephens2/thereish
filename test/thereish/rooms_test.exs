@@ -2440,7 +2440,7 @@ defmodule Thereish.RoomsTest do
       assert view_p2_giving.playing.title == p1_track.title
 
       # Add delay to author and music scoring so we can observe writing phase
-      set_fake(author_delay_ms: 100, music_delay_ms: 150)
+      set_fake(author_delay_ms: 100, music_delay_ms: 150, vamp_mode: :unavailable)
 
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "whispering pines")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "winding river")
@@ -2705,12 +2705,12 @@ defmodule Thereish.RoomsTest do
       assert page.music_meta[:cost_usd] != nil or page.music_meta["cost_usd"] != nil
     end
 
-    test "playable-early stream seizes Speaker as soon as playable, before full track download completes, and updates to cached track when complete",
+    test "on Track cache miss: Room starts Vamp and score together; snapshot shows Vamp before Track and Track replacing it; cache hit skips Vamp",
          ctx do
       fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
 
-      # music_mode: :stream, music_stream_delay_ms: 0, music_delay_ms: 200
-      # This causes on_playable to fire immediately, but final scored track to take 200 ms
+      # vamp_delay_ms: 0, music_delay_ms: 200
+      # Vamp lands immediately, but final scored track takes 200 ms
       Application.put_env(
         :thereish,
         :steward,
@@ -2718,8 +2718,7 @@ defmodule Thereish.RoomsTest do
           Application.get_env(:thereish, :steward, []),
           :fake,
           Keyword.merge(fake_config,
-            music_mode: :stream,
-            music_stream_delay_ms: 0,
+            vamp_delay_ms: 0,
             music_delay_ms: 200
           )
         )
@@ -2733,45 +2732,173 @@ defmodule Thereish.RoomsTest do
         )
       end)
 
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
       Rooms.subscribe(ctx.slug)
 
-      :ok = Rooms.give(ctx.slug, ctx.mara.id, "frozen lake")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+      log =
+        capture_log([level: :info], fn ->
+          :ok = Rooms.give(ctx.slug, ctx.mara.id, "frozen lake")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
 
-      # As soon as gives are in, playable stream lands before full download
-      eventually(fn ->
-        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-        not is_nil(view[:track]) and view.track[:stream] == true
-      end)
+          # 1. As soon as gives are in, Vamp lands before full Track download
+          eventually(fn ->
+            view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            not is_nil(view[:vamp]) and is_nil(view[:track])
+          end)
 
-      stream_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert stream_view.track.format == :aac
-      assert stream_view.track.stream == true
-      assert String.starts_with?(stream_view.track.path, "https://stream.mureka.ai/live/fake-")
-      assert stream_view.playing.kind == "track"
-      assert stream_view.playing.path == stream_view.track.path
+          vamp_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+          assert vamp_view.vamp.format == :mp3
+          assert vamp_view.vamp.duration == 30
+          assert vamp_view.vamp.loop == true
+          assert is_nil(vamp_view[:track])
+          assert vamp_view.playing.kind == "vamp"
+          assert vamp_view.playing.path == vamp_view.vamp.path
+          assert is_nil(vamp_view.playing.title)
 
-      # Once the full download finishes, the track updates to the cached MP3 file
-      eventually(fn ->
-        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-        view.track.format == :mp3
-      end)
+          # Vamp is never titled, cached, persisted, or made a Repertoire member
+          refute Map.has_key?(vamp_view.vamp, :title) and not is_nil(vamp_view.vamp[:title])
+          room = Thereish.Rooms.Store.get_room(ctx.slug)
+          repertoire_paths = Enum.map(Thereish.Foley.Repertoire.members(room.id), & &1.path)
+          refute vamp_view.vamp.path in repertoire_paths
 
-      final_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert final_view.track.format == :mp3
-      assert String.starts_with?(final_view.track.path, "/media/tracks/fake-")
-      assert final_view.playing.kind == "track"
-      assert final_view.playing.path == final_view.track.path
+          # 2. Once the full score finishes, the track replaces the Vamp on snapshot
+          eventually(fn ->
+            view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            is_nil(view[:vamp]) and not is_nil(view[:track])
+          end)
 
-      # The same Gives on another Page immediately return the cached track directly
-      disk_path = Thereish.Steward.TrackCache.disk_path(final_view.track.path)
+          final_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+          assert is_nil(final_view[:vamp])
+          assert final_view.track.format == :mp3
+          assert String.starts_with?(final_view.track.path, "/media/tracks/fake-")
+          assert final_view.playing.kind == "track"
+          assert final_view.playing.path == final_view.track.path
+        end)
+
+      # Verify music log lines appear for vamp started, vamp landed, and track landed
+      assert log =~ ~r/Foley music for room #{ctx.slug}.*: vamp started \(\+\d+ms\)/
+      assert log =~ ~r/Foley music for room #{ctx.slug}.*: vamp landed \(\+\d+ms\)/
+      assert log =~ ~r/Foley music for room #{ctx.slug}.*: track landed \(\+\d+ms\)/
+
+      # 3. Cache hit skips Vamp (lands no Vamp)
+      # Create a dummy disk file for the track so TrackCache considers it valid
+      final_track_path = Rooms.snapshot(ctx.slug, ctx.mara.id).track.path
+      disk_path = Thereish.Steward.TrackCache.disk_path(final_track_path)
       File.mkdir_p!(Path.dirname(disk_path))
       File.write!(disk_path, "mp3-bytes")
       on_exit(fn -> File.rm(disk_path) end)
 
-      _cached_key = Thereish.Steward.TrackCache.key(["frozen lake", "northern lights"])
-      assert {:ok, cached} = Thereish.Steward.TrackCache.get(["frozen lake", "northern lights"])
-      assert cached.path == final_view.track.path
+      # Play through to closed
+      await_phase(ctx.slug, :bridging)
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Move to next page and submit identical gives -> cache hit skips Vamp
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+
+      hit_log =
+        capture_log([level: :info], fn ->
+          :ok = Rooms.give(ctx.slug, ctx.mara.id, "frozen lake")
+          :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+
+          eventually(fn ->
+            view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+            not is_nil(view[:track]) and view.track.path == final_track_path
+          end)
+
+          hit_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+          assert is_nil(hit_view[:vamp])
+          assert hit_view.track.path == final_track_path
+          assert hit_view.playing.kind == "track"
+        end)
+
+      assert hit_log =~ ~r/Foley music for room #{ctx.slug}.*: cache hit/
+      refute hit_log =~ "vamp started"
+      refute hit_log =~ "vamp landed"
+    end
+
+    test "on Page 2+: holdover plays during giving, Vamp replaces holdover on cache miss, and Track replaces Vamp",
+         ctx do
+      # Play Page 1 to closed with a landed track
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "ancient ruins")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "lost temple")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view.playing.kind == "track"
+      end)
+
+      p1_track = Rooms.snapshot(ctx.slug, ctx.mara.id).playing
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      # Move to Page 2
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+
+      # 1. During giving, Page 1's track holds over
+      p2_giving = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert p2_giving.playing.kind == "holdover"
+      assert p2_giving.playing.path == p1_track.path
+
+      # Configure Fake: Vamp lands immediately (0 ms), Track takes 200 ms
+      fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
+          Keyword.merge(fake_config,
+            vamp_mode: :ok,
+            vamp_delay_ms: 0,
+            music_delay_ms: 200
+          )
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "whispering pines")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "winding river")
+
+      # 2. Vamp lands before full Track download and replaces holdover
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view.playing.kind == "vamp"
+      end)
+
+      vamp_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert vamp_view.playing.kind == "vamp"
+      assert not is_nil(vamp_view[:vamp])
+      assert vamp_view.playing.path == vamp_view.vamp.path
+
+      # 3. Once full score finishes, Track replaces Vamp
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+        view.playing.kind == "track"
+      end)
+
+      track_view = Rooms.snapshot(ctx.slug, ctx.mara.id)
+      assert is_nil(track_view[:vamp])
+      assert track_view.playing.kind == "track"
+      assert track_view.playing.path != p1_track.path
     end
 
     test "same Gives bring back the same Track directly from cache without stream", ctx do
@@ -2849,7 +2976,7 @@ defmodule Thereish.RoomsTest do
       assert cached_row.path == view.track.path
     end
 
-    test "stale playable message arriving for moved-on Page is dropped", ctx do
+    test "stale vamp message arriving for moved-on Page is dropped", ctx do
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting alpha")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting beta")
       await_phase(ctx.slug, :bridging)
@@ -2863,30 +2990,30 @@ defmodule Thereish.RoomsTest do
       pid = GenServer.whereis(Server.via(ctx.slug))
       stale_ref = make_ref()
 
-      stale_stream = %{
-        path: "https://stream.mureka.ai/live/stale.aac",
-        duration: 120,
-        format: :aac,
-        stream: true,
+      stale_vamp = %{
+        path: "/media/vamps/stale.mp3",
+        duration: 30,
+        format: :mp3,
+        loop: true,
         meta: %{provider: "fake"}
       }
 
       # Dropped while closed
-      send(pid, {:playable, stale_ref, {:ok, stale_stream}})
+      send(pid, {:vamped, stale_ref, {:ok, stale_vamp}})
       view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert is_nil(view[:track]) or view.track.path != stale_stream.path
+      assert is_nil(view[:vamp]) or view.vamp.path != stale_vamp.path
 
       # Move to next page
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       await_phase(ctx.slug, :giving)
 
-      # Send late playable message for old page_ref
-      send(pid, {:playable, stale_ref, {:ok, stale_stream}})
+      # Send late vamp message for old page_ref
+      send(pid, {:vamped, stale_ref, {:ok, stale_vamp}})
       view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-      assert is_nil(view[:track]) or view.track.path != stale_stream.path
+      assert is_nil(view[:vamp]) or view.vamp.path != stale_vamp.path
     end
 
-    test "score job failing after stream leaves Repertoire playing, records failure in music_meta, and room does not stall",
+    test "score job failing leaves Repertoire playing, records failure in music_meta, and room does not stall",
          ctx do
       fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
 
@@ -2897,10 +3024,7 @@ defmodule Thereish.RoomsTest do
           Application.get_env(:thereish, :steward, []),
           :fake,
           Keyword.merge(fake_config,
-            music_mode: :stream,
-            music_stream_delay_ms: 0,
-            music_delay_ms: 50,
-            music_fail_after_stream: true
+            music_mode: :unavailable
           )
         )
       )
@@ -2918,13 +3042,7 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "misty forest")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "mountain creek")
 
-      # First stream arrives and plays
-      eventually(fn ->
-        view = Rooms.snapshot(ctx.slug, ctx.mara.id)
-        not is_nil(view[:track]) and view.track[:stream] == true
-      end)
-
-      # When stream generation fails later, track reverts to nil (Repertoire playing)
+      # When score generation fails, track reverts to nil (Repertoire playing)
       eventually(fn ->
         view = Rooms.snapshot(ctx.slug, ctx.mara.id)
         is_nil(view[:track]) and view.playing.kind == "repertoire"
@@ -3034,7 +3152,7 @@ defmodule Thereish.RoomsTest do
         Keyword.put(
           Application.get_env(:thereish, :steward, []),
           :fake,
-          Keyword.merge(fake_config, music_delay_ms: 150)
+          Keyword.merge(fake_config, music_delay_ms: 150, vamp_mode: :unavailable)
         )
       )
 
@@ -3551,7 +3669,7 @@ defmodule Thereish.RoomsTest do
       assert is_binary(view_giving.playing.title) and byte_size(view_giving.playing.title) > 0
 
       # Set delay on author so writing phase can be observed
-      set_fake(author_delay_ms: 100, music_delay_ms: 200)
+      set_fake(author_delay_ms: 100, music_delay_ms: 200, vamp_mode: :unavailable)
 
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
@@ -3787,7 +3905,7 @@ defmodule Thereish.RoomsTest do
       refute view_after_skip.playing.path == landed_track.path
 
       # In-flight track for Page 2 still seizes the Speaker when it lands
-      set_fake(author_delay_ms: 100, music_delay_ms: 200)
+      set_fake(author_delay_ms: 100, music_delay_ms: 200, vamp_mode: :unavailable)
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "p2 setting 1")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "p2 setting 2")
       await_phase(ctx.slug, :writing)
