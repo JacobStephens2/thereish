@@ -328,7 +328,54 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ "Mara"
       assert html =~ ~s(data-seat="s2")
       assert html =~ "Jacob"
-      assert html =~ ~s(data-role="open-seats")
+      refute html =~ ~s(data-role="open-seats")
+    end
+
+    test "renders 'Waiting for 1 more' at one Seat, and no fill line at two or more" do
+      one_seat_room = %{
+        seats: [%{id: "s1", name: "Mara", committed?: false, you?: false}],
+        open_seats: 5,
+        seat_limit: 6
+      }
+
+      html1 = render_component(&roster/1, room: one_seat_room)
+      assert html1 =~ ~s(data-role="open-seats")
+      assert html1 =~ "Waiting for 1 more"
+
+      two_seat_room = %{
+        seats: [
+          %{id: "s1", name: "Mara", committed?: false, you?: false},
+          %{id: "s2", name: "Jacob", committed?: false, you?: false}
+        ],
+        open_seats: 4,
+        seat_limit: 6
+      }
+
+      html2 = render_component(&roster/1, room: two_seat_room)
+      refute html2 =~ ~s(data-role="open-seats")
+      refute html2 =~ "Waiting for"
+
+      three_seat_room = %{
+        seats: [
+          %{id: "s1", name: "Mara", committed?: false, you?: false},
+          %{id: "s2", name: "Jacob", committed?: false, you?: false},
+          %{id: "s3", name: "Ada", committed?: false, you?: false}
+        ],
+        open_seats: 3,
+        seat_limit: 6
+      }
+
+      html3 = render_component(&roster/1, room: three_seat_room)
+      refute html3 =~ ~s(data-role="open-seats")
+
+      empty_room = %{
+        seats: [],
+        open_seats: 6,
+        seat_limit: 6
+      }
+
+      html0 = render_component(&roster/1, room: empty_room)
+      refute html0 =~ ~s(data-role="open-seats")
     end
   end
 
@@ -922,17 +969,28 @@ defmodule ThereishWeb.RoomComponentsTest do
   end
 
   describe "bookends component" do
-    test "renders a 'Bookends' caption over the Bookends in the caption style" do
+    test "renders a 'Bookends' caption on the Stage, but no label on phones" do
       room = %{
         bookends: ["lantern", "harbour"]
       }
 
-      html = render_component(&bookends/1, room: room)
+      stage_html = render_component(&bookends/1, room: room, mode: :stage)
+      assert stage_html =~ "Bookends"
+      assert stage_html =~ ~s(data-role="bookends-caption")
+      assert stage_html =~ "text-center text-sm uppercase tracking-widest opacity-60"
+      assert stage_html =~ "lantern"
+      assert stage_html =~ "harbour"
 
-      assert html =~ "Bookends"
-      assert html =~ "text-center text-sm uppercase tracking-widest opacity-60"
-      assert html =~ "lantern"
-      assert html =~ "harbour"
+      phone_html = render_component(&bookends/1, room: room, mode: :phone)
+      refute phone_html =~ "Bookends"
+      refute phone_html =~ ~s(data-role="bookends-caption")
+      assert phone_html =~ "lantern"
+      assert phone_html =~ "harbour"
+
+      # Default mode is :phone
+      default_html = render_component(&bookends/1, room: room)
+      refute default_html =~ "Bookends"
+      refute default_html =~ ~s(data-role="bookends-caption")
     end
   end
 

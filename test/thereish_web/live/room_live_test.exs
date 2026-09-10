@@ -146,9 +146,53 @@ defmodule ThereishWeb.RoomLiveTest do
       for view <- [mara, jacob, stage] do
         assert has_element?(view, "[data-seat]", "Mara")
         assert has_element?(view, "[data-seat]", "Jacob")
+        refute has_element?(view, "[data-role=open-seats]")
       end
 
-      assert render(stage) =~ "All 2 seats taken"
+      refute render(stage) =~ "All 2 seats taken"
+    end
+
+    test "fill line renders 'Waiting for 1 more' at one Seat, and no fill line at two or more before and during play" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      {:ok, mara, _} = live(phone(slug))
+
+      # Before anyone joins, no fill line
+      refute has_element?(stage, "[data-role=open-seats]")
+
+      # One Seat joined: "Waiting for 1 more" on phone and stage
+      join(mara, "Mara")
+      assert has_element?(mara, "[data-role=open-seats]", "Waiting for 1 more")
+      assert has_element?(stage, "[data-role=open-seats]", "Waiting for 1 more")
+
+      # Two Seats joined: no fill line on either phone or stage
+      {:ok, jacob, _} = live(phone(slug))
+      join(jacob, "Jacob")
+      refute has_element?(mara, "[data-role=open-seats]")
+      refute has_element?(jacob, "[data-role=open-seats]")
+      refute has_element?(stage, "[data-role=open-seats]")
+    end
+
+    test "'Start another Room' link is present at the bottom of the phone view below the Seat list, and absent on the Stage" do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      {:ok, mara, _} = live(phone(slug))
+
+      # On phone, link is present below roster
+      assert has_element?(mara, "[data-role=start-another-room]", "Start another Room")
+      assert has_element?(mara, "a[href='/new']", "Start another Room")
+      html = render(mara)
+      assert_order(html, [~s(data-role="roster"), ~s(data-role="start-another-room")])
+
+      # Even after joining, it stays present at the bottom below the Seat list
+      join(mara, "Mara")
+      assert has_element?(mara, "[data-role=start-another-room]", "Start another Room")
+      assert_order(render(mara), [~s(data-role="roster"), ~s(data-role="start-another-room")])
+
+      # On Stage, it is absent
+      refute has_element?(stage, "[data-role=start-another-room]")
+      refute has_element?(stage, "a[href='/new']")
+      refute render(stage) =~ "Start another Room"
     end
 
     test "each phone is told which Seat is its own, and the stage holds none" do
@@ -264,11 +308,16 @@ defmodule ThereishWeb.RoomLiveTest do
       %{slug: slug, mara: mara, mara_conn: mara_conn, jacob: jacob}
     end
 
-    test "the Bookends are up on both phones and the stage", ctx do
+    test "the Bookends are up on both phones and the stage, with label on Stage only", ctx do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
 
+      assert has_element?(stage, "[data-role=bookends-caption]", "Bookends")
+
+      for phone <- [ctx.mara, ctx.jacob] do
+        refute has_element?(phone, "[data-role=bookends-caption]")
+      end
+
       for view <- [ctx.mara, ctx.jacob, stage] do
-        assert has_element?(view, "[data-role=bookends-caption]", "Bookends")
         assert has_element?(view, "[data-role=bookends]", "lantern")
         assert has_element?(view, "[data-role=bookends]", "harbour")
       end
@@ -655,11 +704,8 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(stage, "footer [data-seat]", "Mara")
       assert has_element?(stage, "footer [data-seat]", "Jacob")
 
-      assert has_element?(
-               stage,
-               "[data-role=stage-foot] [data-role=open-seats]",
-               "All 2 seats taken"
-             )
+      refute has_element?(stage, "[data-role=stage-foot] [data-role=open-seats]")
+      refute html =~ "All 2 seats taken"
 
       refute has_element?(stage, "h2", "In the Room")
       refute html =~ "In the Room"
@@ -844,11 +890,14 @@ defmodule ThereishWeb.RoomLiveTest do
 
       assert has_element?(ctx.mara, "footer [data-role=you]", "Mara")
       assert has_element?(ctx.mara, "footer h1", "Thereish")
+      refute has_element?(ctx.mara, "footer h1 a")
+      refute has_element?(ctx.mara, "footer a[href='/']", "Thereish")
       assert has_element?(ctx.mara, "footer a", "The Chronicle")
 
-      # Stage has public stage mode and no private (you) attribution
+      # Stage has public stage mode and no private (you) attribution; wordmark links home
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
       assert has_element?(stage, "header h1", "Thereish")
+      assert has_element?(stage, "header h1 a[href='/']", "Thereish")
       assert has_element?(stage, "[data-mode=stage]")
       refute has_element?(stage, "[data-bridge][data-you=true]")
     end

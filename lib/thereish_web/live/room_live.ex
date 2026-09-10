@@ -603,6 +603,15 @@ defmodule ThereishWeb.RoomLive do
       <section class="flex flex-col gap-2">
         <h2 class="text-sm uppercase tracking-wide opacity-60">In the Room</h2>
         <.roster room={@room} />
+        <div class="mt-1">
+          <.link
+            navigate={~p"/new"}
+            data-role="start-another-room"
+            class="text-sm font-medium underline opacity-70 hover:opacity-100"
+          >
+            Start another Room
+          </.link>
+        </div>
       </section>
 
       <footer class="flex flex-col gap-3 border-t border-base-300 pt-6">
