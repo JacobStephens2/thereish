@@ -811,6 +811,23 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Replaces the music_meta on an existing Chronicle page with a successful track record.
+  """
+  @spec replace_page_music(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
+  def replace_page_music(%Page{} = page, music_meta) do
+    page
+    |> Page.changeset(%{music_meta: music_meta})
+    |> Repo.update()
+  end
+
+  def replace_page_music(page_id, music_meta) when is_binary(page_id) do
+    case Repo.get(Page, page_id) do
+      nil -> {:error, :not_found}
+      page -> replace_page_music(page, music_meta)
+    end
+  end
+
+  @doc """
   Answers spend for all Rooms across Author, Assayer, and Scribe calls.
   """
   @spec spend() :: map()
