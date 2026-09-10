@@ -2526,7 +2526,10 @@ defmodule Thereish.RoomsTest do
       warn_lines =
         log
         |> String.split("\n")
-        |> Enum.filter(&(&1 =~ "[warning]" and &1 =~ ctx.slug and &1 =~ page_ref_str and &1 =~ "failure with reason"))
+        |> Enum.filter(
+          &(&1 =~ "[warning]" and &1 =~ ctx.slug and &1 =~ page_ref_str and
+              &1 =~ "failure with reason")
+        )
 
       assert length(warn_lines) == 1
       [warn_line] = warn_lines
@@ -3160,6 +3163,11 @@ defmodule Thereish.RoomsTest do
         meta: %{provider: "cached", cost_usd: 0.04}
       }
 
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_track.path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
+
       {:ok, _} = Thereish.Steward.TrackCache.put(gives, cached_track)
 
       log =
@@ -3176,7 +3184,9 @@ defmodule Thereish.RoomsTest do
       hit_lines =
         log
         |> String.split("\n")
-        |> Enum.filter(&(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ page_ref_str and &1 =~ "cache hit"))
+        |> Enum.filter(
+          &(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ page_ref_str and &1 =~ "cache hit")
+        )
 
       assert length(hit_lines) == 1
       [hit_line] = hit_lines

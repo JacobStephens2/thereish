@@ -12,7 +12,10 @@ defmodule Mix.Tasks.TrackCache.PruneTest do
 
   setup do
     test_dir =
-      Path.join(System.tmp_dir!(), "track_cache_prune_task_test_#{System.unique_integer([:positive])}")
+      Path.join(
+        System.tmp_dir!(),
+        "track_cache_prune_task_test_#{System.unique_integer([:positive])}"
+      )
 
     File.mkdir_p!(test_dir)
     Application.put_env(:thereish, :media_dir, test_dir)
