@@ -1070,6 +1070,7 @@ defmodule Thereish.Chronicle do
     acc0 = %{
       room_id: room.id,
       slug: room.slug,
+      opened_at: room.inserted_at,
       total_usd: Decimal.new(0),
       calls_count: 0,
       unpriced_count: 0,
