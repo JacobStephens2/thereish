@@ -39,6 +39,7 @@ MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^GEMINI_API_KEY=.' ${APP_DIR}/.env || echo 'GEMINI_API_KEY'
   grep -q '^ANTHROPIC_API_KEY=.' ${APP_DIR}/.env || echo 'ANTHROPIC_API_KEY'
   grep -q '^MUREKA_API_KEY=.' ${APP_DIR}/.env || echo 'MUREKA_API_KEY'
+  grep -qE '^(RECRAFT_AI_API_KEY|RECRAFT_API_KEY|RECRAFT_API_TOKEN)=.' ${APP_DIR}/.env || echo 'RECRAFT_AI_API_KEY'
   grep -q '^HUME_API_KEY=.' ${APP_DIR}/.env || echo 'HUME_API_KEY'
   grep -q '^HUME_SECRET_KEY=.' ${APP_DIR}/.env || echo 'HUME_SECRET_KEY'
   grep -q '^ELEVENLABS_API_KEY=.' ${APP_DIR}/.env || echo 'ELEVENLABS_API_KEY'
@@ -64,6 +65,11 @@ fi
 if echo "${MISSING_KEYS}" | grep -q 'MUREKA_API_KEY'; then
   echo "Note: no MUREKA_API_KEY in ${APP_DIR}/.env — every Page will have only the house loop."
   echo "      See docs/deploy.md, \"Foley's keys\"."
+fi
+
+if echo "${MISSING_KEYS}" | grep -q 'RECRAFT_AI_API_KEY'; then
+  echo "Note: no RECRAFT_AI_API_KEY in ${APP_DIR}/.env — every Seat will wear a colour dot."
+  echo "      See bin/keys-to-server (the Limner's Recraft arm)."
 fi
 
 if [ "${VOICE_PROVIDER}" = "ElevenLabs" ]; then

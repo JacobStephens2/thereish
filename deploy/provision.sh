@@ -82,7 +82,8 @@ fi
 
 say "Media directory"
 sudo install -d -m 0777 "${APP_DIR}/media"
-echo "ensured ${APP_DIR}/media exists"
+sudo chmod 0777 "${APP_DIR}/media"
+echo "ensured ${APP_DIR}/media exists and is world-writable"
 
 say "Apache proxy fragment"
 # Always synced, because this is the file that changes. Both the :80 vhost and

@@ -10,6 +10,13 @@ cd "$ROOT"
 
 COMPOSE="docker compose -f docker-compose.app.yml"
 
+echo "==> Ensuring media volume is writable"
+# Ticket 73 mounts ./media into the container so Tracks and Masks survive
+# deploys. The app runs as nobody; a root-owned 0755 directory makes
+# TrackCache.store raise eacces and every Page stays on the Repertoire.
+install -d -m 0777 "${ROOT}/media"
+chmod 0777 "${ROOT}/media" || sudo chmod 0777 "${ROOT}/media"
+
 echo "==> Building release image"
 ${COMPOSE} build
 
