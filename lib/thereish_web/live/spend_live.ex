@@ -193,6 +193,7 @@ defmodule ThereishWeb.SpendLive do
             <thead class="border-b border-base-200 text-xs uppercase opacity-70">
               <tr>
                 <th class="py-3 px-4">Room</th>
+                <th class="py-3 px-4">Opened</th>
                 <th class="py-3 px-4">Total</th>
                 <th class="py-3 px-4">Calls</th>
                 <th class="py-3 px-4">Author</th>
@@ -209,6 +210,12 @@ defmodule ThereishWeb.SpendLive do
                   <.link navigate={~p"/r/#{r.slug}/chronicle"} class="underline hover:opacity-80">
                     {r.slug}
                   </.link>
+                </td>
+                <td
+                  class="py-2.5 px-4 font-mono whitespace-nowrap opacity-80"
+                  data-role="room-opened"
+                >
+                  {r.opened_at && Calendar.strftime(r.opened_at, "%b %d, %Y")}
                 </td>
                 <td class="py-2.5 px-4 font-mono font-semibold">
                   {Chronicle.format_usd(r.total_usd)}
