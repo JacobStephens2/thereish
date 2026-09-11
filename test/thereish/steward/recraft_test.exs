@@ -55,6 +55,34 @@ defmodule Thereish.Steward.RecraftTest do
       assert {:error, :no_api_key} = Recraft.generate(%{prompt: "lighthouse"})
     end
 
+    test "style references are posted as multipart, not a urlencoded form" do
+      test_pid = self()
+
+      Req.Test.stub(Recraft, fn conn ->
+        content_type = conn |> Plug.Conn.get_req_header("content-type") |> List.first()
+        send(test_pid, {:recraft_content_type, content_type})
+
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{"data" => [%{"b64_json" => @b64}]})
+        )
+      end)
+
+      assert {:ok, result} =
+               Recraft.generate(%{
+                 prompt: Limner.prompt("lighthouse", "#c45c26"),
+                 api_key: "test-recraft",
+                 model: "recraftv4_styles",
+                 references: [@png]
+               })
+
+      assert_received {:recraft_content_type, content_type}
+      assert content_type =~ "multipart/form-data"
+      assert result.bytes == @png
+    end
+
     @tag :live
     test "live Recraft smoke test" do
       Thereish.StewardFixtures.let_it_call_recraft()

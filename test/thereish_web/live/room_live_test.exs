@@ -780,8 +780,16 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(stage, "h2", "In the Room")
       refute html =~ "In the Room"
 
+      # Play column scrolls; header and foot stay put. Now-playing lives in the foot
+      # so a tall closed Page cannot cover the chrome.
+      assert html =~ ~s(data-role="stage-body")
+
+      if html =~ ~s(data-role="now-playing") do
+        assert has_element?(stage, "[data-role=stage-foot] [data-role=now-playing]")
+      end
+
       # Order: header -> play content -> stage-foot
-      assert_order(html, ["<header", ~s(data-role="stage-foot")])
+      assert_order(html, ["<header", ~s(data-role="stage-body"), ~s(data-role="stage-foot")])
     end
 
     test "the Code is large while the Room fills and small in the header once a Page is in play" do
@@ -3905,6 +3913,7 @@ defmodule ThereishWeb.RoomLiveTest do
       # On a Room with a Chronicle: opening tap does NOT play prologue, but Play the Prologue is present
       chronicle_slug = open_room()
       room = Rooms.Store.get_room(chronicle_slug)
+
       Thereish.Repo.insert!(%Thereish.Chronicle.Page{
         room_id: room.id,
         opened_at: DateTime.utc_now(),
@@ -3969,6 +3978,7 @@ defmodule ThereishWeb.RoomLiveTest do
       # Room with a Chronicle: phone does not show the card
       slug_with_chronicle = open_room()
       room_c = Rooms.Store.get_room(slug_with_chronicle)
+
       Thereish.Repo.insert!(%Thereish.Chronicle.Page{
         room_id: room_c.id,
         opened_at: DateTime.utc_now(),
@@ -3977,6 +3987,7 @@ defmodule ThereishWeb.RoomLiveTest do
         document: %{"bookends" => ["lantern", "harbour"]},
         melded: true
       })
+
       {:ok, phone3, _} = live(phone(slug_with_chronicle))
       join(phone3, "Nora")
       refute has_element?(phone3, "[data-role=prologue-card]")
@@ -4001,7 +4012,8 @@ defmodule ThereishWeb.RoomLiveTest do
       }
     end
 
-    test "bridge marker replaces name chip with face-down card before reveal, lighting on bridge commit", ctx do
+    test "bridge marker replaces name chip with face-down card before reveal, lighting on bridge commit",
+         ctx do
       play_to_bridging(ctx.mara, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
 
       mara = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Mara"))
@@ -4060,6 +4072,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # Committing bridge on attempt 2 lights the Mask marker
       commit(ctx.mara, "candle")
+
       assert has_element?(
                ctx.stage,
                "[data-role=bridge-marker][data-seat='#{mara.id}'][data-state=lit] [data-role=seat-mask]"
@@ -4068,10 +4081,13 @@ defmodule ThereishWeb.RoomLiveTest do
 
     test "seat with no Mask shows the colour dot as its marker", ctx do
       fake_config = Keyword.get(Application.get_env(:thereish, :steward, []), :fake, [])
+
       Application.put_env(
         :thereish,
         :steward,
-        Keyword.put(Application.get_env(:thereish, :steward, []), :fake,
+        Keyword.put(
+          Application.get_env(:thereish, :steward, []),
+          :fake,
           Keyword.merge(fake_config, draw_mode: :refused)
         )
       )
@@ -4105,6 +4121,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # Lighting works on the colour dot marker
       commit(ctx.mara, "candle")
+
       assert has_element?(
                ctx.stage,
                "[data-role=bridge-marker][data-seat='#{mara.id}'][data-state=lit] [data-role=seat-colour-dot]"
@@ -4127,6 +4144,7 @@ defmodule ThereishWeb.RoomLiveTest do
       eventually(fn ->
         has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{mara.id}']")
       end)
+
       refute has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{jacob.id}']")
 
       # Jacob gives a setting -> both face-down cards appear on the Stage
@@ -4135,6 +4153,7 @@ defmodule ThereishWeb.RoomLiveTest do
       eventually(fn ->
         has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{jacob.id}']")
       end)
+
       assert has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{mara.id}']")
 
       # Progress to bridging: stage still shows face-down cards (in bridge-markers)
@@ -4150,9 +4169,16 @@ defmodule ThereishWeb.RoomLiveTest do
       # face-down cards are gone and replaced by revealed Masks
       refute has_element?(ctx.stage, "[data-role=mask-face-down]")
       assert has_element?(ctx.stage, "[data-role=stage-masks]")
-      assert has_element?(ctx.stage, "[data-role=stage-mask][data-seat='#{mara.id}'] [data-role=seat-mask]")
-      assert has_element?(ctx.stage, "[data-role=stage-mask][data-seat='#{jacob.id}'] [data-role=seat-mask]")
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=stage-mask][data-seat='#{mara.id}'] [data-role=seat-mask]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=stage-mask][data-seat='#{jacob.id}'] [data-role=seat-mask]"
+             )
     end
   end
 end
-
