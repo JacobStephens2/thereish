@@ -147,7 +147,7 @@ defmodule Thereish.Steward do
             {:ok, result}
 
           {:error, _reason} when retry? ->
-            softened_opts = Keyword.merge(opts, [retry: false, softened: true])
+            softened_opts = Keyword.merge(opts, retry: false, softened: true)
             adapter().draw(give, colour, softened_opts)
 
           {:error, reason} ->
@@ -540,6 +540,46 @@ defmodule Thereish.Steward do
   def warn_missing_foley_keys do
     warn_missing_music_key()
     warn_missing_voice_keys()
+    :ok
+  end
+
+  @doc """
+  Warns at application boot if the configured Limner provider has no key.
+
+  Recraft is the house Limner. Without `RECRAFT_AI_API_KEY` (or `api_key` /
+  `recraft_api_key` on the role) every Give lands as a colour dot.
+  """
+  @spec warn_missing_limner_keys() :: :ok
+  def warn_missing_limner_keys do
+    limner = role(:limner)
+    provider = limner[:provider] || Thereish.Steward.Recraft
+
+    {present?, label} =
+      case provider do
+        Thereish.Steward.Recraft ->
+          {not missing_key?(limner[:recraft_api_key]) or not missing_key?(limner[:api_key]),
+           "RECRAFT_AI_API_KEY"}
+
+        Thereish.Steward.Fal ->
+          {not missing_key?(limner[:fal_key]) or not missing_key?(limner[:api_key]),
+           "FAL_AI_API_KEY"}
+
+        Thereish.Steward.Ideogram ->
+          {not missing_key?(limner[:ideogram_api_key]) or not missing_key?(limner[:api_key]),
+           "IDEOGRAM_API_KEY"}
+
+        Thereish.Steward.Bfl ->
+          {not missing_key?(limner[:bfl_api_key]) or not missing_key?(limner[:api_key]),
+           "BFL_API_KEY"}
+
+        _ ->
+          {not missing_key?(limner[:api_key]), "Limner API key"}
+      end
+
+    unless present? do
+      Logger.warning("no #{label} — every Seat will wear a colour dot")
+    end
+
     :ok
   end
 
