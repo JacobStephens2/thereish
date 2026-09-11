@@ -99,7 +99,7 @@ defmodule Thereish.Steward.Recraft do
     [
       url: "#{@base_url}/v1/images/generations",
       headers: [{"authorization", "Bearer #{key}"}],
-      form: form,
+      form_multipart: form,
       receive_timeout: timeout_ms,
       retry: false
     ]

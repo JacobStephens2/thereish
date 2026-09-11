@@ -1558,13 +1558,20 @@ defmodule Thereish.Rooms.Server do
             send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:ok, mask}})
 
           {:error, reason} ->
+            Logger.warning(
+              "Limner draw failed for seat #{seat_id}: #{inspect(reason, limit: 40)}"
+            )
+
             send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, reason}})
         end
       rescue
         error ->
+          Logger.warning("Limner draw crashed for seat #{seat_id}: #{Exception.message(error)}")
+
           send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, error}})
       catch
         :exit, reason ->
+          Logger.warning("Limner draw exited for seat #{seat_id}: #{inspect(reason, limit: 20)}")
           send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, {:exit, reason}}})
       end
     end)
