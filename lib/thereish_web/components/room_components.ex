@@ -148,10 +148,12 @@ defmodule ThereishWeb.RoomComponents do
         <%= if @seat[:mask] == :face_down do %>
           <span
             data-role="mask-face-down"
+            data-seat={@seat.id}
             class={[
-              "rounded border border-primary/40 bg-base-300 flex items-center justify-center text-[10px] opacity-70",
+              "rounded border flex items-center justify-center text-[10px] opacity-80",
               if(@mode == :stage and @in_side, do: "size-3", else: "size-4")
             ]}
+            style={"border-color: #{@seat[:colour] || "var(--color-primary, currentColor)"}; color: #{@seat[:colour] || "var(--color-primary, currentColor)"}; background-color: color-mix(in oklab, #{@seat[:colour] || "var(--color-primary, currentColor)"} 15%, transparent);"}
             title="Mask face down"
           >
             🂠
@@ -502,6 +504,42 @@ defmodule ThereishWeb.RoomComponents do
       >
         {@room.reveal.quip}
       </p>
+
+      <div
+        :if={@mode == :stage and first_reveal_happened?(@room) and is_list(@room[:seats]) and @room[:seats] != []}
+        data-role="stage-masks"
+        class="flex flex-wrap items-center justify-center gap-4 my-2"
+      >
+        <div
+          :for={seat <- @room[:seats] || []}
+          data-role="stage-mask"
+          data-seat={seat.id}
+          class="flex flex-col items-center gap-1"
+        >
+          <%= if is_map(seat[:mask]) and (seat.mask[:url] || seat.mask["url"]) do %>
+            <img
+              src={seat.mask[:url] || seat.mask["url"]}
+              alt={seat.name}
+              data-role="seat-mask"
+              class="size-16 rounded-xl object-cover border-2 shadow-md"
+              style={"border-color: #{seat[:colour] || "var(--color-primary, currentColor)"};"}
+            />
+          <% else %>
+            <div
+              class="size-16 rounded-xl border-2 flex items-center justify-center shadow-md bg-base-200"
+              style={"border-color: #{seat[:colour] || "var(--color-primary, currentColor)"};"}
+            >
+              <span
+                data-role="seat-colour-dot"
+                class="size-6 rounded-full"
+                style={"background-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
+                aria-hidden="true"
+              ></span>
+            </div>
+          <% end %>
+          <span class="text-xs font-semibold opacity-75">{seat.name}</span>
+        </div>
+      </div>
 
       <.fairness_controls
         :if={@mode in [:phone, :quiet] && @seat && !@room[:late?] && @room.reveal.closeness}
