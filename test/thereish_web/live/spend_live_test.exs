@@ -158,6 +158,11 @@ defmodule ThereishWeb.SpendLiveTest do
       assert rooms_text =~ slug2
       assert rooms_text =~ "$0.0447"
       assert rooms_text =~ "$0.0000"
+      assert rooms_text =~ "Opened"
+      opened1 = Calendar.strftime(room1.inserted_at, "%b %d, %Y")
+      opened2 = Calendar.strftime(room2.inserted_at, "%b %d, %Y")
+      assert has_element?(view, "[data-role=room-opened]", opened1)
+      assert has_element?(view, "[data-role=room-opened]", opened2)
     end
 
     test "shows in-play sentence when Pages are in play, and omits it when count is zero", %{
