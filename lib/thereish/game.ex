@@ -1865,23 +1865,26 @@ defmodule Thereish.Game do
 
   defp mask_for_viewer(state, seat, viewer) do
     raw_mask = Map.get(state.masks || %{}, seat.id)
+    first_reveal? = phase(state) in [:reveal, :closed] or state.played != []
 
     cond do
-      is_nil(raw_mask) ->
-        nil
-
-      phase(state) in [:reveal, :closed] or state.played != [] ->
+      first_reveal? ->
         raw_mask
 
       seat.id == viewer ->
         raw_mask
 
-      is_nil(viewer) ->
+      give_landed?(state, seat.id) ->
         :face_down
 
       true ->
         nil
     end
+  end
+
+  defp give_landed?(state, seat_id) do
+    (is_map(state.gives) and Map.has_key?(state.gives, seat_id) and not is_nil(state.gives[seat_id])) or
+      (is_map(state.masks) and Map.has_key?(state.masks, seat_id) and not is_nil(state.masks[seat_id]))
   end
 
   defp find_partner(state, seat) do

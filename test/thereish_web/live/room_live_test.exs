@@ -3982,5 +3982,177 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(phone3, "[data-role=prologue-card]")
     end
   end
+
+  describe "masks on the stage (ticket 17)" do
+    setup do
+      slug = open_room()
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+
+      %{
+        slug: slug,
+        stage: stage,
+        melissa: melissa,
+        jacob: jacob
+      }
+    end
+
+    test "bridge marker replaces name chip with face-down card before reveal, lighting on bridge commit", ctx do
+      play_to_bridging(ctx.melissa, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
+
+      melissa = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Melissa"))
+      jacob = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Jacob"))
+
+      # Before reveal (attempt 1 bridging): markers are face-down cards
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{melissa.id}'][data-state=dim] [data-role=mask-face-down]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{jacob.id}'][data-state=dim] [data-role=mask-face-down]"
+             )
+
+      # When Melissa commits bridge, Melissa's marker lights
+      commit(ctx.melissa, "cairn")
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{melissa.id}'][data-state=lit] [data-role=mask-face-down]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{jacob.id}'][data-state=dim] [data-role=mask-face-down]"
+             )
+    end
+
+    test "after first reveal, Mask replaces face-down card as the marker on next attempt", ctx do
+      play_to_bridging(ctx.melissa, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
+
+      melissa = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Melissa"))
+      jacob = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Jacob"))
+
+      # Complete attempt 1 with a miss to trigger first reveal
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "tallow")
+      await_reveal_on(ctx.stage)
+
+      # Advance to attempt 2
+      ctx.melissa |> element("[data-role=again]") |> render_click()
+      assert has_element?(ctx.stage, "[data-role=attempt]", "Attempt 2 of 5")
+
+      # On attempt 2 bridging (after first reveal), markers are now the Masks, dim until committed
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{melissa.id}'][data-state=dim] [data-role=seat-mask]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{jacob.id}'][data-state=dim] [data-role=seat-mask]"
+             )
+
+      # Committing bridge on attempt 2 lights the Mask marker
+      commit(ctx.melissa, "candle")
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{melissa.id}'][data-state=lit] [data-role=seat-mask]"
+             )
+    end
+
+    test "seat with no Mask shows the colour dot as its marker", ctx do
+      fake_config = Keyword.get(Application.get_env(:thereish, :steward, []), :fake, [])
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(Application.get_env(:thereish, :steward, []), :fake,
+          Keyword.merge(fake_config, draw_mode: :refused)
+        )
+      )
+
+      on_exit(fn ->
+        Application.put_env(
+          :thereish,
+          :steward,
+          Keyword.put(Application.get_env(:thereish, :steward, []), :fake, fake_config)
+        )
+      end)
+
+      play_to_bridging(ctx.melissa, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
+
+      melissa = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Melissa"))
+
+      # Complete attempt 1 to trigger first reveal
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "tallow")
+      await_reveal_on(ctx.stage)
+
+      # Advance to attempt 2
+      ctx.melissa |> element("[data-role=again]") |> render_click()
+      assert has_element?(ctx.stage, "[data-role=attempt]", "Attempt 2 of 5")
+
+      # Because draw was refused, seats have no mask (:dot), so marker is colour dot
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{melissa.id}'][data-state=dim] [data-role=seat-colour-dot]"
+             )
+
+      # Lighting works on the colour dot marker
+      commit(ctx.melissa, "candle")
+      assert has_element?(
+               ctx.stage,
+               "[data-role=bridge-marker][data-seat='#{melissa.id}'][data-state=lit] [data-role=seat-colour-dot]"
+             )
+    end
+
+    test "Stage shows face-down cards as Gives land and flips them at the first reveal", ctx do
+      # Room is in giving phase
+      assert has_element?(ctx.stage, "[data-role=giving-stage]")
+
+      melissa = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Melissa"))
+      jacob = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Jacob"))
+
+      # Initially no gives have landed, so no face-down cards on stage
+      refute has_element?(ctx.stage, "[data-role=mask-face-down]")
+
+      # Melissa gives a setting -> Melissa's face-down card appears on the Stage
+      give_setting(ctx.melissa, "candlelit cathedral")
+
+      eventually(fn ->
+        has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{melissa.id}']")
+      end)
+      refute has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{jacob.id}']")
+
+      # Jacob gives a setting -> both face-down cards appear on the Stage
+      give_setting(ctx.jacob, "misty harbor")
+
+      eventually(fn ->
+        has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{jacob.id}']")
+      end)
+      assert has_element?(ctx.stage, "[data-role=mask-face-down][data-seat='#{melissa.id}']")
+
+      # Progress to bridging: stage still shows face-down cards (in bridge-markers)
+      await_phase(ctx.slug, :bridging)
+      assert has_element?(ctx.stage, "[data-role=bridge-marker] [data-role=mask-face-down]")
+
+      # Both seats commit bridges and reveal arrives (the first reveal)
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "tallow")
+      await_reveal_on(ctx.stage)
+
+      # At the first reveal, every mask turns over together:
+      # face-down cards are gone and replaced by revealed Masks
+      refute has_element?(ctx.stage, "[data-role=mask-face-down]")
+      assert has_element?(ctx.stage, "[data-role=stage-masks]")
+      assert has_element?(ctx.stage, "[data-role=stage-mask][data-seat='#{melissa.id}'] [data-role=seat-mask]")
+      assert has_element?(ctx.stage, "[data-role=stage-mask][data-seat='#{jacob.id}'] [data-role=seat-mask]")
+    end
+  end
 end
 

@@ -224,6 +224,22 @@ defmodule ThereishWeb.StageLive do
           <p class="text-2xl font-semibold">
             Waiting for settings: {@room.gives_in} of {length(@room.seats)}
           </p>
+          <div data-role="stage-cards" class="flex items-center justify-center gap-4 mt-2">
+            <%= for seat <- @room[:seats] || [] do %>
+              <%= if seat[:mask] == :face_down do %>
+                <div
+                  data-role="mask-face-down"
+                  data-seat={seat.id}
+                  class="size-14 rounded-xl border-2 flex items-center justify-center text-2xl opacity-80 shadow-sm"
+                  style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 15%, transparent); color: var(--seat-color);"}
+                  title={"#{seat.name}'s setting landed"}
+                >
+                  <span class="sr-only">{seat.name}</span>
+                  🂠
+                </div>
+              <% end %>
+            <% end %>
+          </div>
         </section>
 
         <section
@@ -311,8 +327,9 @@ defmodule ThereishWeb.StageLive do
 
   attr :room, :map, required: true
 
-  # Issue #82 establishes the Stage marker with a name chip. Issue #86 replaces
-  # this chip with the Seat's Mask once Masks exist.
+  # Issue #82 established the Stage marker with a name chip. Issue #86 replaces
+  # this chip with the Seat's Mask (or face-down card before the first reveal,
+  # or colour dot if no Mask).
   defp bridge_markers(assigns) do
     assigns =
       assign(assigns, :markers, Enum.zip(assigns.room.seats, @seat_colors))
@@ -321,7 +338,7 @@ defmodule ThereishWeb.StageLive do
     <section
       :if={@room.phase in [:bridging, :assaying]}
       data-role="bridge-markers"
-      class="flex flex-wrap items-center justify-center gap-3"
+      class="flex flex-wrap items-center justify-center gap-4"
       aria-label="Bridges landed"
     >
       <div
@@ -330,10 +347,38 @@ defmodule ThereishWeb.StageLive do
         data-seat={seat.id}
         data-color={color_name}
         data-state={if seat.committed?, do: "lit", else: "dim"}
-        class="bridge-marker rounded-full border-2 px-4 py-2 text-base font-semibold"
-        style={"--seat-color: #{color}"}
+        class="bridge-marker relative flex items-center justify-center rounded-xl border-2 p-1.5 transition-all"
+        style={"--seat-color: #{seat[:colour] || color}"}
+        title={seat.name}
       >
-        {seat.name}
+        <span class="sr-only">{seat.name}</span>
+        <%= if is_map(seat[:mask]) and (seat.mask[:url] || seat.mask["url"]) do %>
+          <img
+            src={seat.mask[:url] || seat.mask["url"]}
+            alt={seat.name}
+            data-role="seat-mask"
+            class="size-14 rounded-lg object-cover border border-base-300 shadow-sm"
+          />
+        <% else %>
+          <%= if seat[:mask] == :face_down do %>
+            <div
+              data-role="mask-face-down"
+              class="size-14 rounded-lg border border-primary/40 bg-base-300 flex items-center justify-center text-2xl opacity-75 shadow-sm"
+              title="Mask face down"
+            >
+              🂠
+            </div>
+          <% else %>
+            <div class="size-14 flex items-center justify-center">
+              <span
+                data-role="seat-colour-dot"
+                class="size-6 rounded-full shadow-sm"
+                style={"background-color: #{seat[:colour] || color}"}
+                aria-hidden="true"
+              ></span>
+            </div>
+          <% end %>
+        <% end %>
       </div>
     </section>
     """

@@ -2178,7 +2178,7 @@ defmodule Thereish.GameTest do
                Game.apply(state, {:mask_landed, %{seat_id: "seat-Ghost", mask: mask}})
     end
 
-    test "before first reveal: giver sees own mask, stage sees face_down, other player sees nil", %{
+    test "before first reveal: giver sees own mask, stage and other seat see face_down", %{
       state: state
     } do
       {:ok, state, []} =
@@ -2202,7 +2202,7 @@ defmodule Thereish.GameTest do
       jacob_view = Game.view(state, "seat-Jacob")
       assert jacob_view.your_mask == nil
       melissa_seat_from_jacob = Enum.find(jacob_view.seats, &(&1.id == "seat-Melissa"))
-      assert melissa_seat_from_jacob.mask == nil
+      assert melissa_seat_from_jacob.mask == :face_down
 
       # Stage view
       stage_view = Game.view(state, nil)
@@ -2379,10 +2379,10 @@ defmodule Thereish.GameTest do
       assert melissa_view.your_mask == :dot
       assert Enum.find(melissa_view.seats, &(&1.id == "seat-Melissa")).mask == :dot
 
-      # Jacob sees nil for Melissa's mask
+      # Jacob sees face_down for Melissa's mask
       jacob_view = Game.view(state, "seat-Jacob")
       melissa_in_jacob_view = Enum.find(jacob_view.seats, &(&1.id == "seat-Melissa"))
-      assert melissa_in_jacob_view.mask == nil
+      assert melissa_in_jacob_view.mask == :face_down
 
       # Stage sees face_down for Melissa's mask
       stage_view = Game.view(state, nil)
@@ -2413,6 +2413,127 @@ defmodule Thereish.GameTest do
       assert Enum.find(Game.view(meld_state, "seat-Melissa").seats, &(&1.id == "seat-Melissa")).mask == :dot
       assert Enum.find(Game.view(meld_state, "seat-Jacob").seats, &(&1.id == "seat-Melissa")).mask == :dot
       assert Enum.find(Game.view(meld_state, nil).seats, &(&1.id == "seat-Melissa")).mask == :dot
+    end
+  end
+
+  describe "masks on the stage (ticket 17)" do
+    setup do
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+      %{state: state}
+    end
+
+    test "before first reveal a Seat sees its own Mask and only face-down cards for others; after it, all Masks",
+         %{state: state} do
+      # Before any give is committed, no masks or cards
+      m_view0 = Game.view(state, "seat-Melissa")
+      j_view0 = Game.view(state, "seat-Jacob")
+      s_view0 = Game.view(state, nil)
+
+      assert Enum.find(m_view0.seats, &(&1.id == "seat-Melissa")).mask == nil
+      assert Enum.find(m_view0.seats, &(&1.id == "seat-Jacob")).mask == nil
+      assert Enum.find(j_view0.seats, &(&1.id == "seat-Melissa")).mask == nil
+      assert Enum.find(s_view0.seats, &(&1.id == "seat-Melissa")).mask == nil
+
+      # Melissa commits give
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      mask_m = %{url: "/media/masks/mask-melissa.png"}
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: mask_m}})
+
+      # Melissa sees her own mask; Jacob and Stage see face-down for Melissa, nil for Jacob
+      m_view1 = Game.view(state, "seat-Melissa")
+      j_view1 = Game.view(state, "seat-Jacob")
+      s_view1 = Game.view(state, nil)
+
+      assert Enum.find(m_view1.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(m_view1.seats, &(&1.id == "seat-Jacob")).mask == nil
+
+      assert Enum.find(j_view1.seats, &(&1.id == "seat-Melissa")).mask == :face_down
+      assert Enum.find(j_view1.seats, &(&1.id == "seat-Jacob")).mask == nil
+
+      assert Enum.find(s_view1.seats, &(&1.id == "seat-Melissa")).mask == :face_down
+      assert Enum.find(s_view1.seats, &(&1.id == "seat-Jacob")).mask == nil
+
+      # Jacob commits give
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      mask_j = %{url: "/media/masks/mask-jacob.png"}
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Jacob", mask: mask_j}})
+
+      # Page written, now bridging (attempt 1)
+      {:ok, state, []} =
+        Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"], meta: %{}}})
+
+      assert Game.phase(state) == :bridging
+
+      # Before first reveal: each seat sees own mask and only face-down for others; stage sees only face-down
+      m_view2 = Game.view(state, "seat-Melissa")
+      j_view2 = Game.view(state, "seat-Jacob")
+      s_view2 = Game.view(state, nil)
+
+      assert Enum.find(m_view2.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(m_view2.seats, &(&1.id == "seat-Jacob")).mask == :face_down
+
+      assert Enum.find(j_view2.seats, &(&1.id == "seat-Melissa")).mask == :face_down
+      assert Enum.find(j_view2.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      assert Enum.find(s_view2.seats, &(&1.id == "seat-Melissa")).mask == :face_down
+      assert Enum.find(s_view2.seats, &(&1.id == "seat-Jacob")).mask == :face_down
+
+      # First attempt bridges and verdict (a miss)
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "tallow"}})
+
+      verdict = %{
+        closeness: 45,
+        reasoning: "Distant",
+        quip: "Far apart",
+        furthest: ["cairn", "tallow"],
+        meta: %{}
+      }
+
+      {:ok, reveal_state, _} = Game.apply(state, {:verdict_received, verdict})
+      assert Game.phase(reveal_state) == :reveal
+
+      # At first reveal: every mask turns over together, all Seats see all Masks
+      m_view3 = Game.view(reveal_state, "seat-Melissa")
+      j_view3 = Game.view(reveal_state, "seat-Jacob")
+      s_view3 = Game.view(reveal_state, nil)
+
+      assert Enum.find(m_view3.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(m_view3.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      assert Enum.find(j_view3.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(j_view3.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      assert Enum.find(s_view3.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(s_view3.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      # Continue to attempt 2 (phase is :bridging again, but after first reveal)
+      {:ok, attempt2_state, []} = Game.apply(reveal_state, {:attempt_advanced, %{seat_id: "seat-Melissa"}})
+      assert Game.phase(attempt2_state) == :bridging
+      assert attempt2_state.attempt == 2
+
+      # All masks remain visible to everyone on attempt 2
+      m_view4 = Game.view(attempt2_state, "seat-Melissa")
+      j_view4 = Game.view(attempt2_state, "seat-Jacob")
+      s_view4 = Game.view(attempt2_state, nil)
+
+      assert Enum.find(m_view4.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(m_view4.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      assert Enum.find(j_view4.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(j_view4.seats, &(&1.id == "seat-Jacob")).mask == mask_j
+
+      assert Enum.find(s_view4.seats, &(&1.id == "seat-Melissa")).mask == mask_m
+      assert Enum.find(s_view4.seats, &(&1.id == "seat-Jacob")).mask == mask_j
     end
   end
 end
