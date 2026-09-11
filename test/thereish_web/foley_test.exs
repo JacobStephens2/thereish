@@ -67,27 +67,6 @@ defmodule ThereishWeb.FoleyTest do
       assert {"foley:ending", %{kind: :unmelded}} in pushed_events(result)
     end
 
-    test "pushes :deep_meld in sides mode when one side achieved deep_meld" do
-      old_room = %{phase: :reveal, speaker?: true}
-
-      new_room = %{
-        phase: :closed,
-        speaker?: true,
-        closed: %{because: :meld, attempt: 2},
-        reveal: %{
-          sides: [
-            %{id: :a, band: :meld},
-            %{id: :b, band: :deep_meld}
-          ]
-        }
-      }
-
-      socket = test_socket()
-      result = Foley.push_foley_events(socket, old_room, new_room)
-
-      assert {"foley:ending", %{kind: :deep_meld}} in pushed_events(result)
-    end
-
     test "does not push ending when already closed" do
       old_room = %{phase: :closed, speaker?: true, closed: %{because: :meld}}
 

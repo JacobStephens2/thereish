@@ -90,10 +90,10 @@ room_closed =
     your_give: "savanna",
     your_bridge: "simba",
     seats: [
-      %{id: "s1", name: "Wifey", committed?: true, partner_id: nil, you?: false},
-      %{id: "s2", name: "Jacob", committed?: true, partner_id: nil, you?: true}
+      %{id: "s1", name: "Wifey", committed?: true, you?: false},
+      %{id: "s2", name: "Jacob", committed?: true, you?: true}
     ],
-    you: %{id: "s2", name: "Jacob", partner_name: nil},
+    you: %{id: "s2", name: "Jacob"},
     closed: %{
       because: :meld,
       attempt: 1
@@ -111,9 +111,17 @@ room_closed =
 room_waiting = Map.merge(base_room, %{phase: :waiting})
 
 html_closed = MobileSnapshotGenerator.render_room(room_closed)
-File.write!(Path.join(out_dir, "closed_phone.html"), MobileSnapshotGenerator.wrap_html(html_closed, css))
+
+File.write!(
+  Path.join(out_dir, "closed_phone.html"),
+  MobileSnapshotGenerator.wrap_html(html_closed, css)
+)
 
 html_waiting = MobileSnapshotGenerator.render_room(room_waiting, %{seat: nil})
-File.write!(Path.join(out_dir, "waiting_phone.html"), MobileSnapshotGenerator.wrap_html(html_waiting, css))
+
+File.write!(
+  Path.join(out_dir, "waiting_phone.html"),
+  MobileSnapshotGenerator.wrap_html(html_waiting, css)
+)
 
 IO.puts("Wrote tmp/mobile_html/closed_phone.html and waiting_phone.html")

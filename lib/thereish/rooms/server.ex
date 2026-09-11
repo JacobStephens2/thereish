@@ -122,28 +122,10 @@ defmodule Thereish.Rooms.Server do
   end
 
   @impl true
-  def handle_call({:join, name, device_token}, from, state) do
-    handle_call({:join, name, device_token, nil}, from, state)
-  end
-
-  def handle_call({:join, name, device_token, partner_id}, _from, state) do
+  def handle_call({:join, name, device_token}, _from, state) do
     case held_seat(state, name, device_token) do
       %Seat{} = seat -> rejoin_seat(seat, device_token, state)
-      nil -> take_seat(name, device_token, partner_id, state)
-    end
-  end
-
-  def handle_call({:pair_seats, seat_id, nil}, from, state) do
-    handle_call({:unpair_seat, seat_id}, from, state)
-  end
-
-  def handle_call({:pair_seats, seat_id, partner_id}, _from, state) do
-    with {:ok, _seats} <- Store.pair_seats(state.room.id, seat_id, partner_id),
-         {:ok, game, effects} <-
-           Game.apply(state.game, {:seat_paired, %{seat_id: seat_id, partner_id: partner_id}}) do
-      {:reply, :ok, advance(state, game, effects)}
-    else
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      nil -> take_seat(name, device_token, state)
     end
   end
 
@@ -164,15 +146,6 @@ defmodule Thereish.Rooms.Server do
   def handle_call({:next_attempt, seat_id}, _from, state) do
     case Game.apply(state.game, {:attempt_advanced, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
-      {:error, reason} -> {:reply, {:error, reason}, state}
-    end
-  end
-
-  def handle_call({:unpair_seat, seat_id}, _from, state) do
-    with {:ok, _seats} <- Store.unpair_seat(state.room.id, seat_id),
-         {:ok, game, effects} <- Game.apply(state.game, {:seat_unpaired, %{seat_id: seat_id}}) do
-      {:reply, :ok, advance(state, game, effects)}
-    else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -656,12 +629,7 @@ defmodule Thereish.Rooms.Server do
   # number and handing the ruling to the couple. A verdict that turns up
   # afterwards changes nothing: an Attempt is graded once.
   def handle_info({:escalate, :unavailable}, %{assayer: %{}} = state) do
-    event =
-      if Game.sides_mode?(state.game) do
-        {:side_verdicts_unavailable, %{}}
-      else
-        {:verdict_unavailable, %{}}
-      end
+    event = {:verdict_unavailable, %{}}
 
     {:noreply, apply_events(%{state | assayer: nil}, [event])}
   end
@@ -975,12 +943,12 @@ defmodule Thereish.Rooms.Server do
 
   # The rules decide before Postgres hears anything, so a Room that is full costs
   # no write. The id is minted here because the rules need a Seat to rule on.
-  defp take_seat(name, device_token, partner_id, state) do
+  defp take_seat(name, device_token, state) do
     id = Ecto.UUID.generate()
 
     with {:ok, game, effects} <-
-           Game.apply(state.game, {:seat_joined, %{id: id, name: name, partner_id: partner_id}}),
-         {:ok, seat} <- Store.insert_seat(state.room.id, id, name, device_token, partner_id) do
+           Game.apply(state.game, {:seat_joined, %{id: id, name: name}}),
+         {:ok, seat} <- Store.insert_seat(state.room.id, id, name, device_token) do
       {:reply, {:ok, public(seat)}, advance(state, game, effects)}
     else
       {:error, :room_full} -> {:reply, {:error, :room_full}, state}
@@ -1377,52 +1345,6 @@ defmodule Thereish.Rooms.Server do
     waiting_on(state)
   end
 
-  defp perform({:assay_sides, request}, state) do
-    room = self()
-    arm = state[:current_arm] || :flash
-    page = state.game.page
-
-    request = %{
-      side_a: with_prior_quips(request.side_a, state),
-      side_b: with_prior_quips(request.side_b, state),
-      overall: with_prior_quips(request.overall, state)
-    }
-
-    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      task_side_a = Task.async(fn -> assay(request.side_a, page, arm) end)
-      task_side_b = Task.async(fn -> assay(request.side_b, page, arm) end)
-      task_overall = Task.async(fn -> assay(request.overall, page, arm) end)
-
-      result_side_a = Task.await(task_side_a, 15_000)
-      result_side_b = Task.await(task_side_b, 15_000)
-      result_overall = Task.await(task_overall, 15_000)
-
-      event = side_verdicts_event(result_side_a, result_side_b, result_overall)
-      send(room, {:assayed, event})
-    end)
-
-    waiting_on(state)
-  end
-
-  defp side_verdicts_event({:ok, verdict_side_a}, {:ok, verdict_side_b}, result_overall) do
-    furthest =
-      case result_overall do
-        {:ok, %{furthest: [_, _] = f}} -> f
-        _ -> nil
-      end
-
-    {:side_verdicts_received,
-     %{
-       side_a: verdict_side_a,
-       side_b: verdict_side_b,
-       furthest: furthest
-     }}
-  end
-
-  defp side_verdicts_event(_result_side_a, _result_side_b, _result_overall) do
-    {:side_verdicts_unavailable, %{}}
-  end
-
   defp reset_score_state(state, opts) do
     state =
       state
@@ -1797,7 +1719,7 @@ defmodule Thereish.Rooms.Server do
   defp attach_voice_meta(entry, _), do: entry
 
   # Device tokens are the browser's business and never leave this module.
-  defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name, partner_id: seat.partner_id}
+  defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name}
 
   @doc """
   Logs a music event carrying the Room's Code, Page reference, event name,

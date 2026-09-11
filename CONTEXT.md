@@ -25,7 +25,7 @@ A place in a Room held by a player under a name. It carries a stable id and its 
 _Avoid_: player (the person), user, slot
 
 **Side**:
-A grouping of Seats within a Room that play together as a unit — two couples at a table play as two Sides on the same Bookends.
+Retired (ADR-0015). A grouping of Seats that played together as a unit - two couples at a table as two Sides on the same Bookends. Kept so Chronicles that hold side verdicts from earlier nights can still be read.
 _Avoid_: team, pair (pair is the Assayer's two Bridges), couple (informal copy only), squad
 
 **Account**:
