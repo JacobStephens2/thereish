@@ -290,7 +290,7 @@ defmodule Thereish.Steward.Live do
         _ -> %{}
       end
 
-    prompt = Music.prompt(gives)
+    prompt = Music.vamp_prompt(gives)
 
     params =
       role
