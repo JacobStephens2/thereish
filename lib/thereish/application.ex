@@ -8,6 +8,7 @@ defmodule Thereish.Application do
   @impl true
   def start(_type, _args) do
     Thereish.Steward.warn_missing_foley_keys()
+    Thereish.Steward.warn_missing_limner_keys()
     Thereish.Umami.warn_at_boot()
 
     children = [

@@ -95,6 +95,51 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
       assert log =~ "no MUREKA_API_KEY — every Page will have only the house loop"
     end
 
+    test "application boot invokes Limner key warning" do
+      configure_limner(
+        provider: Thereish.Steward.Recraft,
+        recraft_api_key: nil,
+        api_key: nil
+      )
+
+      log =
+        capture_log(fn ->
+          _ = Thereish.Application.start(:normal, [])
+        end)
+
+      assert log =~ "no RECRAFT_AI_API_KEY — every Seat will wear a colour dot"
+    end
+
+    test "warns when the Limner's Recraft key is missing" do
+      configure_limner(
+        provider: Thereish.Steward.Recraft,
+        recraft_api_key: nil,
+        api_key: nil
+      )
+
+      log =
+        capture_log(fn ->
+          assert :ok = Thereish.Steward.warn_missing_limner_keys()
+        end)
+
+      assert log =~ "no RECRAFT_AI_API_KEY — every Seat will wear a colour dot"
+    end
+
+    test "Limner warning is silent when Recraft key is present" do
+      configure_limner(
+        provider: Thereish.Steward.Recraft,
+        recraft_api_key: "recorded-responses-need-no-key"
+      )
+
+      log =
+        capture_log(fn ->
+          assert :ok = Thereish.Steward.warn_missing_limner_keys()
+        end)
+
+      refute log =~ "RECRAFT_AI_API_KEY"
+      refute log =~ "colour dot"
+    end
+
     test "application boot is silent when all keys are present" do
       log =
         capture_log(fn ->
@@ -121,6 +166,14 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
       |> Keyword.put(:jobs, jobs)
 
     roles = Keyword.put(roles, :foley, foley)
+    Application.put_env(:thereish, :steward, Keyword.put(steward, :roles, roles))
+  end
+
+  defp configure_limner(updates) do
+    steward = Application.get_env(:thereish, :steward)
+    roles = steward[:roles]
+    limner = Keyword.merge(roles[:limner], updates)
+    roles = Keyword.put(roles, :limner, limner)
     Application.put_env(:thereish, :steward, Keyword.put(steward, :roles, roles))
   end
 end
