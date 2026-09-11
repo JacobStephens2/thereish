@@ -138,7 +138,7 @@ defmodule ThereishWeb.StageLive do
     <main
       id="stage"
       phx-hook=".WakeLock"
-      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col justify-between p-4 sm:p-6 md:px-8 md:py-5 overflow-y-auto select-none box-border"
+      class="mx-auto flex h-screen max-h-screen w-full max-w-5xl flex-col overflow-hidden p-4 sm:p-6 md:px-8 md:py-5 select-none box-border"
     >
       <header class="flex items-center justify-between w-full shrink-0 gap-4">
         <div class="flex items-baseline gap-3 sm:gap-4">
@@ -170,127 +170,132 @@ defmodule ThereishWeb.StageLive do
         </div>
       </header>
 
-      <div class="flex flex-1 flex-col items-center justify-center my-auto min-h-0 w-full gap-[clamp(0.5rem,1.8vh,1.5rem)]">
-        <section
-          :if={@room && filling?(@room)}
-          data-role="waiting-stage"
-          class="flex flex-col items-center justify-center gap-[clamp(0.4rem,1.6vh,1.25rem)] text-center"
-        >
-          <p class="text-xs uppercase tracking-widest font-semibold text-primary">Code</p>
-          <p
-            data-role="stage-code"
-            data-size="large"
-            class="font-mono font-bold leading-none tracking-[0.15em] text-[clamp(4rem,18vw,10rem)]"
+      <div
+        data-role="stage-body"
+        class="flex-1 min-h-0 overflow-y-auto w-full"
+      >
+        <div class="flex min-h-full flex-col items-center justify-center gap-[clamp(0.5rem,1.8vh,1.5rem)] py-2">
+          <section
+            :if={@room && filling?(@room)}
+            data-role="waiting-stage"
+            class="flex flex-col items-center justify-center gap-[clamp(0.4rem,1.6vh,1.25rem)] text-center"
           >
-            {Code.shout(@slug)}
-          </p>
-          <.tap_for_sound :if={offer_tap?(@room)} size={:large} pulse={not @room.speaker_claimed?} />
-
-          <div
-            :if={@room[:prologue]}
-            data-role="prologue-stage"
-            class="flex flex-col items-center gap-3 max-w-lg mx-auto"
-          >
-            <p data-role="prologue-words" class="text-base sm:text-lg leading-relaxed opacity-90">
-              {@room.prologue.text}
-            </p>
-            <button
-              type="button"
-              phx-click="skip_prologue"
-              data-role="prologue-skip"
-              class="btn btn-ghost btn-xs text-xs opacity-70 hover:opacity-100"
+            <p class="text-xs uppercase tracking-widest font-semibold text-primary">Code</p>
+            <p
+              data-role="stage-code"
+              data-size="large"
+              class="font-mono font-bold leading-none tracking-[0.15em] text-[clamp(4rem,18vw,10rem)]"
             >
-              Skip
+              {Code.shout(@slug)}
+            </p>
+            <.tap_for_sound :if={offer_tap?(@room)} size={:large} pulse={not @room.speaker_claimed?} />
+
+            <div
+              :if={@room[:prologue]}
+              data-role="prologue-stage"
+              class="flex flex-col items-center gap-3 max-w-lg mx-auto"
+            >
+              <p data-role="prologue-words" class="text-base sm:text-lg leading-relaxed opacity-90">
+                {@room.prologue.text}
+              </p>
+              <button
+                type="button"
+                phx-click="skip_prologue"
+                data-role="prologue-skip"
+                class="btn btn-ghost btn-xs text-xs opacity-70 hover:opacity-100"
+              >
+                Skip
+              </button>
+            </div>
+
+            <button
+              :if={is_nil(@room[:prologue]) and not offer_tap?(@room)}
+              type="button"
+              phx-click="play_prologue"
+              data-role="play-prologue"
+              class="btn btn-outline btn-xs sm:btn-sm opacity-70 hover:opacity-100"
+            >
+              Play the Prologue
             </button>
-          </div>
+          </section>
 
-          <button
-            :if={is_nil(@room[:prologue]) and not offer_tap?(@room)}
-            type="button"
-            phx-click="play_prologue"
-            data-role="play-prologue"
-            class="btn btn-outline btn-xs sm:btn-sm opacity-70 hover:opacity-100"
+          <section
+            :if={@room.phase == :giving}
+            data-role="giving-stage"
+            class="flex flex-col items-center justify-center gap-3 text-center"
           >
-            Play the Prologue
-          </button>
-        </section>
-
-        <section
-          :if={@room.phase == :giving}
-          data-role="giving-stage"
-          class="flex flex-col items-center justify-center gap-3 text-center"
-        >
-          <p class="text-xs uppercase tracking-widest font-semibold text-primary">Settings</p>
-          <p class="text-2xl font-semibold">
-            Waiting for settings: {@room.gives_in} of {length(@room.seats)}
-          </p>
-          <div data-role="stage-cards" class="flex items-center justify-center gap-4 mt-2">
-            <%= for seat <- @room[:seats] || [] do %>
-              <%= if seat[:mask] == :face_down do %>
-                <div
-                  data-role="mask-face-down"
-                  data-seat={seat.id}
-                  class="size-14 rounded-xl border-2 flex items-center justify-center text-2xl opacity-80 shadow-sm"
-                  style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 15%, transparent); color: var(--seat-color);"}
-                  title={"#{seat.name}'s setting landed"}
-                >
-                  <span class="sr-only">{seat.name}</span>
-                  🂠
-                </div>
+            <p class="text-xs uppercase tracking-widest font-semibold text-primary">Settings</p>
+            <p class="text-2xl font-semibold">
+              Waiting for settings: {@room.gives_in} of {length(@room.seats)}
+            </p>
+            <div data-role="stage-cards" class="flex items-center justify-center gap-4 mt-2">
+              <%= for seat <- @room[:seats] || [] do %>
+                <%= if seat[:mask] == :face_down do %>
+                  <div
+                    data-role="mask-face-down"
+                    data-seat={seat.id}
+                    class="size-14 rounded-xl border-2 flex items-center justify-center text-2xl opacity-80 shadow-sm"
+                    style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 15%, transparent); color: var(--seat-color);"}
+                    title={"#{seat.name}'s setting landed"}
+                  >
+                    <span class="sr-only">{seat.name}</span> 🂠
+                  </div>
+                <% end %>
               <% end %>
-            <% end %>
-          </div>
-        </section>
+            </div>
+          </section>
 
-        <section
-          :if={@room.phase == :writing && is_nil(@room[:author_failure])}
-          data-role="writing-stage"
-          class="flex flex-col items-center justify-center gap-3 text-center"
-        >
-          <.author_writing room={@room} mode={:stage} />
-        </section>
+          <section
+            :if={@room.phase == :writing && is_nil(@room[:author_failure])}
+            data-role="writing-stage"
+            class="flex flex-col items-center justify-center gap-3 text-center"
+          >
+            <.author_writing room={@room} mode={:stage} />
+          </section>
 
-        <section
-          :if={@room.phase == :writing && @room[:author_failure]}
-          data-role="author-failure"
-          class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
-        >
-          <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
-          <p class="text-2xl font-semibold">
-            The Author couldn't write from these settings: {@room.author_failure}
-          </p>
-        </section>
+          <section
+            :if={@room.phase == :writing && @room[:author_failure]}
+            data-role="author-failure"
+            class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
+          >
+            <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+            <p class="text-2xl font-semibold">
+              The Author couldn't write from these settings: {@room.author_failure}
+            </p>
+          </section>
 
-        <.attempt room={@room} />
+          <.attempt room={@room} />
 
-        <.bookends room={@room} mode={:stage} />
+          <.bookends room={@room} mode={:stage} />
 
-        <.bridge_markers room={@room} />
+          <.bridge_markers room={@room} />
 
-        <.assaying room={@room} />
+          <.assaying room={@room} />
 
-        <.reveal room={@room} mode={:stage} />
+          <.reveal room={@room} mode={:stage} />
 
-        <.overrule_banner room={@room} />
+          <.overrule_banner room={@room} />
 
-        <.carry_forward room={@room} />
+          <.carry_forward room={@room} />
 
-        <.ending room={@room} mode={:stage} />
+          <.ending room={@room} mode={:stage} />
+        </div>
       </div>
 
       <footer
         data-role="stage-foot"
-        class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-base-content/10 pt-2 shrink-0 text-xs sm:text-sm opacity-80"
+        class="flex flex-col items-stretch gap-1 border-t border-base-content/10 pt-2 shrink-0 text-xs sm:text-sm opacity-80"
       >
-        <p class={["opacity-70", filling?(@room) && "text-base sm:text-2xl"]}>
-          Join at
-          <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
-          <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
-        </p>
-        <.roster room={@room} mode={:stage} />
+        <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+          <p class={["opacity-70", filling?(@room) && "text-base sm:text-2xl"]}>
+            Join at
+            <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
+            <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
+          </p>
+          <.roster room={@room} mode={:stage} />
+        </div>
+        <.now_playing :if={@room} room={@room} />
       </footer>
-
-      <.now_playing :if={@room} room={@room} />
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".WakeLock">
         export default {
