@@ -88,7 +88,7 @@ defmodule Thereish.Steward.VampTest do
       :ok
     end
 
-    test "generates thirty-second looping sound via ElevenLabs with house prefix plus gives and writes to disk" do
+    test "generates thirty-second looping sound via ElevenLabs with vamp prefix plus gives and writes to disk" do
       role = [
         provider: Thereish.Steward.ElevenLabs,
         model: "eleven_text_to_sound_v2",
@@ -115,9 +115,14 @@ defmodule Thereish.Steward.VampTest do
       assert body["duration_seconds"] == 30.0 or body["duration_seconds"] == 30
       assert body["loop"] == true
 
-      expected_prefix = Thereish.Steward.Music.house_prefix()
-      assert String.starts_with?(body["text"], expected_prefix)
-      assert String.contains?(body["text"], "summer camp, viking beaches")
+      text = body["text"]
+      assert String.contains?(text, "summer camp, viking beaches")
+      assert String.contains?(text, "instrumental")
+      # ElevenLabs sound-generation hears these as people talking, not as a bed
+      # that sits under talk. The Mureka house prefix is the wrong brief here.
+      refute String.contains?(text, "conversational")
+      refute String.contains?(text, "spoken conversation")
+      assert String.starts_with?(text, Thereish.Steward.Music.vamp_prefix())
 
       # Verify Vamp is never cached in TrackCache
       assert :miss = TrackCache.get(@gives)
