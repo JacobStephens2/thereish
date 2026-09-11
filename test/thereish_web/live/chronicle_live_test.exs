@@ -177,6 +177,84 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert shouted_html =~ "The Chronicle"
     end
 
+    test "renders an Attempt that holds two Verdicts, each covering two Seats", %{conn: conn} do
+      slug = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: slug)
+
+      seats =
+        for name <- ["Mara", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      [mara, jacob, ada, sam] = seats
+
+      entry = %{
+        page: %{
+          id: "two-verdicts-live",
+          chapter: "harbour",
+          bookends: ["lantern", "harbour"],
+          why_these: "An earlier night graded the table as two pairs."
+        },
+        closed_because: :attempts,
+        melded?: false,
+        closeness: 85,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["lantern", "harbour"],
+            closeness: 85,
+            melded?: false,
+            bridges: [
+              %{seat_id: mara.id, bridge: "beacon"},
+              %{seat_id: jacob.id, bridge: "cairn"},
+              %{seat_id: ada.id, bridge: "lamp"},
+              %{seat_id: sam.id, bridge: "seagull"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [mara.id, jacob.id],
+                bridges: ["beacon", "cairn"],
+                graded?: true,
+                closeness: 85,
+                band: :almost,
+                reasoning: "Close on the shore.",
+                quip: "A cairn for the beacon.",
+                furthest: ["beacon", "cairn"],
+                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
+              },
+              %{
+                seat_ids: [ada.id, sam.id],
+                bridges: ["lamp", "seagull"],
+                graded?: true,
+                closeness: 27,
+                band: :miss,
+                reasoning: "The seagull is having its own evening.",
+                quip: "One of you brought a bird.",
+                furthest: ["lamp", "seagull"],
+                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+
+      {:ok, view, html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert html =~ "lantern"
+      assert html =~ "beacon"
+      assert html =~ "cairn"
+      assert html =~ "lamp"
+      assert html =~ "seagull"
+      assert has_element?(view, "[data-role=attempt]")
+      assert html =~ "85"
+      assert html =~ "27"
+      assert html =~ "Close on the shore."
+      assert html =~ "The seagull is having its own evening."
+    end
+
     test "shows overrules and player corrections, and allows recording an edit",
          %{conn: conn, slug: slug} = ctx do
       play(ctx, "cairn", "cairns")
