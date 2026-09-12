@@ -451,47 +451,24 @@ defmodule ThereishWeb.ChronicleLive do
             </div>
           </div>
 
-          <!-- Track player if present -->
-          <div
+          <.chronicle_audio
             :if={track = page_track(page)}
-            data-role="track"
-            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg bg-base-200/50 p-3"
-          >
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Track</span>
-              <span data-role="track-title" class="text-sm font-medium">{track.title}</span>
-            </div>
-            <audio
-              data-role="track-player"
-              controls
-              src={track.path}
-              preload="none"
-              class="h-8 max-w-full sm:max-w-xs"
-            >
-              Your browser does not support the audio element.
-            </audio>
-          </div>
+            role="track"
+            label="Track"
+            name={track.title}
+            name_role="track-title"
+            src={track.path}
+          />
 
-          <!-- Vamp player if present: the short piece while the Track was being written -->
-          <div
+          <.chronicle_audio
             :if={vamp = page_vamp(page)}
-            data-role="vamp"
-            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg bg-base-200/50 p-3"
-          >
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Vamp</span>
-              <span data-role="vamp-label" class="text-sm font-medium">the short piece</span>
-            </div>
-            <audio
-              data-role="vamp-player"
-              controls
-              src={vamp.path}
-              preload="none"
-              class="h-8 max-w-full sm:max-w-xs"
-            >
-              Your browser does not support the audio element.
-            </audio>
-          </div>
+            role="vamp"
+            label="Vamp"
+            name="the short piece"
+            name_role="vamp-label"
+            src={vamp.path}
+            loop={vamp.loop}
+          />
 
           <!-- Attempts list -->
           <div class="flex flex-col gap-4">
@@ -806,6 +783,37 @@ defmodule ThereishWeb.ChronicleLive do
 
   defp page_track(page), do: Chronicle.page_track(page)
   defp page_vamp(page), do: Chronicle.page_vamp(page)
+
+  attr :role, :string, required: true
+  attr :label, :string, required: true
+  attr :name, :string, required: true
+  attr :name_role, :string, required: true
+  attr :src, :string, required: true
+  attr :loop, :boolean, default: false
+
+  defp chronicle_audio(assigns) do
+    ~H"""
+    <div
+      data-role={@role}
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg bg-base-200/50 p-3"
+    >
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">{@label}</span>
+        <span data-role={@name_role} class="text-sm font-medium">{@name}</span>
+      </div>
+      <audio
+        data-role={"#{@role}-player"}
+        controls
+        src={@src}
+        preload="none"
+        loop={@loop}
+        class="h-8 max-w-full sm:max-w-xs"
+      >
+        Your browser does not support the audio element.
+      </audio>
+    </div>
+    """
+  end
 
   attr :data_role, :string, required: true
   attr :title, :string, required: true

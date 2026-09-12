@@ -845,7 +845,7 @@ defmodule Thereish.Rooms.Server do
         track[:meta] || %{}
       end
 
-    music_meta = build_music_meta(base_meta, attrs)
+    music_meta = put_meta(base_meta, attrs)
 
     page_id =
       (state[:recorded_pages] || %{})[page_ref] ||
@@ -973,7 +973,7 @@ defmodule Thereish.Rooms.Server do
         _ -> track[:meta] || %{}
       end
 
-    music_meta = build_music_meta(base_meta, attrs)
+    music_meta = put_meta(base_meta, attrs)
 
     state = %{state | current_track: track, music_meta: music_meta}
     if page_ref, do: Map.put(state, :track_page_ref, page_ref), else: state
@@ -1463,7 +1463,7 @@ defmodule Thereish.Rooms.Server do
         log_music_event(state, page_ref, "cache hit")
 
         music_meta =
-          build_music_meta(cached_track.meta,
+          put_meta(cached_track.meta,
             title: cached_track.title,
             path: cached_track.path,
             title_cost_usd: 0.0
@@ -1578,7 +1578,7 @@ defmodule Thereish.Rooms.Server do
     state
   end
 
-  defp build_music_meta(base, pairs) do
+  defp put_meta(base, pairs) do
     Enum.reduce(pairs, base || %{}, fn {key, val}, acc ->
       acc
       |> Map.put(key, val)
@@ -1589,7 +1589,7 @@ defmodule Thereish.Rooms.Server do
   defp build_vamp_meta(vamp) when is_map(vamp) do
     base = vamp[:meta] || vamp["meta"] || %{}
 
-    build_music_meta(base,
+    put_meta(base,
       path: vamp[:path] || vamp["path"],
       duration: vamp[:duration] || vamp["duration"],
       format: vamp[:format] || vamp["format"],

@@ -3258,6 +3258,59 @@ defmodule Thereish.RoomsTest do
       assert Chronicle.page_track(page) != nil
     end
 
+    test "House playback does not write a Vamp onto the Page, and does not replace a kept one",
+         ctx do
+      set_fake(vamp_delay_ms: 0, music_delay_ms: 0)
+      :ok = Rooms.set_music(ctx.slug, "house")
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "quiet library")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "old books")
+      await_phase(ctx.slug, :bridging)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [house_page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(house_page) == nil
+      assert Chronicle.page_track(house_page) == nil
+
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      await_phase(ctx.slug, :giving)
+      :ok = Rooms.set_music(ctx.slug, "page")
+
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "frozen lake")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.mara.id)[:track])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn ->
+        pages = Chronicle.page_views(ctx.slug)
+        length(pages) == 2 and Chronicle.page_vamp(hd(pages)) != nil
+      end)
+
+      [kept | _] = Chronicle.page_views(ctx.slug)
+      vamp_path = Chronicle.page_vamp(kept).path
+      track_path = Chronicle.page_track(kept).path
+
+      :ok = Rooms.set_music(ctx.slug, "house")
+
+      [after_house | _] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(after_house).path == vamp_path
+      assert Chronicle.page_track(after_house).path == track_path
+    end
+
     test "a cache hit writes no Vamp onto the closed Page", ctx do
       gives = ["quiet library", "old books"]
       cached_path = "/media/tracks/preseeded-library.mp3"
