@@ -25,7 +25,7 @@ defmodule Thereish.Steward.Recap do
   # repair pass on most — a sentence opening with "So", and the word count.
   # Telling a model a rule costs nothing; catching it costs a whole second call
   # (design law 14).
-  @version "recap-2"
+  @version "recap-3"
 
   # The question asks for seventy words and `Scribe/Length.yml` refuses at
   # eighty. The ten words of slack are deliberate: a model told the number the
@@ -34,7 +34,7 @@ defmodule Thereish.Steward.Recap do
   # first-attempt pass.
 
   @system """
-  You are the Scribe for Thereish, a word game played on a couch. A Page has just closed. The players saw two bookend words and each secretly wrote one bridging word between them; if their words did not converge, the two that landed furthest apart became the next attempt's bookends, and they went again.
+  You are the Scribe for Thereish, a word game played on a couch. A Page has just closed. The players saw bookend words — two, or one per Seat at a Full table — and each secretly wrote one bridging word spanning all of them; if their words did not converge, at a Full table every Bridge became the next attempt's bookends, otherwise the two that landed furthest apart, and they went again.
 
   Write the evening back to them. You are keeping a Chronicle that these people will read months from now, not filing a report: say what they wrote, what it was like when they wrote it, and what the shape of the Page turned out to be. Use their words. Name them by name.
 
@@ -112,7 +112,7 @@ defmodule Thereish.Steward.Recap do
   end
 
   defp page_lines(page) do
-    bookends = page.bookends |> Enum.map(&String.upcase/1) |> Enum.join(" and ")
+    bookends = page.bookends |> Enum.map(&String.upcase/1) |> Thereish.Game.join_and()
     outcome = if page.melded, do: "They melded.", else: "They never converged."
 
     [
@@ -140,7 +140,7 @@ defmodule Thereish.Steward.Recap do
           "The Assayer had no verdict."
       end
 
-    "Attempt #{attempt.number} (bookends #{Enum.join(attempt.bookends, " and ")}): " <>
+    "Attempt #{attempt.number} (bookends #{Thereish.Game.join_and(attempt.bookends)}): " <>
       "#{written}. #{read}"
   end
 

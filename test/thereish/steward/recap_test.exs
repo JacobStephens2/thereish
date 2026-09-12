@@ -65,6 +65,32 @@ defmodule Thereish.Steward.RecapTest do
     test "the version rides on the question" do
       assert is_binary(Recap.version())
     end
+
+    test "receives the Page's Bookends at their full count" do
+      six = ~w(lantern harbour summit ember grove spire)
+
+      page = %{
+        bookends: six,
+        melded: false,
+        attempts: [
+          %{
+            number: 1,
+            bookends: six,
+            bridges: [
+              %{seat_name: "Mara", bridge: "cairn"},
+              %{seat_name: "Jacob", bridge: "beacon"}
+            ],
+            verdicts: [%{band: "miss", reasoning: "Far apart."}]
+          }
+        ]
+      }
+
+      %{user: user, system: system} = Recap.prompt(page, "Nothing yet; this is the first Page.")
+
+      assert user =~ "LANTERN, HARBOUR, SUMMIT, EMBER, GROVE and SPIRE"
+      assert user =~ "lantern, harbour, summit, ember, grove and spire"
+      refute system =~ "two bookend words"
+    end
   end
 
   describe "what counts as an answer" do

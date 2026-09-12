@@ -1654,7 +1654,9 @@ defmodule Thereish.Chronicle do
       end)
 
     attempts =
-      Enum.map(page.attempts, fn attempt ->
+      page.attempts
+      |> Enum.with_index()
+      |> Enum.map(fn {attempt, index} ->
         attempt_overrules =
           Enum.filter(page_overrules, fn o ->
             o.attempt_number == attempt.number and
@@ -1739,7 +1741,16 @@ defmodule Thereish.Chronicle do
           melded: attempt.melded,
           bridges: bridges,
           verdicts: verdicts,
-          carried: extract_carried(verdicts, bridges),
+          carried:
+            extract_carried(
+              page,
+              page.attempts,
+              index,
+              attempt,
+              verdicts,
+              bridges
+            ),
+          bookend_chips: bookend_chips_for(page, attempt, index),
           overrules: Enum.map(attempt_overrules, &format_overrule/1),
           corrections: Enum.map(attempt_corrections, &format_correction/1),
           fairness_taps: Enum.map(attempt_taps, &format_fairness_tap/1)
@@ -1822,6 +1833,8 @@ defmodule Thereish.Chronicle do
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
       bookends: opening_bookends,
+      bookend_origins: page_bookend_origins(page.document),
+      full_table: page_full_table(page.document),
       closed_because: page.closed_because,
       melded: page.melded,
       closeness: page.closeness,
@@ -2122,7 +2135,25 @@ defmodule Thereish.Chronicle do
     |> Repo.insert!()
   end
 
-  defp extract_carried(verdicts, bridges) do
+  defp extract_carried(page, attempts, index, attempt, verdicts, bridges) do
+    next = Enum.at(attempts, index + 1)
+
+    cond do
+      attempt.melded == true ->
+        nil
+
+      is_map(next) ->
+        next.bookends
+
+      page_full_table(page.document) == true ->
+        Enum.map(bridges, & &1.bridge)
+
+      true ->
+        extract_carried_pair(verdicts, bridges)
+    end
+  end
+
+  defp extract_carried_pair(verdicts, bridges) do
     case List.first(verdicts) do
       %{furthest: [_, _] = furthest} ->
         furthest
@@ -2132,6 +2163,77 @@ defmodule Thereish.Chronicle do
 
       _ ->
         nil
+    end
+  end
+
+  defp page_full_table(doc) when is_map(doc) do
+    case Map.get(doc, "full_table", Map.get(doc, :full_table)) do
+      true -> true
+      false -> false
+      _ -> nil
+    end
+  end
+
+  defp page_full_table(_), do: nil
+
+  defp page_bookend_origins(doc) when is_map(doc) do
+    raw =
+      Map.get(doc, "bookend_origins") || Map.get(doc, :bookend_origins) ||
+        Map.get(doc, "bookend_gives") || Map.get(doc, :bookend_gives) || []
+
+    Enum.map(raw, fn origin ->
+      %{
+        word: origin[:word] || origin["word"],
+        give: origin[:give] || origin["give"],
+        seat_id: origin[:seat_id] || origin["seat_id"],
+        seat_name: origin[:seat_name] || origin["seat_name"]
+      }
+    end)
+  end
+
+  defp page_bookend_origins(_), do: []
+
+  defp bookend_chips_for(page, attempt, index) do
+    origins = page_bookend_origins(page.document)
+    masks = page.masks_meta || %{}
+
+    cond do
+      attempt.number == 1 and origins != [] ->
+        Enum.map(origins, fn origin ->
+          %{
+            word: origin.word,
+            give: origin.give,
+            seat_id: origin.seat_id,
+            seat_name: origin.seat_name,
+            mask: nil
+          }
+        end)
+
+      attempt.number == 1 ->
+        Enum.map(attempt.bookends || [], &%{word: &1, mask: nil})
+
+      true ->
+        prev = Enum.at(page.attempts, index - 1)
+        unclaimed = (prev && prev.bridges) || []
+
+        {chips, _rest} =
+          Enum.map_reduce(attempt.bookends || [], unclaimed, fn word, remaining ->
+            case Enum.split_while(remaining, &(&1.bridge != word)) do
+              {passed, [claimed | rest]} ->
+                seat_id = claimed.seat_id
+
+                mask =
+                  seat_id &&
+                    (Map.get(masks, seat_id) || Map.get(masks, to_string(seat_id)))
+
+                {%{word: word, seat_id: seat_id, mask: mask}, passed ++ rest}
+
+              {_all, []} ->
+                {%{word: word, mask: nil}, remaining}
+            end
+          end)
+
+        chips
     end
   end
 end
