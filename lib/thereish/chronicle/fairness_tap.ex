@@ -7,6 +7,7 @@ defmodule Thereish.Chronicle.FairnessTap do
   the couple actually judges closeness (ADR-0005, ticket 11).
 
   Labels are per Seat: two players can disagree about the same grade.
+  The authenticated admin may review any Attempt with source "admin".
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -15,6 +16,7 @@ defmodule Thereish.Chronicle.FairnessTap do
   @foreign_key_type :binary_id
 
   @valid_labels ["fair", "too_kind", "too_harsh"]
+  @valid_sources ["participant", "admin"]
 
   schema "chronicle_fairness_taps" do
     field :attempt_number, :integer
@@ -26,10 +28,12 @@ defmodule Thereish.Chronicle.FairnessTap do
     field :model, :string
     field :prompt_version, :string
     field :label, :string
+    field :source, :string, default: "participant"
 
     belongs_to :room, Thereish.Rooms.Room
     belongs_to :page, Thereish.Chronicle.Page
     belongs_to :seat, Thereish.Rooms.Seat
+    belongs_to :admin, Thereish.Admin.Identity, foreign_key: :admin_id
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end
@@ -62,6 +66,7 @@ defmodule Thereish.Chronicle.FairnessTap do
       :room_id,
       :page_id,
       :seat_id,
+      :admin_id,
       :attempt_number,
       :bookends,
       :bridges,
@@ -69,18 +74,34 @@ defmodule Thereish.Chronicle.FairnessTap do
       :band,
       :model,
       :prompt_version,
-      :label
+      :label,
+      :source
     ])
     |> validate_required([
       :room_id,
-      :seat_id,
       :attempt_number,
       :bookends,
       :bridges,
       :label
     ])
     |> validate_inclusion(:label, @valid_labels)
+    |> validate_inclusion(:source, @valid_sources)
+    |> require_reviewer()
     |> populate_grade()
+  end
+
+  defp require_reviewer(changeset) do
+    case get_field(changeset, :source) || "participant" do
+      "admin" ->
+        changeset
+        |> validate_required([:admin_id])
+        |> put_change(:seat_id, nil)
+
+      _ ->
+        changeset
+        |> validate_required([:seat_id])
+        |> put_change(:admin_id, nil)
+    end
   end
 
   defp populate_grade(changeset) do
