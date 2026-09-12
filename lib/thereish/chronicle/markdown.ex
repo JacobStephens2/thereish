@@ -103,6 +103,23 @@ defmodule Thereish.Chronicle.Markdown do
           []
       end
 
+    rule_lines =
+      case page[:full_table] do
+        true -> ["- Rule: Full table"]
+        false -> ["- Rule: Two Bookends"]
+        _ -> []
+      end
+
+    bookend_give_lines =
+      Enum.flat_map(page[:bookend_gives] || [], fn origin ->
+        if origin[:give] && origin[:word] do
+          who = origin[:seat_name] || "Seat"
+          ["- Bookend (#{origin.word}): from #{who}'s #{origin.give}"]
+        else
+          []
+        end
+      end)
+
     meta_lines =
       [
         "### Page #{index}: #{bookends_str}",
@@ -110,6 +127,8 @@ defmodule Thereish.Chronicle.Markdown do
         "- Outcome: #{closed_detail}",
         "- Closeness: #{closeness_str}"
       ] ++
+        rule_lines ++
+        bookend_give_lines ++
         give_lines ++
         track_lines ++
         mask_lines ++
@@ -194,8 +213,8 @@ defmodule Thereish.Chronicle.Markdown do
           lines = if single.quip, do: lines ++ ["- Quip: #{single.quip}"], else: lines
 
           lines =
-            if single.furthest && length(single.furthest) == 2 do
-              lines ++ ["- Carried: #{Enum.join(single.furthest, " · ")}"]
+            if attempt[:carried] && attempt.carried != [] do
+              lines ++ ["- Carried: #{join_and(attempt.carried)}"]
             else
               lines
             end
@@ -481,9 +500,10 @@ defmodule Thereish.Chronicle.Markdown do
                  "Original",
                  "Overruled",
                  "Fairness",
-                 "Carried"
+                 "Carried",
+                 "Rule"
                ] ->
-            if String.starts_with?(name, "By ") do
+            if String.starts_with?(name, "By ") or String.starts_with?(name, "Bookend") do
               []
             else
               [{String.trim(name), String.trim(bridge)}]
@@ -520,8 +540,7 @@ defmodule Thereish.Chronicle.Markdown do
           |> String.trim()
           |> String.replace_prefix("- Carried:", "")
           |> String.trim()
-          |> String.split(" · ")
-          |> Enum.map(&String.trim/1)
+          |> parse_joined_words()
       end
 
     fairness_line = Enum.find(lines, &String.starts_with?(String.trim(&1), "- Fairness:"))
@@ -685,5 +704,31 @@ defmodule Thereish.Chronicle.Markdown do
     else
       Repo.get_by!(Room, slug: room_id_or_slug)
     end
+  end
+
+  defp join_and(words) when is_list(words) do
+    case words do
+      [] ->
+        ""
+
+      [one] ->
+        one
+
+      [left, right] ->
+        "#{left} and #{right}"
+
+      many ->
+        {last, rest} = List.pop_at(many, -1)
+        Enum.join(rest, ", ") <> " and " <> last
+    end
+  end
+
+  defp parse_joined_words(text) do
+    text
+    |> String.replace(" · ", ", ")
+    |> String.replace(" and ", ", ")
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
   end
 end

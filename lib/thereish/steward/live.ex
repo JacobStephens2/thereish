@@ -111,6 +111,7 @@ defmodule Thereish.Steward.Live do
         {:ok,
          %{
            bookends: bookends,
+           from: answer.json["from"],
            why: why,
            meta: %{
              model: answer.model,

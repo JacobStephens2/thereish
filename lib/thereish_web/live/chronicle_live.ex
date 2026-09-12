@@ -11,6 +11,8 @@ defmodule ThereishWeb.ChronicleLive do
   """
   use ThereishWeb, :live_view
 
+  import ThereishWeb.RoomComponents
+
   alias Thereish.Chronicle
   alias Thereish.Repo
   alias Thereish.Rooms
@@ -351,6 +353,20 @@ defmodule ThereishWeb.ChronicleLive do
                   {Enum.join(page.bookends, " · ")}
                 </h2>
                 <span
+                  :if={page[:full_table] == true}
+                  data-role="page-rule"
+                  class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+                >
+                  Full table
+                </span>
+                <span
+                  :if={page[:full_table] == false}
+                  data-role="page-rule"
+                  class="rounded-full bg-base-300 px-2.5 py-0.5 text-xs font-semibold opacity-80"
+                >
+                  Two Bookends
+                </span>
+                <span
                   :for={g <- page[:gives] || []}
                   data-role="give-tag"
                   class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
@@ -415,7 +431,10 @@ defmodule ThereishWeb.ChronicleLive do
 
           <!-- Masks if present -->
           <div
-            :if={is_map(page[:masks]) and map_size(page.masks) > 0 and Enum.any?(page.masks, fn {_, m} -> is_map(m) and (m[:url] || m["url"]) end)}
+            :if={
+              is_map(page[:masks]) and map_size(page.masks) > 0 and
+                Enum.any?(page.masks, fn {_, m} -> is_map(m) and (m[:url] || m["url"]) end)
+            }
             data-role="page-masks"
             class="flex items-center gap-3 rounded-lg bg-base-200/50 p-3"
           >
@@ -463,10 +482,20 @@ defmodule ThereishWeb.ChronicleLive do
             >
               <div class="flex items-center justify-between text-xs uppercase tracking-wider opacity-60">
                 <span>Attempt {attempt.number}</span>
-                <span :if={attempt.bookends != page.bookends}>
-                  Bookends: {Enum.join(attempt.bookends, " · ")}
-                </span>
               </div>
+
+              <.bookends
+                room={%{bookend_chips: attempt_bookend_chips(page, attempt)}}
+                mode={:phone}
+              />
+
+              <p
+                :for={origin <- first_attempt_gives(page, attempt)}
+                data-role="bookend-give"
+                class="text-xs opacity-70"
+              >
+                {origin.word} from {origin.seat_name}'s {origin.give}
+              </p>
 
               <!-- Bridges -->
               <div class="flex flex-wrap items-center gap-3 text-base">
@@ -503,14 +532,15 @@ defmodule ThereishWeb.ChronicleLive do
                 </div>
                 <p :if={v.reasoning} class="italic opacity-80">"{v.reasoning}"</p>
                 <p :if={v.quip} class="text-xs font-medium opacity-90">{v.quip}</p>
-                <p
-                  :if={v.furthest && length(v.furthest) == 2}
-                  data-role="carried-words"
-                  class="text-xs opacity-70"
-                >
-                  Carried: <span class="font-medium">{Enum.join(v.furthest, " · ")}</span>
-                </p>
               </div>
+
+              <p
+                :if={attempt[:carried] && attempt.carried != []}
+                data-role="carried-words"
+                class="text-xs opacity-70"
+              >
+                Carried: <span class="font-medium">{join_and(attempt.carried)}</span>
+              </p>
 
               <!-- Fairness taps on this attempt -->
               <div
@@ -753,6 +783,49 @@ defmodule ThereishWeb.ChronicleLive do
   defp human_label(label), do: Thereish.Chronicle.FairnessTap.label_human(label)
 
   defp page_track(page), do: Chronicle.page_track(page)
+
+  defp first_attempt_gives(page, %{number: 1}) do
+    Enum.filter(page[:bookend_gives] || [], & &1[:give])
+  end
+
+  defp first_attempt_gives(_page, _attempt), do: []
+
+  defp attempt_bookend_chips(page, attempt) do
+    if attempt.number == 1 do
+      case page[:bookend_gives] do
+        [_ | _] = origins ->
+          Enum.map(origins, fn origin ->
+            %{word: origin.word || origin[:word], mask: nil, give: origin[:give]}
+          end)
+
+        _ ->
+          attempt.bookends || page.bookends || []
+      end
+    else
+      prev = Enum.find(page.attempts, &(&1.number == attempt.number - 1))
+      masks = page[:masks_meta] || page[:masks] || %{}
+      unclaimed = (prev && prev.bridges) || []
+
+      {chips, _rest} =
+        Enum.map_reduce(attempt.bookends || [], unclaimed, fn word, remaining ->
+          case Enum.split_while(remaining, &(&1.bridge != word)) do
+            {passed, [claimed | rest]} ->
+              seat_id = claimed.seat_id
+
+              mask =
+                seat_id &&
+                  (Map.get(masks, seat_id) || Map.get(masks, to_string(seat_id)))
+
+              {%{word: word, seat_id: seat_id, mask: mask}, passed ++ rest}
+
+            {_all, []} ->
+              {%{word: word, mask: nil}, remaining}
+          end
+        end)
+
+      chips
+    end
+  end
 
   attr :data_role, :string, required: true
   attr :title, :string, required: true

@@ -55,7 +55,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
       assert recap.recap =~ "cairn"
       assert recap.callback == "They wrote cairn last month too."
       assert recap.meta.model == "claude-fable-5-1"
-      assert recap.meta.prompt_version == "recap-2"
+      assert recap.meta.prompt_version == "recap-3"
       assert recap.meta.attempts == 1
       assert recap.meta.cost_usd > 0
     end

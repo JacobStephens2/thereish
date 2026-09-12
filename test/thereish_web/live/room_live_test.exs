@@ -322,16 +322,11 @@ defmodule ThereishWeb.RoomLiveTest do
       %{slug: slug, mara: mara, mara_conn: mara_conn, jacob: jacob}
     end
 
-    test "the Bookends are up on both phones and the stage, with label on Stage only", ctx do
+    test "the Bookends are up on both phones and the stage, under the Bookends caption", ctx do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
 
-      assert has_element?(stage, "[data-role=bookends-caption]", "Bookends")
-
-      for phone <- [ctx.mara, ctx.jacob] do
-        refute has_element?(phone, "[data-role=bookends-caption]")
-      end
-
       for view <- [ctx.mara, ctx.jacob, stage] do
+        assert has_element?(view, "[data-role=bookends-caption]", "Bookends")
         assert has_element?(view, "[data-role=bookends]", "lantern")
         assert has_element?(view, "[data-role=bookends]", "harbour")
       end
@@ -580,6 +575,29 @@ defmodule ThereishWeb.RoomLiveTest do
       commit(ctx.jacob, jacob_bridge)
 
       await_reveal_on(ctx.mara)
+    end
+
+    test "carried Bookends show the Seat's Mask from the second Attempt, never on the first",
+         ctx do
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+
+      for view <- [ctx.mara, ctx.jacob, stage] do
+        refute has_element?(view, "[data-role=bookend-mask]")
+      end
+
+      miss(ctx)
+
+      for view <- [ctx.mara, ctx.jacob, stage] do
+        refute has_element?(view, "[data-role=bookend-mask]")
+      end
+
+      press(ctx.mara, "again")
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=bookend-mask]") end)
+
+      for view <- [ctx.mara, ctx.jacob, stage] do
+        assert has_element?(view, "[data-role=bookend-mask]")
+      end
     end
 
     test "the failed Bridges become the next attempt's Bookends, on every screen", ctx do
@@ -1813,16 +1831,16 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # 7. Carry into the next Attempt
       snapshot = Rooms.snapshot(code, nil)
-      [carry1, carry2] = snapshot.next_bookends
+      carried = snapshot.next_bookends
+      assert carried == ["beacon", "cairn", "lamp", "seagull"]
+      named = ThereishWeb.RoomComponents.join_and(carried)
 
       for phone <- [phone1, phone2, phone3, phone4] do
-        # Again button names the two words that open the next Attempt
+        # Again button names every carried word
         assert has_element?(phone, "[data-role=again]")
-        assert render(element(phone, "[data-role=again]")) =~ "Again — #{carry1} and #{carry2}"
-        # Carry-forward text names the two words
+        assert render(element(phone, "[data-role=again]")) =~ "Again — #{named}"
         assert has_element?(phone, "[data-role=carry-forward]")
-        assert render(element(phone, "[data-role=carry-forward]")) =~ carry1
-        assert render(element(phone, "[data-role=carry-forward]")) =~ carry2
+        assert render(element(phone, "[data-role=carry-forward]")) =~ named
       end
 
       # Tap Again to start Attempt 2 with the carried Bookends
@@ -1830,8 +1848,10 @@ defmodule ThereishWeb.RoomLiveTest do
 
       for phone <- [phone1, phone2, phone3, phone4] do
         eventually(fn -> has_element?(phone, "[data-role=attempt]", "Attempt 2") end)
-        assert has_element?(phone, "[data-role=bookends]", carry1)
-        assert has_element?(phone, "[data-role=bookends]", carry2)
+
+        for word <- carried do
+          assert has_element?(phone, "[data-role=bookends]", word)
+        end
       end
 
       # Commit on Attempt 2

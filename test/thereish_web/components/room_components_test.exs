@@ -273,6 +273,17 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "nobody chose"
     end
 
+    test "names every carried word with commas and a final and" do
+      room = %{
+        phase: :reveal,
+        next_bookends: ~w(cairn beacon wharf signal torch lamp),
+        next_bookends_chosen?: true
+      }
+
+      html = render_component(&carry_forward/1, room: room)
+      assert html =~ "cairn, beacon, wharf, signal, torch and lamp"
+    end
+
     test "says when the Assayer did not choose them" do
       room = %{phase: :reveal, next_bookends: ["cairn", "beacon"], next_bookends_chosen?: false}
 
@@ -749,28 +760,65 @@ defmodule ThereishWeb.RoomComponentsTest do
   end
 
   describe "bookends component" do
-    test "renders a 'Bookends' caption on the Stage, but no label on phones" do
+    @six ~w(lantern harbour summit ember grove spire)
+
+    test "renders a wrapping row of word chips under the Bookends caption at any count" do
+      room = %{bookends: @six}
+
+      for mode <- [:phone, :stage] do
+        html = render_component(&bookends/1, room: room, mode: mode)
+        assert html =~ "Bookends"
+        assert html =~ ~s(data-role="bookends-caption")
+        assert html =~ "flex-wrap"
+        assert html =~ ~s(data-role="bookend-chip")
+
+        for word <- @six do
+          assert html =~ word
+        end
+
+        refute html =~ ~s(data-role="bookend-mask")
+      end
+    end
+
+    test "an optional Mask sits beside a carried word" do
       room = %{
-        bookends: ["lantern", "harbour"]
+        bookends: ["cairn", "beacon"],
+        bookend_chips: [
+          %{word: "cairn", mask: %{url: "/media/masks/m.png"}, seat_id: "s1"},
+          %{word: "beacon", mask: %{url: "/media/masks/j.png"}, seat_id: "s2"}
+        ]
       }
 
-      stage_html = render_component(&bookends/1, room: room, mode: :stage)
-      assert stage_html =~ "Bookends"
-      assert stage_html =~ ~s(data-role="bookends-caption")
-      assert stage_html =~ "text-center text-sm uppercase tracking-widest opacity-60"
-      assert stage_html =~ "lantern"
-      assert stage_html =~ "harbour"
+      html = render_component(&bookends/1, room: room, mode: :phone)
+      assert html =~ ~s(data-role="bookend-mask")
+      assert html =~ "/media/masks/m.png"
+      assert html =~ "/media/masks/j.png"
+      assert html =~ "cairn"
+      assert html =~ "beacon"
+    end
 
-      phone_html = render_component(&bookends/1, room: room, mode: :phone)
-      refute phone_html =~ "Bookends"
-      refute phone_html =~ ~s(data-role="bookends-caption")
-      assert phone_html =~ "lantern"
-      assert phone_html =~ "harbour"
+    test "first-Attempt Bookends never show a Mask" do
+      room = %{
+        bookends: ["lantern", "harbour"],
+        bookend_chips: [
+          %{word: "lantern", mask: nil, give: "lighthouse"},
+          %{word: "harbour", mask: nil, give: "candle"}
+        ]
+      }
 
-      # Default mode is :phone
-      default_html = render_component(&bookends/1, room: room)
-      refute default_html =~ "Bookends"
-      refute default_html =~ ~s(data-role="bookends-caption")
+      html = render_component(&bookends/1, room: room, mode: :phone)
+      refute html =~ ~s(data-role="bookend-mask")
+      assert html =~ "lantern"
+      assert html =~ "harbour"
+    end
+  end
+
+  describe "join_and" do
+    test "two words stay 'cairn and beacon'; six take commas and a final and" do
+      assert join_and(["cairn", "beacon"]) == "cairn and beacon"
+
+      assert join_and(~w(cairn beacon wharf signal torch lamp)) ==
+               "cairn, beacon, wharf, signal, torch and lamp"
     end
   end
 

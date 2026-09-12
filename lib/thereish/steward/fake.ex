@@ -86,6 +86,7 @@ defmodule Thereish.Steward.Fake do
         {:ok,
          %{
            bookends: bookends,
+           from: author_from(request, count),
            why: why,
            meta: %{
              model: "fake-author",
@@ -114,6 +115,20 @@ defmodule Thereish.Steward.Fake do
       :raise ->
         raise "this Author is having a moment"
     end
+  end
+
+  defp author_from(request, count) do
+    gives =
+      cond do
+        is_map(request) and is_list(request[:gives]) -> request[:gives]
+        is_map(request) and is_list(request["gives"]) -> request["gives"]
+        is_list(request) -> request
+        true -> []
+      end
+
+    gives
+    |> Enum.take(count)
+    |> Enum.map(&Thereish.Steward.Author.give_name/1)
   end
 
   @impl true
