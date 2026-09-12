@@ -200,6 +200,12 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("toggle_full_table", _params, socket) do
+    current = Map.get(socket.assigns.room, :full_table, true)
+    Rooms.set_full_table(socket.assigns.slug, !current)
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("set_music", %{"music" => music}, socket) do
     Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}

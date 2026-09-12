@@ -2231,4 +2231,64 @@ defmodule Thereish.GameTest do
       assert Enum.find(s_view4.seats, &(&1.id == "seat-Jacob")).mask == mask_j
     end
   end
+
+  describe "Full table is the Page's rule (ticket 02, #119)" do
+    defp written(state, bookends, full_table \\ :omit) do
+      attrs =
+        case full_table do
+          :omit -> %{bookends: bookends}
+          value -> %{bookends: bookends, full_table: value}
+        end
+
+      {:ok, state, []} = Game.apply(state, {:page_written, attrs})
+      state
+    end
+
+    defp giving do
+      state = Game.init(seat_limit: 2, seats: [seat("Mara"), seat("Jacob")])
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      state
+    end
+
+    test "the Game copies the Room's rule onto the Page and exposes it" do
+      state = written(giving(), ["cliff", "wax"], false)
+
+      assert Game.view(state, "seat-Mara").full_table == false
+      assert Game.view(state, "seat-Jacob").full_table == false
+      assert Game.view(state, nil).full_table == false
+    end
+
+    test "a Page written with no rule is a Full table, the default" do
+      state = written(giving(), ["cliff", "wax"])
+
+      assert Game.view(state, nil).full_table == true
+    end
+
+    test "a Page written under one rule keeps it after the Room flips, and the next Page takes the new one" do
+      state = written(giving(), ["cliff", "wax"], true)
+      assert Game.view(state, nil).full_table == true
+
+      {state, effects} = commit_all(state, [{"Mara", "cairn"}, {"Jacob", "cairo"}])
+      state = grade(state, effects, 91)
+      assert Game.view(state, nil).phase == :closed
+      assert Game.view(state, nil).full_table == true
+
+      {:ok, state, []} = Game.apply(state, {:next_page, %{seat_id: "seat-Mara"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "ocean"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "lantern"}})
+
+      state = written(state, ["tide", "wick"], false)
+      assert Game.view(state, nil).full_table == false
+    end
+  end
 end

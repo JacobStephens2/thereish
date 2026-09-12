@@ -156,7 +156,8 @@ defmodule Thereish.Game do
           | {:page_written,
              %{
                required(:bookends) => [String.t()],
-               optional(:meta) => map()
+               optional(:meta) => map(),
+               optional(:full_table) => boolean()
              }}
           | {:author_failed, %{required(:reason) => term()}}
           | {:author_retried, %{required(:seat_id) => String.t()}}
@@ -424,7 +425,8 @@ defmodule Thereish.Game do
         page = %{
           bookends: bookends,
           gives: state.gives,
-          meta: meta
+          meta: meta,
+          full_table: page_full_table(attrs)
         }
 
         {:ok,
@@ -782,6 +784,7 @@ defmodule Thereish.Game do
       page_give: state.page && (state.page[:give] || state.page["give"]),
       page_chapter: state.page && (state.page[:chapter] || state.page["chapter"]),
       page_theme: state.page && (state.page[:theme] || state.page["theme"]),
+      full_table: page_full_table(state.page),
       your_give: Map.get(state.gives, viewer),
       your_last_give: Map.get(state.last_gives, viewer),
       your_mask: if(viewer, do: Map.get(state.masks || %{}, viewer)),
@@ -868,6 +871,17 @@ defmodule Thereish.Game do
   # typing their name.
   defp bookends(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
   defp bookends(state, _phase), do: state.bookends
+
+  # A Page keeps the rule it was written under. Omitted or missing (Pages from
+  # before the rule, or a Room that has not written one yet) reads as on.
+  defp page_full_table(attrs) when is_map(attrs) do
+    case Map.get(attrs, :full_table, Map.get(attrs, "full_table", true)) do
+      false -> false
+      _ -> true
+    end
+  end
+
+  defp page_full_table(_), do: true
 
   # The Bridges go in roster order, the order the reveal puts them in, so that
   # the sentence the Assayer writes, the joke it makes and the two words it

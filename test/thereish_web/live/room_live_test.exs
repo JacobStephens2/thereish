@@ -2019,9 +2019,11 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.stage, "[data-role=voice-switch]")
       assert has_element?(ctx.stage, "[data-role=music-control]")
       assert has_element?(ctx.stage, "[data-role=quips-switch]")
+      assert has_element?(ctx.stage, "[data-role=full-table-switch]")
       refute has_element?(ctx.mara, "[data-role=voice-switch]")
       assert has_element?(ctx.mara, "[data-role=music-control]")
       assert has_element?(ctx.mara, "[data-role=quips-switch]")
+      assert has_element?(ctx.mara, "[data-role=full-table-switch]")
       assert has_element?(ctx.mara, "[data-role=local-sound-toggle]")
 
       assert has_element?(
@@ -2032,6 +2034,7 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(ctx.jacob, "[data-role=voice-switch]")
       assert has_element?(ctx.jacob, "[data-role=music-control]")
       assert has_element?(ctx.jacob, "[data-role=quips-switch]")
+      assert has_element?(ctx.jacob, "[data-role=full-table-switch]")
       assert has_element?(ctx.jacob, "[data-role=local-sound-toggle]")
       refute has_element?(ctx.stage, "[data-role=local-sound-toggle]")
 
@@ -2039,6 +2042,12 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.stage, "[data-role=quips-switch][data-active=true]")
       assert has_element?(ctx.mara, "[data-role=quips-switch][data-active=true]")
       assert has_element?(ctx.jacob, "[data-role=quips-switch][data-active=true]")
+      assert has_element?(ctx.stage, "[data-role=full-table-switch][data-active=true]")
+      assert has_element?(ctx.mara, "[data-role=full-table-switch][data-active=true]")
+      assert has_element?(ctx.jacob, "[data-role=full-table-switch][data-active=true]")
+      assert has_element?(ctx.stage, "[data-role=full-table-note]")
+      assert has_element?(ctx.mara, "[data-role=full-table-note]")
+      assert has_element?(ctx.jacob, "[data-role=full-table-note]")
       assert has_element?(ctx.stage, "[data-role=music-page][data-active=true]")
       assert has_element?(ctx.mara, "[data-role=music-page][data-active=true]")
       assert has_element?(ctx.jacob, "[data-role=music-page][data-active=true]")
@@ -2066,6 +2075,13 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.mara, "[data-role=quips-switch][data-active=false]")
       assert has_element?(ctx.stage, "[data-role=quips-switch][data-active=false]")
       assert has_element?(ctx.jacob, "[data-role=quips-switch][data-active=false]")
+
+      # Full table fact toggles from any device and updates all views
+      ctx.jacob |> element("[data-role=full-table-switch]") |> render_click()
+      assert Rooms.get_room(ctx.slug).full_table == false
+      assert has_element?(ctx.jacob, "[data-role=full-table-switch][data-active=false]")
+      assert has_element?(ctx.stage, "[data-role=full-table-switch][data-active=false]")
+      assert has_element?(ctx.mara, "[data-role=full-table-switch][data-active=false]")
 
       ctx.jacob |> element("[data-role=music-off]") |> render_click()
       assert Rooms.get_room(ctx.slug).music == "off"
