@@ -515,6 +515,76 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert has_element?(view, "[data-role=chronicle-page]")
       assert has_element?(view, "[data-role=page-mask]")
     end
+
+    test "a Chronicle Mask opens in an enlarged view and closes with a labelled control",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairns")
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=enlarge-mask]")
+      refute has_element?(view, "[data-role=enlarged-mask]")
+
+      view
+      |> element("[data-role=give-tag] [data-role=enlarge-mask][data-seat='#{ctx.mara.id}']")
+      |> render_click()
+
+      assert has_element?(view, "[data-role=enlarged-mask]")
+      assert has_element?(view, "[data-role=enlarged-mask-image]")
+      assert has_element?(view, "[data-role=close-enlarged-mask][aria-label='Close']")
+
+      view |> element("[data-role=close-enlarged-mask]") |> render_click()
+      refute has_element?(view, "[data-role=enlarged-mask]")
+    end
+
+    test "an older retained Mask enlarges and closes the same way",
+         %{conn: conn, slug: slug} = ctx do
+      room = Repo.get_by!(Room, slug: slug)
+      now = DateTime.utc_now()
+
+      {:ok, _page} =
+        Chronicle.write(
+          room.id,
+          %{
+            document: %{"bookends" => ["desert", "oasis"]},
+            author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+            gives: [
+              %{seat_id: ctx.mara.id, text: "cactus"},
+              %{seat_id: ctx.jacob.id, text: "dune"}
+            ],
+            masks: %{
+              ctx.mara.id => %{url: "/media/masks/mask-historical.png"},
+              ctx.jacob.id => %{url: "/media/masks/mask-jacob-old.png"}
+            },
+            closed_because: :meld,
+            melded?: true,
+            closeness: 90,
+            attempts: []
+          },
+          now
+        )
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(
+               view,
+               "[data-role=give-tag] [data-role=enlarge-mask][data-seat='#{ctx.mara.id}']"
+             )
+
+      view
+      |> element("[data-role=give-tag] [data-role=enlarge-mask][data-seat='#{ctx.mara.id}']")
+      |> render_click()
+
+      assert has_element?(view, "[data-role=enlarged-mask]")
+
+      assert has_element?(
+               view,
+               "[data-role=enlarged-mask-image][src='/media/masks/mask-historical.png']"
+             )
+
+      view |> element("[data-role=close-enlarged-mask]") |> render_click()
+      refute has_element?(view, "[data-role=enlarged-mask]")
+    end
   end
 
   describe "spend foot line (ticket 09)" do
