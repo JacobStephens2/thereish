@@ -19,17 +19,19 @@ defmodule Thereish.Steward.Music do
   @vamp_opener "A 30-second looping instrumental music bed. No vocals, no speech, no crowd, no talking. "
 
   @doc "House style prefix used for Mureka instrumental generation."
-  def house_prefix, do: @house_opener <> standing_brief() <> " Gives: "
+  @spec house_prefix([String.t() | map()]) :: String.t()
+  def house_prefix(gives \\ []), do: build(@house_opener, gives)
 
   @doc "Prefix for the Vamp: ElevenLabs sound-generation, not Mureka."
-  def vamp_prefix, do: @vamp_opener <> standing_brief() <> " Gives: "
+  @spec vamp_prefix([String.t() | map()]) :: String.t()
+  def vamp_prefix(gives \\ []), do: build(@vamp_opener, gives)
 
   @doc """
   Builds a prompt for Mureka from the given Gives.
   """
   @spec prompt([String.t() | map()]) :: String.t()
   def prompt(gives) when is_list(gives) do
-    @house_opener <> direction(gives) <> " Gives: " <> theme(gives)
+    house_prefix(gives) <> theme(gives)
   end
 
   @doc """
@@ -40,10 +42,10 @@ defmodule Thereish.Steward.Music do
   """
   @spec vamp_prompt([String.t() | map()]) :: String.t()
   def vamp_prompt(gives) when is_list(gives) do
-    @vamp_opener <> direction(gives) <> " Gives: " <> theme(gives)
+    vamp_prefix(gives) <> theme(gives)
   end
 
-  defp standing_brief, do: direction([])
+  defp build(opener, gives), do: opener <> direction(gives) <> " Gives: "
 
   defp direction(gives) do
     [
