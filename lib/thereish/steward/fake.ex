@@ -41,7 +41,8 @@ defmodule Thereish.Steward.Fake do
   @behaviour Thereish.Steward
 
   @impl true
-  def assay(%{bookends: [_, _], bridges: bridges} = request) when length(bridges) >= 2 do
+  def assay(%{bookends: bookends, bridges: bridges} = request)
+      when is_list(bookends) and length(bookends) >= 2 and length(bridges) >= 2 do
     case config_get(:assay_capture, nil) do
       pid when is_pid(pid) -> send(pid, {:assay, request})
       _ -> :ok
@@ -56,15 +57,20 @@ defmodule Thereish.Steward.Fake do
     end
   end
 
+  @bookend_pool ~w(lantern harbour summit ember grove spire)
+
   @impl true
-  def author(_request, opts \\ []) do
+  def author(request, opts \\ []) do
     delay = author_delay_ms()
     if delay > 0, do: Process.sleep(delay)
 
     case author_mode() do
       :ok ->
+        count = Thereish.Steward.Author.requested_count(request, opts)
+
         bookends =
-          Keyword.get(opts, :bookends) || config_get(:author_bookends, ["lantern", "harbour"])
+          Keyword.get(opts, :bookends) ||
+            config_get(:author_bookends, Enum.take(@bookend_pool, count))
 
         why =
           Keyword.get(opts, :why) ||
@@ -87,7 +93,8 @@ defmodule Thereish.Steward.Fake do
              cost_usd: 0.0,
              latency_ms: delay,
              attempts: 1,
-             why: why
+             why: why,
+             count: count
            }
          }}
 

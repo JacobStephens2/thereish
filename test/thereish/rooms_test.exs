@@ -44,6 +44,22 @@ defmodule Thereish.RoomsTest do
       assert Rooms.snapshot(slug, nil).open_seats == 0
     end
 
+    test "a six-Seat Full table Page opens with six Bookends" do
+      slug = open_room(seat_limit: 6)
+
+      seats =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora) do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      view = await_phase(slug, :bridging)
+
+      assert view.bookends == ["lantern", "harbour", "summit", "ember", "grove", "spire"]
+      assert view.full_table == true
+    end
+
     test "a Room at the Assayer's cap plays, and every Bridge in it is graded together" do
       slug = open_room(seat_limit: Thereish.Steward.seat_cap())
 
@@ -1641,6 +1657,10 @@ defmodule Thereish.RoomsTest do
       assert outcome1.taps[to_string(ctx.mara.id)] == "fine"
       assert outcome1.taps[to_string(ctx.jacob.id)] == "flat"
       assert outcome1.closing_band == "deep_meld"
+
+      [page] = Chronicle.pages(room.id)
+      count = page.author_meta["count"] || page.author_meta[:count]
+      assert count == 2
 
       assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       await_phase(ctx.slug, :giving)
