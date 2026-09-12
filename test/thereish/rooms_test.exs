@@ -1686,12 +1686,14 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, token_a: token_a, token_b: token_b, mara: mara, jacob: jacob}
     end
 
-    test "a new Room has no speaker, quips on, music page by default, and no voice column", ctx do
+    test "a new Room has no speaker, quips on, music page by default, Full table on, and no voice column",
+         ctx do
       room = Store.get_room(ctx.slug)
       assert is_nil(room.speaker)
       assert room.quips == true
       assert room.music == "page"
       assert room.prologue_skipped == false
+      assert room.full_table == true
       refute :voice in Thereish.Rooms.Room.__schema__(:fields)
     end
 
@@ -1704,6 +1706,18 @@ defmodule Thereish.RoomsTest do
       assert File.exists?(migration_file)
       content = File.read!(migration_file)
       assert content =~ "add :prologue_skipped, :boolean"
+    end
+
+    test "migration adds full_table column defaulting on so existing Rooms read as Full tables" do
+      migrations_dir = Application.app_dir(:thereish, "priv/repo/migrations")
+
+      migration_file =
+        Path.join(migrations_dir, "20260911130000_add_full_table_to_rooms.exs")
+
+      assert File.exists?(migration_file)
+      content = File.read!(migration_file)
+      assert content =~ "add :full_table, :boolean"
+      assert content =~ "default: true"
     end
 
     test "migration drops voice and adds quips column" do
@@ -1847,7 +1861,7 @@ defmodule Thereish.RoomsTest do
       assert is_nil(Store.get_room(ctx.slug).speaker)
     end
 
-    test "quips and music switches update the Room and broadcast", ctx do
+    test "quips, music and Full table switches update the Room and broadcast", ctx do
       Rooms.subscribe(ctx.slug)
 
       assert :ok = Rooms.set_quips(ctx.slug, false)
@@ -1869,12 +1883,21 @@ defmodule Thereish.RoomsTest do
       assert :ok = Rooms.set_quips(ctx.slug, true)
       assert_receive :room_changed
       assert Store.get_room(ctx.slug).quips == true
+
+      assert :ok = Rooms.set_full_table(ctx.slug, false)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).full_table == false
+
+      assert :ok = Rooms.set_full_table(ctx.slug, true)
+      assert_receive :room_changed
+      assert Store.get_room(ctx.slug).full_table == true
     end
 
-    test "speaker, quips and music survive a Room process restart", ctx do
+    test "speaker, quips, music and Full table survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       assert :ok = Rooms.set_quips(ctx.slug, false)
       assert :ok = Rooms.set_music(ctx.slug, "off")
+      assert :ok = Rooms.set_full_table(ctx.slug, false)
 
       pid = GenServer.whereis(Server.via(ctx.slug))
       ref = Process.monitor(pid)
@@ -1890,6 +1913,7 @@ defmodule Thereish.RoomsTest do
       assert room.speaker == ctx.token_a
       assert room.quips == false
       assert room.music == "off"
+      assert room.full_table == false
       refute Map.has_key?(room, :voice)
     end
 
@@ -1952,6 +1976,7 @@ defmodule Thereish.RoomsTest do
         assert view.speaker_claimed? == false
         assert view.quips == true
         assert view.music == "page"
+        assert view.full_table == true
         refute Map.has_key?(view, :voice)
         refute Map.has_key?(view, :house_loop_only)
         refute Map.has_key?(view, :speaker)
@@ -1961,6 +1986,7 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       :ok = Rooms.set_quips(ctx.slug, false)
       :ok = Rooms.set_music(ctx.slug, "house")
+      :ok = Rooms.set_full_table(ctx.slug, false)
 
       view_a = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
       view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
@@ -1970,23 +1996,43 @@ defmodule Thereish.RoomsTest do
       assert view_a.speaker_claimed? == true
       assert view_a.quips == false
       assert view_a.music == "house"
+      assert view_a.full_table == false
       refute Map.has_key?(view_a, :voice)
 
       assert view_b.speaker? == false
       assert view_b.speaker_claimed? == true
       assert view_b.quips == false
       assert view_b.music == "house"
+      assert view_b.full_table == false
       refute Map.has_key?(view_b, :voice)
 
       assert view_stage.speaker? == false
       assert view_stage.speaker_claimed? == true
       assert view_stage.quips == false
       assert view_stage.music == "house"
+      assert view_stage.full_table == false
       refute Map.has_key?(view_stage, :voice)
 
       json = Jason.encode!(view_a)
       refute json =~ ctx.token_a
       refute json =~ ctx.token_b
+    end
+
+    test "flipping Full table mid-Page changes the Room fact only and leaves the Page's Bookends",
+         ctx do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      view = await_phase(ctx.slug, :bridging)
+      bookends = view.bookends
+      assert view.full_table == true
+      assert is_list(bookends)
+
+      assert :ok = Rooms.set_full_table(ctx.slug, false)
+
+      flipped = Rooms.snapshot(ctx.slug, nil)
+      assert flipped.full_table == false
+      assert flipped.phase == :bridging
+      assert flipped.bookends == bookends
     end
   end
 

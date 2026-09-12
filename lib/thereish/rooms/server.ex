@@ -82,7 +82,9 @@ defmodule Thereish.Rooms.Server do
     # a Room to bring into being.
     with %{} = room <- Store.get_room(slug) do
       seats = Store.list_seats(room.id)
-      game = Game.init(seat_limit: room.seat_limit, seats: seats)
+
+      game =
+        Game.init(seat_limit: room.seat_limit, seats: seats, full_table: room.full_table)
 
       eligible_members = Thereish.Foley.Repertoire.members(room.id)
       wait_music = Thereish.Foley.Repertoire.draw(eligible_members)
@@ -370,6 +372,19 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
+  def handle_call({:set_full_table, enabled}, _from, state) do
+    case Store.update_room(state.room, %{full_table: enabled}) do
+      {:ok, room} ->
+        game = %{state.game | full_table: enabled == true}
+        state = %{state | room: room, game: game}
+        broadcast(state.room.slug)
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
   def handle_call({:set_music, music}, _from, state) do
     music = to_string(music)
 
@@ -503,7 +518,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   # The snapshot answers how long the Assayer has been thinking, plus the
-  # Room facts (speaker?, speaker_claimed?, voice, music) for the
+  # Room facts (speaker?, speaker_claimed?, quips, music, Full table) for the
   # requesting viewer's device token. Device tokens never leave the Room.
   def handle_call({:snapshot, viewer}, from, state) do
     handle_call({:snapshot, viewer, nil}, from, state)
@@ -544,6 +559,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:speaker?, speaker?)
       |> Map.put(:speaker_claimed?, speaker_claimed?)
       |> Map.put(:quips, state.room.quips)
+      |> Map.put(:full_table, state.room.full_table)
       |> Map.put(:music, state.room.music)
       |> Map.put(:quip, state.room.quip)
       |> Map.put(:vamp, current_vamp)
@@ -692,7 +708,15 @@ defmodule Thereish.Rooms.Server do
 
   def handle_info({:author_completed, ref, {:ok, result}}, %{author: %{ref: ref}} = state) do
     state = author_answered(state)
-    event = {:page_written, %{bookends: result.bookends, meta: result.meta}}
+
+    event =
+      {:page_written,
+       %{
+         bookends: result.bookends,
+         meta: result.meta,
+         full_table: state.room.full_table
+       }}
+
     {:noreply, apply_events(state, [event])}
   end
 

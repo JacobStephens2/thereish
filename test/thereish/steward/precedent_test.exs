@@ -360,5 +360,39 @@ defmodule Thereish.Steward.PrecedentTest do
 
       assert Precedent.get("gemini-3.8-flash", "assay-3", req) == :miss
     end
+
+    test "the version bump to assay-4 orphans assay-3 precedents" do
+      req = %{bookends: ["ocean", "night"], bridges: ["tide", "moon"]}
+
+      {:ok, _} =
+        Precedent.put("gemini-3.8-flash", "assay-3", req, %{
+          closeness: 85,
+          reasoning: "Old assay-3 verdict.",
+          quip: "Old quip.",
+          meta: %{model: "gemini-3.8-flash", prompt_version: "assay-3"}
+        })
+
+      assert Precedent.get("gemini-3.8-flash", "assay-4", req) == :miss
+    end
+
+    test "every ordering of N Bookends and N Bridges collapses to the same key" do
+      roster =
+        Precedent.key(
+          "gemini-3.8-flash",
+          "assay-4",
+          ["lantern", "harbour", "wharf", "dusk"],
+          ["beacon", "cairn", "lamp", "seagull"]
+        )
+
+      shuffled =
+        Precedent.key(
+          "gemini-3.8-flash",
+          "assay-4",
+          ["dusk", "wharf", "lantern", "harbour"],
+          ["lamp", "seagull", "beacon", "cairn"]
+        )
+
+      assert roster == shuffled
+    end
   end
 end
