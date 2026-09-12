@@ -430,15 +430,25 @@ defmodule Thereish.Chronicle do
 
   @doc """
   Records an unblinding action for an experiment as an append-only event (ticket 13).
+
+  Rejected until the Room has recorded the experiment's declared sample of
+  completed-Page outcomes.
   """
   @spec record_experiment_unblinding(Ecto.UUID.t(), map()) ::
-          {:ok, ExperimentUnblinding.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, ExperimentUnblinding.t()}
+          | {:error, :sample_incomplete | Ecto.Changeset.t()}
   def record_experiment_unblinding(room_id, attrs) do
-    attrs = Map.put(attrs, :room_id, room_id)
+    experiment_id = attrs[:experiment_id] || attrs["experiment_id"]
 
-    %ExperimentUnblinding{}
-    |> ExperimentUnblinding.changeset(attrs)
-    |> Repo.insert()
+    if experiment_progress(room_id, experiment_id).ready? do
+      attrs = Map.put(attrs, :room_id, room_id)
+
+      %ExperimentUnblinding{}
+      |> ExperimentUnblinding.changeset(attrs)
+      |> Repo.insert()
+    else
+      {:error, :sample_incomplete}
+    end
   end
 
   @doc """
@@ -461,6 +471,32 @@ defmodule Thereish.Chronicle do
         )
         |> Repo.all()
     end
+  end
+
+  @doc """
+  Experiment ids recorded in a Room, from assignments then outcomes.
+  """
+  @spec room_experiment_ids(Ecto.UUID.t() | String.t()) :: [String.t()]
+  def room_experiment_ids(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    assignment_ids =
+      from(a in ExperimentAssignment,
+        where: a.room_id == ^room_id,
+        distinct: true,
+        select: a.experiment_id
+      )
+      |> Repo.all()
+
+    outcome_ids =
+      from(o in ExperimentOutcome,
+        where: o.room_id == ^room_id,
+        distinct: true,
+        select: o.experiment_id
+      )
+      |> Repo.all()
+
+    Enum.uniq(assignment_ids ++ outcome_ids)
   end
 
   @doc """
@@ -577,6 +613,24 @@ defmodule Thereish.Chronicle do
     )
     |> Repo.all()
     |> Enum.map(&String.to_atom/1)
+  end
+
+  @doc """
+  Blinded progress toward an experiment's declared sample size in one Room.
+
+  Counts recorded completed-Page outcomes across both arms combined. Assignments
+  that never produced an outcome (still in play, or abandoned) do not count.
+  """
+  @spec experiment_progress(Ecto.UUID.t() | String.t(), String.t()) :: %{
+          recorded: non_neg_integer(),
+          required: pos_integer(),
+          ready?: boolean()
+        }
+  def experiment_progress(room_id_or_slug, experiment_id) do
+    required = Thereish.Experiments.definition(experiment_id).sample_size
+    recorded = length(experiment_outcomes(room_id_or_slug, experiment_id))
+
+    %{recorded: recorded, required: required, ready?: recorded >= required}
   end
 
   @doc """
@@ -803,7 +857,11 @@ defmodule Thereish.Chronicle do
     all_taps = fairness_taps(room_id)
     all_assignments = experiment_assignments(room_id)
     all_outcomes = experiment_outcomes(room_id)
-    unblinded? = experiment_unblinded?(room_id)
+
+    unblinded_experiments =
+      room_id
+      |> experiment_unblindings()
+      |> MapSet.new(& &1.experiment_id)
 
     Enum.map(
       pages,
@@ -815,7 +873,7 @@ defmodule Thereish.Chronicle do
         all_assignments,
         all_outcomes,
         all_recaps,
-        unblinded?
+        unblinded_experiments
       )
     )
   end
@@ -1701,7 +1759,7 @@ defmodule Thereish.Chronicle do
         all_assignments \\ [],
         all_outcomes \\ [],
         all_recaps \\ [],
-        unblinded? \\ false
+        unblinded_experiments \\ MapSet.new()
       ) do
     page_overrules =
       Enum.filter(all_overrules, fn o ->
@@ -1896,6 +1954,8 @@ defmodule Thereish.Chronicle do
       (matching_assignment && matching_assignment.experiment_id) ||
         (matching_outcome && matching_outcome.experiment_id) ||
         "bait_against_plain"
+
+    unblinded? = MapSet.member?(unblinded_experiments, experiment_id)
 
     %{
       id: page.id,

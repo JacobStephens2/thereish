@@ -2031,12 +2031,45 @@ defmodule Thereish.RoomsTest do
 
       refute Thereish.Chronicle.experiment_unblinded?(room.id)
 
+      for i <- 1..20 do
+        {:ok, _} =
+          Chronicle.record_experiment_outcome(room.id, %{
+            page_identifier: "bait-#{i}",
+            experiment_id: "bait_against_plain",
+            arm: "bait",
+            melded: true,
+            closeness: 80,
+            attempts_count: 1,
+            closed_because: "meld"
+          })
+      end
+
       assert :ok = Rooms.unblind_experiment(ctx.slug, ctx.jacob.id)
       assert Thereish.Chronicle.experiment_unblinded?(room.id)
 
       [unblinding] = Thereish.Chronicle.experiment_unblindings(room.id)
       assert unblinding.seat_id == ctx.jacob.id
       assert unblinding.experiment_id == "bait_against_plain"
+    end
+
+    test "rejects a direct unblind before the declared sample is recorded", ctx do
+      room = Thereish.Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
+
+      {:ok, _} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "bait-1",
+          experiment_id: "bait_against_plain",
+          arm: "bait",
+          melded: true,
+          closeness: 80,
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      assert {:error, :sample_incomplete} =
+               Rooms.unblind_experiment(ctx.slug, ctx.jacob.id)
+
+      refute Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
     end
 
     test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
