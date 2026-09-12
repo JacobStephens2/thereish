@@ -1235,6 +1235,91 @@ defmodule Thereish.ChronicleTest do
       assert parsed_attempt.carried == verdict.furthest
     end
 
+    test "a book that holds two Verdicts on one Attempt, each covering two Seats, still renders" do
+      slug = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: slug)
+
+      seats =
+        for name <- ["Melissa", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      [melissa, jacob, ada, sam] = seats
+
+      entry = %{
+        page: %{
+          id: "two-verdicts-on-one-attempt",
+          chapter: "harbour",
+          bookends: ["lantern", "harbour"],
+          why_these: "An earlier night graded the table as two pairs."
+        },
+        closed_because: :attempts,
+        melded?: false,
+        closeness: 85,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["lantern", "harbour"],
+            closeness: 85,
+            melded?: false,
+            bridges: [
+              %{seat_id: melissa.id, bridge: "beacon"},
+              %{seat_id: jacob.id, bridge: "cairn"},
+              %{seat_id: ada.id, bridge: "lamp"},
+              %{seat_id: sam.id, bridge: "seagull"}
+            ],
+            verdicts: [
+              %{
+                seat_ids: [melissa.id, jacob.id],
+                bridges: ["beacon", "cairn"],
+                graded?: true,
+                closeness: 85,
+                band: :almost,
+                reasoning: "Close on the shore.",
+                quip: "A cairn for the beacon.",
+                furthest: ["beacon", "cairn"],
+                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
+              },
+              %{
+                seat_ids: [ada.id, sam.id],
+                bridges: ["lamp", "seagull"],
+                graded?: true,
+                closeness: 27,
+                band: :miss,
+                reasoning: "The seagull is having its own evening.",
+                quip: "One of you brought a bird.",
+                furthest: ["lamp", "seagull"],
+                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+
+      [view] = Chronicle.book(room.id)
+      [attempt] = view.attempts
+      assert length(attempt.verdicts) == 2
+      assert Enum.map(attempt.verdicts, & &1.closeness) == [85, 27]
+
+      assert Enum.map(attempt.verdicts, & &1.bridges) == [
+               ["beacon", "cairn"],
+               ["lamp", "seagull"]
+             ]
+
+      markdown = Chronicle.to_markdown(room.id)
+      assert markdown =~ "Melissa: beacon"
+      assert markdown =~ "Jacob: cairn"
+      assert markdown =~ "Ada: lamp"
+      assert markdown =~ "Sam: seagull"
+      assert markdown =~ "85 / 100"
+      assert markdown =~ "27 / 100"
+      assert markdown =~ "Close on the shore."
+      assert markdown =~ "The seagull is having its own evening."
+    end
+
     test "calibration export carries the Bridge list on every tap for N seats" do
       code = open_room(seat_limit: 4)
       room = Repo.get_by!(Room, slug: code)
@@ -1681,7 +1766,8 @@ defmodule Thereish.ChronicleTest do
   end
 
   describe "masks in Chronicle (ticket 16)" do
-    test "Chronicle.write persists masks_meta and page_views includes masks and give masks", ctx do
+    test "Chronicle.write persists masks_meta and page_views includes masks and give masks",
+         ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
       now = DateTime.utc_now()
 
@@ -1693,8 +1779,14 @@ defmodule Thereish.ChronicleTest do
           %{seat_id: ctx.jacob.id, text: "dune"}
         ],
         masks: %{
-          ctx.melissa.id => %{url: "/media/masks/mask-melissa.png", meta: %{model: "imagen-3", cost_usd: 0.04}},
-          ctx.jacob.id => %{url: "/media/masks/mask-jacob.png", meta: %{model: "imagen-3", cost_usd: 0.04}}
+          ctx.melissa.id => %{
+            url: "/media/masks/mask-melissa.png",
+            meta: %{model: "imagen-3", cost_usd: 0.04}
+          },
+          ctx.jacob.id => %{
+            url: "/media/masks/mask-jacob.png",
+            meta: %{model: "imagen-3", cost_usd: 0.04}
+          }
         },
         closed_because: :meld,
         melded?: true,
@@ -1742,7 +1834,9 @@ defmodule Thereish.ChronicleTest do
       }
 
       assert {:ok, updated_page} = Chronicle.replace_page_masks(page.id, updated_masks)
-      assert updated_page.masks_meta[to_string(ctx.melissa.id)]["url"] == "/media/masks/mask-late.png"
+
+      assert updated_page.masks_meta[to_string(ctx.melissa.id)]["url"] ==
+               "/media/masks/mask-late.png"
 
       spend = Chronicle.spend(room.id)
       assert spend.by_role.limner.calls_count == 1

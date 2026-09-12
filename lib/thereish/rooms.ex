@@ -277,32 +277,17 @@ defmodule Thereish.Rooms do
   end
 
   @doc """
-  Takes a Seat in the Room under `name`, for the browser holding `device_token`,
-  optionally declaring a partner in the Room.
+  Takes a Seat in the Room under `name`, for the browser holding `device_token`.
 
   Returns the Seat that browser already holds if it has one, or the Seat held
   under that name if someone is coming back on a browser that forgot its token.
   Only a genuinely new player can be turned away for want of a Seat.
   """
-  @spec join(String.t(), String.t(), String.t(), String.t() | nil) ::
+  @spec join(String.t(), String.t(), String.t()) ::
           {:ok, map()} | {:error, :name_required | :name_too_long | :room_full | :could_not_join}
-  def join(slug, name, device_token, partner_id \\ nil) do
-    partner_id = if partner_id in [nil, ""], do: nil, else: partner_id
-
+  def join(slug, name, device_token) do
     with {:ok, name} <- check_name(name) do
-      call(slug, {:join, name, device_token, partner_id})
-    end
-  end
-
-  @doc """
-  Assigns two seats to a Side in the room before play begins, or clears Side assignment if partner_id is nil.
-  """
-  @spec pair_seats(String.t(), String.t(), String.t() | nil) :: :ok | {:error, term()}
-  def pair_seats(slug, seat_id_1, seat_id_2 \\ nil) do
-    if seat_id_2 in [nil, ""] do
-      unpair_seat(slug, seat_id_1)
-    else
-      call(slug, {:pair_seats, seat_id_1, seat_id_2})
+      call(slug, {:join, name, device_token})
     end
   end
 
@@ -330,12 +315,6 @@ defmodule Thereish.Rooms do
   @spec next_attempt(String.t(), String.t()) ::
           :ok | {:error, :not_revealed | :page_closed | :no_such_seat}
   def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
-
-  @doc """
-  Clears Side assignment for a seat in the room.
-  """
-  @spec unpair_seat(String.t(), String.t()) :: :ok | {:error, term()}
-  def unpair_seat(slug, seat_id), do: call(slug, {:unpair_seat, seat_id})
 
   @doc """
   Proposes an overrule of the current reveal from one Seat.

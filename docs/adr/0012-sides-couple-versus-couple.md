@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0015
 ---
 
 # Sides: Couple versus couple as two paired Seats on shared Bookends

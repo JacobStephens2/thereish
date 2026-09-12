@@ -27,65 +27,24 @@ defmodule ThereishWeb.RoomComponents do
         )
       ]}
     >
-      <%= if @room[:sides_mode?] && @room[:sides] do %>
-        <div
-          data-role="sides-roster"
-          class={
-            if @mode == :stage, do: "flex flex-wrap items-center gap-3", else: "flex flex-col gap-4"
-          }
+      <ul class={
+        if @mode == :stage,
+          do: "flex flex-wrap items-center gap-x-3 gap-y-1",
+          else: "flex flex-col gap-2"
+      }>
+        <.seat_badge
+          :for={seat <- @room.seats}
+          seat={seat}
+          room={@room}
+          mode={@mode}
+        />
+        <li
+          :if={@room.seats == []}
+          class={if @mode == :stage, do: "opacity-60", else: "text-lg opacity-60"}
         >
-          <div
-            :for={side <- @room.sides}
-            data-side={side.id}
-            class={[
-              if(@mode == :stage,
-                do: "flex items-center gap-2",
-                else: "flex flex-col gap-2 rounded-xl border border-base-300 bg-base-200/30 p-3"
-              )
-            ]}
-          >
-            <div class={if @mode == :stage, do: "", else: "flex items-center justify-between"}>
-              <span class="text-xs font-bold uppercase tracking-wider text-primary">
-                {side.name}{if @mode == :stage, do: ":", else: ""}
-              </span>
-              <span :if={@mode != :stage and side.you?} class="text-xs font-semibold text-primary">
-                (your side)
-              </span>
-            </div>
-            <ul class={
-              if @mode == :stage, do: "flex items-center gap-2", else: "flex flex-col gap-1.5"
-            }>
-              <.seat_badge
-                :for={seat <- side.seats}
-                seat={seat}
-                room={@room}
-                mode={@mode}
-                in_side={true}
-              />
-            </ul>
-          </div>
-        </div>
-      <% else %>
-        <ul class={
-          if @mode == :stage,
-            do: "flex flex-wrap items-center gap-x-3 gap-y-1",
-            else: "flex flex-col gap-2"
-        }>
-          <.seat_badge
-            :for={seat <- @room.seats}
-            seat={seat}
-            room={@room}
-            mode={@mode}
-            in_side={false}
-          />
-          <li
-            :if={@room.seats == []}
-            class={if @mode == :stage, do: "opacity-60", else: "text-lg opacity-60"}
-          >
-            Nobody yet
-          </li>
-        </ul>
-      <% end %>
+          Nobody yet
+        </li>
+      </ul>
 
       <p
         :if={waiting(@room)}
@@ -116,22 +75,15 @@ defmodule ThereishWeb.RoomComponents do
   attr :seat, :map, required: true
   attr :room, :map, required: true
   attr :mode, :atom, default: :phone
-  attr :in_side, :boolean, default: false
 
   defp seat_badge(assigns) do
     ~H"""
     <li
       data-seat={@seat.id}
       data-committed={to_string(@seat.committed?)}
-      data-couple={if !@in_side, do: to_string(Map.get(@seat, :couple?, false))}
       class={[
         "flex items-center",
-        cond do
-          @mode == :stage and @in_side -> "gap-1"
-          @mode == :stage -> "gap-1.5"
-          @in_side -> "gap-2 text-base"
-          true -> "gap-2 text-lg"
-        end
+        if(@mode == :stage, do: "gap-1.5", else: "gap-2 text-lg")
       ]}
     >
       <%= if @seat[:mask] && @seat.mask not in [nil, :dot, :face_down] do %>
@@ -141,7 +93,7 @@ defmodule ThereishWeb.RoomComponents do
           data-role="seat-mask"
           class={[
             "rounded object-cover border border-base-300",
-            if(@mode == :stage and @in_side, do: "size-3.5", else: "size-5")
+            if(@mode == :stage, do: "size-3.5", else: "size-5")
           ]}
         />
       <% else %>
@@ -151,7 +103,7 @@ defmodule ThereishWeb.RoomComponents do
             data-seat={@seat.id}
             class={[
               "rounded border flex items-center justify-center text-[10px] opacity-80",
-              if(@mode == :stage and @in_side, do: "size-3", else: "size-4")
+              if(@mode == :stage, do: "size-3", else: "size-4")
             ]}
             style={"border-color: #{@seat[:colour] || "var(--color-primary, currentColor)"}; color: #{@seat[:colour] || "var(--color-primary, currentColor)"}; background-color: color-mix(in oklab, #{@seat[:colour] || "var(--color-primary, currentColor)"} 15%, transparent);"}
             title="Mask face down"
@@ -163,26 +115,19 @@ defmodule ThereishWeb.RoomComponents do
             data-role="seat-colour-dot"
             class={[
               "rounded-full",
-              if(@mode == :stage and @in_side, do: "size-1.5", else: "size-2")
+              if(@mode == :stage, do: "size-1.5", else: "size-2")
             ]}
             style={"background-color: #{@seat[:colour] || "var(--color-primary, currentColor)"}"}
             aria-hidden="true"
           ></span>
         <% end %>
       <% end %>
-      <span class={if @mode == :stage or @in_side, do: "font-medium", else: ""}>
+      <span class={if @mode == :stage, do: "font-medium", else: ""}>
         {@seat.name}
       </span>
       <span
-        :if={(!@in_side and Map.get(@seat, :couple?)) && @seat.partner_name}
-        data-role="partner"
-        class={if @mode == :stage, do: "text-xs opacity-70", else: "text-sm opacity-70"}
-      >
-        (with {@seat.partner_name})
-      </span>
-      <span
         :if={@mode != :stage and @seat.you?}
-        class={if @in_side, do: "text-xs opacity-60", else: "text-sm opacity-60"}
+        class="text-sm opacity-60"
       >
         (you)
       </span>
@@ -342,11 +287,7 @@ defmodule ThereishWeb.RoomComponents do
   then the punchline quip.
   """
   def reveal(assigns) do
-    if assigns.room.reveal && assigns.room.reveal[:mode] == :sides do
-      sides_reveal(assigns)
-    else
-      standard_reveal(assigns)
-    end
+    standard_reveal(assigns)
   end
 
   defp standard_reveal(assigns) do
@@ -400,34 +341,6 @@ defmodule ThereishWeb.RoomComponents do
             {bridge.bridge}
           </span>
         </div>
-      </div>
-
-      <% own_couple = find_own_couple(@room.reveal[:pairs], @seat) %>
-      <div
-        :if={@mode in [:phone, :quiet] && own_couple}
-        data-role="own-couple-pair"
-        class="flex flex-col items-center gap-1 rounded-xl border border-primary/40 bg-primary/10 p-4 text-center w-full max-w-sm"
-      >
-        <span class="text-xs uppercase tracking-widest font-semibold text-primary">
-          Your couple: {Enum.join(own_couple.names, " & ")}
-        </span>
-        <div class="flex items-center gap-3">
-          <span data-role="couple-closeness" class="text-3xl font-black tabular-nums">
-            {own_couple.closeness}
-          </span>
-          <span class="text-sm font-bold uppercase tracking-wider opacity-80">
-            {band(own_couple.band)}
-          </span>
-        </div>
-      </div>
-
-      <div
-        :for={p <- @room.reveal[:pairs] || []}
-        :if={@mode in [:phone, :quiet] && p.cross_couple_meld?}
-        data-role="cross-couple-meld"
-        class="alert alert-info shadow-sm text-center py-2 px-4 max-w-md w-full"
-      >
-        <span class="font-medium">✨ {p.surprise}</span>
       </div>
 
       <div
@@ -506,7 +419,10 @@ defmodule ThereishWeb.RoomComponents do
       </p>
 
       <div
-        :if={@mode == :stage and first_reveal_happened?(@room) and is_list(@room[:seats]) and @room[:seats] != []}
+        :if={
+          @mode == :stage and first_reveal_happened?(@room) and is_list(@room[:seats]) and
+            @room[:seats] != []
+        }
         data-role="stage-masks"
         class="flex flex-wrap items-center justify-center gap-4 my-2"
       >
@@ -546,80 +462,6 @@ defmodule ThereishWeb.RoomComponents do
         room={@room}
         seat={@seat}
       />
-
-      <section
-        :if={@mode == :stage && @room.reveal[:pairs] && Enum.any?(@room.reveal.pairs, & &1.couple?)}
-        data-role="meld-map"
-        class="flex flex-col gap-5 w-full"
-      >
-        <div class="flex items-center justify-between border-b border-base-300 pb-2">
-          <div class="flex items-center gap-2">
-            <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-            <h3 class="text-sm font-semibold uppercase tracking-widest opacity-80">Meld Map</h3>
-          </div>
-          <span class="text-xs opacity-50">{length(@room.reveal.pairs)} pairs</span>
-        </div>
-
-        <div
-          :for={p <- @room.reveal.pairs}
-          :if={p.cross_couple_meld?}
-          data-role="cross-couple-meld"
-          class="alert alert-info shadow-sm text-center py-2.5 px-4 rounded-xl border border-info/40 bg-info/10"
-        >
-          <span class="font-semibold text-lg">✨ {p.surprise}</span>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          <div
-            :for={pair <- @room.reveal.pairs}
-            data-role="pair-card"
-            data-couple={to_string(pair.couple?)}
-            data-cross-couple-meld={to_string(pair.cross_couple_meld?)}
-            class={[
-              "relative flex flex-col gap-2 rounded-xl border p-4 transition-all duration-300 shadow-sm",
-              if(pair.couple?,
-                do: "border-primary/60 bg-primary/5 ring-1 ring-primary/30",
-                else: "border-base-300 bg-base-100"
-              ),
-              if(pair.cross_couple_meld?, do: "ring-2 ring-info border-info/50 bg-info/5", else: "")
-            ]}
-          >
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-base">{Enum.join(pair.names, " ⟷ ")}</span>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <span
-                  :if={pair.couple?}
-                  data-role="couple-badge"
-                  class="badge badge-primary badge-sm font-bold uppercase tracking-wider text-[10px]"
-                >
-                  Couple
-                </span>
-                <span
-                  :if={pair.melded?}
-                  data-role="meld-badge"
-                  class="badge badge-success badge-sm font-bold uppercase tracking-wider text-[10px]"
-                >
-                  Meld
-                </span>
-              </div>
-            </div>
-
-            <div class="flex items-center justify-between text-sm pt-1 border-t border-base-200">
-              <span class="opacity-75 font-serif italic text-base">
-                "{hd(pair.bridges)}" ··· "{List.last(pair.bridges)}"
-              </span>
-              <div class="flex items-center gap-1.5">
-                <span class="font-mono font-black text-lg">{pair.closeness}</span>
-                <span class="text-xs uppercase font-bold tracking-wider opacity-70">
-                  ({band(pair.band)})
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <div
         :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
@@ -685,171 +527,8 @@ defmodule ThereishWeb.RoomComponents do
     """
   end
 
-  defp sides_reveal(assigns) do
-    ~H"""
-    <section
-      :if={@room.reveal}
-      id="reveal-performance"
-      data-role="reveal"
-      data-mode={@mode}
-      class={[
-        "flex flex-col items-center w-full mx-auto",
-        if(@mode == :stage,
-          do: "gap-[clamp(0.5rem,1.5vh,1.25rem)] max-w-4xl",
-          else: "gap-8 max-w-2xl"
-        )
-      ]}
-    >
-      <div
-        data-role="sides-comparison"
-        class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full"
-      >
-        <div
-          :for={side <- @room.reveal.sides}
-          data-role="side-card"
-          data-side={side.id}
-          data-closer={to_string(side.closer?)}
-          data-melded={to_string(side.melded?)}
-          class={[
-            "flex flex-col items-center rounded-2xl border text-center transition-all",
-            if(@mode == :stage, do: "gap-3 p-3.5 sm:p-4", else: "gap-4 p-5"),
-            if(side_you?(side, @seat),
-              do: "border-primary/60 bg-primary/5 ring-2 ring-primary/20",
-              else: "border-base-300 bg-base-100 shadow-sm"
-            )
-          ]}
-        >
-          <div class="flex flex-wrap items-center justify-center gap-2">
-            <h3 class="text-sm font-bold uppercase tracking-wider">{side.name}</h3>
-            <span :if={side_you?(side, @seat)} class="badge badge-primary badge-xs">You</span>
-            <span
-              :if={side.closer?}
-              data-role="closer-badge"
-              class="badge badge-accent badge-xs font-semibold"
-            >Closer</span>
-            <span
-              :if={side.melded?}
-              data-role="melded-badge"
-              class="badge badge-primary badge-xs font-semibold"
-            >Melded</span>
-          </div>
-
-          <div data-role="comparison" class="flex flex-wrap items-stretch justify-center gap-2 w-full">
-            <div
-              :for={bridge <- side.bridges}
-              data-bridge={bridge.seat_id}
-              data-you={to_string(you?(@seat, bridge))}
-              class={[
-                "flex flex-1 min-w-28 flex-col items-center justify-center gap-0.5 rounded-lg border p-2 text-center",
-                if(you?(@seat, bridge),
-                  do: "border-primary/50 bg-primary/10",
-                  else: "border-base-300 bg-base-200/50"
-                )
-              ]}
-            >
-              <div class="flex items-center gap-1 text-[10px] uppercase tracking-wider opacity-60">
-                <span>{bridge.name}</span>
-                <span :if={you?(@seat, bridge)} class="font-bold text-primary">(you)</span>
-              </div>
-              <span class="text-xl sm:text-2xl font-bold tracking-tight">
-                {bridge.bridge}
-              </span>
-            </div>
-          </div>
-
-          <%= if @mode != :quiet and side.closeness do %>
-            <div
-              data-role="closeness-display"
-              class={[
-                "flex flex-col items-center justify-center rounded-xl w-full",
-                if(@mode == :stage, do: "px-4 py-2 sm:py-3", else: "px-6 py-4"),
-                closeness_presentation(side).container_class
-              ]}
-            >
-              <span
-                data-role="closeness"
-                class={[
-                  "font-black tracking-tighter tabular-nums leading-none select-none",
-                  if(@mode == :stage, do: "text-6xl sm:text-7xl", else: "text-6xl sm:text-7xl"),
-                  closeness_presentation(side).number_class
-                ]}
-              >
-                {side.closeness}
-              </span>
-              <span
-                data-role="band"
-                class={[
-                  "mt-2 text-sm font-extrabold uppercase tracking-widest px-3 py-0.5 rounded-full",
-                  closeness_presentation(side).badge_class
-                ]}
-              >
-                {band(side.band)}
-              </span>
-            </div>
-          <% end %>
-
-          <%= if @mode != :quiet and is_nil(side.closeness) do %>
-            <div
-              data-role="no-verdict"
-              class="flex flex-col items-center gap-1 rounded-xl border border-primary/30 bg-base-200/60 p-4 text-center"
-            >
-              <p class="text-lg font-bold">No verdict</p>
-              <p class="text-xs opacity-70">The Assayer stepped aside</p>
-            </div>
-          <% end %>
-
-          <p
-            :if={@mode != :quiet and Map.get(@room, :quips, true) and side.quip}
-            data-role="quip"
-            class="font-serif italic text-sm text-base-content/90 leading-snug"
-          >
-            "{side.quip}"
-          </p>
-
-          <span
-            :if={side[:overruled?]}
-            data-role="side-overruled"
-            class="badge badge-warning badge-sm font-semibold"
-          >
-            Overruled to Meld
-          </span>
-        </div>
-      </div>
-
-      <.fairness_controls
-        :if={@mode in [:phone, :quiet] && @seat && Enum.any?(@room.reveal.sides, & &1.closeness)}
-        room={@room}
-        seat={@seat}
-        side_mode?={true}
-      />
-
-      <div
-        :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
-        data-role="gives"
-        class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm opacity-80"
-      >
-        <span class="text-xs uppercase tracking-wider font-semibold opacity-60">Settings:</span>
-        <div
-          :for={give <- gives_list(@room)}
-          data-role="give"
-          data-seat={give[:seat_id]}
-          class="flex items-center gap-1.5"
-        >
-          <span class="font-semibold">{give[:name] || give[:seat_name]}:</span>
-          <span>{give[:text] || give[:give]}</span>
-        </div>
-      </div>
-
-      <p :if={@mode == :stage} class="text-xs font-semibold uppercase tracking-widest opacity-50">
-        The couch has the call · Use your phones to continue or overrule
-      </p>
-    </section>
-    """
-  end
-
   attr :room, :map, required: true
   attr :seat, :map, default: nil
-  attr :side_mode?, :boolean, default: false
 
   def fairness_controls(assigns) do
     ~H"""
@@ -858,11 +537,7 @@ defmodule ThereishWeb.RoomComponents do
       class="flex flex-col items-center gap-2 pt-2"
     >
       <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-        <%= if @side_mode? do %>
-          Was your Side's grade fair?
-        <% else %>
-          Was this grade fair?
-        <% end %>
+        Was this grade fair?
       </span>
       <div class="flex items-center gap-2">
         <button
@@ -926,10 +601,6 @@ defmodule ThereishWeb.RoomComponents do
     """
   end
 
-  defp side_you?(side, seat) do
-    seat != nil and seat.id in side.seat_ids
-  end
-
   attr :room, :map, required: true
   attr :seat, :map, default: nil
 
@@ -945,22 +616,17 @@ defmodule ThereishWeb.RoomComponents do
       class="flex flex-col items-center gap-2 rounded-lg border border-primary/30 bg-base-200/50 p-4 text-center"
     >
       <p :if={@seat && !@room[:late?] && @room.overrule.you_proposed?} data-role="overrule-pending">
-        {if @room.overrule[:side_id],
-          do: "You proposed an overrule. Waiting for your partner to agree.",
-          else: "You proposed an overrule. Waiting for everyone to agree."}
+        You proposed an overrule. Waiting for everyone to agree.
       </p>
 
       <div
-        :if={
-          @seat && !@room[:late?] && @room.overrule[:your_side?] != false &&
-            !@room.overrule.you_agreed?
-        }
+        :if={@seat && !@room[:late?] && !@room.overrule.you_agreed?}
         data-role="overrule-vote"
         class="flex flex-col items-center gap-3"
       >
         <p data-role="overrule-pending">
           <span class="font-semibold">{@room.overrule.proposer_name}</span>
-          proposed overruling {if @room.overrule[:side_id], do: "your Side's", else: "this"} grade to a Meld.
+          proposed overruling this grade to a Meld.
         </p>
         <div class="flex gap-3">
           <.button phx-click="agree_overrule" data-role="agree-overrule" variant="primary">
@@ -974,44 +640,26 @@ defmodule ThereishWeb.RoomComponents do
 
       <p
         :if={
-          @seat && !@room[:late?] && @room.overrule[:your_side?] != false &&
-            @room.overrule.you_agreed? &&
+          @seat && !@room[:late?] && @room.overrule.you_agreed? &&
             !@room.overrule.you_proposed?
         }
         data-role="overrule-pending"
       >
-        {if @room.overrule[:side_id],
-          do: "You agreed. Waiting for your partner to agree.",
-          else: "You agreed. Waiting for everyone to agree."}
-      </p>
-
-      <p
-        :if={@seat && @room.overrule[:your_side?] == false}
-        data-role="overrule-pending"
-        class="opacity-80"
-      >
-        <span class="font-semibold">{@room.overrule.proposer_name}</span>
-        proposed an overrule for their Side. Waiting for their partner to agree.
+        You agreed. Waiting for everyone to agree.
       </p>
 
       <p :if={is_nil(@seat) or @room[:late?]} data-role="overrule-pending" class="opacity-80">
         <span class="font-semibold">{@room.overrule.proposer_name}</span>
-        proposed an overrule. Waiting for {if @room.overrule[:side_id],
-          do: "their partner",
-          else: "the Room"} to agree.
+        proposed an overrule. Waiting for the Room to agree.
       </p>
     </div>
 
     <p
-      :if={
-        (@room.reveal && @room.reveal[:overruled?]) ||
-          (@room.reveal && @room.reveal[:mode] == :sides &&
-             Enum.any?(@room.reveal.sides, & &1[:overruled?]))
-      }
+      :if={@room.reveal && @room.reveal[:overruled?]}
       data-role="overruled-notice"
       class="text-center text-sm font-semibold text-primary"
     >
-      Overruled jointly — recorded in the Chronicle as precedent.
+      Overruled jointly - recorded in the Chronicle as precedent.
     </p>
     """
   end
@@ -1271,12 +919,6 @@ defmodule ThereishWeb.RoomComponents do
   end
 
   defp you?(seat, bridge), do: seat != nil and seat.id == bridge.seat_id
-
-  defp find_own_couple(pairs, %{id: seat_id}) when is_list(pairs) do
-    Enum.find(pairs, fn p -> p.couple? and seat_id in p.seat_ids end)
-  end
-
-  defp find_own_couple(_pairs, _seat), do: nil
 
   attr :state, :atom, default: :none, doc: ":self, :other, or :none"
 

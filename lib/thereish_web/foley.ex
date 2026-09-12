@@ -209,10 +209,6 @@ defmodule ThereishWeb.Foley do
       room.reveal[:band] ->
         room.reveal[:band]
 
-      is_list(room.reveal[:sides]) ->
-        bands = Enum.map(room.reveal.sides, & &1[:band])
-        if :deep_meld in bands or "deep_meld" in bands, do: :deep_meld, else: :meld
-
       true ->
         nil
     end

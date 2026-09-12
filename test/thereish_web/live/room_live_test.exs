@@ -3396,117 +3396,39 @@ defmodule ThereishWeb.RoomLiveTest do
     end
   end
 
-  describe "Sides: couple versus couple on phone and stage" do
+  describe "a four-Seat Room plays as one table" do
     setup do
       beat(0)
       steward(delay_ms: 0)
       :ok
     end
 
-    test "four players pair into Sides, see side-by-side reveal cards, and meld together" do
+    test "offers no partners, grades one Verdict, and an overrule needs the whole Room" do
       code = open_room(seat_limit: 4)
 
-      conn1 = build_conn()
-      {:ok, phone1, _} = live(conn1, ~p"/r/#{code}")
+      {:ok, phone1, _} = live(phone(code))
       join(phone1, "Melissa")
 
-      conn2 = build_conn()
-      {:ok, phone2, _} = live(conn2, ~p"/r/#{code}")
+      {:ok, phone2, html2} = live(phone(code))
+      refute html2 =~ ~s(data-role="partner-select")
+      refute html2 =~ "Partner (optional)"
       join(phone2, "Jacob")
 
-      conn3 = build_conn()
-      {:ok, phone3, _} = live(conn3, ~p"/r/#{code}")
+      {:ok, phone3, _} = live(phone(code))
       join(phone3, "Ada")
 
-      conn4 = build_conn()
-      {:ok, phone4, _} = live(conn4, ~p"/r/#{code}")
+      {:ok, phone4, _} = live(phone(code))
       join(phone4, "Sam")
 
-      # Partner picker appears on all phones
       for phone <- [phone1, phone2, phone3, phone4] do
-        assert has_element?(phone, "[data-role=partner-picker]")
+        html = render(phone)
+        refute has_element?(phone, "[data-role=partner-picker]")
+        refute has_element?(phone, "[data-role=partner-select]")
+        refute has_element?(phone, "[data-role=pair-partner]")
+        refute html =~ "I'm with"
+        refute html =~ "Couple versus Couple"
+        refute html =~ "Pick your partner"
       end
-
-      # Melissa picks Jacob -> 4-seat room automatically completes both Sides
-      phone1 |> element("button", "I'm with Jacob") |> render_click()
-
-      eventually(fn ->
-        Rooms.snapshot(code, nil).sides_mode?
-      end)
-
-      # All phones see paired notice and Sides roster
-      for phone <- [phone1, phone2, phone3, phone4] do
-        eventually(fn -> has_element?(phone, "[data-role=sides-roster]") end)
-        assert has_element?(phone, "[data-role=paired-notice]")
-        assert has_element?(phone, "[data-side=a]")
-        assert has_element?(phone, "[data-side=b]")
-      end
-
-      # Test unpairing: Ada clicks Change pairs
-      phone3 |> element("[data-role=unpair-partner]") |> render_click()
-      eventually(fn -> not Rooms.snapshot(code, nil).sides_mode? end)
-
-      # Now Ada picks Sam -> both Sides active again
-      phone3 |> element("button", "I'm with Sam") |> render_click()
-      eventually(fn -> Rooms.snapshot(code, nil).sides_mode? end)
-
-      # Submit 4 settings
-      give_setting(phone1, "coastal lighthouse in storm")
-      give_setting(phone2, "old library with rolling ladders")
-      give_setting(phone3, "artisan glassblowing workshop")
-      give_setting(phone4, "mountain observatory at dusk")
-
-      await_phase(code, :bridging)
-
-      for phone <- [phone1, phone2, phone3, phone4] do
-        eventually(fn -> has_element?(phone, "[data-role=bridge-form]") end)
-      end
-
-      # Melissa and Jacob write matching prefixes ("cairn" and "cairns" -> score 91, meld)
-      commit(phone1, "cairn")
-      commit(phone2, "cairns")
-      commit(phone3, "beacon")
-      commit(phone4, "seagull")
-
-      # Reveal lands and Page melds
-      await_phase(code, :closed)
-
-      for phone <- [phone1, phone2, phone3, phone4] do
-        eventually(fn -> has_element?(phone, "[data-role=sides-comparison]") end)
-        assert has_element?(phone, "[data-role=side-card][data-side=a]")
-        assert has_element?(phone, "[data-role=side-card][data-side=b]")
-        assert has_element?(phone, "[data-role=closeness]", "91")
-        assert has_element?(phone, "[data-role=melded-badge]")
-        assert has_element?(phone, "[data-role=one-more]")
-      end
-
-      # Melissa taps fairness
-      phone1 |> element("[data-role=tap-fair]") |> render_click()
-      eventually(fn -> has_element?(phone1, "[data-role=seat-tap]", "fair") end)
-    end
-
-    test "an overrule in Sides mode requires only the proposing Side's partner to agree" do
-      code = open_room(seat_limit: 4)
-
-      conn1 = build_conn()
-      {:ok, phone1, _} = live(conn1, ~p"/r/#{code}")
-      join(phone1, "Melissa")
-
-      conn2 = build_conn()
-      {:ok, phone2, _} = live(conn2, ~p"/r/#{code}")
-      join(phone2, "Jacob")
-
-      conn3 = build_conn()
-      {:ok, phone3, _} = live(conn3, ~p"/r/#{code}")
-      join(phone3, "Ada")
-
-      conn4 = build_conn()
-      {:ok, phone4, _} = live(conn4, ~p"/r/#{code}")
-      join(phone4, "Sam")
-
-      # Pair into Sides: Melissa picks Jacob
-      phone1 |> element("button", "I'm with Jacob") |> render_click()
-      eventually(fn -> Rooms.snapshot(code, nil).sides_mode? end)
 
       give_setting(phone1, "setting one")
       give_setting(phone2, "setting two")
@@ -3515,136 +3437,43 @@ defmodule ThereishWeb.RoomLiveTest do
 
       await_phase(code, :bridging)
 
-      # Bridges that do NOT meld
+      for phone <- [phone1, phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=bridge-form]") end)
+      end
+
       commit(phone1, "beacon")
       commit(phone2, "pier")
-      commit(phone3, "beacon")
+      commit(phone3, "lamp")
       commit(phone4, "seagull")
 
       await_reveal(code)
 
       for phone <- [phone1, phone2, phone3, phone4] do
-        eventually(fn -> has_element?(phone, "[data-role=propose-overrule]") end)
+        eventually(fn -> has_element?(phone, "[data-role=reveal]") end)
+        assert has_element?(phone, "[data-role=closeness]")
+        assert has_element?(phone, "[data-role=propose-overrule]")
       end
 
-      # Melissa proposes overrule
       phone1 |> element("[data-role=propose-overrule]") |> render_click()
 
-      # Melissa sees waiting for partner
-      assert render(phone1) =~ "Waiting for your partner to agree"
+      assert render(phone1) =~ "Waiting for everyone to agree"
 
-      # Jacob (partner) sees Agree / Decline buttons
-      eventually(fn -> has_element?(phone2, "[data-role=agree-overrule]") end)
+      for phone <- [phone2, phone3, phone4] do
+        eventually(fn -> has_element?(phone, "[data-role=agree-overrule]") end)
+      end
 
-      # Ada and Sam (other side) do NOT see Agree / Decline buttons
-      refute has_element?(phone3, "[data-role=agree-overrule]")
-      refute has_element?(phone4, "[data-role=agree-overrule]")
-      assert render(phone3) =~ "Waiting for their partner to agree"
-      assert render(phone4) =~ "Waiting for their partner to agree"
-
-      # Jacob agrees
       phone2 |> element("[data-role=agree-overrule]") |> render_click()
+      phone3 |> element("[data-role=agree-overrule]") |> render_click()
 
-      # Overrule succeeds: page closes as Meld
+      refute Rooms.snapshot(code, nil).phase == :closed
+
+      phone4 |> element("[data-role=agree-overrule]") |> render_click()
+
       await_phase(code, :closed)
 
       for phone <- [phone1, phone2, phone3, phone4] do
         eventually(fn -> has_element?(phone, "[data-role=overruled-notice]") end)
-        assert has_element?(phone, "[data-role=one-more]")
       end
-    end
-  end
-
-  describe "couples on the meld map (ticket 07)" do
-    test "joining with a partner marks couple in roster and offers partner dropdown in join form" do
-      slug = open_room(seat_limit: 4)
-
-      {:ok, melissa, _} = live(phone(slug))
-      join(melissa, "Melissa")
-
-      # Jacob arrives and sees partner dropdown listing Melissa
-      {:ok, jacob, html} = live(phone(slug))
-      assert html =~ ~s(data-role="partner-select")
-      assert html =~ "With Melissa"
-
-      # Melissa's seat ID
-      [melissa_seat] = Rooms.snapshot(slug, nil).seats
-
-      # Jacob joins with Melissa as partner
-      jacob
-      |> form("form", %{"name" => "Jacob", "partner_id" => melissa_seat.id})
-      |> render_submit()
-
-      # Both phones and stage show the couple in the roster
-      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
-
-      for view <- [melissa, jacob, stage] do
-        assert has_element?(view, "[data-role=partner]", "(with Melissa)") or
-                 has_element?(view, "[data-role=partner]", "(with Jacob)")
-      end
-    end
-
-    test "reveal on phone highlights own couple score and marks cross-couple melds; stage draws meld map" do
-      slug = open_room(seat_limit: 4)
-
-      {:ok, melissa, _} = live(phone(slug))
-      {:ok, jacob, _} = live(phone(slug))
-      {:ok, bryan, _} = live(phone(slug))
-      {:ok, evelyn, _} = live(phone(slug))
-      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
-
-      join(melissa, "Melissa")
-      [melissa_seat] = Rooms.snapshot(slug, nil).seats
-
-      jacob
-      |> form("form", %{"name" => "Jacob", "partner_id" => melissa_seat.id})
-      |> render_submit()
-
-      join(bryan, "Bryan")
-      [_, _, bryan_seat] = Rooms.snapshot(slug, nil).seats
-
-      evelyn
-      |> form("form", %{"name" => "Evelyn", "partner_id" => bryan_seat.id})
-      |> render_submit()
-
-      # Submit settings for all 4 seats
-      for {v, name} <- [
-            {melissa, "setting 1"},
-            {jacob, "setting 2"},
-            {bryan, "setting 3"},
-            {evelyn, "setting 4"}
-          ] do
-        give_setting(v, name)
-      end
-
-      await_phase(slug, :bridging)
-
-      for v <- [melissa, jacob, bryan, evelyn] do
-        eventually(fn -> has_element?(v, "[data-role=bridge-form]") end)
-      end
-
-      # Melissa and Jacob meld ("cairn" and "cairn" -> 100)
-      # Bryan commits "dock"
-      # Evelyn commits "cairn" (Evelyn melds with Melissa & Jacob -> cross-couple meld!)
-      commit(melissa, "cairn")
-      commit(jacob, "cairn")
-      commit(bryan, "dock")
-      commit(evelyn, "cairn")
-
-      await_reveal_on(melissa)
-      await_reveal_on(stage)
-
-      # Melissa's phone shows her couple closeness
-      assert has_element?(melissa, "[data-role=own-couple-pair]")
-      assert has_element?(melissa, "[data-role=couple-closeness]", "100")
-
-      # Melissa's phone shows surprise cross-couple meld alert
-      assert has_element?(melissa, "[data-role=cross-couple-meld]")
-
-      # Stage draws meld map with couple badges and cross-couple meld
-      assert has_element?(stage, "[data-role=meld-map]")
-      assert has_element?(stage, "[data-role=couple-badge]")
-      assert has_element?(stage, "[data-role=cross-couple-meld]")
     end
   end
 
