@@ -105,6 +105,32 @@ defmodule Thereish.StewardSmokeTest do
     )
   end
 
+  test "the Assayer grades a real table against N Bookends, and names two of their words" do
+    bookends = ["harbour", "dusk", "lantern", "wharf"]
+    bridges = ["lighthouse", "beacon", "lamp", "gull"]
+
+    {:ok, verdict} = Steward.assay(%{bookends: bookends, bridges: bridges})
+
+    assert verdict.closeness in 0..100
+    assert Ladder.read(verdict.closeness).band != nil
+    assert String.trim(verdict.reasoning) != ""
+    assert String.trim(verdict.quip) != ""
+    assert verdict.meta.prompt_version == Thereish.Steward.Assay.version()
+
+    assert [left, right] = verdict.furthest
+    assert left in bridges
+    assert right in bridges
+    assert verdict.meta.latency_ms < 4_000
+
+    IO.puts(
+      "\n  live Assayer at four Bookends: #{verdict.closeness} " <>
+        "(#{verdict.meta.forward}/#{verdict.meta.reverse}) " <>
+        "in #{verdict.meta.latency_ms} ms for $#{Float.round(verdict.meta.cost_usd, 5)}" <>
+        "\n  furthest apart: #{left} / #{right}" <>
+        "\n  #{verdict.reasoning}\n  #{verdict.quip}\n"
+    )
+  end
+
   test "the Author writes Bookends from two real Gives inside the deadline" do
     gives = [
       %{name: "Mara", text: "candlelit cathedral"},

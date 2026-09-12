@@ -873,8 +873,8 @@ defmodule Thereish.Game do
   # the sentence the Assayer writes, the joke it makes and the two words it
   # names as furthest apart all read in the order they are on the screen.
   #
-  # assay-3 carries Bookends, Bridges with player names in roster order, earlier
-  # Attempts, and Gives.
+  # assay-4 carries Bookends of two or more, Bridges with player names in roster
+  # order, earlier Attempts, and Gives.
   defp assay(state), do: {:assay, assay_request_overall(state)}
 
   defp assay_request_overall(state) do

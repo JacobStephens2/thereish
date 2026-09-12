@@ -114,6 +114,29 @@ defmodule Thereish.Steward.FakeTest do
     end
   end
 
+  describe "N Bookends" do
+    @four_bookends ["lantern", "harbour", "wharf", "dusk"]
+    @table ["cairn", "cairo", "cable", "beacon"]
+
+    test "grades N Bookends the same way it grades two: on the Bridges" do
+      {:ok, with_two} = Fake.assay(%{bookends: @bookends, bridges: @table})
+      {:ok, with_four} = Fake.assay(%{bookends: @four_bookends, bridges: @table})
+
+      assert with_four.closeness == with_two.closeness
+      assert with_four.furthest == with_two.furthest
+      assert with_four.closeness == 27
+      assert with_four.furthest == ["cairn", "beacon"]
+    end
+
+    test "still names exactly two written Bridges as furthest apart" do
+      {:ok, verdict} = Fake.assay(%{bookends: @four_bookends, bridges: @table})
+
+      assert [left, right] = verdict.furthest
+      assert left in @table
+      assert right in @table
+    end
+  end
+
   describe "the dials" do
     setup do
       steward = Application.fetch_env!(:thereish, :steward)
