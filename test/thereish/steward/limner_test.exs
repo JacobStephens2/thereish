@@ -102,12 +102,27 @@ defmodule Thereish.Steward.LimnerTest do
       refute prompt =~ "Picasso"
     end
 
+    test "asks to depict the Give recognizably in the house style, not a step removed" do
+      prompt = Limner.prompt(@give, @colour)
+
+      assert prompt =~ "Give: #{@give}"
+      refute prompt =~ "Setting:"
+      assert prompt =~ "recognizably"
+      refute prompt =~ "a step removed"
+
+      style = Limner.style_brief()
+      assert style =~ "recognizably"
+      refute style =~ "a step removed"
+    end
+
     test "softened prompt softens the Give for safety retry" do
       prompt = Limner.prompt(@give, @colour, softened: true)
 
       assert prompt =~ @give
       assert prompt =~ @colour
       assert prompt =~ "Softened"
+      assert prompt =~ "Give: #{@give}"
+      assert prompt =~ "recognizably"
     end
   end
 
