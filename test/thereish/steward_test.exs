@@ -630,7 +630,97 @@ defmodule Thereish.StewardTest do
     end
   end
 
-  describe "assay-3" do
+  describe "assay-4" do
+    @n_request %{
+      bookends: ["lantern", "harbour", "wharf", "dusk"],
+      bridges: ["light", "shore", "lamp", "evening"],
+      player_bridges: [
+        %{player: "Jacob", bridge: "light"},
+        %{player: "Mara", bridge: "shore"},
+        %{player: "Ada", bridge: "lamp"},
+        %{player: "Sam", bridge: "evening"}
+      ]
+    }
+
+    test "the prompt lists N Bookends and the rubric says a Bridge spans all of them" do
+      prompt = Thereish.Steward.Assay.prompt(@n_request, @n_request.player_bridges)
+      quip = Thereish.Steward.Assay.quip_prompt(@n_request, @n_request.player_bridges)
+
+      assert Thereish.Steward.Assay.version() == "assay-4"
+      assert prompt.system =~ "whose meaning spans all of them"
+      assert prompt.system =~ "any of the bridges"
+      assert quip.system =~ "whose meaning spans all of them"
+      assert quip.system =~ "any of the bridges"
+      assert quip.user =~ ~r/Bookends: LANTERN, HARBOUR, WHARF and DUSK/
+
+      assert prompt.user =~ ~r/Bookends:.*LANTERN/
+      assert prompt.user =~ ~r/Bookends:.*HARBOUR/
+      assert prompt.user =~ ~r/Bookends:.*WHARF/
+      assert prompt.user =~ ~r/Bookends:.*DUSK/
+    end
+
+    test "the post-check still requires exactly two furthest words that were actually written" do
+      bridges = ["light", "shore", "lamp", "evening"]
+
+      valid = %{
+        "reasoning" => "Three of you were at the water and one of you was not.",
+        "quip" => "The evening is having its own night.",
+        "furthest" => ["light", "evening"],
+        "closeness" => 40
+      }
+
+      assert Thereish.Steward.Assay.check(valid, bridges) == :ok
+
+      assert {:error, why} =
+               Thereish.Steward.Assay.check(%{valid | "furthest" => ["light"]}, bridges)
+
+      assert why =~ "furthest"
+
+      assert {:error, _} =
+               Thereish.Steward.Assay.check(
+                 %{valid | "furthest" => ["light", "shore", "lamp"]},
+                 bridges
+               )
+
+      # A Bookend is not a Bridge: naming one of the table's words that nobody
+      # wrote as a Bridge is the same rejection as inventing a word.
+      assert {:error, why2} =
+               Thereish.Steward.Assay.check(
+                 %{valid | "furthest" => ["light", "lantern"]},
+                 bridges
+               )
+
+      assert why2 =~ "furthest"
+    end
+
+    test "a recorded live run with N Bookends lists them and grades the set as one Closeness" do
+      assayer(requests: 1, retries: 0)
+      test_pid = self()
+
+      recorded(fn conn, body ->
+        [%{"content" => user}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
+        send(test_pid, {:user_prompt, user})
+
+        Req.Test.json(conn, response(verdict(furthest: ["light", "evening"])))
+      end)
+
+      assert {:ok, verdict} = Live.assay(@n_request)
+      assert verdict.meta.prompt_version == "assay-4"
+      assert verdict.closeness in 0..100
+      assert verdict.furthest == ["light", "evening"]
+
+      assert_receive {:user_prompt, prompt1}
+      assert_receive {:user_prompt, prompt2}
+
+      for prompt <- [prompt1, prompt2] do
+        assert prompt =~ "LANTERN"
+        assert prompt =~ "HARBOUR"
+        assert prompt =~ "WHARF"
+        assert prompt =~ "DUSK"
+        assert prompt =~ ~r/Bookends: LANTERN, HARBOUR, WHARF and DUSK/
+      end
+    end
+
     test "request carries Bookends, Bridges with players' names in roster order, earlier Attempts, and Gives with names" do
       assayer(requests: 1, retries: 0)
       test_pid = self()
@@ -666,7 +756,7 @@ defmodule Thereish.StewardTest do
       end)
 
       assert {:ok, verdict} = Live.assay(request)
-      assert verdict.meta.prompt_version == "assay-3"
+      assert verdict.meta.prompt_version == "assay-4"
 
       assert_receive {:user_prompt, prompt1}
       assert_receive {:user_prompt, prompt2}
@@ -762,7 +852,7 @@ defmodule Thereish.StewardTest do
       bare = Thereish.Steward.Assay.prompt(without, without.player_bridges)
       prompted = Thereish.Steward.Assay.prompt(with_quips, with_quips.player_bridges)
 
-      assert Thereish.Steward.Assay.version() == "assay-3"
+      assert Thereish.Steward.Assay.version() == "assay-4"
       assert prompted.system == bare.system
       refute prompted.user == bare.user
 
