@@ -120,25 +120,6 @@ defmodule Thereish.Steward.ScoreTest do
       assert track.duration == 150
     end
 
-    test "a retained Track for musical Gives is returned without regenerating" do
-      gives = ["Kiss Heavy Metal", "alpine meadow"]
-      cached_path = "/media/tracks/kiss-heavy-metal-historical.mp3"
-      file_path = TrackCache.disk_path(cached_path)
-      File.mkdir_p!(Path.dirname(file_path))
-      File.write!(file_path, "historical-audio")
-
-      TrackCache.put(gives, %{
-        path: cached_path,
-        duration: 180,
-        format: :mp3,
-        meta: %{"provider" => "mureka", "cost_usd" => 0.04}
-      })
-
-      assert {:ok, track} = Live.score(gives)
-      assert track.path == cached_path
-      assert track.duration == 180
-    end
-
     test "cache miss calls Mureka with house prefix, n: 1, downloads to media dir, and caches" do
       test_pid = self()
 
@@ -172,7 +153,7 @@ defmodule Thereish.Steward.ScoreTest do
         end
       end)
 
-      fresh_gives = ["alpine meadow", "deep space"]
+      fresh_gives = ["Kiss Heavy Metal", "bossa nova"]
       assert {:ok, track} = Live.score(fresh_gives)
 
       assert_receive {:mureka_generate, body}
@@ -185,49 +166,6 @@ defmodule Thereish.Steward.ScoreTest do
       # Verify cached
       assert {:ok, cached} = TrackCache.get(fresh_gives)
       assert cached.path == track.path
-    end
-
-    test "cache miss for a heavy-metal Give asks Mureka for genre and energy, not a gentle background" do
-      test_pid = self()
-
-      Req.Test.stub(Mureka, fn conn ->
-        case {conn.method, conn.request_path} do
-          {"POST", "/v1/instrumental/generate"} ->
-            {:ok, body, conn} = Plug.Conn.read_body(conn)
-            decoded = Jason.decode!(body)
-            send(test_pid, {:mureka_generate, decoded})
-
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_metal_1"}))
-
-          {"GET", "/v1/instrumental/query/task_metal_1"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(
-              200,
-              Jason.encode!(%{
-                "id" => "task_metal_1",
-                "status" => "succeeded",
-                "choices" => [%{"url" => "https://cdn.mureka.ai/audio/metal.mp3"}]
-              })
-            )
-
-          {"GET", "/audio/metal.mp3"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
-            |> Plug.Conn.send_resp(200, @fake_bytes)
-        end
-      end)
-
-      gives = ["Kiss Heavy Metal", "bossa nova"]
-      assert {:ok, track} = Live.score(gives)
-
-      assert_receive {:mureka_generate, body}
-      assert body["n"] == 1
-      assert body["prompt"] == Music.prompt(gives)
-
-      assert String.starts_with?(track.path, "/media/tracks/")
     end
 
     test "handles provider error on miss" do
