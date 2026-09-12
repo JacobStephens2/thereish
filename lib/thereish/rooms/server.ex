@@ -111,6 +111,8 @@ defmodule Thereish.Rooms.Server do
         gives_landed_at: nil,
         voice_audio: nil,
         voice_meta: %{},
+        voice_pending_attempt: nil,
+        pending_chronicle: nil,
         giving_ref: make_ref(),
         prologue: nil
       }
@@ -229,6 +231,11 @@ defmodule Thereish.Rooms.Server do
   def handle_call({:next_page, seat_id}, _from, state) do
     case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
       {:ok, game, effects} ->
+        # A closed Page must not vanish if Foley is still speaking when the
+        # couple tap next. Flush whatever voice_meta we have (ADR-0003: the
+        # Verdict row is written once).
+        state = flush_pending_chronicle(state)
+
         eligible_members = Thereish.Foley.Repertoire.members(state.room.id)
         wait_music = Thereish.Foley.Repertoire.draw(eligible_members, state[:wait_music])
 
@@ -236,7 +243,13 @@ defmodule Thereish.Rooms.Server do
         holdover_track = state[:current_track]
 
         new_state =
-          %{state | opened_at: nil, voice_audio: nil, voice_meta: %{}}
+          %{
+            state
+            | opened_at: nil,
+              voice_audio: nil,
+              voice_meta: %{},
+              voice_pending_attempt: nil
+          }
           |> Map.put(:current_arm, nil)
           |> Map.put(:current_page_id, nil)
           |> Map.put(:giving_ref, make_ref())
@@ -554,8 +567,10 @@ defmodule Thereish.Rooms.Server do
   # this Assayer has answered.
   @impl true
   def handle_info({:assayed, event}, state) do
-    state = answered(state)
-    maybe_start_voice_task(event, state)
+    state =
+      state
+      |> answered()
+      |> maybe_start_voice_task(event)
 
     if state.beat do
       {:noreply, %{state | held: state.held ++ [event]}}
@@ -596,6 +611,11 @@ defmodule Thereish.Rooms.Server do
           voice_meta: Map.put(state.voice_meta, attempt, voice_meta)
       }
 
+      state =
+        state
+        |> clear_voice_pending(attempt)
+        |> flush_pending_chronicle()
+
       broadcast(state.room.slug, {:voice_ready, attempt})
       {:noreply, state}
     else
@@ -616,6 +636,11 @@ defmodule Thereish.Rooms.Server do
       state
       | voice_meta: Map.put(state.voice_meta, attempt, failure_meta)
     }
+
+    state =
+      state
+      |> clear_voice_pending(attempt)
+      |> flush_pending_chronicle()
 
     {:noreply, state}
   end
@@ -1114,10 +1139,16 @@ defmodule Thereish.Rooms.Server do
     %{state | beat: Process.send_after(self(), :beat_over, beat_ms()), held: []}
   end
 
-  # A closed Page goes into the Chronicle before anything else happens, and it
-  # goes in from here rather than from a task: it is a handful of rows to the
-  # same Postgres the Seats came out of, and a Page that closed while the write
-  # was still in flight elsewhere would be a Page that could go missing.
+  # A closed Page goes into the Chronicle from this process rather than from a
+  # task: it is a handful of rows to the same Postgres the Seats came out of,
+  # and a Page that closed while the write was still in flight elsewhere would
+  # be a Page that could go missing.
+  #
+  # Foley for the closing Verdict is already in flight when this effect runs.
+  # ADR-0003 forbids updating the Verdict row, so the write waits for that
+  # result and lands voice_meta on the first insert. next_page flushes whatever
+  # is waiting so a closed Page cannot vanish if the couple tap through before
+  # the voice returns.
   #
   # A write that fails is logged and swallowed. Losing the record of a Page is
   # bad; taking the Room down in front of the couple, and losing the Page they
@@ -1135,27 +1166,13 @@ defmodule Thereish.Rooms.Server do
           Thereish.Steward.score_failure(:unfinished)
       end
 
-    entry =
-      entry
-      |> Map.put(:music_meta, music_meta)
-      |> attach_voice_meta(state.voice_meta)
+    entry = Map.put(entry, :music_meta, music_meta)
 
-    {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
-
-    arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
-    _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
-
-    Scribe.write_about(state.room, page)
-
-    recorded_pages = Map.put(state[:recorded_pages] || %{}, state.current_page_ref, page.id)
-
-    state
-    |> Map.put(:current_page_id, page.id)
-    |> Map.put(:recorded_pages, recorded_pages)
-  rescue
-    error ->
-      Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
-      state
+    if waiting_for_voice_meta?(state, entry) do
+      %{state | pending_chronicle: entry}
+    else
+      commit_chronicle(entry, state)
+    end
   end
 
   defp perform({:overrule, overrule}, state) do
@@ -1652,7 +1669,7 @@ defmodule Thereish.Rooms.Server do
     Phoenix.PubSub.broadcast(Thereish.PubSub, Thereish.Rooms.topic(slug), message)
   end
 
-  defp maybe_start_voice_task({:verdict_received, verdict}, state) do
+  defp maybe_start_voice_task(state, {:verdict_received, verdict}) do
     if not is_nil(state.room.speaker) and state.room.speaker != "" do
       closeness = verdict[:closeness] || verdict["closeness"]
 
@@ -1691,10 +1708,57 @@ defmodule Thereish.Rooms.Server do
             send(room, {:voice_spoken, attempt, {:error, {:exit, reason}}})
         end
       end)
+
+      %{state | voice_pending_attempt: attempt}
+    else
+      state
     end
   end
 
-  defp maybe_start_voice_task(_event, _state), do: :ok
+  defp maybe_start_voice_task(state, _event), do: state
+
+  defp waiting_for_voice_meta?(state, entry) do
+    pending = state.voice_pending_attempt
+
+    pending != nil and
+      is_nil(Map.get(state.voice_meta, pending)) and
+      Enum.any?(entry.attempts, fn attempt -> attempt.number == pending end)
+  end
+
+  defp clear_voice_pending(state, attempt) do
+    if state.voice_pending_attempt == attempt do
+      %{state | voice_pending_attempt: nil}
+    else
+      state
+    end
+  end
+
+  defp flush_pending_chronicle(%{pending_chronicle: nil} = state), do: state
+
+  defp flush_pending_chronicle(%{pending_chronicle: entry} = state) do
+    commit_chronicle(entry, %{state | pending_chronicle: nil})
+  end
+
+  defp commit_chronicle(entry, state) do
+    entry = attach_voice_meta(entry, state.voice_meta)
+
+    {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
+
+    arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
+    _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
+
+    Scribe.write_about(state.room, page)
+
+    recorded_pages = Map.put(state[:recorded_pages] || %{}, state.current_page_ref, page.id)
+
+    state
+    |> Map.put(:current_page_id, page.id)
+    |> Map.put(:recorded_pages, recorded_pages)
+  rescue
+    error ->
+      Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
+      state
+  end
 
   defp attach_voice_meta(entry, voice_meta) when is_map(voice_meta) do
     attempts =
