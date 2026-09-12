@@ -3610,7 +3610,7 @@ defmodule ThereishWeb.RoomLiveTest do
       await_reveal(ctx.slug)
       await_phase(ctx.slug, :closed)
 
-      {:ok, _view, html} = live(build_conn(), ~p"/spend")
+      {:ok, _view, html} = live(log_in_admin(build_conn()), ~p"/spend")
       assert html =~ "Foley"
     end
 

@@ -349,132 +349,6 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert rendered =~ "Jacob: too harsh"
     end
 
-    test "experiment is blinded until deliberately unblinded, then reveals qualitative readout",
-         %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairns")
-
-      room = Repo.get_by!(Room, slug: slug)
-      [page] = Chronicle.pages(room.id)
-
-      {:ok, _} =
-        Chronicle.record_experiment_assignment(room.id, %{
-          page_id: page.id,
-          page_identifier: page.id,
-          experiment_id: "bait_against_plain",
-          arm: "bait",
-          chapter: "harbour",
-          assigned_at: DateTime.utc_now()
-        })
-
-      {:ok, _} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_id: page.id,
-          page_identifier: page.id,
-          experiment_id: "bait_against_plain",
-          arm: "bait",
-          melded: true,
-          closeness: 80,
-          attempts_count: 1,
-          closed_because: "meld",
-          trap_converged: false
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
-
-      # Experiment card is visible with blinded banner
-      assert has_element?(view, "[data-role=experiment-card]")
-      assert has_element?(view, "[data-role=blinded-banner]")
-      assert has_element?(view, "[data-role=unblind-button]")
-
-      # While blinded, no arm tag appears on the page
-      refute has_element?(view, "[data-role=arm-tag]")
-      refute has_element?(view, "[data-role=experiment-readout]")
-
-      # Deliberate unblinding
-      view |> element("[data-role=unblind-button]") |> render_click()
-
-      # Now unblinded banner is shown
-      assert has_element?(view, "[data-role=unblinded-banner]")
-      refute has_element?(view, "[data-role=unblind-button]")
-
-      # Arm tag is now displayed on the played page
-      assert has_element?(view, "[data-role=arm-tag]")
-
-      # Qualitative readout is displayed
-      assert has_element?(view, "[data-role=experiment-readout]")
-      assert has_element?(view, "[data-role=readout-narrative]")
-      readout_text = element(view, "[data-role=experiment-readout]") |> render()
-      assert readout_text =~ "Bait-scored Pages"
-      assert readout_text =~ "Plain Pages"
-
-      # No p-values
-      refute readout_text =~ ~r/p\s*<\s*0\.05/i
-      refute readout_text =~ "p-value"
-    end
-
-    test "author_model experiment is blinded until unblinded, showing Flash and Astra readout",
-         %{conn: conn, slug: slug} = ctx do
-      play(ctx, "cairn", "cairns")
-
-      room = Repo.get_by!(Room, slug: slug)
-      [page] = Chronicle.pages(room.id)
-
-      {:ok, _} =
-        Chronicle.record_experiment_assignment(room.id, %{
-          page_id: page.id,
-          page_identifier: page.id,
-          experiment_id: "author_model",
-          arm: "flash",
-          chapter: "table",
-          assigned_at: DateTime.utc_now()
-        })
-
-      {:ok, _} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_id: page.id,
-          page_identifier: page.id,
-          experiment_id: "author_model",
-          arm: "flash",
-          melded: true,
-          closeness: 80,
-          closing_band: "meld",
-          attempts_count: 1,
-          closed_because: "meld"
-        })
-
-      {:ok, _} =
-        Chronicle.record_bookends_tap(room.id, %{
-          page_id: page.id,
-          page_identifier: page.id,
-          seat_id: ctx.mara.id,
-          label: "great",
-          bookends: page.document["bookends"],
-          arm: "flash"
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
-
-      assert render(view) =~ "Flash against Astra"
-      assert has_element?(view, "[data-role=blinded-banner]")
-      assert has_element?(view, "[data-role=unblind-button]")
-      refute has_element?(view, "[data-role=experiment-readout]")
-
-      view |> element("[data-role=unblind-button]") |> render_click()
-
-      assert has_element?(view, "[data-role=unblinded-banner]")
-      assert has_element?(view, "[data-role=experiment-readout]")
-      assert has_element?(view, "[data-role=readout-arm-flash]")
-      assert has_element?(view, "[data-role=readout-arm-astra]")
-
-      readout_text = element(view, "[data-role=experiment-readout]") |> render()
-      assert readout_text =~ "Gemini 3.8 Flash"
-      assert readout_text =~ "GPT-6 Astra"
-      assert readout_text =~ "1 great"
-      assert readout_text =~ "meld:"
-
-      refute readout_text =~ "p-value"
-    end
-
     test "book view displays gives, every bridge, the verdict with reasoning, and the carried words",
          %{conn: conn, slug: slug} = ctx do
       # Play attempt 1 which misses and carries furthest words
@@ -587,37 +461,30 @@ defmodule ThereishWeb.ChronicleLiveTest do
     end
   end
 
-  describe "spend foot line (ticket 09)" do
-    test "renders the spend line at the foot of the Chronicle book view",
+  describe "operator information stays off the ordinary Chronicle (ticket 09)" do
+    test "has no export links, experiment card, or spend foot",
          %{conn: conn, slug: slug} = ctx do
       play(ctx, "cairn", "cairns")
       await_recap(slug)
 
-      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+      {:ok, view, html} = live(conn, ~p"/r/#{slug}/chronicle")
 
-      assert has_element?(view, "[data-role=chronicle-spend]")
-      spend_text = render(element(view, "[data-role=spend-line]"))
-      assert spend_text =~ "Spend:"
-      assert spend_text =~ "Author"
-      assert spend_text =~ "Assayer"
-      assert spend_text =~ "Scribe"
-      refute spend_text =~ "not yet counted"
+      refute html =~ "Export Markdown"
+      refute html =~ "Export Calibration"
+      refute has_element?(view, "[data-role=experiment-card]")
+      refute has_element?(view, "[data-role=chronicle-spend]")
       refute has_element?(view, "[data-role=in-play-line]")
     end
 
-    test "shows in-play sentence at foot when Room is in play, and omits it when not in play",
+    test "omits in-play sentence that used to sit at the Chronicle foot",
          %{conn: conn, slug: slug} = ctx do
-      # When room is in play (:bridging)
       :ok = Rooms.give(slug, ctx.mara.id, "lantern")
       :ok = Rooms.give(slug, ctx.jacob.id, "harbour")
       await_phase(slug, :bridging)
 
       {:ok, view, html} = live(conn, ~p"/r/#{slug}/chronicle")
-      assert html =~ "1 Page in play, not yet counted"
-      assert has_element?(view, "[data-role=in-play-line]")
-
-      assert render(element(view, "[data-role=in-play-line]")) =~
-               "1 Page in play, not yet counted"
+      refute html =~ "1 Page in play, not yet counted"
+      refute has_element?(view, "[data-role=in-play-line]")
 
       # Melding closes the page
       :ok = Rooms.commit_bridge(slug, ctx.mara.id, "cairn")
