@@ -18,7 +18,8 @@ defmodule ThereishWeb.FrontLiveTest do
 
   defp phone_at(slug), do: build_conn() |> get(~p"/r/#{slug}")
 
-  defp join(view, name), do: view |> form("form", %{"name" => name}) |> render_submit()
+  defp join(view, name),
+    do: view |> form("form[phx-submit=join]", %{"name" => name}) |> render_submit()
 
   describe "the front page" do
     test "asks for a Code and offers a New Room", %{conn: conn} do

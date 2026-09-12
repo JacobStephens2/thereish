@@ -7,9 +7,11 @@ defmodule ThereishWeb.VoiceController do
 
   alias Thereish.Rooms
 
-  def show(conn, %{"slug" => code, "attempt" => attempt_param}) do
+  def show(conn, %{"slug" => code, "attempt" => attempt_param} = params) do
+    kind = voice_kind(params["kind"])
+
     with {attempt, _} <- Integer.parse(attempt_param),
-         {:ok, audio, format} <- Rooms.voice_audio(code, attempt) do
+         {:ok, audio, format} <- Rooms.voice_audio(code, attempt, kind) do
       content_type =
         case format do
           :mp3 -> "audio/mpeg"
@@ -27,4 +29,7 @@ defmodule ThereishWeb.VoiceController do
         |> text("Not Found")
     end
   end
+
+  defp voice_kind("bookends"), do: :bookends
+  defp voice_kind(_), do: :verdict
 end

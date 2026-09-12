@@ -38,6 +38,7 @@ defmodule ThereishWeb.Router do
     live "/r/:slug/book", ChronicleLive, :room
 
     get "/r/:slug/voice/:attempt", VoiceController, :show
+    get "/r/:slug/voice/:attempt/:kind", VoiceController, :show
 
     live "/check", CheckLive, :show
 
