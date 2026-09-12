@@ -116,16 +116,34 @@ defmodule Thereish.Steward.VampTest do
       assert body["loop"] == true
 
       text = body["text"]
-      assert String.contains?(text, "summer camp, viking beaches")
-      assert String.contains?(text, "instrumental")
+      assert text == Thereish.Steward.Music.vamp_prompt(@gives)
       # ElevenLabs sound-generation hears these as people talking, not as a bed
       # that sits under talk. The Mureka house prefix is the wrong brief here.
       refute String.contains?(text, "conversational")
       refute String.contains?(text, "spoken conversation")
-      assert String.starts_with?(text, Thereish.Steward.Music.vamp_prefix())
 
       # Verify Vamp is never cached in TrackCache
       assert :miss = TrackCache.get(@gives)
+    end
+
+    test "a heavy-metal Give drives genre and energy on the Vamp request" do
+      role = [
+        provider: Thereish.Steward.ElevenLabs,
+        model: "eleven_text_to_sound_v2",
+        format: "mp3_44100_128",
+        timeout_ms: 30_000,
+        api_key: "test-eleven-key"
+      ]
+
+      gives = ["Kiss Heavy Metal", "bossa nova"]
+      assert {:ok, vamp} = Live.vamp(gives, role)
+      assert String.starts_with?(vamp.path, "/media/vamps/")
+
+      assert_receive {:eleven_labs_generate_called, _headers, body}
+      text = body["text"]
+      assert text == Thereish.Steward.Music.vamp_prompt(gives)
+      refute String.contains?(text, "conversational")
+      refute String.contains?(text, "spoken conversation")
     end
   end
 end

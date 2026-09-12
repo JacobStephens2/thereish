@@ -1,11 +1,20 @@
 defmodule Thereish.Steward.Music do
   @moduledoc """
   Prompt construction and formatting for Foley music generation.
+
+  Explicit musical Gives determine genre, instrumentation, and energy;
+  nonmusical Gives supply atmosphere. Conflicting genres invite a fusion.
+  Comfortable playback volume is mix, not a requirement for gentle composition.
   """
 
-  @house_prefix "Gentle, conversational background instrumental music that sits comfortably under spoken conversation. Atmosphere and theme: "
+  @give_brief "Musical Gives set genre, instrumentation, and energy — follow them strongly. " <>
+                "Nonmusical Gives supply atmosphere. When several Gives name different genres, fuse them rather than a subdued style. " <>
+                "Mix volume is comfortable, not a requirement for gentle composition."
 
-  @vamp_prefix "A 30-second looping instrumental music bed. No vocals, no speech, no crowd, no talking. Soft and gentle, sitting under conversation. Atmosphere and theme: "
+  @house_prefix "Instrumental music. " <> @give_brief <> " Gives: "
+
+  @vamp_prefix "A 30-second looping instrumental music bed. No vocals, no speech, no crowd, no talking. " <>
+                 @give_brief <> " Gives: "
 
   @doc "House style prefix used for Mureka instrumental generation."
   def house_prefix, do: @house_prefix
@@ -24,9 +33,8 @@ defmodule Thereish.Steward.Music do
   @doc """
   Builds a prompt for the Vamp (ElevenLabs sound-generation).
 
-  The Mureka house prefix says "conversational" and "spoken conversation" so
-  a Track sits under talk. The same words sent to a sound-effect model come
-  back as people talking.
+  ElevenLabs sound-generation hears "conversational" and "spoken conversation"
+  as people talking, so the Vamp brief must not use those words.
   """
   @spec vamp_prompt([String.t() | map()]) :: String.t()
   def vamp_prompt(gives) when is_list(gives) do
