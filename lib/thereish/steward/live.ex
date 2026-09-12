@@ -100,7 +100,7 @@ defmodule Thereish.Steward.Live do
       Keyword.get(opts, :digest) ||
         (is_map(request) && (request[:digest] || request["digest"]))
 
-    count = Thereish.Steward.Author.requested_count(request, opts)
+    count = Thereish.Steward.Author.requested_count(request)
     prompt = Thereish.Steward.Author.prompt(gives, digest, count)
 
     case Gate.answer(role, prompt, &Thereish.Steward.Author.check(&1, gives, count)) do

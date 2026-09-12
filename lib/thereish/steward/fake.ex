@@ -66,7 +66,7 @@ defmodule Thereish.Steward.Fake do
 
     case author_mode() do
       :ok ->
-        count = Thereish.Steward.Author.requested_count(request, opts)
+        count = Thereish.Steward.Author.requested_count(request)
 
         bookends =
           Keyword.get(opts, :bookends) ||

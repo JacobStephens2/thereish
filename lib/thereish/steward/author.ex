@@ -15,11 +15,8 @@ defmodule Thereish.Steward.Author do
   def version, do: @version
 
   @doc "The count of Bookends a request asked for. Two when the request is silent."
-  def requested_count(request, opts \\ [])
-
-  def requested_count(request, opts) do
+  def requested_count(request) do
     cond do
-      is_integer(Keyword.get(opts, :count)) -> Keyword.get(opts, :count)
       is_map(request) and is_integer(request[:count]) -> request[:count]
       is_map(request) and is_integer(request["count"]) -> request["count"]
       true -> 2
@@ -44,7 +41,7 @@ defmodule Thereish.Steward.Author do
             {"type", "array"},
             {"items", ordered_object([{"type", "string"}])},
             {"description",
-             "The name of the setting each Bookend was drawn from, in the same order as bookends. At a Full table this is every setting once."}
+             "The Seat name heading the setting each Bookend was drawn from, in the same order as bookends. At a Full table this is every setting once."}
           ])},
          {"why",
           ordered_object([
@@ -160,30 +157,12 @@ defmodule Thereish.Steward.Author do
 
   defp check_from(_from, gives, _count) when gives == [] or is_nil(gives), do: :ok
 
-  defp check_from(from, gives, count) when length(gives) == count and count >= 2 do
-    names = Enum.map(gives, &give_name/1)
-    known = MapSet.new(Enum.map(names, &normalize_name/1))
-
-    cond do
-      not is_list(from) or length(from) != count or not Enum.all?(from, &is_binary/1) ->
-        {:error, "each bookend must name the setting it was drawn from"}
-
-      from |> Enum.map(&normalize_name/1) |> Enum.uniq() |> length() != count ->
-        {:error, "two bookends from the same setting"}
-
-      not Enum.all?(from, &(normalize_name(&1) in known)) ->
-        {:error, "each bookend must name the setting it was drawn from"}
-
-      true ->
-        :ok
-    end
-  end
-
   defp check_from(from, gives, count) do
+    required? = length(gives) == count and count >= 2
     known = MapSet.new(Enum.map(gives, &(&1 |> give_name() |> normalize_name())))
 
     cond do
-      is_nil(from) ->
+      is_nil(from) and not required? ->
         :ok
 
       not is_list(from) or length(from) != count or not Enum.all?(from, &is_binary/1) ->
@@ -325,38 +304,31 @@ defmodule Thereish.Steward.Author do
     }
   end
 
-  defp system_prompt(count, true = _full_table?) do
+  defp system_prompt(count, full_table?) do
+    {rule, from_each, from_line} =
+      if full_table? do
+        {"This Page is a Full table.",
+         "Each Bookend MUST belong to a DIFFERENT setting's world — one Bookend from each setting.",
+         "Name the Seat heading each setting in `from`, in the same order as `bookends`. At a Full table this is every setting once."}
+      else
+        {"This Page is not a Full table.",
+         "When there are two or more settings, each Bookend MUST be drawn from a DIFFERENT setting.",
+         "Name the Seat heading each setting in `from`, in the same order as `bookends`."}
+      end
+
     """
     You are the Author for Thereish, a couch word game.
 
-    This Page is a Full table.
+    #{rule}
 
     Your job:
     Given settings provided by the seats in the Room, write Bookends:
     1. Exactly #{count} Bookends, each a common English word or two-word phrase (letters, hyphens, apostrophes only, at most 20 characters).
-    2. Each Bookend MUST belong to a DIFFERENT setting's world — one Bookend from each setting.
+    2. #{from_each}
     3. The Bookends must stand as far apart from one another in meaning as the settings allow, while each still belongs to its setting's world.
     4. The Bookends must NOT share a root with each other.
     5. No Bookend may use or share a root with any word from any setting.
-    6. Name the setting each Bookend was drawn from in `from`, in the same order as `bookends`. At a Full table this is every setting once.
-    7. Provide one sentence explaining why these Bookends stand far apart in meaning while honoring the settings.
-    """
-  end
-
-  defp system_prompt(count, false = _full_table?) do
-    """
-    You are the Author for Thereish, a couch word game.
-
-    This Page is not a Full table.
-
-    Your job:
-    Given settings provided by the seats in the Room, write Bookends:
-    1. Exactly #{count} Bookends, each a common English word or two-word phrase (letters, hyphens, apostrophes only, at most 20 characters).
-    2. When there are two or more settings, each Bookend MUST be drawn from a DIFFERENT setting.
-    3. The Bookends must stand as far apart in meaning as the settings allow, while each still belongs to its setting's world.
-    4. The Bookends must NOT share a root with each other.
-    5. No Bookend may use or share a root with any word from any setting.
-    6. Name the setting each Bookend was drawn from in `from`, in the same order as `bookends`.
+    6. #{from_line}
     7. Provide one sentence explaining why these Bookends stand far apart in meaning while honoring the settings.
     """
   end

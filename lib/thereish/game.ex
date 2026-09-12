@@ -22,10 +22,11 @@ defmodule Thereish.Game do
 
   ## A Page is a ladder of attempts, not one shot
 
-  A miss does not end the Page. The two Bridges the Assayer names as landing
-  furthest apart become the next attempt's Bookends — Medium's carry-forward
-  rule — so the words the couple reach for narrow towards each other and a
-  missed Page converges rather than collapsing. After `attempt_cap/0` tries the Page closes
+  A miss does not end the Page. Carry-forward still takes the two Bridges the
+  Assayer named as furthest apart — Medium's rule, and the two-Bookend rule
+  when Full table is off. At a Full table the first Attempt already has one
+  Bookend per Seat on the Page (ADR-0016); carrying every Seat's Bridge after a
+  miss is the rest of that rule. After `attempt_cap/0` tries the Page closes
   unmelded, and a Meld closes it the moment it lands.
 
   ## Phase is derived, never stored
@@ -861,12 +862,11 @@ defmodule Thereish.Game do
         %{seat_id: s.id, name: s.name, text: state.gives[s.id], give: state.gives[s.id]}
       end)
 
-    %{gives: gives, count: bookend_count(state, gives)}
+    %{gives: gives, count: bookend_count(state, participating)}
   end
 
-  defp bookend_count(state, gives) do
-    if state.full_table, do: max(length(gives), 2), else: 2
-  end
+  defp bookend_count(%{full_table: false}, _seats), do: 2
+  defp bookend_count(_state, seats), do: length(seats)
 
   defp page_full_table(page, default) when is_map(page) do
     cond do
