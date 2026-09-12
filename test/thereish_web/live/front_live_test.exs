@@ -30,6 +30,24 @@ defmodule ThereishWeb.FrontLiveTest do
       assert has_element?(front, "[data-role=new-room]")
     end
 
+    test "the Code box keeps its label and drops the extra joining phrase", %{conn: conn} do
+      {:ok, front, html} = live(conn, ~p"/")
+
+      assert has_element?(front, "label", "Code")
+      refute html =~ "the word you were told"
+      refute has_element?(front, "input[name=code][placeholder]")
+    end
+
+    test "a quiet credit names who made Thereish", %{conn: conn} do
+      {:ok, front, _} = live(conn, ~p"/")
+
+      assert has_element?(
+               front,
+               "[data-role=made-by] a[href='https://stephens.page']",
+               "Made by Jacob Stephens"
+             )
+    end
+
     test "a Code opens its Room, in whatever case it was typed", %{conn: conn} do
       slug = open_room()
 
@@ -132,6 +150,12 @@ defmodule ThereishWeb.FrontLiveTest do
       refute has_element?(new, "[data-role=full-table-switch]")
       assert has_element?(new, "[data-role=open-room]")
 
+      assert has_element?(
+               new,
+               "[data-role=made-by] a[href='https://stephens.page']",
+               "Made by Jacob Stephens"
+             )
+
       assert {:error, {:live_redirect, %{to: to}}} =
                new |> form("form") |> render_submit()
 
@@ -141,7 +165,9 @@ defmodule ThereishWeb.FrontLiveTest do
       {:ok, room, _} = live(conn, to)
 
       assert has_element?(room, "[data-role=code]", String.upcase(code))
-      assert has_element?(room, "[data-role=join-url]", "/r/#{code}")
+      assert has_element?(room, "[data-role=join-url]", "thereish.app")
+      assert has_element?(room, ~s(a[data-role=join-url][href*="/r/#{code}"]))
+      refute has_element?(room, "[data-role=join-url]", "/r/#{code}")
       assert Rooms.snapshot(code, nil).seat_limit == Thereish.Steward.seat_cap()
     end
 
@@ -250,9 +276,11 @@ defmodule ThereishWeb.FrontLiveTest do
 
       assert has_element?(view, "[data-role=code]", String.upcase(slug))
 
-      # The Room's own URL, so a latecomer can be sent one thing rather than
-      # a host and a Code to type into it.
-      assert has_element?(view, "[data-role=join-url]", "/r/#{slug}")
+      # thereish.app and the Code, not a dense Room URL. The href still
+      # points at this Room so a latecomer can follow one link.
+      assert has_element?(view, "[data-role=join-url]", "thereish.app")
+      assert has_element?(view, ~s(a[data-role=join-url][href*="/r/#{slug}"]))
+      refute has_element?(view, "[data-role=join-url]", "/r/#{slug}")
       assert has_element?(view, "[data-role=open-seats]", "Waiting for 1 more")
     end
   end
