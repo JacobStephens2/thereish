@@ -423,7 +423,8 @@ defmodule Thereish.Rooms do
   @doc """
   Deliberately unblinds an experiment in the Room (ticket 13).
   """
-  @spec unblind_experiment(String.t(), String.t() | nil, String.t()) :: :ok | {:error, term()}
+  @spec unblind_experiment(String.t(), String.t() | nil, String.t()) ::
+          :ok | {:error, :sample_incomplete | term()}
   def unblind_experiment(slug, seat_id, experiment_id \\ "bait_against_plain") do
     call(slug, {:unblind_experiment, seat_id, experiment_id})
   end

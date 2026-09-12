@@ -33,6 +33,41 @@ defmodule ThereishWeb.AdminExperimentsTest do
     await_reveal(ctx.slug)
   end
 
+  defp record_assignment(room_id, experiment_id, arm) do
+    {:ok, _} =
+      Chronicle.record_experiment_assignment(room_id, %{
+        page_identifier: "#{experiment_id}-#{System.unique_integer([:positive])}",
+        experiment_id: experiment_id,
+        arm: arm,
+        chapter: "harbour",
+        assigned_at: DateTime.utc_now()
+      })
+  end
+
+  defp record_completed_outcomes(room_id, experiment_id, count, opts \\ []) when count > 0 do
+    arm = Keyword.get(opts, :arm, default_experiment_arm(experiment_id))
+
+    for i <- 1..count do
+      {:ok, _} =
+        Chronicle.record_experiment_outcome(room_id, %{
+          page_identifier: "#{experiment_id}-#{i}-#{System.unique_integer([:positive])}",
+          experiment_id: experiment_id,
+          arm: arm,
+          melded: true,
+          closeness: 80,
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+    end
+  end
+
+  defp default_experiment_arm("bait_against_plain"), do: "bait"
+  defp default_experiment_arm(_experiment_id), do: "flash"
+
+  defp unblind_button(view, experiment_id) do
+    element(view, "[data-experiment=#{experiment_id}] [data-role=unblind-button]")
+  end
+
   test "unauthenticated visitors cannot unblind from the ordinary Chronicle",
        %{
          conn: _conn,
@@ -102,17 +137,19 @@ defmodule ThereishWeb.AdminExperimentsTest do
         trap_converged: false
       })
 
+    record_completed_outcomes(room.id, "bait_against_plain", 19)
+
     {:ok, view, _html} = live(conn, ~p"/admin/experiments")
 
-    assert has_element?(view, "[data-role=experiment-card]")
-    assert has_element?(view, "[data-role=blinded-banner]")
-    assert has_element?(view, "[data-role=unblind-button]")
+    assert has_element?(view, "[data-role=experiment-card][data-experiment=bait_against_plain]")
+    assert has_element?(view, "[data-experiment=bait_against_plain] [data-role=blinded-banner]")
+    assert has_element?(view, "[data-experiment=bait_against_plain] [data-role=unblind-button]")
     refute has_element?(view, "[data-role=experiment-readout]")
 
-    view |> element("[data-role=unblind-button]") |> render_click()
+    unblind_button(view, "bait_against_plain") |> render_click()
 
-    assert has_element?(view, "[data-role=unblinded-banner]")
-    refute has_element?(view, "[data-role=unblind-button]")
+    assert has_element?(view, "[data-experiment=bait_against_plain] [data-role=unblinded-banner]")
+    refute has_element?(view, "[data-experiment=bait_against_plain] [data-role=unblind-button]")
     assert has_element?(view, "[data-role=experiment-readout]")
     assert has_element?(view, "[data-role=readout-narrative]")
     readout_text = element(view, "[data-role=experiment-readout]") |> render()
@@ -166,14 +203,16 @@ defmodule ThereishWeb.AdminExperimentsTest do
         arm: "flash"
       })
 
+    record_completed_outcomes(room.id, "author_model", 19)
+
     {:ok, view, html} = live(conn, ~p"/admin/experiments")
 
     assert html =~ "Flash against Astra"
-    assert has_element?(view, "[data-role=blinded-banner]")
-    assert has_element?(view, "[data-role=unblind-button]")
+    assert has_element?(view, "[data-experiment=author_model] [data-role=blinded-banner]")
+    assert has_element?(view, "[data-experiment=author_model] [data-role=unblind-button]")
     refute has_element?(view, "[data-role=experiment-readout]")
 
-    view |> element("[data-role=unblind-button]") |> render_click()
+    unblind_button(view, "author_model") |> render_click()
 
     assert has_element?(view, "[data-role=unblinded-banner]")
     assert has_element?(view, "[data-role=experiment-readout]")
@@ -186,5 +225,97 @@ defmodule ThereishWeb.AdminExperimentsTest do
     assert readout_text =~ "1 great"
     assert readout_text =~ "meld:"
     refute readout_text =~ "p-value"
+  end
+
+  test "shows blinded progress and rejects unblinding below the sample minimum", %{conn: conn} do
+    slug = open_room()
+    room = Repo.get_by!(Room, slug: slug)
+
+    record_assignment(room.id, "author_model", "flash")
+    record_completed_outcomes(room.id, "author_model", 10, arm: "flash")
+    record_completed_outcomes(room.id, "author_model", 9, arm: "astra")
+
+    {:ok, view, _html} = live(conn, ~p"/admin/experiments")
+
+    card = "[data-role=experiment-card][data-experiment=author_model]"
+    card_html = element(view, card) |> render()
+
+    assert has_element?(view, "#{card} [data-role=experiment-progress]")
+    assert card_html =~ "19 / 20"
+    assert has_element?(view, "#{card} [data-role=unblind-button][disabled]")
+    refute has_element?(view, "[data-role=experiment-readout]")
+    refute card_html =~ "Pages played:"
+    refute card_html =~ "Mean attempts:"
+
+    render_click(view, "unblind_experiment", %{
+      "room-id" => room.id,
+      "experiment-id" => "author_model"
+    })
+
+    refute Chronicle.experiment_unblinded?(room.id, "author_model")
+    refute has_element?(view, "[data-role=unblinded-banner]")
+    refute has_element?(view, "[data-role=experiment-readout]")
+    assert has_element?(view, "#{card} [data-role=blinded-banner]")
+  end
+
+  test "permits unblinding from the admin view once the declared minimum is reached",
+       %{conn: conn} do
+    slug = open_room()
+    room = Repo.get_by!(Room, slug: slug)
+
+    record_assignment(room.id, "author_model", "flash")
+    record_completed_outcomes(room.id, "author_model", 10, arm: "flash")
+    record_completed_outcomes(room.id, "author_model", 10, arm: "astra")
+
+    {:ok, view, _html} = live(conn, ~p"/admin/experiments")
+
+    card = "[data-role=experiment-card][data-experiment=author_model]"
+    card_html = element(view, card) |> render()
+    assert card_html =~ "20 / 20"
+    refute has_element?(view, "#{card} [data-role=unblind-button][disabled]")
+
+    unblind_button(view, "author_model") |> render_click()
+
+    assert Chronicle.experiment_unblinded?(room.id, "author_model")
+    assert has_element?(view, "#{card} [data-role=unblinded-banner]")
+    assert has_element?(view, "#{card} [data-role=experiment-readout]")
+  end
+
+  test "progress stays per Room and per experiment without leaking another experiment's results",
+       %{conn: conn} do
+    slug_a = open_room()
+    slug_b = open_room()
+    room_a = Repo.get_by!(Room, slug: slug_a)
+    room_b = Repo.get_by!(Room, slug: slug_b)
+
+    record_assignment(room_a.id, "author_model", "flash")
+    record_assignment(room_a.id, "bait_against_plain", "bait")
+    record_assignment(room_b.id, "author_model", "flash")
+    record_completed_outcomes(room_a.id, "author_model", 20, arm: "flash")
+    record_completed_outcomes(room_a.id, "bait_against_plain", 3, arm: "bait")
+    record_completed_outcomes(room_b.id, "author_model", 4, arm: "astra")
+
+    {:ok, view, _html} = live(conn, ~p"/admin/experiments")
+
+    author_a = "[data-slug=#{slug_a}][data-experiment=author_model]"
+    bait_a = "[data-slug=#{slug_a}][data-experiment=bait_against_plain]"
+    author_b = "[data-slug=#{slug_b}][data-experiment=author_model]"
+
+    assert render(element(view, author_a)) =~ "20 / 20"
+    assert render(element(view, bait_a)) =~ "3 / 20"
+    assert render(element(view, author_b)) =~ "4 / 20"
+
+    refute has_element?(view, "#{author_a} [data-role=unblind-button][disabled]")
+    assert has_element?(view, "#{bait_a} [data-role=unblind-button][disabled]")
+    assert has_element?(view, "#{author_b} [data-role=unblind-button][disabled]")
+
+    element(view, "#{author_a} [data-role=unblind-button]") |> render_click()
+
+    assert Chronicle.experiment_unblinded?(room_a.id, "author_model")
+    refute Chronicle.experiment_unblinded?(room_a.id, "bait_against_plain")
+    refute Chronicle.experiment_unblinded?(room_b.id, "author_model")
+    assert has_element?(view, "#{author_a} [data-role=experiment-readout]")
+    refute has_element?(view, "#{bait_a} [data-role=experiment-readout]")
+    refute has_element?(view, "#{author_b} [data-role=experiment-readout]")
   end
 end
