@@ -478,11 +478,21 @@ defmodule Thereish.GameTest do
 
   describe "the Author writes one Bookend per Give at a Full table (ticket 03, #120)" do
     @six ~w(Mara Jacob Ada Ida Ola Ora)
+    @eight ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned)
 
     defp six_table(opts \\ []) do
       Game.init(
         Keyword.merge(
           [seat_limit: 6, seats: Enum.map(@six, &seat/1)],
+          opts
+        )
+      )
+    end
+
+    defp eight_table(opts \\ []) do
+      Game.init(
+        Keyword.merge(
+          [seat_limit: 8, seats: Enum.map(@eight, &seat/1)],
           opts
         )
       )
@@ -529,6 +539,37 @@ defmodule Thereish.GameTest do
       view = Game.view(bridging, nil)
       assert view.bookends == ["lantern", "harbour"]
       assert view.full_table == false
+    end
+
+    test "an eight-Seat Full table asks for eight Bookends, one per Give" do
+      {state, effects} = give_all(eight_table(), @eight)
+      assert [{:author, request}] = effects
+      assert request.count == 8
+      assert Enum.map(request.gives, & &1.name) == @eight
+
+      eight_bookends = ~w(lantern harbour summit ember grove spire ridge hearth)
+
+      assert {:ok, bridging, []} =
+               Game.apply(state, {:page_written, %{bookends: eight_bookends}})
+
+      view = Game.view(bridging, nil)
+      assert view.phase == :bridging
+      assert view.bookends == eight_bookends
+      assert view.full_table == true
+    end
+
+    test "eight Seats with Full table off still ask for two Bookends" do
+      {_state, effects} = give_all(eight_table(full_table: false), @eight)
+      assert [{:author, request}] = effects
+      assert request.count == 2
+      assert length(request.gives) == 8
+    end
+
+    test "eight Seats have eight distinct house colours" do
+      state = eight_table()
+      colours = Enum.map(state.seats, &Game.seat_colour(state, &1))
+      assert length(colours) == 8
+      assert colours == Enum.uniq(colours)
     end
   end
 
@@ -2443,6 +2484,31 @@ defmodule Thereish.GameTest do
       state = grade(state, effects, 10)
 
       assert length(Game.view(state, nil).next_bookends) == 6
+    end
+
+    test "an eight-Seat Full table miss carries every Bridge" do
+      eight = ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned)
+      eight_bookends = ~w(lantern harbour summit ember grove spire ridge hearth)
+      eight_bridges = ~w(cairn beacon wharf signal torch lamp stone flare)
+
+      state =
+        Game.init(
+          seat_limit: 8,
+          seats: Enum.map(eight, &seat/1),
+          page: %{id: "eight", bookends: eight_bookends, full_table: true},
+          full_table: true
+        )
+
+      {state, effects} = commit_all(state, Enum.zip(eight, eight_bridges))
+      state = grade(state, effects, 10, ["beacon", "signal"])
+
+      assert Game.view(state, nil).next_bookends == eight_bridges
+      refute Map.has_key?(Game.view(state, nil).reveal, :pairs)
+
+      state = again(state)
+      view = Game.view(state, nil)
+      assert view.bookends == eight_bridges
+      assert Enum.map(view.bookend_chips, & &1.seat_id) == Enum.map(eight, &("seat-" <> &1))
     end
 
     test "carried Bookends carry their Seat id, and first-Attempt Bookends carry their Give" do

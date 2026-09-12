@@ -165,25 +165,25 @@ for {w, h} <- viewports do
   end
 end
 
-# 2. Reveal with 6 bridges (seat cap)
-IO.puts("\nSetting up: Reveal with 6 bridges (seat cap)...")
-{slug2, _} = Helper.create_room(seat_limit: 6)
-seats6 = for name <- ["Mara", "Jacob", "Ada", "Sam", "Noah", "Lily"] do
+# 2. Reveal with 8 bridges (seat cap)
+IO.puts("\nSetting up: Reveal with 8 bridges (seat cap)...")
+{slug2, _} = Helper.create_room(seat_limit: 8)
+seats8 = for name <- ["Mara", "Jacob", "Ada", "Sam", "Noah", "Lily", "Ivy", "Ned"] do
   {:ok, s} = Helper.join(slug2, name)
   s
 end
-for {s, i} <- Enum.with_index(seats6) do
+for {s, i} <- Enum.with_index(seats8) do
   Rooms.give(slug2, s.id, "setting #{i}")
 end
 Helper.await_phase(slug2, :bridging)
-bridges6 = ["cairn", "cairo", "beacon", "drift", "compass", "anchor"]
-for {s, b} <- Enum.zip(seats6, bridges6) do
+bridges8 = ["cairn", "cairo", "beacon", "drift", "compass", "anchor", "stone", "flare"]
+for {s, b} <- Enum.zip(seats8, bridges8) do
   Rooms.commit_bridge(slug2, s.id, b)
 end
 Helper.await_reveal(slug2)
 
 for {w, h} <- viewports do
-  shot = Path.join(screenshot_dir, "stage_#{w}x#{h}_reveal_6bridges.png")
+  shot = Path.join(screenshot_dir, "stage_#{w}x#{h}_reveal_8bridges.png")
   expected = [
     "header h1",
     "[data-role=attempt]",
