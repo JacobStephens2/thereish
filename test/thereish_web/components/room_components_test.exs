@@ -313,6 +313,40 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html_without =~ "Written for this Page"
     end
 
+    test "foley_switches renders Full table with its description, and the two-Seat note only at two Seats" do
+      two_seats = %{
+        speaker?: false,
+        quips: true,
+        music: "page",
+        full_table: true,
+        seats: [%{id: "s1"}, %{id: "s2"}]
+      }
+
+      html = render_component(&foley_switches/1, room: two_seats)
+      assert html =~ ~s(data-role="full-table-switch")
+      assert html =~ ~s(data-active="true")
+
+      assert html =~
+               "Full table: one Bookend from every player's setting, and every bridge carries forward"
+
+      assert html =~ ~s(data-role="full-table-note")
+      assert html =~ "Matters from three Seats"
+
+      four_seats = %{
+        speaker?: false,
+        quips: true,
+        music: "page",
+        full_table: false,
+        seats: [%{id: "s1"}, %{id: "s2"}, %{id: "s3"}, %{id: "s4"}]
+      }
+
+      html_four = render_component(&foley_switches/1, room: four_seats)
+      assert html_four =~ ~s(data-role="full-table-switch")
+      assert html_four =~ ~s(data-active="false")
+      refute html_four =~ ~s(data-role="full-table-note")
+      refute html_four =~ "Matters from three Seats"
+    end
+
     test "reveal quip shows when quips is true and is hidden when quips is false" do
       reveal_data = %{
         closeness: 85,

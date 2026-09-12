@@ -129,6 +129,7 @@ defmodule ThereishWeb.FrontLiveTest do
       {:ok, new, _html} = live(conn, ~p"/new")
 
       refute has_element?(new, "select[name=players]")
+      refute has_element?(new, "[data-role=full-table-switch]")
       assert has_element?(new, "[data-role=open-room]")
 
       assert {:error, {:live_redirect, %{to: to}}} =
