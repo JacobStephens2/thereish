@@ -262,10 +262,39 @@ defmodule Thereish.Rooms do
   @doc """
   Every Room this browser holds a Seat in, newest first, each with the Seat.
 
-  The front page's one-tap way back in.
+  Identity, not the home list. A Room this browser has hidden is still here:
+  the Seat and the device association that finds it have not gone anywhere.
   """
   @spec for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
   def for_device(device_token), do: Store.rooms_for_device(device_token)
+
+  @doc """
+  Every Room this browser holds a Seat in that it has not hidden, newest first.
+
+  The front page's one-tap way back in. Hiding a Room drops it from this list
+  without touching `for_device/1`.
+  """
+  @spec listed_for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
+  def listed_for_device(device_token), do: Store.rooms_listed_for_device(device_token)
+
+  @doc """
+  Hides a Room from this browser's home list.
+
+  The Seat, the Chronicle, and the device association stay. The Code still
+  opens the same Seat. Another browser's list is a different token.
+  """
+  @spec hide(String.t(), String.t()) :: :ok | {:error, :no_such_room | term()}
+  def hide(slug, device_token) when is_binary(device_token) do
+    with normalised when is_binary(normalised) <- Code.normalise(slug),
+         %Room{} = room <- Store.get_room(normalised) do
+      case Store.hide_from_device(room.id, device_token) do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      _ -> {:error, :no_such_room}
+    end
+  end
 
   defp start_room(code) do
     DynamicSupervisor.start_child(Thereish.Rooms.Supervisor, {Server, slug: code})
