@@ -1,6 +1,8 @@
 defmodule ThereishWeb.Router do
   use ThereishWeb, :router
 
+  import ThereishWeb.AdminAuth
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -9,6 +11,11 @@ defmodule ThereishWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug ThereishWeb.DeviceToken
+    plug :fetch_current_admin
+  end
+
+  pipeline :require_admin do
+    plug :require_authenticated_admin
   end
 
   pipeline :api do
@@ -30,11 +37,31 @@ defmodule ThereishWeb.Router do
     live "/r/:slug/chronicle", ChronicleLive, :room
     live "/r/:slug/book", ChronicleLive, :room
 
-    get "/r/:slug/chronicle.md", ChronicleController, :export
     get "/r/:slug/voice/:attempt", VoiceController, :show
 
-    # Every Room's calibration at once, which is an operator's export rather
-    # than a Room's, and so is the one thing here that names no Code.
+    live "/check", CheckLive, :show
+
+    live_session :admin_guest, on_mount: [{ThereishWeb.AdminAuth, :redirect_if_admin}] do
+      live "/admin/sign-in", AdminSignInLive, :new
+      live "/admin/reset-password", AdminResetPasswordLive, :new
+      live "/admin/reset-password/:token", AdminResetPasswordLive, :edit
+    end
+
+    post "/admin/sign-in", AdminSessionController, :create
+    delete "/admin/sign-out", AdminSessionController, :delete
+  end
+
+  scope "/", ThereishWeb do
+    pipe_through [:browser, :require_admin]
+
+    live_session :admin, on_mount: [{ThereishWeb.AdminAuth, :require_admin}] do
+      live "/admin", AdminOverviewLive, :index
+      live "/admin/experiments", AdminExperimentsLive, :index
+      live "/spend", SpendLive, :index
+    end
+
+    get "/r/:slug/chronicle.md", ChronicleController, :export
+
     get "/calibration.json", ChronicleController, :export_calibration, assigns: %{format: :json}
     get "/calibration.jsonl", ChronicleController, :export_calibration, assigns: %{format: :jsonl}
 
@@ -43,11 +70,6 @@ defmodule ThereishWeb.Router do
 
     get "/r/:slug/calibration.jsonl", ChronicleController, :export_calibration,
       assigns: %{format: :jsonl}
-
-    live "/check", CheckLive, :show
-
-    # Operator spend page across all Rooms by role and model (ticket 09)
-    live "/spend", SpendLive, :index
   end
 
   # Other scopes may use custom stacks.

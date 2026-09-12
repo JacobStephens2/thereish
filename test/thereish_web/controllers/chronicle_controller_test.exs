@@ -8,12 +8,12 @@ defmodule ThereishWeb.ChronicleControllerTest do
 
   alias Thereish.Rooms
 
-  setup do
+  setup %{conn: conn} do
     slug = open_room()
     {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
     {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
 
-    %{slug: slug, melissa: melissa, jacob: jacob}
+    %{conn: log_in_admin(conn), slug: slug, melissa: melissa, jacob: jacob}
   end
 
   defp play(ctx, melissa_bridge, jacob_bridge) do

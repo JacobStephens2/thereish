@@ -170,4 +170,3 @@ defmodule Mix.Tasks.Foley.ForgeTest do
     assert output =~ "Prologue"
   end
 end
-

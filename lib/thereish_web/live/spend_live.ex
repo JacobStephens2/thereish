@@ -31,10 +31,10 @@ defmodule ThereishWeb.SpendLive do
         <div class="flex items-center justify-between">
           <h1 data-role="spend-heading" class="text-3xl font-bold tracking-tight">Spend</h1>
           <.link
-            navigate={~p"/"}
+            navigate={~p"/admin"}
             class="text-sm font-medium underline opacity-70 hover:opacity-100"
           >
-            ← Back to Front
+            ← Admin
           </.link>
         </div>
         <p class="text-sm opacity-60">
@@ -210,6 +210,20 @@ defmodule ThereishWeb.SpendLive do
                   <.link navigate={~p"/r/#{r.slug}/chronicle"} class="underline hover:opacity-80">
                     {r.slug}
                   </.link>
+                  <span class="opacity-40">·</span>
+                  <a
+                    href={~p"/r/#{r.slug}/chronicle.md"}
+                    class="text-xs underline opacity-70 hover:opacity-100"
+                  >
+                    Markdown
+                  </a>
+                  <span class="opacity-40">·</span>
+                  <a
+                    href={~p"/r/#{r.slug}/calibration.json"}
+                    class="text-xs underline opacity-70 hover:opacity-100"
+                  >
+                    Calibration
+                  </a>
                 </td>
                 <td
                   class="py-2.5 px-4 font-mono whitespace-nowrap opacity-80"

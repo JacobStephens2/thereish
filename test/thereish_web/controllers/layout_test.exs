@@ -92,8 +92,10 @@ defmodule ThereishWeb.LayoutTest do
         website_id: "3a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
       )
 
-      for path <- [~p"/", ~p"/spend"] do
-        {:ok, _view, html} = live(conn, path)
+      admin_conn = log_in_admin(conn)
+
+      for {c, path} <- [{conn, ~p"/"}, {admin_conn, ~p"/spend"}] do
+        {:ok, _view, html} = live(c, path)
 
         assert html =~ ~s(src="https://umami.stephens.page/script.js")
         assert html =~ ~s(data-website-id="3a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d")

@@ -442,6 +442,43 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Rooms that have at least one experiment assignment, newest first.
+  """
+  @spec experiment_rooms() :: [Thereish.Rooms.Room.t()]
+  def experiment_rooms do
+    room_ids =
+      from(a in ExperimentAssignment, distinct: true, select: a.room_id)
+      |> Repo.all()
+
+    case room_ids do
+      [] ->
+        []
+
+      ids ->
+        from(r in Thereish.Rooms.Room,
+          where: r.id in ^ids,
+          order_by: [desc: r.inserted_at]
+        )
+        |> Repo.all()
+    end
+  end
+
+  @doc """
+  The experiment currently in view for a Room: the latest outcome, else assignment.
+  """
+  @spec active_experiment_id(Ecto.UUID.t() | String.t()) :: String.t()
+  def active_experiment_id(room_id_or_slug) do
+    latest_outcome = room_id_or_slug |> experiment_outcomes(nil) |> List.last()
+    latest_assignment = room_id_or_slug |> experiment_assignments(nil) |> List.last()
+
+    cond do
+      latest_outcome -> latest_outcome.experiment_id
+      latest_assignment -> latest_assignment.experiment_id
+      true -> "author_model"
+    end
+  end
+
+  @doc """
   Returns all experiment assignments for a Room, oldest first.
   """
   @spec experiment_assignments(Ecto.UUID.t() | String.t(), String.t() | nil) ::

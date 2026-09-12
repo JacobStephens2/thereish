@@ -47,6 +47,10 @@ config :thereish,
   umami: [
     script_url: nil,
     website_id: nil
+  ],
+  # The one operator identity. Play stays account-free (ADR-0017).
+  admin: [
+    email: "jacob@stephens.page"
   ]
 
 # The one seam to the models. Two adapters satisfy it: the live one, which is
