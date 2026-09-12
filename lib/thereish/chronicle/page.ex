@@ -26,6 +26,7 @@ defmodule Thereish.Chronicle.Page do
     field :closeness, :integer
     field :opened_at, :utc_datetime_usec
     field :closed_at, :utc_datetime_usec
+    field :revealed_at, :utc_datetime_usec
 
     belongs_to :room, Thereish.Rooms.Room
     has_many :gives, Thereish.Chronicle.Give, preload_order: [asc: :order]
@@ -51,7 +52,8 @@ defmodule Thereish.Chronicle.Page do
       :melded,
       :closeness,
       :opened_at,
-      :closed_at
+      :closed_at,
+      :revealed_at
     ])
     |> validate_required([
       :room_id,
