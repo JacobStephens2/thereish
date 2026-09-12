@@ -2431,6 +2431,13 @@ defmodule Thereish.GameTest do
       assert Game.view(state, nil).next_bookends_chosen? == false
     end
 
+    test "join_and names two words with and, and more with commas and a final and" do
+      assert Game.join_and(["cairn", "beacon"]) == "cairn and beacon"
+
+      assert Game.join_and(~w(cairn beacon wharf signal torch lamp)) ==
+               "cairn, beacon, wharf, signal, torch and lamp"
+    end
+
     test "the next-Bookends projection is any length" do
       {state, effects} = six_committed(six_full())
       state = grade(state, effects, 10)

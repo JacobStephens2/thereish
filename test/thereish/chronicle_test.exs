@@ -1225,7 +1225,14 @@ defmodule Thereish.ChronicleTest do
       assert attempt.carried == ["beacon", "cairn", "lamp", "seagull"]
       assert view.full_table == true
 
-      assert Enum.map(view.bookend_gives, & &1.give) == [
+      assert Enum.map(view.bookend_origins, & &1.give) == [
+               "setting one",
+               "setting two",
+               "setting three",
+               "setting four"
+             ]
+
+      assert Enum.map(attempt.bookend_chips, & &1.give) == [
                "setting one",
                "setting two",
                "setting three",

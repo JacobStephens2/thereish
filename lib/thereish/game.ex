@@ -300,6 +300,35 @@ defmodule Thereish.Game do
   def attempt_cap, do: Application.fetch_env!(:thereish, :attempts_per_page)
 
   @doc """
+  Names a list of words the way the table hears them: two stay "cairn and beacon",
+  six become "cairn, beacon, wharf, signal, torch and lamp".
+  """
+  @spec join_and([String.t() | map()]) :: String.t()
+  def join_and(words) when is_list(words) do
+    words = Enum.map(words, &join_and_word/1)
+
+    case Enum.reject(words, &(&1 == "")) do
+      [] ->
+        ""
+
+      [one] ->
+        one
+
+      [left, right] ->
+        "#{left} and #{right}"
+
+      many ->
+        {last, rest} = List.pop_at(many, -1)
+        Enum.join(rest, ", ") <> " and " <> last
+    end
+  end
+
+  defp join_and_word(%{word: word}) when is_binary(word), do: word
+  defp join_and_word(%{"word" => word}) when is_binary(word), do: word
+  defp join_and_word(word) when is_binary(word), do: word
+  defp join_and_word(_), do: ""
+
+  @doc """
   Applies one event, returning the next state and whatever the Room now owes.
 
   A Seat already in the Room joining again is the ordinary rejoin, and is a
@@ -441,7 +470,7 @@ defmodule Thereish.Game do
 
         page = %{
           bookends: bookends,
-          bookend_gives: origins,
+          bookend_origins: origins,
           gives: state.gives,
           meta: meta,
           full_table: page_full_table(attrs, state.full_table)
@@ -1192,7 +1221,8 @@ defmodule Thereish.Game do
   defp page_origins(nil), do: nil
 
   defp page_origins(page) when is_map(page) do
-    page[:bookend_gives] || page["bookend_gives"] ||
+    page[:bookend_origins] || page["bookend_origins"] ||
+      page[:bookend_gives] || page["bookend_gives"] ||
       Enum.map(page[:bookends] || page["bookends"] || [], fn _ -> %{} end)
   end
 

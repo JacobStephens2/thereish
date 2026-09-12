@@ -112,7 +112,7 @@ defmodule Thereish.Steward.Recap do
   end
 
   defp page_lines(page) do
-    bookends = page.bookends |> Enum.map(&String.upcase/1) |> join_and()
+    bookends = page.bookends |> Enum.map(&String.upcase/1) |> Thereish.Game.join_and()
     outcome = if page.melded, do: "They melded.", else: "They never converged."
 
     [
@@ -140,25 +140,8 @@ defmodule Thereish.Steward.Recap do
           "The Assayer had no verdict."
       end
 
-    "Attempt #{attempt.number} (bookends #{join_and(attempt.bookends)}): " <>
+    "Attempt #{attempt.number} (bookends #{Thereish.Game.join_and(attempt.bookends)}): " <>
       "#{written}. #{read}"
-  end
-
-  defp join_and(words) when is_list(words) do
-    case words do
-      [] ->
-        ""
-
-      [one] ->
-        one
-
-      [left, right] ->
-        "#{left} and #{right}"
-
-      many ->
-        {last, rest} = List.pop_at(many, -1)
-        Enum.join(rest, ", ") <> " and " <> last
-    end
   end
 
   @doc """

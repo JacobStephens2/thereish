@@ -213,24 +213,7 @@ defmodule ThereishWeb.RoomComponents do
   Joins words with commas and a final "and": two stay "cairn and beacon", six
   become "cairn, beacon, wharf, signal, torch and lamp".
   """
-  def join_and(words) when is_list(words) do
-    words = Enum.map(words, &bookend_word/1)
-
-    case words do
-      [] ->
-        ""
-
-      [one] ->
-        one
-
-      [left, right] ->
-        "#{left} and #{right}"
-
-      many ->
-        {last, rest} = List.pop_at(many, -1)
-        Enum.join(rest, ", ") <> " and " <> last
-    end
-  end
+  defdelegate join_and(words), to: Thereish.Game
 
   defp bookend_chips(%{bookend_chips: chips}) when is_list(chips) and chips != [], do: chips
   defp bookend_chips(%{bookends: bookends}) when is_list(bookends), do: bookends
