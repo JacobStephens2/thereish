@@ -5,9 +5,9 @@ defmodule Thereish.Chronicle do
   A Page arrives here when it closes, as the whole thing at once: the authored
   document, every attempt in order, what each Seat wrote on each, and the one
   Verdict the Assayer gave those Bridges read together (ADR-0010). Nothing here updates a row and nothing deletes
-  one — the log is the version history (ADR-0003), which is why the couple
-  correcting the record later will be another row rather than an edit to this
-  one.
+  one — the log is the version history (ADR-0003). Retrospective opinions about
+  an Assayer grade append; they do not rewrite Verdicts or Precedents (ADR-0019).
+  Historical correction rows remain readable.
 
   Rows reference Seats and never Accounts. A Seat is permanent and claimable, so
   a history written against one comes with it whenever an Account claims it
@@ -71,17 +71,11 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
-  Records one player correction into the Chronicle as an append-only event.
+  Correction writes are retired. Historical correction rows remain readable
+  (ADR-0019).
   """
-  @spec record_correction(Ecto.UUID.t(), map()) ::
-          {:ok, Correction.t()} | {:error, Ecto.Changeset.t()}
-  def record_correction(room_id, attrs) do
-    attrs = Map.put(attrs, :room_id, room_id)
-
-    %Correction{}
-    |> Correction.changeset(attrs)
-    |> Repo.insert()
-  end
+  @spec record_correction(Ecto.UUID.t(), map()) :: {:error, :corrections_retired}
+  def record_correction(_room_id, _attrs), do: {:error, :corrections_retired}
 
   @doc """
   Every overrule in one Room, oldest first.
@@ -153,6 +147,41 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Records one retrospective opinion about an Attempt's original Assayer grade.
+
+  Original participants are Seats that wrote a Bridge on that Attempt. The
+  authenticated admin may review any Attempt, attributed separately. Opinions
+  append; they do not rewrite the Verdict, an overrule, or a cached Precedent
+  (ADR-0006, ADR-0019).
+  """
+  @spec record_opinion(Ecto.UUID.t() | String.t(), map()) ::
+          {:ok, FairnessTap.t()} | {:error, atom() | Ecto.Changeset.t()}
+  def record_opinion(room_id, attrs) do
+    room_id = resolve_room_id(room_id)
+
+    with {:ok, snapshot} <- opinion_target(room_id, attrs),
+         {:ok, reviewer} <-
+           authorize_opinion(snapshot, Map.get(attrs, :as) || Map.get(attrs, "as")),
+         {:ok, label} <- opinion_label(Map.get(attrs, :label) || Map.get(attrs, "label")) do
+      record_fairness_tap(room_id, %{
+        page_id: snapshot.page_id,
+        attempt_number: snapshot.attempt_number,
+        bookends: snapshot.bookends,
+        bridges: snapshot.bridges,
+        closeness: snapshot.grade,
+        grade: snapshot.grade,
+        band: snapshot.band,
+        model: snapshot.model,
+        prompt_version: snapshot.prompt_version,
+        label: label,
+        source: reviewer.source,
+        seat_id: reviewer.seat_id,
+        admin_id: reviewer.admin_id
+      })
+    end
+  end
+
+  @doc """
   Records one player fairness tap into the Chronicle as an append-only event.
   """
   @spec record_fairness_tap(Ecto.UUID.t(), map()) ::
@@ -202,7 +231,9 @@ defmodule Thereish.Chronicle do
         all_fairness_taps()
       end
 
-    Enum.map(taps, &format_calibration_entry/1)
+    taps
+    |> Enum.reject(&(&1.source == "admin"))
+    |> Enum.map(&format_calibration_entry/1)
   end
 
   @doc """
@@ -225,6 +256,7 @@ defmodule Thereish.Chronicle do
 
   defp format_calibration_entry(t) do
     format_fairness_tap(t)
+    |> Map.drop([:source, :admin_id, :reviewer_name])
     |> Map.merge(%{
       room_id: t.room_id,
       page_id: t.page_id
@@ -1964,14 +1996,96 @@ defmodule Thereish.Chronicle do
     })
   end
 
+  defp opinion_target(room_id, attrs) do
+    page_id = Map.get(attrs, :page_id) || Map.get(attrs, "page_id")
+    attempt_number = Map.get(attrs, :attempt_number) || Map.get(attrs, "attempt_number")
+
+    page =
+      if is_binary(page_id) do
+        Page
+        |> Repo.get(page_id)
+        |> Repo.preload(attempts: [:bridges, :verdicts])
+      end
+
+    attempt = page && Enum.find(page.attempts, &(&1.number == attempt_number))
+
+    cond do
+      is_nil(page) or page.room_id != room_id or is_nil(attempt) ->
+        {:error, :no_such_attempt}
+
+      true ->
+        overrule =
+          Enum.find(overrules(room_id), fn o ->
+            o.attempt_number == attempt.number and
+              (o.page_id == page.id or o.bookends == attempt.bookends)
+          end)
+
+        verdict = List.first(attempt.verdicts)
+        grade = (overrule && overrule.machine_closeness) || (verdict && verdict.closeness)
+
+        band =
+          case grade do
+            nil -> verdict && verdict.band
+            closeness -> to_string(Thereish.Ladder.read(closeness).band)
+          end
+
+        {:ok,
+         %{
+           page_id: page.id,
+           attempt_number: attempt.number,
+           bookends: attempt.bookends,
+           bridges: Enum.map(attempt.bridges, & &1.bridge),
+           participant_ids: Enum.map(attempt.bridges, & &1.seat_id),
+           grade: grade,
+           band: band,
+           model: verdict && verdict.model,
+           prompt_version: verdict && verdict.prompt_version
+         }}
+    end
+  end
+
+  defp authorize_opinion(snapshot, {:participant, seat_id}) when is_binary(seat_id) do
+    if seat_id in snapshot.participant_ids do
+      {:ok, %{source: "participant", seat_id: seat_id, admin_id: nil}}
+    else
+      {:error, :not_a_participant}
+    end
+  end
+
+  defp authorize_opinion(_snapshot, {:admin, admin_id}) when is_binary(admin_id) do
+    case Repo.get(Thereish.Admin.Identity, admin_id) do
+      %Thereish.Admin.Identity{} ->
+        {:ok, %{source: "admin", seat_id: nil, admin_id: admin_id}}
+
+      nil ->
+        {:error, :not_admin}
+    end
+  end
+
+  defp authorize_opinion(_snapshot, _as), do: {:error, :not_a_participant}
+
+  defp opinion_label(label) when label in [:fair, "fair"], do: {:ok, "fair"}
+
+  defp opinion_label(label) when label in [:too_kind, "too_kind", "too kind"],
+    do: {:ok, "too_kind"}
+
+  defp opinion_label(label) when label in [:too_harsh, "too_harsh", "too harsh"],
+    do: {:ok, "too_harsh"}
+
+  defp opinion_label(_), do: {:error, :invalid_label}
+
   defp format_fairness_tap(t) do
     closeness = t.closeness || Map.get(t, :grade)
+    source = Map.get(t, :source) || "participant"
 
     %{
       id: t.id,
       attempt_number: t.attempt_number,
       seat_id: t.seat_id,
-      seat_name: (t.seat && t.seat.name) || "Player",
+      admin_id: Map.get(t, :admin_id),
+      source: source,
+      seat_name: t.seat && t.seat.name,
+      reviewer_name: opinion_reviewer_name(t, source),
       bookends: t.bookends,
       bridges: t.bridges,
       grade: closeness,
@@ -1983,6 +2097,9 @@ defmodule Thereish.Chronicle do
       inserted_at: t.inserted_at
     }
   end
+
+  defp opinion_reviewer_name(_t, "admin"), do: "Admin"
+  defp opinion_reviewer_name(t, _), do: (t.seat && t.seat.name) || "Player"
 
   defp format_overrule(o) do
     %{
