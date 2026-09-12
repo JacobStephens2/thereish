@@ -284,6 +284,8 @@ defmodule ThereishWeb.StageLive do
 
           <.carry_forward room={@room} />
 
+          <.reveal_hold room={@room} />
+
           <.ending room={@room} mode={:stage} />
         </div>
       </div>
