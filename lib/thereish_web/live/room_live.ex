@@ -300,8 +300,6 @@ defmodule ThereishWeb.RoomLive do
 
   defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
 
-  defp display_url(url), do: String.replace_prefix(url, "https://", "")
-
   defp find_seat_colour(room, seat_id) do
     seat = Enum.find(room[:seats] || [], &(&1.id == seat_id))
     (seat && seat[:colour]) || "currentColor"
@@ -585,6 +583,7 @@ defmodule ThereishWeb.RoomLive do
             The Chronicle
           </.link>
         </div>
+        <Layouts.made_by />
       </footer>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResyncOnWake">
         export default {
@@ -666,7 +665,7 @@ defmodule ThereishWeb.RoomLive do
         {@room.quip}
       </p>
       <p class="mt-2 text-center text-sm opacity-70">
-        <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
+        <.join_at url={@join_url} />
       </p>
       <div class="mt-4">
         <.button navigate={~p"/r/#{@code}/stage"} data-role="make-stage" class="btn-sm text-xs">
