@@ -63,7 +63,6 @@ defmodule ThereishWeb.FrontLive do
           name="code"
           value={@code}
           label="Code"
-          placeholder="the word you were told"
           autocomplete="off"
           autocapitalize="characters"
           autofocus
@@ -96,6 +95,8 @@ defmodule ThereishWeb.FrontLive do
           </li>
         </ul>
       </section>
+
+      <Layouts.made_by />
     </main>
     """
   end

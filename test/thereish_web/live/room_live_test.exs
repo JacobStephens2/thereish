@@ -137,6 +137,17 @@ defmodule ThereishWeb.RoomLiveTest do
       refute element(view, "[data-role=room-code]") |> render() =~ "Read it aloud, or send"
     end
 
+    test "a quiet credit names who made Thereish" do
+      code = open_room()
+      {:ok, view, _html} = live(phone(code))
+
+      assert has_element?(
+               view,
+               "[data-role=made-by] a[href='https://stephens.page']",
+               "Made by Jacob Stephens"
+             )
+    end
+
     test "Stage header renders the Room's quip beside the join line when present, and nothing when absent" do
       slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
       {:ok, stage, _html} = live(build_conn(), ~p"/r/#{slug_with_quip}/stage")
@@ -906,11 +917,34 @@ defmodule ThereishWeb.RoomLiveTest do
       ])
     end
 
-    test "shows the URL a phone should open" do
+    test "shows thereish.app and keeps a useful Room link" do
       slug = open_room()
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
-      assert has_element?(stage, "[data-role=join-url]", "/r/#{slug}")
+      assert has_element?(stage, "[data-role=join-url]", "thereish.app")
+      assert has_element?(stage, ~s(a[data-role=join-url][href*="/r/#{slug}"]))
+      refute has_element?(stage, "[data-role=join-url]", "/r/#{slug}")
+    end
+
+    test "the joining screen has a small credit that play does not" do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      assert has_element?(stage, "[data-role=stage-foot] [data-role=made-by][data-size=stage]")
+
+      assert has_element?(
+               stage,
+               "[data-role=stage-foot] [data-role=made-by] a[href='https://stephens.page']",
+               "Made by Jacob Stephens"
+             )
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+      play_to_bridging(melissa, jacob, slug)
+
+      refute has_element?(stage, "[data-role=made-by]")
     end
 
     test "heading, controls, and chronicle link share the header; join URL and roster share the foot" do
@@ -929,9 +963,9 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(stage, "header a[href*='chronicle']", "The Chronicle")
       refute has_element?(stage, "header [data-role=join-url]")
 
-      # Footer strip has join URL and roster together; no separate "In the Room" heading
-      assert has_element?(stage, "footer [data-role=join-url]", "/r/#{slug}")
-      assert has_element?(stage, "[data-role=stage-foot] [data-role=join-url]", "/r/#{slug}")
+      # Footer strip has join address and roster together; no separate "In the Room" heading
+      assert has_element?(stage, "footer [data-role=join-url]", "thereish.app")
+      assert has_element?(stage, "[data-role=stage-foot] [data-role=join-url]", "thereish.app")
       assert has_element?(stage, "footer [data-role=roster]")
       assert has_element?(stage, "footer [data-seat]", "Melissa")
       assert has_element?(stage, "footer [data-seat]", "Jacob")

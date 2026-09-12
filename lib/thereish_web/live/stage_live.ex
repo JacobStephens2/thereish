@@ -3,9 +3,9 @@ defmodule ThereishWeb.StageLive do
   The laptop: the Room's public face, holding no Seat.
 
   It shows the same roster the phones show, the Room's Code — large while the
-  Room is filling, small in the header for the rest of the night — and the URL
-  to type to get into it, so the first thing a new player needs is already on
-  the screen they are looking at.
+  Room is filling, small in the header for the rest of the night — and
+  thereish.app, so the first thing a new player needs is already on the screen
+  they are looking at.
 
   Sound starts on one deliberate tap. Opening the Stage claims nothing and
   plays nothing; the tap claims the Speaker and the Repertoire starts. That is
@@ -287,13 +287,13 @@ defmodule ThereishWeb.StageLive do
       >
         <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
           <p class={["opacity-70", filling?(@room) && "text-base sm:text-2xl"]}>
-            Join at
-            <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
+            Join at <.join_at url={@join_url} class="font-semibold" />
             <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
           </p>
           <.roster room={@room} mode={:stage} />
         </div>
         <.now_playing :if={@room} room={@room} />
+        <Layouts.made_by :if={filling?(@room)} size={:stage} />
       </footer>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".WakeLock">
@@ -384,8 +384,6 @@ defmodule ThereishWeb.StageLive do
     </section>
     """
   end
-
-  defp display_url(url), do: String.replace_prefix(url, "https://", "")
 
   # The Room is still filling: nothing is in play yet, so the Code is the
   # biggest thing on the screen. From the first Give on it moves to the header

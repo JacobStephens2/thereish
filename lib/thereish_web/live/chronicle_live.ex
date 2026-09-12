@@ -770,6 +770,7 @@ defmodule ThereishWeb.ChronicleLive do
         >
           {Rooms.in_play_sentence(@in_play_count)}
         </p>
+        <Layouts.made_by />
       </footer>
     </main>
     """

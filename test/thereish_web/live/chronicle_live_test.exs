@@ -135,6 +135,16 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert html =~ "empty" or has_element?(view, "[data-role=empty-chronicle]")
     end
 
+    test "a quiet credit names who made Thereish", %{conn: conn, slug: slug} do
+      {:ok, view, _} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(
+               view,
+               "[data-role=made-by] a[href='https://stephens.page']",
+               "Made by Jacob Stephens"
+             )
+    end
+
     test "reads pages in reverse chronological order with bookends, attempts, bridges, and verdicts",
          %{conn: conn, slug: slug} = ctx do
       # Play first page: melded
