@@ -114,6 +114,9 @@ defmodule ThereishWeb.RoomLive do
       :ok ->
         {:noreply, socket |> assign(:page_error, nil) |> resync()}
 
+      {:error, :reveal_held} ->
+        {:noreply, resync(socket)}
+
       {:error, reason} ->
         {:noreply, assign(socket, :page_error, message(reason))}
     end
@@ -157,7 +160,7 @@ defmodule ThereishWeb.RoomLive do
     trimmed = String.trim(give || "")
 
     if trimmed == "" do
-      {:noreply, assign(socket, :give_error, "Type a setting first.")}
+      {:noreply, assign(socket, :give_error, "Type a Give first.")}
     else
       case Rooms.give(socket.assigns.slug, socket.assigns.seat.id, trimmed) do
         :ok ->
@@ -274,7 +277,7 @@ defmodule ThereishWeb.RoomLive do
     |> ThereishWeb.Foley.push_foley_events(old_room, new_room)
   end
 
-  defp message(:give_required), do: "Type a setting first."
+  defp message(:give_required), do: "Type a Give first."
   defp message(:name_required), do: "Type a name first."
   defp message(:name_too_long), do: "That name is longer than #{Seat.name_max()} characters."
   defp message(:room_full), do: "Every seat is taken. Ask whoever is in there to make room."
@@ -284,7 +287,7 @@ defmodule ThereishWeb.RoomLive do
   defp message(:not_bridging), do: "Too late for this one."
   defp message(:no_such_seat), do: "You are not in this Room any more. Reload."
   defp message({:illegal_bridge, reason}), do: reason
-  defp message(:not_enough_gives), do: "Need at least two settings to start."
+  defp message(:not_enough_gives), do: "Need at least two Gives to start."
   defp message(:not_playing_page), do: "You're watching this Page."
   defp message(:pool_exhausted), do: "That's every Page for tonight."
   defp message(_), do: "Something went wrong. Try again."
@@ -300,8 +303,6 @@ defmodule ThereishWeb.RoomLive do
   defp playing_phase?(room), do: room.phase not in [:waiting, :giving]
 
   defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
-
-  defp display_url(url), do: String.replace_prefix(url, "https://", "")
 
   defp find_seat_colour(room, seat_id) do
     seat = Enum.find(room[:seats] || [], &(&1.id == seat_id))
@@ -387,15 +388,19 @@ defmodule ThereishWeb.RoomLive do
         <.input
           name="give"
           value={if(@give_input != "", do: @give_input, else: @room.your_last_give)}
-          label="Your setting"
-          placeholder="e.g. the world St. Thérèse grew up in"
+          label="Your Give"
+          placeholder="e.g. restless, first snow, Kiss Heavy Metal"
           autocomplete="off"
           autofocus
         />
+        <p data-role="give-examples" class="text-sm opacity-70">
+          A feeling, an idea, a night you remember, a kind of music — not only a place.
+          restless · a can of worms · first snow · Kiss Heavy Metal
+        </p>
         <p :if={@give_error} data-role="give-error" class="text-sm text-error">
           {@give_error}
         </p>
-        <.button variant="primary">Set</.button>
+        <.button variant="primary">Give</.button>
       </form>
 
       <div
@@ -403,7 +408,7 @@ defmodule ThereishWeb.RoomLive do
         data-role="your-give"
         class="flex flex-col items-center gap-1 text-center"
       >
-        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your setting</p>
+        <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your Give</p>
         <div
           :if={@room[:your_mask] && @room.your_mask not in [nil, :dot]}
           data-role="your-mask"
@@ -459,13 +464,13 @@ defmodule ThereishWeb.RoomLive do
         data-role="author-failure"
         class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
       >
-        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+        <p class="text-xs uppercase tracking-widest font-semibold text-warning">Give Notice</p>
         <p class="text-sm font-medium">
-          The Author couldn't write from these settings: {@room.author_failure}
+          The Author couldn't write from these Gives: {@room.author_failure}
         </p>
         <div class="flex gap-2 mt-2">
           <.button phx-click="retry_author" data-role="retry-author" variant="primary">Try again</.button>
-          <.button phx-click="reset_gives" data-role="reset-gives">New settings</.button>
+          <.button phx-click="reset_gives" data-role="reset-gives">New Gives</.button>
         </div>
       </div>
       <.attempt :if={@seat} room={@room} />
@@ -524,7 +529,13 @@ defmodule ThereishWeb.RoomLive do
         class="flex flex-col items-center gap-2 border-t border-base-300 pt-6"
       >
         <.carry_forward room={@room} />
-        <.button phx-click="next_attempt" data-role="again" variant="primary">
+        <.reveal_hold room={@room} />
+        <.button
+          phx-click="next_attempt"
+          data-role="again"
+          variant="primary"
+          disabled={not @room[:can_advance?]}
+        >
           Again — {join_and(@room.next_bookends)}
         </.button>
       </div>
@@ -532,8 +543,16 @@ defmodule ThereishWeb.RoomLive do
       <.ending room={@room} seat={@seat} mode={:phone} />
 
       <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
+        <.reveal_hold room={@room} />
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>
-        <.button phx-click="next_page" data-role="one-more" variant="primary">One more?</.button>
+        <.button
+          phx-click="next_page"
+          data-role="one-more"
+          variant="primary"
+          disabled={not @room[:can_advance?]}
+        >
+          One more?
+        </.button>
       </div>
 
       <%= if playing_phase?(@room) do %>
@@ -572,6 +591,7 @@ defmodule ThereishWeb.RoomLive do
             The Chronicle
           </.link>
         </div>
+        <Layouts.made_by />
       </footer>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResyncOnWake">
         export default {
@@ -653,7 +673,7 @@ defmodule ThereishWeb.RoomLive do
         {@room.quip}
       </p>
       <p class="mt-2 text-center text-sm opacity-70">
-        <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
+        <.join_at url={@join_url} />
       </p>
       <div class="mt-4">
         <.button navigate={~p"/r/#{@code}/stage"} data-role="make-stage" class="btn-sm text-xs">

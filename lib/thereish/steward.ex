@@ -636,7 +636,7 @@ defmodule Thereish.Steward do
   The most Seats a Room may hold while the Assayer is grading it live.
 
   Not a cost: an Attempt is one grading request however many Seats wrote into it
-  (ADR-0010). The cap is about the phone — six Bridges is what a reveal can show
+  (ADR-0010). The cap is about the phone — eight Bridges is what a reveal can show
   at once — and about how long a list of words one model can be asked to hold one
   opinion about. The rules are written for a list of any length (ADR-0007).
   """

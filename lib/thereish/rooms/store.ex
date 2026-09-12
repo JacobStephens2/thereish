@@ -10,6 +10,7 @@ defmodule Thereish.Rooms.Store do
   import Ecto.Query
 
   alias Thereish.Repo
+  alias Thereish.Rooms.Hidden
   alias Thereish.Rooms.Never
   alias Thereish.Rooms.Room
   alias Thereish.Rooms.Seat
@@ -47,8 +48,8 @@ defmodule Thereish.Rooms.Store do
   Every Room this browser holds a Seat in, newest Seat first, each with the Seat
   it holds.
 
-  This is what the front page's rejoin links are made of: a phone that has been
-  in a Room is one tap from its own Seat, without remembering a Code.
+  Identity, not the home list: a hidden Room is still here, because the Seat and
+  the device association that finds it have not gone anywhere.
   """
   @spec rooms_for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
   def rooms_for_device(device_token) do
@@ -60,6 +61,33 @@ defmodule Thereish.Rooms.Store do
         preload: [room: r]
     )
     |> Enum.map(&%{room: &1.room, seat: &1})
+  end
+
+  @doc """
+  Every Room this browser holds a Seat in that it has not hidden, newest first.
+
+  The front page's one-tap way back in. Hiding a Room drops it from this list
+  without touching `rooms_for_device/1`.
+  """
+  @spec rooms_listed_for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
+  def rooms_listed_for_device(device_token) do
+    hidden_ids = hidden_room_ids_for_device(device_token)
+
+    device_token
+    |> rooms_for_device()
+    |> Enum.reject(fn %{room: room} -> room.id in hidden_ids end)
+  end
+
+  @doc "Records that this browser will not list this Room on the front page."
+  @spec hide_from_device(Ecto.UUID.t(), String.t()) :: {:ok, Hidden.t()} | {:error, term()}
+  def hide_from_device(room_id, device_token) do
+    %Hidden{}
+    |> Hidden.changeset(%{room_id: room_id, device_token: device_token})
+    |> Repo.insert(on_conflict: :nothing, conflict_target: [:device_token, :room_id])
+  end
+
+  defp hidden_room_ids_for_device(device_token) do
+    Repo.all(from h in Hidden, where: h.device_token == ^device_token, select: h.room_id)
   end
 
   @doc "Every Seat in the Room, in the order they were first taken."

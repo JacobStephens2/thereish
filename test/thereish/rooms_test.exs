@@ -60,6 +60,32 @@ defmodule Thereish.RoomsTest do
       assert view.full_table == true
     end
 
+    test "an eight-Seat Full table Page opens with eight Bookends" do
+      slug = open_room(seat_limit: 8)
+
+      seats =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned) do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      view = await_phase(slug, :bridging)
+
+      assert view.bookends == [
+               "lantern",
+               "harbour",
+               "summit",
+               "ember",
+               "grove",
+               "spire",
+               "ridge",
+               "hearth"
+             ]
+
+      assert view.full_table == true
+    end
+
     test "a six-Seat Full table Page plays from Gives to close" do
       slug = open_room(seat_limit: 6)
       names = ~w(Mara Jacob Ada Ida Ola Ora)
@@ -110,11 +136,101 @@ defmodule Thereish.RoomsTest do
       assert hd(page.attempts).carried == bridges
     end
 
-    test "a Room at the Assayer's cap plays, and every Bridge in it is graded together" do
-      slug = open_room(seat_limit: Thereish.Steward.seat_cap())
+    test "an eight-Seat Full table Page plays from Gives to close" do
+      slug = open_room(seat_limit: 8)
+      names = ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned)
+      bridges = ~w(cairn beacon wharf signal torch lamp stone flare)
 
       seats =
-        for name <- ~w(Mara Jacob Ada Ida Ola Ora) do
+        for name <- names do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      view = await_phase(slug, :bridging)
+      assert length(view.bookends) == 8
+
+      for {seat, word} <- Enum.zip(seats, bridges) do
+        :ok = Rooms.commit_bridge(slug, seat.id, word)
+      end
+
+      view = await_reveal(slug)
+      assert view.next_bookends == bridges
+
+      :ok = Rooms.next_attempt(slug, hd(seats).id)
+      view = await_phase(slug, :bridging)
+      assert view.bookends == bridges
+      assert Enum.map(view.bookend_chips, & &1.seat_id) == Enum.map(seats, & &1.id)
+
+      Enum.each(seats, &(:ok = Rooms.commit_bridge(slug, &1.id, "peak")))
+      view = await_reveal(slug)
+      assert view.phase == :closed
+      assert view.reveal.melded?
+
+      room = Store.get_room(slug)
+      [page] = Chronicle.book(room.id)
+      assert page.full_table == true
+      assert length(hd(page.attempts).bookends) == 8
+      assert hd(page.attempts).carried == bridges
+    end
+
+    test "an eight-Seat Room with Full table off opens on two Bookends and carries the furthest pair" do
+      slug = open_room(seat_limit: 8)
+      assert :ok = Rooms.set_full_table(slug, false)
+
+      names = ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned)
+      bridges = ~w(cairn beacon wharf signal torch lamp stone flare)
+
+      seats =
+        for name <- names do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      view = await_phase(slug, :bridging)
+      assert view.full_table == false
+      assert view.bookends == ["lantern", "harbour"]
+
+      for {seat, word} <- Enum.zip(seats, bridges) do
+        :ok = Rooms.commit_bridge(slug, seat.id, word)
+      end
+
+      view = await_reveal(slug)
+      assert length(view.reveal.bridges) == 8
+      assert length(view.next_bookends) == 2
+      refute view.reveal.melded?
+      carried = view.next_bookends
+
+      :ok = Rooms.next_attempt(slug, hd(seats).id)
+      view = await_phase(slug, :bridging)
+      assert view.bookends == carried
+      assert length(view.bookends) == 2
+    end
+
+    test "eight Seats join a Room at the cap, and a ninth cannot occupy a Seat" do
+      slug = open_room(seat_limit: 8)
+
+      seats =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned) do
+          assert {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      assert length(seats) == 8
+      assert Rooms.snapshot(slug, nil).seat_limit == 8
+      assert Rooms.snapshot(slug, nil).open_seats == 0
+      assert {:error, :room_full} = Rooms.join(slug, "Ninth", device_token())
+      assert length(Rooms.snapshot(slug, nil).seats) == 8
+    end
+
+    test "a Room at the Assayer's cap plays, and every Bridge in it is graded together" do
+      slug = open_room(seat_limit: Thereish.Steward.seat_cap())
+      names = Enum.take(~w(Mara Jacob Ada Ida Ola Ora Ivy Ned), Thereish.Steward.seat_cap())
+
+      seats =
+        for name <- names do
           {:ok, seat} = Rooms.join(slug, name, device_token())
           seat
         end
@@ -123,12 +239,65 @@ defmodule Thereish.RoomsTest do
       await_phase(slug, :bridging)
       Enum.each(seats, &(:ok = Rooms.commit_bridge(slug, &1.id, "cairn")))
 
-      # Six Bridges, one Verdict. The cap is about what a phone can show and
+      # Eight Bridges, one Verdict. The cap is about what a phone can show and
       # what one reading can hold, not about the bill (ADR-0010).
       view = await_reveal(slug)
 
-      assert length(view.reveal.bridges) == 6
+      assert length(view.reveal.bridges) == Thereish.Steward.seat_cap()
       assert view.reveal.closeness == 100
+    end
+
+    test "an eight-Seat Attempt is one whole-set assay, not one per pair" do
+      steward(assay_capture: self())
+      slug = open_room(seat_limit: 8)
+
+      seats =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned) do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      await_phase(slug, :bridging)
+
+      for {seat, word} <- Enum.zip(seats, ~w(cairn beacon wharf signal torch lamp stone flare)) do
+        :ok = Rooms.commit_bridge(slug, seat.id, word)
+      end
+
+      view = await_reveal(slug)
+      refute Map.has_key?(view.reveal, :pairs)
+      assert length(view.reveal.furthest) == 2
+
+      assert Enum.all?(
+               view.reveal.furthest,
+               &(&1.bridge in ~w(cairn beacon wharf signal torch lamp stone flare))
+             )
+
+      assays = received_assays()
+      assert length(assays) == 1
+      [request] = assays
+      assert length(request.bridges) == 8
+    end
+
+    test "an eight-Seat Attempt still reveals when the Assayer cannot grade" do
+      steward(mode: :unavailable)
+      slug = open_room(seat_limit: 8)
+
+      seats =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned) do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      await_phase(slug, :bridging)
+      Enum.each(seats, &(:ok = Rooms.commit_bridge(slug, &1.id, "cairn")))
+
+      view = await_reveal(slug)
+      refute view.reveal.graded?
+      assert view.reveal.closeness == nil
+      assert length(view.reveal.bridges) == 8
+      refute Map.has_key?(view.reveal, :pairs)
     end
 
     test "a Room too big for the Assayer to grade cannot be created" do
@@ -680,6 +849,137 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  describe "the reveal hold" do
+    setup do
+      reveal_hold(5_000)
+      clock = freeze_clock(0)
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+
+      %{slug: slug, mara: mara, jacob: jacob, clock: clock}
+    end
+
+    test "a miss cannot advance immediately before the deadline and can at it", ctx do
+      view = play(ctx, "cairn", "beacon")
+
+      assert view.phase == :reveal
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+
+      travel(ctx.clock, 4_999)
+
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+      refute Rooms.snapshot(ctx.slug, ctx.jacob.id).can_advance?
+      assert Rooms.snapshot(ctx.slug, nil).phase == :reveal
+
+      travel(ctx.clock, 5_000)
+
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).can_advance?
+      assert :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
+      assert Rooms.snapshot(ctx.slug, nil).attempt.number == 2
+    end
+
+    test "an early Meld cannot open the next Page immediately before the deadline and can at it",
+         ctx do
+      view = play(ctx, "cairn", "cairn")
+
+      assert view.phase == :closed
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.mara.id)
+
+      travel(ctx.clock, 4_999)
+
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.jacob.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :closed
+
+      travel(ctx.clock, 5_000)
+
+      assert Rooms.snapshot(ctx.slug, nil).can_advance?
+      assert :ok = Rooms.next_page(ctx.slug, ctx.jacob.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
+    end
+
+    test "exhausted Attempts hold the closing reveal the same way", ctx do
+      attempt_cap(2)
+
+      play(ctx, "cairn", "beacon")
+      travel(ctx.clock, 5_000)
+      :ok = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+
+      view = play(ctx, "wharf", "gantry")
+
+      assert view.phase == :closed
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.mara.id)
+
+      travel(ctx.clock, 9_999)
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.jacob.id)
+
+      travel(ctx.clock, 10_000)
+      assert :ok = Rooms.next_page(ctx.slug, ctx.jacob.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
+    end
+
+    test "another Seat or a direct event cannot bypass the shared deadline", ctx do
+      play(ctx, "cairn", "beacon")
+
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+
+      for viewer <- [ctx.mara.id, ctx.jacob.id, nil] do
+        view = Rooms.snapshot(ctx.slug, viewer)
+        assert view.phase == :reveal
+        refute view.can_advance?
+      end
+    end
+
+    test "nothing advances on its own once the deadline has passed", ctx do
+      play(ctx, "cairn", "beacon")
+      travel(ctx.clock, 5_000)
+
+      view = Rooms.snapshot(ctx.slug, nil)
+      assert view.phase == :reveal
+      assert view.can_advance?
+      assert view.attempt.number == 1
+    end
+
+    test "the pre-reveal Beat is still the theatre before the reveal, not this hold", ctx do
+      beat(40)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+
+      assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
+      assert Rooms.snapshot(ctx.slug, nil).reveal == nil
+      refute Map.get(Rooms.snapshot(ctx.slug, nil), :can_advance?, false)
+
+      view = await_reveal(ctx.slug)
+
+      assert view.phase == :reveal
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.mara.id)
+    end
+
+    test "a later snapshot does not restart or bypass the Room's deadline", ctx do
+      play(ctx, "cairn", "beacon")
+      travel(ctx.clock, 2_000)
+
+      later = Rooms.snapshot(ctx.slug, nil)
+      refute later.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+
+      travel(ctx.clock, 5_000)
+
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).can_advance?
+      assert :ok = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+    end
+  end
+
   describe "the Assayer remembers its Quips (ticket 11)" do
     test "the assay request carries the Room's last five Quips, oldest dropped" do
       slug = open_room()
@@ -1124,6 +1424,66 @@ defmodule Thereish.RoomsTest do
       {:ok, _} = Rooms.join(slug, "Mara", device_token())
 
       assert Rooms.for_device(device_token()) == []
+    end
+  end
+
+  describe "hiding a Room from this browser's list" do
+    test "drops the shortcut without dropping the Seat, the Room, or the Chronicle" do
+      phone = device_token()
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", phone)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      await_phase(slug, :closed)
+
+      room = Rooms.get_room(slug)
+      assert [page] = Chronicle.pages(room.id)
+
+      assert [%{room: %{slug: ^slug}}] = Rooms.listed_for_device(phone)
+      assert :ok = Rooms.hide(slug, phone)
+
+      assert Rooms.listed_for_device(phone) == []
+      assert [%{room: kept_room, seat: kept_seat}] = Rooms.for_device(phone)
+      assert kept_room.id == room.id
+      assert kept_seat.id == mara.id
+      assert kept_seat.device_tokens == [phone]
+      assert Rooms.get_room(slug).id == room.id
+      assert [kept_page] = Chronicle.pages(room.id)
+      assert kept_page.id == page.id
+      assert {:ok, seated} = Rooms.rejoin(slug, phone)
+      assert seated.id == mara.id
+    end
+
+    test "another browser that holds the same Seat still sees the Room" do
+      slug = open_room()
+      pixel = device_token()
+      ipad = device_token()
+      {:ok, seat} = Rooms.join(slug, "Mara", pixel)
+      {:ok, same} = Rooms.join(slug, "Mara", ipad)
+      assert same.id == seat.id
+
+      assert :ok = Rooms.hide(slug, pixel)
+
+      assert Rooms.listed_for_device(pixel) == []
+      assert [%{room: %{slug: ^slug}, seat: listed}] = Rooms.listed_for_device(ipad)
+      assert listed.id == seat.id
+      assert {:ok, seated} = Rooms.rejoin(slug, pixel)
+      assert seated.id == seat.id
+    end
+
+    test "hiding twice is still hidden, and a Code nobody has cannot be hidden" do
+      phone = device_token()
+      slug = open_room()
+      {:ok, _} = Rooms.join(slug, "Mara", phone)
+
+      assert :ok = Rooms.hide(slug, phone)
+      assert :ok = Rooms.hide(slug, phone)
+      assert Rooms.listed_for_device(phone) == []
+      assert {:error, :no_such_room} = Rooms.hide("zzzz", phone)
     end
   end
 
@@ -1768,6 +2128,43 @@ defmodule Thereish.RoomsTest do
       content = File.read!(migration_file)
       assert content =~ "add :full_table, :boolean"
       assert content =~ "default: true"
+    end
+
+    test "migration raises persisted Rooms so existing Codes accept eight Seats" do
+      migrations_dir = Application.app_dir(:thereish, "priv/repo/migrations")
+
+      migration_file =
+        Path.join(migrations_dir, "20260912120000_raise_seat_cap_to_eight.exs")
+
+      assert File.exists?(migration_file)
+      content = File.read!(migration_file)
+      assert content =~ "UPDATE rooms SET seat_limit = 8 WHERE seat_limit < 8"
+
+      slug = "cap-#{System.unique_integer([:positive])}"
+      {:ok, room} = Store.insert_room(slug, 6)
+      assert room.seat_limit == 6
+
+      {1, nil} =
+        Thereish.Repo.update_all(
+          from(r in Thereish.Rooms.Room, where: r.id == ^room.id and r.seat_limit < 8),
+          set: [seat_limit: 8]
+        )
+
+      raised = Store.get_room(slug)
+      assert raised.seat_limit == 8
+
+      ExUnit.Callbacks.start_supervised!(
+        Supervisor.child_spec({Server, slug: slug}, id: {Server, slug})
+      )
+
+      seats =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora Ivy Ned) do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      assert length(seats) == 8
+      assert {:error, :room_full} = Rooms.join(slug, "Ninth", device_token())
     end
 
     test "migration drops voice and adds quips column" do
@@ -4499,6 +4896,14 @@ defmodule Thereish.RoomsTest do
       view_after_mara = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
       refute view_after_mara.playing.path == initial_path
       assert initial_path in Store.list_nevers(ctx.room.id)
+    end
+  end
+
+  defp received_assays(acc \\ []) do
+    receive do
+      {:assay, request} -> received_assays([request | acc])
+    after
+      50 -> Enum.reverse(acc)
     end
   end
 

@@ -43,6 +43,11 @@ config :thereish, ThereishWeb.Endpoint,
 # the beat itself set their own with `Thereish.RoomFixtures.beat/1`.
 config :thereish, reveal_beat_ms: 5
 
+# The couch is promised five seconds after a reveal; a test suite is not.
+# Tests that are about the hold set their own with
+# `Thereish.RoomFixtures.reveal_hold/1` and move the clock rather than sleeping.
+config :thereish, reveal_hold_ms: 0
+
 # Suppress missing-key warnings during test suite boots.
 config :thereish, boot_warnings: false
 

@@ -17,6 +17,30 @@ defmodule ThereishWeb.Layouts do
   defdelegate umami_config, to: Thereish.Umami, as: :config
 
   @doc """
+  Quiet creator credit. Ordinary pages use the default; the Stage's joining
+  screen uses `size={:stage}` so it stays small and out of the way of play.
+  """
+  attr :size, :atom, default: :ordinary, values: [:ordinary, :stage]
+
+  def made_by(assigns) do
+    ~H"""
+    <p
+      data-role="made-by"
+      data-size={@size}
+      class={[
+        "text-center opacity-50",
+        @size == :stage && "text-[0.65rem] leading-tight mt-3",
+        @size != :stage && "text-xs mt-4"
+      ]}
+    >
+      <a href="https://stephens.page" class="underline-offset-2 hover:underline">
+        Made by Jacob Stephens
+      </a>
+    </p>
+    """
+  end
+
+  @doc """
   Renders your app layout.
 
   This function is typically invoked from every template,

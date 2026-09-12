@@ -300,7 +300,7 @@ defmodule ThereishWeb.FoleyTest do
       }
 
       socket = Foley.push_foley_events(test_socket(), old_room, new_room)
-      assert {"foley:stop_voice", %{}} in pushed_events(socket)
+      assert {"foley:stop_voice", %{attempt: 2}} in pushed_events(socket)
     end
 
     test "does not stop voice when the Attempt is unchanged" do

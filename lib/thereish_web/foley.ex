@@ -164,7 +164,7 @@ defmodule ThereishWeb.Foley do
 
   defp maybe_stop_stale_voice(socket, old_room, new_room) do
     if not is_nil(old_room) and attempt_number(old_room) != attempt_number(new_room) do
-      push_event(socket, "foley:stop_voice", %{})
+      push_event(socket, "foley:stop_voice", %{attempt: attempt_number(new_room)})
     else
       socket
     end
