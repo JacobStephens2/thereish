@@ -230,9 +230,9 @@ defmodule ThereishWeb.StageLive do
             data-role="giving-stage"
             class="flex flex-col items-center justify-center gap-3 text-center"
           >
-            <p class="text-xs uppercase tracking-widest font-semibold text-primary">Settings</p>
+            <p class="text-xs uppercase tracking-widest font-semibold text-primary">Gives</p>
             <p class="text-2xl font-semibold">
-              Waiting for settings: {@room.gives_in} of {length(@room.seats)}
+              Waiting for Gives: {@room.gives_in} of {length(@room.seats)}
             </p>
             <div data-role="stage-cards" class="flex items-center justify-center gap-4 mt-2">
               <%= for seat <- @room[:seats] || [] do %>
@@ -242,7 +242,7 @@ defmodule ThereishWeb.StageLive do
                     data-seat={seat.id}
                     class="size-14 rounded-xl border-2 flex items-center justify-center text-2xl opacity-80 shadow-sm"
                     style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 15%, transparent); color: var(--seat-color);"}
-                    title={"#{seat.name}'s setting landed"}
+                    title={"#{seat.name}'s Give landed"}
                   >
                     <span class="sr-only">{seat.name}</span> 🂠
                   </div>
@@ -264,9 +264,9 @@ defmodule ThereishWeb.StageLive do
             data-role="author-failure"
             class="flex flex-col items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-center"
           >
-            <p class="text-xs uppercase tracking-widest font-semibold text-warning">Setting Notice</p>
+            <p class="text-xs uppercase tracking-widest font-semibold text-warning">Give Notice</p>
             <p class="text-2xl font-semibold">
-              The Author couldn't write from these settings: {@room.author_failure}
+              The Author couldn't write from these Gives: {@room.author_failure}
             </p>
           </section>
 

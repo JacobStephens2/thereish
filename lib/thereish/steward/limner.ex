@@ -10,8 +10,8 @@ defmodule Thereish.Steward.Limner do
   Cubist: the subject broken into overlapping planes seen from several angles at once. \
   A restrained palette of ochre, umber, grey, and bone on a dark ground. \
   Flat, poster-like, no text, no border. One subject centred and readable as a \
-  silhouette at thumbnail size. Suggest the setting a step removed — an object or \
-  figure it brings to mind, not a picture of the words themselves.
+  silhouette at thumbnail size. Depict the Give recognizably — a viewer who knows \
+  the Give should recognize it at a glance — while keeping the house style.
   """
 
   @doc "The house style brief the bake-off and every Mask share."
@@ -44,9 +44,9 @@ defmodule Thereish.Steward.Limner do
   def prompt(give, colour, opts \\ []) when is_binary(colour) do
     text = Thereish.Steward.Author.give_text(give)
     softened = Keyword.get(opts, :softened, false)
-    softened_note = if softened, do: " Softened, gentle, and abstract.", else: ""
+    softened_note = if softened, do: " Softened, gentle, and still recognizable.", else: ""
 
-    "A small square Mask. #{style_brief()} A note of #{colour} in the palette.#{softened_note} Setting: #{text}."
+    "A small square Mask. #{style_brief()} A note of #{colour} in the palette.#{softened_note} Give: #{text}."
   end
 
   @doc "PNG magic number."
