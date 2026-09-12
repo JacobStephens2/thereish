@@ -24,10 +24,12 @@ defmodule Thereish.Steward.Limner do
     "#8a9a6a",
     "#7a1f1f",
     "#d8c8a0",
-    "#c45c5c"
+    "#c45c5c",
+    "#4a5c6a",
+    "#b08968"
   ]
 
-  @doc "The six house colours from the style palette."
+  @doc "The house colours from the style palette, one per Seat at the cap."
   @spec palette() :: [String.t()]
   def palette, do: @palette
 

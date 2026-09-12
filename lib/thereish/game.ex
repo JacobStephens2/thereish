@@ -565,7 +565,6 @@ defmodule Thereish.Game do
       reasoning: verdict.reasoning,
       quip: Map.get(verdict, :quip),
       furthest: Map.get(verdict, :furthest),
-      pairs: Map.get(verdict, :pairs),
       meta: Map.get(verdict, :meta, %{})
     })
   end
@@ -1083,28 +1082,19 @@ defmodule Thereish.Game do
   defp closed(state, _phase), do: %{because: closed_because(state), attempt: state.attempt}
 
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
-  # the two words that landed furthest apart, and every pair of Seats graded
-  # alongside the one Verdict (ADR-0010, ticket 07). Reasoning is kept in the
-  # Chronicle and kept off the screen.
-  defp reveal(state, phase, viewer) when phase in [:reveal, :closed] do
+  # and the two words that landed furthest apart, named inside the same Verdict
+  # (ADR-0010). Reasoning is kept in the Chronicle and kept off the screen.
+  defp reveal(state, phase, _viewer) when phase in [:reveal, :closed] do
     gives = gives_view(state)
 
-    base =
-      state.verdict
-      |> verdict_view()
-      |> Map.delete(:reasoning)
-      |> Map.merge(%{
-        bridges: bridges_view(state, state.bridges),
-        furthest: furthest_view(state, chosen_furthest(state)),
-        gives: gives
-      })
-
-    if state.verdict && state.verdict[:pairs] do
-      pairs = pairs_view(state, state.verdict[:pairs], viewer)
-      Map.put(base, :pairs, pairs)
-    else
-      base
-    end
+    state.verdict
+    |> verdict_view()
+    |> Map.delete(:reasoning)
+    |> Map.merge(%{
+      bridges: bridges_view(state, state.bridges),
+      furthest: furthest_view(state, chosen_furthest(state)),
+      gives: gives
+    })
   end
 
   defp reveal(_state, _phase, _viewer), do: nil
@@ -1526,72 +1516,6 @@ defmodule Thereish.Game do
        not is_nil(state.gives[seat_id])) or
       (is_map(state.masks) and Map.has_key?(state.masks, seat_id) and
          not is_nil(state.masks[seat_id]))
-  end
-
-  defp pairs_view(state, pair_verdicts, _viewer) do
-    all_pairs =
-      for {seat_a, idx} <- Enum.with_index(state.seats),
-          seat_b <- Enum.drop(state.seats, idx + 1) do
-        {seat_a, seat_b}
-      end
-
-    pairs =
-      Enum.map(all_pairs, fn {seat_a, seat_b} ->
-        pair_ids = [seat_a.id, seat_b.id]
-        names = [seat_a.name, seat_b.name]
-        bridge_a = state.bridges[seat_a.id]
-        bridge_b = state.bridges[seat_b.id]
-        bridges = [bridge_a, bridge_b]
-
-        v =
-          (pair_verdicts || [])
-          |> Enum.find(fn pv ->
-            p_ids = pv[:seat_ids] || pv["seat_ids"] || []
-            seat_a.id in p_ids and seat_b.id in p_ids
-          end)
-
-        closeness =
-          cond do
-            v && (v[:closeness] != nil || v["closeness"] != nil) ->
-              v[:closeness] || v["closeness"]
-
-            (length(state.seats) == 2 and state.verdict) && state.verdict.closeness != nil ->
-              state.verdict.closeness
-
-            true ->
-              nil
-          end
-
-        band_info = if closeness, do: Ladder.read(closeness), else: %{band: nil, melded?: false}
-        melded? = band_info.melded?
-        band = band_info.band
-
-        pair_data = %{
-          seat_ids: pair_ids,
-          names: names,
-          bridges: bridges,
-          closeness: closeness,
-          band: band,
-          melded?: melded?,
-          couple?: false,
-          cross_couple?: false,
-          cross_couple_meld?: false,
-          surprise: nil
-        }
-
-        {pair_data, false}
-      end)
-
-    pairs
-    |> Enum.sort_by(fn {p, viewer_couple?} ->
-      cond do
-        viewer_couple? -> {0, 0}
-        p.couple? -> {1, -(p.closeness || 0)}
-        p.cross_couple_meld? -> {2, -(p.closeness || 0)}
-        true -> {3, -(p.closeness || 0)}
-      end
-    end)
-    |> Enum.map(fn {p, _} -> p end)
   end
 
   defp taken_by_a_seat(state, seat_id) do

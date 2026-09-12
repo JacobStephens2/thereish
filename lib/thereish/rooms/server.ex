@@ -1305,83 +1305,10 @@ defmodule Thereish.Rooms.Server do
     room = self()
     arm = state[:current_arm] || :flash
     page = state.game.page
-    seats = state.game.seats
-    bridges = state.game.bridges
     request = with_prior_quips(request, state)
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      main_task = Task.async(fn -> assay(request, page, arm) end)
-
-      pair_tasks =
-        if length(seats) > 2 do
-          for {seat_a, idx} <- Enum.with_index(seats),
-              seat_b <- Enum.drop(seats, idx + 1) do
-            bridge_a = bridges[seat_a.id]
-            bridge_b = bridges[seat_b.id]
-
-            Task.async(fn ->
-              pair_request = %{bookends: request.bookends, bridges: [bridge_a, bridge_b]}
-
-              case assay(pair_request, page, arm) do
-                {:ok, pv} ->
-                  %{
-                    seat_ids: [seat_a.id, seat_b.id],
-                    closeness: pv[:closeness],
-                    quip: pv[:quip],
-                    verdict: pv
-                  }
-
-                {:error, _} ->
-                  %{
-                    seat_ids: [seat_a.id, seat_b.id],
-                    closeness: nil,
-                    verdict: nil
-                  }
-              end
-            end)
-          end
-        else
-          []
-        end
-
-      main_res = Task.await(main_task, :infinity)
-
-      pair_verdicts =
-        if length(seats) <= 2 do
-          case main_res do
-            {:ok, v} ->
-              [
-                %{
-                  seat_ids: Enum.map(seats, & &1.id),
-                  closeness: v[:closeness],
-                  quip: v[:quip],
-                  verdict: v
-                }
-              ]
-
-            _ ->
-              [
-                %{
-                  seat_ids: Enum.map(seats, & &1.id),
-                  closeness: nil,
-                  verdict: nil
-                }
-              ]
-          end
-        else
-          Enum.map(pair_tasks, &Task.await(&1, :infinity))
-        end
-
-      event =
-        case verdict_event(main_res) do
-          {:verdict_received, verdict} ->
-            {:verdict_received, Map.put(verdict, :pairs, pair_verdicts)}
-
-          other ->
-            other
-        end
-
-      send(room, {:assayed, event})
+      send(room, {:assayed, verdict_event(assay(request, page, arm))})
     end)
 
     waiting_on(state)

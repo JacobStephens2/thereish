@@ -62,7 +62,7 @@ defmodule Thereish.Rooms.Room do
     #
     # The ceiling is the reveal's, not the rules' and no longer the bill's: an
     # Attempt is one grading request however many Seats wrote into it
-    # (ADR-0010), so six is what a phone can show at once and what one reading
+    # (ADR-0010), so eight is what a phone can show at once and what one reading
     # can hold one opinion about. The rules themselves are written for a list of
     # any length (ADR-0007).
     |> validate_number(:seat_limit,

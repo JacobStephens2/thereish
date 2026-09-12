@@ -258,6 +258,28 @@ defmodule Thereish.Steward.FakeTest do
       assert six.bookends == ["lantern", "harbour", "summit", "ember", "grove", "spire"]
       assert six.meta.count == 6
       assert six.bookends == Enum.uniq(six.bookends)
+
+      eight_gives =
+        six_gives ++
+          for name <- ~w(Ivy Ned) do
+            %{name: name, text: "setting #{name}"}
+          end
+
+      assert {:ok, eight} = Fake.author(%{gives: eight_gives, count: 8})
+
+      assert eight.bookends == [
+               "lantern",
+               "harbour",
+               "summit",
+               "ember",
+               "grove",
+               "spire",
+               "ridge",
+               "hearth"
+             ]
+
+      assert eight.meta.count == 8
+      assert eight.bookends == Enum.uniq(eight.bookends)
     end
 
     test "the fake Author still honours a configured pair" do

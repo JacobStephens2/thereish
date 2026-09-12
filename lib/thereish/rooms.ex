@@ -59,8 +59,8 @@ defmodule Thereish.Rooms do
   def default_seat_limit, do: Application.fetch_env!(:thereish, :seats_per_room)
 
   @doc """
-  The Seat counts a Room may be created with: two at the least, and at most what
-  one reveal can hold on a phone.
+  The Seat counts a Room may be created with: two at the least, and at most the
+  seat cap a reveal can hold on a phone.
   """
   @spec seat_counts() :: Range.t()
   def seat_counts, do: 2..Thereish.Steward.seat_cap()

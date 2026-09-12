@@ -3515,7 +3515,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
   describe "the Room starts when everyone is here (ticket 08)" do
     test "count-free start with Start Page button and late seat joins next page" do
-      # 1. Front page -> New Room (no player count chosen, opens at seat cap 6)
+      # 1. Front page -> New Room (no player count chosen, opens at the seat cap)
       conn1 = build_conn()
       {:ok, front, _} = live(conn1, ~p"/")
       assert has_element?(front, "[data-role=new-room]")
@@ -3529,7 +3529,7 @@ defmodule ThereishWeb.RoomLiveTest do
       "/r/" <> code = to
       on_exit(fn -> stop_room(code) end)
 
-      assert Rooms.snapshot(code, nil).seat_limit == 6
+      assert Rooms.snapshot(code, nil).seat_limit == Thereish.Steward.seat_cap()
 
       # Phone 1 connects and joins
       {:ok, phone1, _} = live(conn1, to)
@@ -4044,6 +4044,99 @@ defmodule ThereishWeb.RoomLiveTest do
                ctx.stage,
                "[data-role=stage-mask][data-seat='#{jacob.id}'] [data-role=seat-mask]"
              )
+    end
+  end
+
+  describe "eight-Seat Rooms (ticket 01, #132)" do
+    @eight ~w(Melissa Jacob Ada Ida Ola Ora Ivy Ned)
+    @eight_bridges ~w(cairn beacon wharf signal torch lamp stone flare)
+
+    test "phones and the Stage play a full Page with eight distinguishable Seats" do
+      slug = open_room(seat_limit: 8)
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      phones =
+        for name <- @eight do
+          {:ok, view, _} = live(phone(slug))
+          join(view, name)
+          view
+        end
+
+      {:ok, ninth, _} = live(phone(slug))
+      assert join(ninth, "Ninth") =~ "Every seat is taken"
+
+      snapshot = Rooms.snapshot(slug, nil)
+      assert length(snapshot.seats) == 8
+
+      for {phone_view, name} <- Enum.zip(phones, @eight) do
+        assert has_element?(phone_view, "[data-role=roster] [data-seat]", name)
+        assert has_element?(phone_view, "[data-role=setting-form]")
+      end
+
+      for name <- @eight do
+        assert has_element?(stage, "[data-role=roster] [data-seat]", name)
+      end
+
+      for {phone_view, name} <- Enum.zip(phones, @eight) do
+        give_setting(phone_view, "setting #{name}")
+      end
+
+      await_phase(slug, :bridging)
+
+      snapshot = Rooms.snapshot(slug, nil)
+      colours = Enum.map(snapshot.seats, & &1.colour)
+      assert length(Enum.uniq(colours)) == 8
+
+      for seat <- snapshot.seats do
+        assert has_element?(stage, "[data-role=bridge-marker][data-seat='#{seat.id}']", seat.name)
+      end
+
+      for phone_view <- phones do
+        eventually(fn -> has_element?(phone_view, "[data-role=bridge-form]") end)
+        assert has_element?(phone_view, "[data-role=bookend-chip]", "lantern")
+        assert has_element?(phone_view, "[data-role=bookend-chip]", "hearth")
+      end
+
+      assert has_element?(stage, "[data-role=bookend-chip]", "lantern")
+      assert has_element?(stage, "[data-role=bookend-chip]", "hearth")
+
+      for {phone_view, bridge} <- Enum.zip(phones, @eight_bridges) do
+        commit(phone_view, bridge)
+      end
+
+      await_reveal(slug)
+      await_reveal_on(stage)
+
+      for bridge <- @eight_bridges do
+        assert has_element?(stage, "[data-bridge]", bridge)
+      end
+
+      refute has_element?(stage, "[data-role=pair]")
+      assert has_element?(stage, "[data-role=closeness]")
+      assert has_element?(stage, "[data-role=quip]")
+
+      for {phone_view, name} <- Enum.zip(phones, @eight) do
+        eventually(fn -> has_element?(phone_view, "[data-role=reveal]") end)
+        assert has_element?(phone_view, "[data-seat]", name)
+        refute has_element?(phone_view, "[data-role=pair]")
+      end
+
+      hd(phones) |> element("[data-role=again]") |> render_click()
+      await_phase(slug, :bridging)
+
+      for phone_view <- phones do
+        eventually(fn -> has_element?(phone_view, "[data-role=bridge-form]") end)
+      end
+
+      Enum.each(phones, &commit(&1, "peak"))
+      await_reveal(slug)
+      await_phase(slug, :closed)
+
+      for phone_view <- phones do
+        eventually(fn -> has_element?(phone_view, "[data-role=one-more]") end)
+      end
+
+      refute has_element?(stage, "[data-role=pair]")
     end
   end
 end
