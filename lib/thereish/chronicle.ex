@@ -34,6 +34,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Recap
   alias Thereish.Chronicle.Verdict
   alias Thereish.Repo
+  alias Thereish.Steward.TrackCache
 
   @doc """
   Writes one closed Page, with its attempts, its Bridges and its verdicts.
@@ -1012,6 +1013,99 @@ defmodule Thereish.Chronicle do
 
   defp meta_get(meta, key) when is_map(meta) and is_atom(key) do
     Map.get(meta, key) || Map.get(meta, Atom.to_string(key))
+  end
+
+  @doc """
+  Retained generated media across Rooms, for the operator gallery.
+
+  Assembles Tracks from the track cache and Page music records, Vamps from Page
+  vamp records, and Masks from Page mask records. A Room or Page is named only
+  when the record actually belongs to one; missing files are marked present or
+  not rather than deleted.
+  """
+  @spec gallery() :: %{tracks: [map()], vamps: [map()], masks: [map()]}
+  def gallery do
+    pages =
+      from(p in Page, preload: [:room], order_by: [desc: p.closed_at])
+      |> Repo.all()
+
+    cache_rows = Repo.all(from(t in TrackCache, order_by: [desc: t.inserted_at]))
+
+    %{
+      tracks: gallery_audio(pages, cache_rows, :music_meta),
+      vamps: gallery_audio(pages, [], :vamp_meta),
+      masks: gallery_masks(pages)
+    }
+  end
+
+  defp gallery_audio(pages, cache_rows, field) do
+    page_hits =
+      for page <- pages,
+          meta = field_meta(page, field),
+          is_map(meta),
+          path = meta_get(meta, :path),
+          is_binary(path) and path != "" do
+        {path, page, meta}
+      end
+
+    by_path = Enum.group_by(page_hits, &elem(&1, 0))
+    cache_by_path = Map.new(cache_rows, &{&1.path, &1})
+
+    paths =
+      (Enum.map(cache_rows, & &1.path) ++ Enum.map(page_hits, &elem(&1, 0)))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    Enum.map(paths, fn path ->
+      hits = Map.get(by_path, path, [])
+      cache = cache_by_path[path]
+
+      first_meta =
+        case hits do
+          [{_path, _page, meta} | _] -> meta
+          _ -> %{}
+        end
+
+      %{
+        path: path,
+        title: (cache && cache.title) || meta_get(first_meta, :title),
+        loop: meta_get(first_meta, :loop) not in [nil, false],
+        present?: TrackCache.file_exists?(path),
+        associations: Enum.map(hits, fn {_path, page, _meta} -> gallery_association(page) end)
+      }
+    end)
+  end
+
+  defp gallery_masks(pages) do
+    hits =
+      for page <- pages,
+          is_map(page.masks_meta),
+          {_seat, mask} <- page.masks_meta,
+          is_map(mask),
+          url = meta_get(mask, :url),
+          is_binary(url) and url != "" do
+        {url, page}
+      end
+
+    hits
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.map(fn {url, assoc_pages} ->
+      %{
+        url: url,
+        present?: TrackCache.file_exists?(url),
+        associations: Enum.map(assoc_pages, &gallery_association/1)
+      }
+    end)
+  end
+
+  defp gallery_association(page) do
+    document = page.document || %{}
+    bookends = document["bookends"] || document[:bookends] || []
+
+    %{
+      room_slug: page.room.slug,
+      bookends: bookends
+    }
   end
 
   @doc """

@@ -58,6 +58,7 @@ defmodule ThereishWeb.Router do
     live_session :admin, on_mount: [{ThereishWeb.AdminAuth, :require_admin}] do
       live "/admin", AdminOverviewLive, :index
       live "/admin/experiments", AdminExperimentsLive, :index
+      live "/admin/media", AdminMediaLive, :index
       live "/spend", SpendLive, :index
     end
 
