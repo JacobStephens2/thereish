@@ -24,15 +24,6 @@ defmodule ThereishWeb.StageLive do
   alias Thereish.Rooms
   alias Thereish.Rooms.Code
 
-  @seat_colors [
-    {"coral", "#e76f51"},
-    {"teal", "#2a9d8f"},
-    {"blue", "#3a86ff"},
-    {"amber", "#e9a23b"},
-    {"violet", "#9b5de5"},
-    {"green", "#43aa8b"}
-  ]
-
   @impl true
   def mount(params, session, socket) do
     slug = Rooms.open!(params["slug"])
@@ -342,9 +333,6 @@ defmodule ThereishWeb.StageLive do
   # this chip with the Seat's Mask (or face-down card before the first reveal,
   # or colour dot if no Mask).
   defp bridge_markers(assigns) do
-    assigns =
-      assign(assigns, :markers, Enum.zip(assigns.room.seats, @seat_colors))
-
     ~H"""
     <section
       :if={@room.phase in [:bridging, :assaying]}
@@ -353,13 +341,13 @@ defmodule ThereishWeb.StageLive do
       aria-label="Bridges landed"
     >
       <div
-        :for={{seat, {color_name, color}} <- @markers}
+        :for={seat <- @room.seats}
         data-role="bridge-marker"
         data-seat={seat.id}
-        data-color={color_name}
+        data-color={seat[:colour]}
         data-state={if seat.committed?, do: "lit", else: "dim"}
         class="bridge-marker relative flex items-center justify-center rounded-xl border-2 p-1.5 transition-all"
-        style={"--seat-color: #{seat[:colour] || color}"}
+        style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
         title={seat.name}
       >
         <span class="sr-only">{seat.name}</span>
@@ -384,7 +372,7 @@ defmodule ThereishWeb.StageLive do
               <span
                 data-role="seat-colour-dot"
                 class="size-6 rounded-full shadow-sm"
-                style={"background-color: #{seat[:colour] || color}"}
+                style={"background-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
                 aria-hidden="true"
               ></span>
             </div>
