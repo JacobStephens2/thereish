@@ -423,6 +423,10 @@ defmodule Thereish.Rooms do
   @spec set_quips(String.t(), boolean()) :: :ok | {:error, term()}
   def set_quips(code, enabled), do: call(code, {:set_quips, enabled})
 
+  @doc "Sets the Full table on/off switch."
+  @spec set_full_table(String.t(), boolean()) :: :ok | {:error, term()}
+  def set_full_table(code, enabled), do: call(code, {:set_full_table, enabled})
+
   @doc "Skips the Prologue for this Room, remembering the skip as a Room fact."
   @spec skip_prologue(String.t()) :: :ok | {:error, term()}
   def skip_prologue(code), do: call(code, :skip_prologue)
