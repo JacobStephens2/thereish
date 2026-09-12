@@ -2196,6 +2196,15 @@ defmodule Thereish.RoomsTest do
       await_reveal(ctx.slug)
 
       room = Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
+
+      # Voice failure is a Task; the Verdict row waits for it (ADR-0003).
+      eventually(fn ->
+        match?(
+          [%{attempts: [%{verdicts: [%{voice_meta: %{}}]}]}],
+          Chronicle.pages(room.id)
+        )
+      end)
+
       pages = Chronicle.pages(room.id)
       assert length(pages) == 1
       page = hd(pages)
