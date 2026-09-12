@@ -1,0 +1,3 @@
+# Authenticated administration, account-free play
+
+The September 11 playtest review ([issue #126](https://github.com/JacobStephens2/thereish/issues/126)) called for an admin overview, while spend, experiments, and calibration exports currently have no authentication boundary. Decision (2026-09-12): put these operator tools and the global Room/media overview behind Jacob's authenticated admin identity, using email/password authentication with password reset; an index alone would leave the underlying tools public. Joining and playing remain account-free, and ordinary per-Room Chronicles retain their existing accessibility: admin authentication does not introduce the player Account/history-claiming feature contemplated by ADR-0007.
