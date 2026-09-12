@@ -114,6 +114,9 @@ defmodule ThereishWeb.RoomLive do
       :ok ->
         {:noreply, socket |> assign(:page_error, nil) |> resync()}
 
+      {:error, :reveal_held} ->
+        {:noreply, resync(socket)}
+
       {:error, reason} ->
         {:noreply, assign(socket, :page_error, message(reason))}
     end
@@ -296,8 +299,6 @@ defmodule ThereishWeb.RoomLive do
   defp playing_phase?(room), do: room.phase not in [:waiting, :giving]
 
   defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
-
-  defp display_url(url), do: String.replace_prefix(url, "https://", "")
 
   defp find_seat_colour(room, seat_id) do
     seat = Enum.find(room[:seats] || [], &(&1.id == seat_id))
@@ -520,7 +521,13 @@ defmodule ThereishWeb.RoomLive do
         class="flex flex-col items-center gap-2 border-t border-base-300 pt-6"
       >
         <.carry_forward room={@room} />
-        <.button phx-click="next_attempt" data-role="again" variant="primary">
+        <.reveal_hold room={@room} />
+        <.button
+          phx-click="next_attempt"
+          data-role="again"
+          variant="primary"
+          disabled={not @room[:can_advance?]}
+        >
           Again — {join_and(@room.next_bookends)}
         </.button>
       </div>
@@ -528,8 +535,16 @@ defmodule ThereishWeb.RoomLive do
       <.ending room={@room} seat={@seat} mode={:phone} />
 
       <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
+        <.reveal_hold room={@room} />
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>
-        <.button phx-click="next_page" data-role="one-more" variant="primary">One more?</.button>
+        <.button
+          phx-click="next_page"
+          data-role="one-more"
+          variant="primary"
+          disabled={not @room[:can_advance?]}
+        >
+          One more?
+        </.button>
       </div>
 
       <%= if playing_phase?(@room) do %>
@@ -568,6 +583,7 @@ defmodule ThereishWeb.RoomLive do
             The Chronicle
           </.link>
         </div>
+        <Layouts.made_by />
       </footer>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResyncOnWake">
         export default {
@@ -649,7 +665,7 @@ defmodule ThereishWeb.RoomLive do
         {@room.quip}
       </p>
       <p class="mt-2 text-center text-sm opacity-70">
-        <span data-role="join-url" class="font-mono">{display_url(@join_url)}</span>
+        <.join_at url={@join_url} />
       </p>
       <div class="mt-4">
         <.button navigate={~p"/r/#{@code}/stage"} data-role="make-stage" class="btn-sm text-xs">

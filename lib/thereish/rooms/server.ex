@@ -23,8 +23,11 @@ defmodule Thereish.Rooms.Server do
   The rules answer the last commit with two things owed: one assay carrying
   every Bridge, and a beat. This process performs both — a Task for the Assayer,
   a timer for the beat — and holds the verdict that comes back until the beat is
-  over. That is the whole of the reveal's theatre, and it is why the Game itself
-  can be driven in a test as a list of events with no clock in sight.
+  over. After the reveal is up, it holds advancement the same way: a shared
+  deadline every screen reads, which a reconnect cannot restart and a second
+  device cannot skip. That is the whole of the reveal's theatre, and it is why
+  the Game itself can be driven in a test as a list of events with no clock in
+  sight.
 
   A verdict is never waited on inline. The Room stays answerable while the
   Assayer thinks, because a phone asking what it missed must not be stuck behind
@@ -96,6 +99,8 @@ defmodule Thereish.Rooms.Server do
         game: game,
         beat: nil,
         held: [],
+        revealed_at: nil,
+        reveal_hold: nil,
         opened_at: nil,
         assayer: nil,
         author: nil,
@@ -148,8 +153,11 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_call({:next_attempt, seat_id}, _from, state) do
-    case Game.apply(state.game, {:attempt_advanced, %{seat_id: seat_id}}) do
-      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
+    with :ok <- reveal_hold_elapsed(state),
+         {:ok, game, effects} <-
+           Game.apply(state.game, {:attempt_advanced, %{seat_id: seat_id}}) do
+      {:reply, :ok, state |> clear_reveal_hold() |> advance(game, effects)}
+    else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -231,41 +239,45 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_call({:next_page, seat_id}, _from, state) do
-    case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
-      {:ok, game, effects} ->
-        # A closed Page must not vanish if Foley is still speaking when the
-        # couple tap next. Flush whatever voice_meta we have (ADR-0003: the
-        # Verdict row is written once).
-        state = flush_pending_chronicle(state)
+    with :ok <- reveal_hold_elapsed(state) do
+      case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
+        {:ok, game, effects} ->
+          # A closed Page must not vanish if Foley is still speaking when the
+          # couple tap next. Flush whatever voice_meta we have (ADR-0003: the
+          # Verdict row is written once).
+          state = state |> clear_reveal_hold() |> flush_pending_chronicle()
 
-        eligible_members = Thereish.Foley.Repertoire.members(state.room.id)
-        wait_music = Thereish.Foley.Repertoire.draw(eligible_members, state[:wait_music])
+          eligible_members = Thereish.Foley.Repertoire.members(state.room.id)
+          wait_music = Thereish.Foley.Repertoire.draw(eligible_members, state[:wait_music])
 
-        # A playing track holds over across next_page until the next page's track lands (ADR-0013)
-        holdover_track = state[:current_track]
+          # A playing track holds over across next_page until the next page's track lands (ADR-0013)
+          holdover_track = state[:current_track]
 
-        new_state =
-          %{
-            state
-            | opened_at: nil,
-              voice_audio: nil,
-              voice_meta: %{},
-              voice_pending_attempt: nil
-          }
-          |> Map.put(:current_arm, nil)
-          |> Map.put(:current_page_id, nil)
-          |> Map.put(:giving_ref, make_ref())
-          |> Map.put(:wait_music, wait_music)
-          |> Map.put(:eligible_members, eligible_members)
-          |> Map.put(:deal, Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path))
-          |> Map.put(:current_track, holdover_track)
-          |> Map.put(:track_page_ref, if(holdover_track, do: state[:track_page_ref], else: nil))
-          |> reset_score_state(keep_track: true)
+          new_state =
+            %{
+              state
+              | opened_at: nil,
+                voice_audio: nil,
+                voice_meta: %{},
+                voice_pending_attempt: nil
+            }
+            |> Map.put(:current_arm, nil)
+            |> Map.put(:current_page_id, nil)
+            |> Map.put(:giving_ref, make_ref())
+            |> Map.put(:wait_music, wait_music)
+            |> Map.put(:eligible_members, eligible_members)
+            |> Map.put(:deal, Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path))
+            |> Map.put(:current_track, holdover_track)
+            |> Map.put(:track_page_ref, if(holdover_track, do: state[:track_page_ref], else: nil))
+            |> reset_score_state(keep_track: true)
 
-        {:reply, :ok, advance(new_state, game, effects)}
+          {:reply, :ok, advance(new_state, game, effects)}
 
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
@@ -573,6 +585,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:prologue, state[:prologue])
       |> Map.put(:prologue_script, Thereish.Foley.Prologue.script())
       |> Map.put(:has_chronicle?, has_chronicle?(state))
+      |> Map.put(:can_advance?, can_advance?(state))
 
     {:reply, view, state}
   end
@@ -663,6 +676,11 @@ defmodule Thereish.Rooms.Server do
 
   def handle_info(:beat_over, state) do
     {:noreply, apply_events(%{state | beat: nil, held: []}, state.held)}
+  end
+
+  def handle_info(:reveal_hold_over, state) do
+    broadcast(state.room.slug)
+    {:noreply, %{state | reveal_hold: nil}}
   end
 
   # Ten seconds is where the game stops waiting and says so. The Verdict is
@@ -1008,6 +1026,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp apply_events(state, events) do
+    old_phase = Game.phase(state.game)
     old_attempt = state.game.attempt
 
     new_state =
@@ -1023,11 +1042,14 @@ defmodule Thereish.Rooms.Server do
         end
       end)
 
-    if new_state.game.attempt != old_attempt do
-      %{new_state | voice_audio: nil}
-    else
-      new_state
-    end
+    new_state =
+      if new_state.game.attempt != old_attempt do
+        %{new_state | voice_audio: nil}
+      else
+        new_state
+      end
+
+    maybe_arm_reveal_hold(new_state, old_phase)
   end
 
   defp current_wait_music(state) do
@@ -1305,83 +1327,10 @@ defmodule Thereish.Rooms.Server do
     room = self()
     arm = state[:current_arm] || :flash
     page = state.game.page
-    seats = state.game.seats
-    bridges = state.game.bridges
     request = with_prior_quips(request, state)
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      main_task = Task.async(fn -> assay(request, page, arm) end)
-
-      pair_tasks =
-        if length(seats) > 2 do
-          for {seat_a, idx} <- Enum.with_index(seats),
-              seat_b <- Enum.drop(seats, idx + 1) do
-            bridge_a = bridges[seat_a.id]
-            bridge_b = bridges[seat_b.id]
-
-            Task.async(fn ->
-              pair_request = %{bookends: request.bookends, bridges: [bridge_a, bridge_b]}
-
-              case assay(pair_request, page, arm) do
-                {:ok, pv} ->
-                  %{
-                    seat_ids: [seat_a.id, seat_b.id],
-                    closeness: pv[:closeness],
-                    quip: pv[:quip],
-                    verdict: pv
-                  }
-
-                {:error, _} ->
-                  %{
-                    seat_ids: [seat_a.id, seat_b.id],
-                    closeness: nil,
-                    verdict: nil
-                  }
-              end
-            end)
-          end
-        else
-          []
-        end
-
-      main_res = Task.await(main_task, :infinity)
-
-      pair_verdicts =
-        if length(seats) <= 2 do
-          case main_res do
-            {:ok, v} ->
-              [
-                %{
-                  seat_ids: Enum.map(seats, & &1.id),
-                  closeness: v[:closeness],
-                  quip: v[:quip],
-                  verdict: v
-                }
-              ]
-
-            _ ->
-              [
-                %{
-                  seat_ids: Enum.map(seats, & &1.id),
-                  closeness: nil,
-                  verdict: nil
-                }
-              ]
-          end
-        else
-          Enum.map(pair_tasks, &Task.await(&1, :infinity))
-        end
-
-      event =
-        case verdict_event(main_res) do
-          {:verdict_received, verdict} ->
-            {:verdict_received, Map.put(verdict, :pairs, pair_verdicts)}
-
-          other ->
-            other
-        end
-
-      send(room, {:assayed, event})
+      send(room, {:assayed, verdict_event(assay(request, page, arm))})
     end)
 
     waiting_on(state)
@@ -1680,9 +1629,61 @@ defmodule Thereish.Rooms.Server do
   defp attempt_quips(%{verdict: %{quip: quip}}) when is_binary(quip) and quip != "", do: [quip]
   defp attempt_quips(_attempt), do: []
 
-  # How long the reveal is held is the Room's to know, because running it is the
-  # Room's job. The rules only say that a beat is owed.
+  # How long the pre-reveal beat runs is the Room's to know, because running it
+  # is the Room's job. The rules only say that a beat is owed.
   defp beat_ms, do: Application.fetch_env!(:thereish, :reveal_beat_ms)
+
+  # The pause after a shared reveal, before anyone may advance. Distinct from
+  # the beat that runs before the reveal appears.
+  defp hold_ms, do: Application.fetch_env!(:thereish, :reveal_hold_ms)
+
+  defp now_ms do
+    case Application.get_env(:thereish, :now_ms) do
+      fun when is_function(fun, 0) -> fun.()
+      _ -> System.monotonic_time(:millisecond)
+    end
+  end
+
+  defp maybe_arm_reveal_hold(state, old_phase) do
+    new_phase = Game.phase(state.game)
+
+    if old_phase == :assaying and new_phase in [:reveal, :closed] do
+      arm_reveal_hold(state)
+    else
+      state
+    end
+  end
+
+  defp arm_reveal_hold(state) do
+    if timer = state[:reveal_hold], do: Process.cancel_timer(timer)
+
+    timer =
+      case hold_ms() do
+        ms when is_integer(ms) and ms > 0 -> Process.send_after(self(), :reveal_hold_over, ms)
+        _ -> nil
+      end
+
+    %{state | revealed_at: now_ms(), reveal_hold: timer}
+  end
+
+  defp clear_reveal_hold(state) do
+    if timer = state[:reveal_hold], do: Process.cancel_timer(timer)
+    %{state | revealed_at: nil, reveal_hold: nil}
+  end
+
+  defp reveal_hold_elapsed(%{revealed_at: nil}), do: :ok
+
+  defp reveal_hold_elapsed(state) do
+    if now_ms() - state.revealed_at >= hold_ms() do
+      :ok
+    else
+      {:error, :reveal_held}
+    end
+  end
+
+  defp can_advance?(state) do
+    Game.phase(state.game) in [:reveal, :closed] and reveal_hold_elapsed(state) == :ok
+  end
 
   defp verdict_event({:ok, verdict}), do: {:verdict_received, verdict}
 

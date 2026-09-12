@@ -3,9 +3,9 @@ defmodule ThereishWeb.StageLive do
   The laptop: the Room's public face, holding no Seat.
 
   It shows the same roster the phones show, the Room's Code — large while the
-  Room is filling, small in the header for the rest of the night — and the URL
-  to type to get into it, so the first thing a new player needs is already on
-  the screen they are looking at.
+  Room is filling, small in the header for the rest of the night — and
+  thereish.app, so the first thing a new player needs is already on the screen
+  they are looking at.
 
   Sound starts on one deliberate tap. Opening the Stage claims nothing and
   plays nothing; the tap claims the Speaker and the Repertoire starts. That is
@@ -23,15 +23,6 @@ defmodule ThereishWeb.StageLive do
 
   alias Thereish.Rooms
   alias Thereish.Rooms.Code
-
-  @seat_colors [
-    {"coral", "#e76f51"},
-    {"teal", "#2a9d8f"},
-    {"blue", "#3a86ff"},
-    {"amber", "#e9a23b"},
-    {"violet", "#9b5de5"},
-    {"green", "#43aa8b"}
-  ]
 
   @impl true
   def mount(params, session, socket) do
@@ -284,6 +275,8 @@ defmodule ThereishWeb.StageLive do
 
           <.carry_forward room={@room} />
 
+          <.reveal_hold room={@room} />
+
           <.ending room={@room} mode={:stage} />
         </div>
       </div>
@@ -294,13 +287,13 @@ defmodule ThereishWeb.StageLive do
       >
         <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
           <p class={["opacity-70", filling?(@room) && "text-base sm:text-2xl"]}>
-            Join at
-            <span data-role="join-url" class="font-mono font-semibold">{display_url(@join_url)}</span>
+            Join at <.join_at url={@join_url} class="font-semibold" />
             <span :if={@room && @room[:quip]} data-role="stage-quip"> — {@room.quip}</span>
           </p>
           <.roster room={@room} mode={:stage} />
         </div>
         <.now_playing :if={@room} room={@room} />
+        <Layouts.made_by :if={filling?(@room)} size={:stage} />
       </footer>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".WakeLock">
@@ -342,9 +335,6 @@ defmodule ThereishWeb.StageLive do
   # this chip with the Seat's Mask (or face-down card before the first reveal,
   # or colour dot if no Mask).
   defp bridge_markers(assigns) do
-    assigns =
-      assign(assigns, :markers, Enum.zip(assigns.room.seats, @seat_colors))
-
     ~H"""
     <section
       :if={@room.phase in [:bridging, :assaying]}
@@ -353,13 +343,13 @@ defmodule ThereishWeb.StageLive do
       aria-label="Bridges landed"
     >
       <div
-        :for={{seat, {color_name, color}} <- @markers}
+        :for={seat <- @room.seats}
         data-role="bridge-marker"
         data-seat={seat.id}
-        data-color={color_name}
+        data-color={seat[:colour]}
         data-state={if seat.committed?, do: "lit", else: "dim"}
         class="bridge-marker relative flex items-center justify-center rounded-xl border-2 p-1.5 transition-all"
-        style={"--seat-color: #{seat[:colour] || color}"}
+        style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
         title={seat.name}
       >
         <span class="sr-only">{seat.name}</span>
@@ -384,7 +374,7 @@ defmodule ThereishWeb.StageLive do
               <span
                 data-role="seat-colour-dot"
                 class="size-6 rounded-full shadow-sm"
-                style={"background-color: #{seat[:colour] || color}"}
+                style={"background-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
                 aria-hidden="true"
               ></span>
             </div>
@@ -394,8 +384,6 @@ defmodule ThereishWeb.StageLive do
     </section>
     """
   end
-
-  defp display_url(url), do: String.replace_prefix(url, "https://", "")
 
   # The Room is still filling: nothing is in play yet, so the Code is the
   # biggest thing on the screen. From the first Give on it moves to the header
