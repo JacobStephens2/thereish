@@ -76,7 +76,8 @@ defmodule Thereish.MixProject do
       {:stemmer, "~> 1.2"},
       {:expletive, "~> 0.1.6"},
       {:swoosh, "~> 1.16"},
-      {:gen_smtp, "~> 1.2"}
+      {:gen_smtp, "~> 1.2"},
+      {:bcrypt_elixir, "~> 3.0"}
     ]
   end
 
