@@ -16,7 +16,8 @@ defmodule Thereish.Steward.Fake do
   first in roster order. At exactly two Bridges there is one pair, so the mean is
   that pair's grade and the furthest two are the only two — which is what makes
   every grade the couch's tests were written against still the grade they get
-  (ADR-0010).
+  (ADR-0010). Bookends of two or more are accepted and ignored: this Assayer
+  grades the Bridges, not the table they were written against.
 
   Two knobs, both configuration, both for the tests that need the Room to be
   waiting on something:

@@ -1073,7 +1073,7 @@ defmodule ThereishWeb.RoomComponents do
       |> assign(:music_options, @music_options)
 
     ~H"""
-    <div class="flex items-center gap-3 text-xs opacity-80">
+    <div class="flex flex-wrap items-center gap-3 text-xs opacity-80">
       <label :if={@room[:speaker?]} class="flex items-center gap-1.5 cursor-pointer">
         <input
           id="voice-switch"
@@ -1096,6 +1096,24 @@ defmodule ThereishWeb.RoomComponents do
         />
         <span>Quips</span>
       </label>
+      <label class="flex items-center gap-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          data-role="full-table-switch"
+          data-active={to_string(Map.get(@room, :full_table, true))}
+          checked={Map.get(@room, :full_table, true)}
+          phx-click="toggle_full_table"
+          class="checkbox checkbox-xs"
+        />
+        <span>Full table: one Bookend from every player's setting, and every bridge carries forward</span>
+      </label>
+      <p
+        :if={length(Map.get(@room, :seats, []) || []) == 2}
+        data-role="full-table-note"
+        class="opacity-70"
+      >
+        Matters from three Seats
+      </p>
       <div data-role="music-control" class="join">
         <button
           :for={{mode, role, label} <- @music_options}

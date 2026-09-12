@@ -1361,6 +1361,99 @@ defmodule Thereish.ChronicleTest do
         assert entry["bridges"] == bridges
       end
     end
+
+    test "calibration export and Attempt rows carry N Bookends without change of shape" do
+      code = open_room(seat_limit: 4)
+      room = Repo.get_by!(Room, slug: code)
+
+      seats =
+        for name <- ["Melissa", "Jacob", "Ada", "Sam"] do
+          {:ok, seat} = Rooms.join(code, name, device_token())
+          seat
+        end
+
+      bookends = ["lantern", "harbour", "wharf", "dusk"]
+      bridges = ["beacon", "cairn", "lamp", "seagull"]
+
+      entry = %{
+        page: %{
+          id: "hand-written-n-bookends",
+          chapter: "harbour",
+          bookends: bookends,
+          why_these: "A Full table at the shore."
+        },
+        closed_because: :attempts,
+        melded?: false,
+        closeness: 27,
+        attempts: [
+          %{
+            number: 1,
+            bookends: bookends,
+            closeness: 27,
+            melded?: false,
+            bridges:
+              Enum.zip_with(seats, bridges, fn seat, bridge ->
+                %{seat_id: seat.id, bridge: bridge}
+              end),
+            verdicts: [
+              %{
+                seat_ids: Enum.map(seats, & &1.id),
+                bridges: bridges,
+                graded?: true,
+                closeness: 27,
+                band: :miss,
+                reasoning: "Three of you were at the shore and one of you was not.",
+                quip: "The seagull is having its own evening.",
+                furthest: ["beacon", "seagull"],
+                meta: %{model: "fake", prompt_version: "assay-4", latency_ms: 90, cost_usd: 0.0}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+
+      [view] = Chronicle.book(room.id)
+      [attempt] = view.attempts
+      [verdict] = attempt.verdicts
+
+      assert attempt.bookends == bookends
+      assert verdict.bridges == bridges
+      assert verdict.furthest == ["beacon", "seagull"]
+      assert length(verdict.seat_ids) == 4
+
+      for seat <- seats do
+        Chronicle.record_fairness_tap(room.id, %{
+          seat_id: seat.id,
+          attempt_number: 1,
+          bookends: bookends,
+          bridges: bridges,
+          grade: 27,
+          band: "miss",
+          model: "gemini-3.8-flash",
+          prompt_version: "assay-4",
+          label: "fair"
+        })
+      end
+
+      dataset = Chronicle.calibration_dataset(room.id)
+      assert length(dataset) == 4
+
+      for tap <- dataset do
+        assert tap.bookends == bookends
+        assert tap.bridges == bridges
+      end
+
+      json_export = Chronicle.export_calibration(room.id, :json)
+      {:ok, parsed_json} = Jason.decode(json_export)
+
+      for tap <- parsed_json do
+        assert tap["bookends"] == bookends
+        assert is_list(tap["bookends"])
+        assert length(tap["bookends"]) == 4
+      end
+    end
   end
 
   describe "recent_quips/2" do

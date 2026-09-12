@@ -159,7 +159,8 @@ defmodule Thereish.Game do
           | {:page_written,
              %{
                required(:bookends) => [String.t()],
-               optional(:meta) => map()
+               optional(:meta) => map(),
+               optional(:full_table) => boolean()
              }}
           | {:author_failed, %{required(:reason) => term()}}
           | {:author_retried, %{required(:seat_id) => String.t()}}
@@ -436,7 +437,7 @@ defmodule Thereish.Game do
           bookends: bookends,
           gives: state.gives,
           meta: meta,
-          full_table: state.full_table
+          full_table: page_full_table(attrs, state.full_table)
         }
 
         {:ok,
@@ -868,11 +869,15 @@ defmodule Thereish.Game do
   defp bookend_count(%{full_table: false}, _seats), do: 2
   defp bookend_count(_state, seats), do: length(seats)
 
-  defp page_full_table(page, default) when is_map(page) do
-    cond do
-      is_boolean(page[:full_table]) -> page[:full_table]
-      is_boolean(page["full_table"]) -> page["full_table"]
-      true -> default == true
+  # A Page keeps the rule it was written under. Omitted or missing (Pages from
+  # before the rule, or a Room that has not written one yet) reads as the
+  # Room's current rule, default on.
+  defp page_full_table(attrs, default \\ true)
+
+  defp page_full_table(attrs, default) when is_map(attrs) do
+    case Map.get(attrs, :full_table, Map.get(attrs, "full_table", default)) do
+      false -> false
+      _ -> true
     end
   end
 
@@ -899,8 +904,8 @@ defmodule Thereish.Game do
   # the sentence the Assayer writes, the joke it makes and the two words it
   # names as furthest apart all read in the order they are on the screen.
   #
-  # assay-3 carries Bookends, Bridges with player names in roster order, earlier
-  # Attempts, and Gives.
+  # assay-4 carries Bookends of two or more, Bridges with player names in roster
+  # order, earlier Attempts, and Gives.
   defp assay(state), do: {:assay, assay_request_overall(state)}
 
   defp assay_request_overall(state) do
