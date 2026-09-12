@@ -820,6 +820,34 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Extracts Vamp information (`%{path: path, duration: duration, loop: loop}`) from a Page
+  or page view map when its vamp record carries a playable path. Answers `nil` otherwise.
+  """
+  @spec page_vamp(map() | struct() | nil) ::
+          %{path: String.t(), duration: integer() | nil, loop: boolean()} | nil
+  def page_vamp(nil), do: nil
+
+  def page_vamp(page) when is_map(page) do
+    case Map.get(page, :vamp_meta) || Map.get(page, "vamp_meta") do
+      %{} = meta ->
+        path = Map.get(meta, :path) || Map.get(meta, "path")
+
+        if is_binary(path) and path != "" do
+          %{
+            path: path,
+            duration: Map.get(meta, :duration) || Map.get(meta, "duration"),
+            loop: Map.get(meta, :loop) || Map.get(meta, "loop") || false
+          }
+        else
+          nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
   Replaces the music_meta on an existing Chronicle page with a successful track record.
   """
   @spec replace_page_music(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
@@ -833,6 +861,23 @@ defmodule Thereish.Chronicle do
     case Repo.get(Page, page_id) do
       nil -> {:error, :not_found}
       page -> replace_page_music(page, music_meta)
+    end
+  end
+
+  @doc """
+  Replaces the vamp_meta on an existing Chronicle page with a playable Vamp record.
+  """
+  @spec replace_page_vamp(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
+  def replace_page_vamp(%Page{} = page, vamp_meta) do
+    page
+    |> Page.changeset(%{vamp_meta: vamp_meta})
+    |> Repo.update()
+  end
+
+  def replace_page_vamp(page_id, vamp_meta) when is_binary(page_id) do
+    case Repo.get(Page, page_id) do
+      nil -> {:error, :not_found}
+      page -> replace_page_vamp(page, vamp_meta)
     end
   end
 
@@ -1827,6 +1872,7 @@ defmodule Thereish.Chronicle do
       gives: formatted_gives,
       author_meta: page.author_meta,
       music_meta: page.music_meta,
+      vamp_meta: page.vamp_meta,
       masks_meta: page.masks_meta,
       masks: page.masks_meta,
       give: page.document["give"] || page.document[:give],
@@ -2011,6 +2057,12 @@ defmodule Thereish.Chronicle do
         Map.get(entry, :music_meta) ||
         Map.get(entry, "music_meta")
 
+    vamp_meta =
+      Map.get(page_data, :vamp_meta) ||
+        Map.get(page_data, "vamp_meta") ||
+        Map.get(entry, :vamp_meta) ||
+        Map.get(entry, "vamp_meta")
+
     masks_meta =
       (Map.get(page_data, :masks_meta) ||
          Map.get(page_data, "masks_meta") ||
@@ -2029,6 +2081,7 @@ defmodule Thereish.Chronicle do
         document: page_data,
         author_meta: author_meta,
         music_meta: music_meta,
+        vamp_meta: vamp_meta,
         masks_meta: masks_meta,
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,

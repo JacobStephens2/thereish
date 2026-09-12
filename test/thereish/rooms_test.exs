@@ -2881,7 +2881,7 @@ defmodule Thereish.RoomsTest do
           assert vamp_view.playing.path == vamp_view.vamp.path
           assert is_nil(vamp_view.playing.title)
 
-          # Vamp is never titled, cached, persisted, or made a Repertoire member
+          # Vamp is never titled or made a Repertoire member
           refute Map.has_key?(vamp_view.vamp, :title) and not is_nil(vamp_view.vamp[:title])
           room = Thereish.Rooms.Store.get_room(ctx.slug)
           repertoire_paths = Enum.map(Thereish.Foley.Repertoire.members(room.id), & &1.path)
@@ -3098,6 +3098,202 @@ defmodule Thereish.RoomsTest do
       assert cached_row != nil
       assert cached_row.path != missing_path
       assert cached_row.path == view.track.path
+    end
+
+    test "a closed Page keeps its Vamp beside its Track in the Chronicle after a fresh read",
+         ctx do
+      set_fake(vamp_delay_ms: 0, music_delay_ms: 80)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "frozen lake")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:vamp]) and is_nil(view[:track])
+      end)
+
+      vamp_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).vamp.path
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      track_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).track.path
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn ->
+        pages = Chronicle.page_views(ctx.slug)
+        pages != [] and Chronicle.page_vamp(hd(pages)) != nil
+      end)
+
+      stop_room(ctx.slug)
+
+      [page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page).path == vamp_path
+      assert Chronicle.page_track(page).path == track_path
+      refute vamp_path == track_path
+    end
+
+    test "a Vamp that lands after the Page closes still attaches to that Page", ctx do
+      set_fake(vamp_delay_ms: 10_000, music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "sprint")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "hoard")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "vault")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "vault")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [page_before] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page_before) == nil
+      assert Chronicle.page_track(page_before) != nil
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+
+      late_vamp = %{
+        path: "/media/vamps/late-sprint.mp3",
+        duration: 30,
+        format: :mp3,
+        loop: true,
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:vamped, page_ref, {:ok, late_vamp}})
+
+      eventually(fn ->
+        [page] = Chronicle.page_views(ctx.slug)
+        Chronicle.page_vamp(page) != nil
+      end)
+
+      [page_after] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page_after).path == "/media/vamps/late-sprint.mp3"
+      assert Chronicle.page_track(page_after).path == Chronicle.page_track(page_before).path
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:vamp]) or view.vamp.path != late_vamp.path
+    end
+
+    test "a Vamp that lands after next_page attaches to the old Page, not the one now in play",
+         ctx do
+      set_fake(vamp_delay_ms: 10_000, music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting alpha")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting beta")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      old_ref = :sys.get_state(pid).current_page_ref
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+      [closed_page] = Chronicle.page_views(ctx.slug)
+
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      late_vamp = %{
+        path: "/media/vamps/old-page.mp3",
+        duration: 30,
+        format: :mp3,
+        loop: true,
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:vamped, old_ref, {:ok, late_vamp}})
+
+      eventually(fn ->
+        page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
+        Chronicle.page_vamp(page) != nil
+      end)
+
+      page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
+      assert Chronicle.page_vamp(page).path == "/media/vamps/old-page.mp3"
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:vamp]) or view.vamp.path != late_vamp.path
+    end
+
+    test "a Page with no Vamp stays readable and invents no historical audio", ctx do
+      set_fake(vamp_mode: :unavailable, music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "quiet library")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "old books")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page) == nil
+      assert Chronicle.page_track(page) != nil
+    end
+
+    test "a cache hit writes no Vamp onto the closed Page", ctx do
+      gives = ["quiet library", "old books"]
+      cached_path = "/media/tracks/preseeded-library.mp3"
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
+
+      {:ok, _} =
+        Thereish.Steward.TrackCache.put(gives, %{
+          title: "Quiet Library",
+          path: cached_path,
+          duration: 120,
+          format: "mp3",
+          meta: %{provider: "fake"}
+        })
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "quiet library")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "old books")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track]) and is_nil(view[:vamp])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page) == nil
+      assert Chronicle.page_track(page).path == cached_path
     end
 
     test "stale vamp message arriving for moved-on Page is dropped", ctx do

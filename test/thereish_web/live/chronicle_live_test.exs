@@ -710,6 +710,160 @@ defmodule ThereishWeb.ChronicleLiveTest do
       refute has_element?(view, ~s([data-role=chronicle-page][data-page-id="#{p4.id}"] audio))
     end
 
+    test "a completed Page's Chronicle still plays its Vamp and Track after a fresh read",
+         %{conn: conn} = ctx do
+      steward(vamp_delay_ms: 0, music_delay_ms: 80)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "frozen lake")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:vamp]) and is_nil(view[:track])
+      end)
+
+      vamp_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).vamp.path
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      track_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).track.path
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn ->
+        pages = Chronicle.page_views(ctx.slug)
+
+        pages != [] and Chronicle.page_vamp(hd(pages)) != nil and
+          Chronicle.page_track(hd(pages)) != nil
+      end)
+
+      [page] = Chronicle.page_views(ctx.slug)
+      {:ok, view, _html} = live(conn, ~p"/r/#{ctx.slug}/chronicle")
+
+      assert has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{page.id}"] [data-role=vamp] audio[src="#{vamp_path}"])
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{page.id}"] [data-role=track] audio[src="#{track_path}"])
+             )
+
+      assert render(
+               element(
+                 view,
+                 ~s([data-role=chronicle-page][data-page-id="#{page.id}"] [data-role=vamp])
+               )
+             ) =~ "short"
+    end
+
+    test "shows a Vamp player labelled as the short piece beside the Track, and none when absent",
+         %{conn: conn, slug: slug} = ctx do
+      room = Repo.get_by!(Room, slug: slug)
+      now = DateTime.utc_now()
+
+      entry1 = %{
+        document: %{"bookends" => ["lantern", "harbour"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: %{
+          provider: "mureka",
+          path: "/media/tracks/harbour-lights.mp3",
+          title: "Harbour Lights"
+        },
+        vamp_meta: %{
+          path: "/media/vamps/harbour-vamp.mp3",
+          duration: 30,
+          loop: true
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 95,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["lantern", "harbour"],
+            closeness: 95,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
+              %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, p1} = Chronicle.write(room.id, entry1, now)
+
+      entry2 = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash"},
+        music_meta: %{
+          provider: "mureka",
+          path: "/media/tracks/oasis.mp3",
+          title: "Oasis"
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.melissa.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, p2} = Chronicle.write(room.id, entry2, DateTime.add(now, 60, :second))
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=vamp])
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=vamp] audio[src="/media/vamps/harbour-vamp.mp3"])
+             )
+
+      vamp_html =
+        render(
+          element(
+            view,
+            ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=vamp])
+          )
+        )
+
+      assert vamp_html =~ "Vamp"
+      assert vamp_html =~ "short"
+
+      assert has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=track] audio[src="/media/tracks/harbour-lights.mp3"])
+             )
+
+      refute has_element?(
+               view,
+               ~s([data-role=chronicle-page][data-page-id="#{p2.id}"] [data-role=vamp])
+             )
+    end
+
     test "Thereish wordmark links home to front page on the Chronicle" do
       slug = open_room()
       {:ok, view, _html} = live(build_conn(), ~p"/r/#{slug}/chronicle")

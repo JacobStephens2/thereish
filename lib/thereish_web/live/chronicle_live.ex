@@ -472,6 +472,27 @@ defmodule ThereishWeb.ChronicleLive do
             </audio>
           </div>
 
+          <!-- Vamp player if present: the short piece while the Track was being written -->
+          <div
+            :if={vamp = page_vamp(page)}
+            data-role="vamp"
+            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg bg-base-200/50 p-3"
+          >
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Vamp</span>
+              <span data-role="vamp-label" class="text-sm font-medium">the short piece</span>
+            </div>
+            <audio
+              data-role="vamp-player"
+              controls
+              src={vamp.path}
+              preload="none"
+              class="h-8 max-w-full sm:max-w-xs"
+            >
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+
           <!-- Attempts list -->
           <div class="flex flex-col gap-4">
             <section
@@ -784,6 +805,7 @@ defmodule ThereishWeb.ChronicleLive do
   defp human_label(label), do: Thereish.Chronicle.FairnessTap.label_human(label)
 
   defp page_track(page), do: Chronicle.page_track(page)
+  defp page_vamp(page), do: Chronicle.page_vamp(page)
 
   attr :data_role, :string, required: true
   attr :title, :string, required: true
