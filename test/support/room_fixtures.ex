@@ -79,6 +79,47 @@ defmodule Thereish.RoomFixtures do
   end
 
   @doc """
+  How long a shared reveal is held before anyone may advance, in milliseconds.
+
+  The couch is promised five seconds; a test that is not about the hold leaves
+  it at zero. Tests that are about the hold set it here and move the Room's
+  clock with `freeze_clock/1` rather than sleeping it out.
+  """
+  def reveal_hold(ms) do
+    restore(:reveal_hold_ms)
+
+    Application.put_env(:thereish, :reveal_hold_ms, ms)
+  end
+
+  @doc """
+  Freezes the Room's clock so a test can sit immediately before or at a
+  deadline without waiting it out.
+
+  Returns the agent holding the current millisecond, which `travel/2` moves.
+  """
+  def freeze_clock(at \\ 0) do
+    previous = Application.get_env(:thereish, :now_ms)
+    {:ok, agent} = Agent.start_link(fn -> at end)
+
+    Application.put_env(:thereish, :now_ms, fn -> Agent.get(agent, & &1) end)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      if previous do
+        Application.put_env(:thereish, :now_ms, previous)
+      else
+        Application.delete_env(:thereish, :now_ms)
+      end
+
+      if Process.alive?(agent), do: Agent.stop(agent)
+    end)
+
+    agent
+  end
+
+  @doc "Moves a clock frozen by `freeze_clock/1` to `at` milliseconds."
+  def travel(agent, at), do: Agent.update(agent, fn _ -> at end)
+
+  @doc """
   Where the escalation ladder's rungs sit for one test, in milliseconds from the
   moment the Assayer was asked.
 

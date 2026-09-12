@@ -10,6 +10,9 @@ defmodule ThereishWeb.FrontLive do
   Nothing here creates a Room. A Code that no Room has is said so plainly,
   because a Room conjured out of a typo is a Room the rest of the table cannot
   find.
+
+  A Room on the list can be hidden for this browser. That drops the shortcut,
+  not the Seat: the Code and a saved link still open the same Seat.
   """
   use ThereishWeb, :live_view
 
@@ -25,7 +28,8 @@ defmodule ThereishWeb.FrontLive do
      socket
      |> assign(:code, "")
      |> assign(:error, nil)
-     |> assign(:rooms, Rooms.for_device(device_token))}
+     |> assign(:device_token, device_token)
+     |> assign(:rooms, Rooms.listed_for_device(device_token))}
   end
 
   @impl true
@@ -40,6 +44,12 @@ defmodule ThereishWeb.FrontLive do
       {:error, _reason} ->
         {:noreply, assign(socket, code: typed, error: no_such_room(typed))}
     end
+  end
+
+  def handle_event("hide", %{"code" => code}, socket) do
+    _ = Rooms.hide(code, socket.assigns.device_token)
+
+    {:noreply, assign(socket, rooms: Rooms.listed_for_device(socket.assigns.device_token))}
   end
 
   defp no_such_room(typed) do
@@ -63,7 +73,6 @@ defmodule ThereishWeb.FrontLive do
           name="code"
           value={@code}
           label="Code"
-          placeholder="the word you were told"
           autocomplete="off"
           autocapitalize="characters"
           autofocus
@@ -80,22 +89,36 @@ defmodule ThereishWeb.FrontLive do
       <section :if={@rooms != []} class="flex flex-col gap-3 border-t border-base-300 pt-6">
         <h2 class="text-sm uppercase tracking-wide opacity-60">Your Rooms</h2>
         <ul class="flex flex-col gap-2">
-          <li :for={%{room: room, seat: seat} <- @rooms}>
-            <.link
-              navigate={~p"/r/#{room.slug}"}
-              data-role="rejoin"
-              data-code={room.slug}
-              class="flex items-baseline gap-3 text-lg underline"
-            >
-              <span class="font-mono font-semibold tracking-widest">{Code.shout(room.slug)}</span>
-              <span class="text-sm opacity-60">as {seat.name}</span>
-            </.link>
+          <li :for={%{room: room, seat: seat} <- @rooms} class="flex flex-col gap-1">
+            <div class="flex items-baseline justify-between gap-3">
+              <.link
+                navigate={~p"/r/#{room.slug}"}
+                data-role="rejoin"
+                data-code={room.slug}
+                class="flex items-baseline gap-3 text-lg underline"
+              >
+                <span class="font-mono font-semibold tracking-widest">{Code.shout(room.slug)}</span>
+                <span class="text-sm opacity-60">as {seat.name}</span>
+              </.link>
+              <button
+                type="button"
+                phx-click="hide"
+                phx-value-code={room.slug}
+                data-role="hide"
+                data-code={room.slug}
+                class="shrink-0 text-sm opacity-60 underline"
+              >
+                Hide
+              </button>
+            </div>
             <p :if={room.quip} data-role="rejoin-quip" class="text-sm italic opacity-70">
               {room.quip}
             </p>
           </li>
         </ul>
       </section>
+
+      <Layouts.made_by />
     </main>
     """
   end

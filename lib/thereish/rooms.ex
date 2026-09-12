@@ -59,8 +59,8 @@ defmodule Thereish.Rooms do
   def default_seat_limit, do: Application.fetch_env!(:thereish, :seats_per_room)
 
   @doc """
-  The Seat counts a Room may be created with: two at the least, and at most what
-  one reveal can hold on a phone.
+  The Seat counts a Room may be created with: two at the least, and at most the
+  seat cap a reveal can hold on a phone.
   """
   @spec seat_counts() :: Range.t()
   def seat_counts, do: 2..Thereish.Steward.seat_cap()
@@ -262,10 +262,39 @@ defmodule Thereish.Rooms do
   @doc """
   Every Room this browser holds a Seat in, newest first, each with the Seat.
 
-  The front page's one-tap way back in.
+  Identity, not the home list. A Room this browser has hidden is still here:
+  the Seat and the device association that finds it have not gone anywhere.
   """
   @spec for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
   def for_device(device_token), do: Store.rooms_for_device(device_token)
+
+  @doc """
+  Every Room this browser holds a Seat in that it has not hidden, newest first.
+
+  The front page's one-tap way back in. Hiding a Room drops it from this list
+  without touching `for_device/1`.
+  """
+  @spec listed_for_device(String.t()) :: [%{room: Room.t(), seat: Seat.t()}]
+  def listed_for_device(device_token), do: Store.rooms_listed_for_device(device_token)
+
+  @doc """
+  Hides a Room from this browser's home list.
+
+  The Seat, the Chronicle, and the device association stay. The Code still
+  opens the same Seat. Another browser's list is a different token.
+  """
+  @spec hide(String.t(), String.t()) :: :ok | {:error, :no_such_room | term()}
+  def hide(slug, device_token) when is_binary(device_token) do
+    with normalised when is_binary(normalised) <- Code.normalise(slug),
+         %Room{} = room <- Store.get_room(normalised) do
+      case Store.hide_from_device(room.id, device_token) do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      _ -> {:error, :no_such_room}
+    end
+  end
 
   defp start_room(code) do
     DynamicSupervisor.start_child(Thereish.Rooms.Supervisor, {Server, slug: code})
@@ -310,10 +339,11 @@ defmodule Thereish.Rooms do
 
   Any Seat may tap it, because the couple are on one couch and the reveal is
   over for both of them at once. A Page that has closed refuses: five attempts
-  is five attempts.
+  is five attempts. A reveal that is still being absorbed refuses until the
+  Room's shared hold has elapsed.
   """
   @spec next_attempt(String.t(), String.t()) ::
-          :ok | {:error, :not_revealed | :page_closed | :no_such_seat}
+          :ok | {:error, :not_revealed | :page_closed | :no_such_seat | :reveal_held}
   def next_attempt(slug, seat_id), do: call(slug, {:next_attempt, seat_id})
 
   @doc """
@@ -358,9 +388,11 @@ defmodule Thereish.Rooms do
   "One more?" — a fresh Page in the same Room, with the same Seats.
 
   Only from a Page that has closed, so that the tap can never take a Page away
-  from the couple in the middle of one.
+  from the couple in the middle of one. A closing reveal that is still being
+  absorbed refuses until the Room's shared hold has elapsed.
   """
-  @spec next_page(String.t(), String.t()) :: :ok | {:error, :page_open | :no_such_seat}
+  @spec next_page(String.t(), String.t()) ::
+          :ok | {:error, :page_open | :no_such_seat | :reveal_held}
   def next_page(slug, seat_id), do: call(slug, {:next_page, seat_id})
 
   @doc """

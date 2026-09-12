@@ -58,6 +58,18 @@ defmodule ThereishWeb.RoomComponents do
   end
 
   @doc """
+  Where to join: thereish.app, linked to this Room so a latecomer can follow one path.
+  """
+  attr :url, :string, required: true
+  attr :class, :any, default: nil
+
+  def join_at(assigns) do
+    ~H"""
+    <.link href={@url} data-role="join-url" class={["font-mono", @class]}>thereish.app</.link>
+    """
+  end
+
+  @doc """
   Small uppercase caption, used for Attempt, Bookends, and section titles.
   """
   attr :class, :string, default: nil
@@ -699,6 +711,23 @@ defmodule ThereishWeb.RoomComponents do
       class="text-center text-sm font-semibold text-primary"
     >
       Overruled jointly - recorded in the Chronicle as precedent.
+    </p>
+    """
+  end
+
+  attr :room, :map, required: true
+
+  @doc """
+  The shared pause after a reveal, on every screen, until anyone may advance.
+  """
+  def reveal_hold(assigns) do
+    ~H"""
+    <p
+      :if={@room.phase in [:reveal, :closed] and @room[:can_advance?] == false}
+      data-role="reveal-hold"
+      class="text-center text-sm opacity-70"
+    >
+      A moment for the reveal.
     </p>
     """
   end

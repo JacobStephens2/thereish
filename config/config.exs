@@ -23,6 +23,10 @@ config :thereish,
   # grade in v1: whether a harsh grade should be revealed sooner is a question
   # the couch answers, not one to guess at here.
   reveal_beat_ms: 2500,
+  # After the shared reveal, every Seat is given this long to absorb it before
+  # anyone may start the next Attempt or open the next Page. Distinct from the
+  # beat that runs before the reveal.
+  reveal_hold_ms: 5_000,
   # How the reveal escalates when the Assayer is slow (design law 10). Visible
   # activity through four seconds; at ten the game states it has no verdict and
   # hands the ruling to the players. Ten seconds is a ceiling, not a target: the
@@ -283,10 +287,10 @@ config :thereish, :steward,
     "flux-2-flex" => {:megapixel, 0.05},
     "fal-ai/flux/schnell" => {:megapixel, 0.003}
   },
-  # The most Seats a Room may hold, because live grading is N choose 2 requests
-  # per attempt and six Seats is already fifteen of them. A limit on what a
-  # reveal can afford, not on what the rules can say.
-  seat_cap: 6
+  # The most Seats a Room may hold. An Attempt is one grading request however
+  # many Seats wrote into it (ADR-0010); eight is what a reveal can still show
+  # at once and what one reading can hold one opinion about.
+  seat_cap: 8
 
 # Configure the endpoint
 config :thereish, ThereishWeb.Endpoint,

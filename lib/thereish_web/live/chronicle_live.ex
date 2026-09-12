@@ -566,6 +566,8 @@ defmodule ThereishWeb.ChronicleLive do
           </div>
         </article>
       </div>
+
+      <Layouts.made_by />
     </main>
     """
   end

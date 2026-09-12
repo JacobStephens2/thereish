@@ -64,6 +64,13 @@ base_seats_6 = [
   %{id: "s6", name: "Sam", committed?: true}
 ]
 
+base_seats_8 =
+  base_seats_6 ++
+    [
+      %{id: "s7", name: "Ivy", committed?: true},
+      %{id: "s8", name: "Ned", committed?: true}
+    ]
+
 states = [
   {"giving", %{
     phase: :giving,
@@ -206,6 +213,43 @@ states = [
         %{seat_id: "s6", name: "Sam", bridge: "slope"}
       ],
       quip: "Six bridges across the divide and all of them found solid footing."
+    },
+    closed: nil,
+    played: [],
+    next_bookends: nil,
+    overrule: nil,
+    fairness_taps: %{},
+    bookends_taps: %{}
+  }},
+
+  {"reveal_8bridges", %{
+    phase: :reveal,
+    speaker?: true,
+    voice: false,
+    house_loop_only: false,
+    seats: base_seats_8,
+    gives_in: 8,
+    open_seats: 0,
+    seat_limit: 8,
+    bookends: ["mountain", "valley", "river", "forest", "cliff", "marsh", "ridge", "hearth"],
+    attempt: %{number: 2, of: 5},
+    reveal: %{
+      closeness: 92,
+      band: :meld,
+      melded?: true,
+      graded?: true,
+      overruled?: false,
+      bridges: [
+        %{seat_id: "s1", name: "Mara", bridge: "pass"},
+        %{seat_id: "s2", name: "Jacob", bridge: "trail"},
+        %{seat_id: "s3", name: "Ada", bridge: "path"},
+        %{seat_id: "s4", name: "Bram", bridge: "ledge"},
+        %{seat_id: "s5", name: "Esme", bridge: "canyon"},
+        %{seat_id: "s6", name: "Sam", bridge: "slope"},
+        %{seat_id: "s7", name: "Ivy", bridge: "crest"},
+        %{seat_id: "s8", name: "Ned", bridge: "saddle"}
+      ],
+      quip: "Eight bridges across the divide and all of them found solid footing."
     },
     closed: nil,
     played: [],
