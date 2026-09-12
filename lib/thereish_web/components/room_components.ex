@@ -205,8 +205,8 @@ defmodule ThereishWeb.RoomComponents do
           ]}
         >
           <img
-            :if={bookend_mask_url(chip)}
-            src={bookend_mask_url(chip)}
+            :if={mask_url(chip)}
+            src={mask_url(chip)}
             alt=""
             data-role="bookend-mask"
             class={[
@@ -236,10 +236,10 @@ defmodule ThereishWeb.RoomComponents do
   defp bookend_word(word) when is_binary(word), do: word
   defp bookend_word(_), do: ""
 
-  defp bookend_mask_url(%{mask: url}) when is_binary(url) and url != "", do: url
-  defp bookend_mask_url(%{mask: mask}) when is_map(mask), do: mask[:url] || mask["url"]
-  defp bookend_mask_url(%{"mask" => mask}) when is_map(mask), do: mask[:url] || mask["url"]
-  defp bookend_mask_url(_), do: nil
+  defp mask_url(%{mask: url}) when is_binary(url) and url != "", do: url
+  defp mask_url(%{mask: mask}) when is_map(mask), do: mask[:url] || mask["url"]
+  defp mask_url(%{"mask" => mask}) when is_map(mask), do: mask[:url] || mask["url"]
+  defp mask_url(_), do: nil
 
   attr :room, :map, required: true
 
@@ -286,7 +286,7 @@ defmodule ThereishWeb.RoomComponents do
     <p class={if @mode == :stage, do: "text-2xl font-semibold", else: "text-lg font-medium"}>
       {if @room[:author_step] == :still_writing,
         do: "The Author is still writing...",
-        else: "The Author is reading your settings..."}
+        else: "The Author is reading your Gives..."}
     </p>
     """
   end
@@ -471,8 +471,8 @@ defmodule ThereishWeb.RoomComponents do
 
       <div
         :if={
-          @mode == :stage and first_reveal_happened?(@room) and is_list(@room[:seats]) and
-            @room[:seats] != []
+          @mode == :stage and first_reveal_happened?(@room) and @room.phase != :closed and
+            is_list(@room[:seats]) and @room[:seats] != []
         }
         data-role="stage-masks"
         class="flex flex-wrap items-center justify-center gap-4 my-2"
@@ -517,17 +517,40 @@ defmodule ThereishWeb.RoomComponents do
       <div
         :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
         data-role="gives"
-        class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm opacity-80"
+        class={[
+          "flex flex-col items-center w-full",
+          if(@mode == :stage, do: "gap-2", else: "gap-3")
+        ]}
       >
-        <span class="text-xs uppercase tracking-wider font-semibold opacity-60">Settings:</span>
-        <div
-          :for={give <- gives_list(@room)}
-          data-role="give"
-          data-seat={give[:seat_id]}
-          class="flex items-center gap-1.5"
-        >
-          <span class="font-semibold">{give[:name] || give[:seat_name]}:</span>
-          <span>{give[:text] || give[:give]}</span>
+        <.caption>Gives</.caption>
+        <div class="flex flex-wrap items-stretch justify-center gap-3 sm:gap-4 w-full">
+          <div
+            :for={give <- gives_list(@room)}
+            data-role="give"
+            data-seat={give[:seat_id]}
+            class={[
+              "flex flex-col items-center gap-2 rounded-xl border border-base-300 bg-base-100 p-3 text-center shadow-sm",
+              if(@mode == :stage,
+                do: "min-w-[7rem] max-w-[11rem]",
+                else: "min-w-[8rem] max-w-[12rem]"
+              )
+            ]}
+          >
+            <img
+              :if={mask_url(give)}
+              src={mask_url(give)}
+              alt={"Mask for #{give[:name] || give[:seat_name]}"}
+              data-role="give-mask"
+              class={[
+                "rounded-xl object-cover border-2 border-base-300 shadow-md",
+                if(@mode == :stage, do: "size-16 sm:size-20", else: "size-20")
+              ]}
+            />
+            <p class="text-sm font-semibold uppercase tracking-wide opacity-70">
+              {give[:name] || give[:seat_name]}
+            </p>
+            <p class="text-lg font-semibold leading-snug">{give[:text] || give[:give]}</p>
+          </div>
         </div>
       </div>
 
@@ -1173,7 +1196,7 @@ defmodule ThereishWeb.RoomComponents do
           phx-click="toggle_full_table"
           class="checkbox checkbox-xs"
         />
-        <span>Full table: one Bookend from every player's setting, and every bridge carries forward</span>
+        <span>Full table: one Bookend from every player's Give, and every bridge carries forward</span>
       </label>
       <p
         :if={length(Map.get(@room, :seats, []) || []) == 2}
