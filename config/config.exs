@@ -30,7 +30,7 @@ config :thereish,
   assayer_escalation_ms: [slow: 4_000, unavailable: 10_000],
   # How the wait escalates when the Author is slow (spec: The Author fails honestly).
   # At five seconds every screen says the Author is still writing; at the eight-second
-  # deadline the Room fails with a timeout reason and offers Try again and New settings.
+  # deadline the Room fails with a timeout reason and offers Try again and New Gives.
   author_escalation_ms: [still_writing: 5_000, deadline: 8_000],
   # How many tries a Page gets before it closes unmelded. Five is a guess about
   # how long a converging arc stays funny, which makes it a setting the couch
