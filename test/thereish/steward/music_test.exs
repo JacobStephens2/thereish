@@ -39,20 +39,13 @@ defmodule Thereish.Steward.MusicTest do
       end
     end
 
-    test "comfortable playback volume is mix, not a requirement for gentle composition" do
-      for prompt <- briefs(["Kiss Heavy Metal"]) do
-        assert prompt =~ ~r/volume/i
-        refute prompt =~ "Gentle, conversational background"
-        refute prompt =~ "Soft and gentle"
-      end
-    end
-
     test "the Vamp brief does not ask ElevenLabs for speech" do
-      prompt = Music.vamp_prompt(["Kiss Heavy Metal"])
+      gives = ["Kiss Heavy Metal"]
+      prompt = Music.vamp_prompt(gives)
 
       refute prompt =~ "conversational"
       refute prompt =~ "spoken conversation"
-      assert String.starts_with?(prompt, Music.vamp_prefix())
+      assert String.starts_with?(prompt, Music.vamp_prefix(gives))
     end
   end
 

@@ -117,8 +117,6 @@ defmodule Thereish.Steward.VampTest do
 
       text = body["text"]
       assert text == Thereish.Steward.Music.vamp_prompt(@gives)
-      # ElevenLabs sound-generation hears these as people talking, not as a bed
-      # that sits under talk. The Mureka house prefix is the wrong brief here.
       refute String.contains?(text, "conversational")
       refute String.contains?(text, "spoken conversation")
 
