@@ -17,10 +17,10 @@ defmodule ThereishWeb.AdminOverviewTest do
     assert html =~ ~r/<meta[^>]*robots[^>]*noindex/i
     assert has_element?(view, "a[href='/spend']", "Spend")
     assert has_element?(view, "a[href='/admin/experiments']", "Experiments")
+    assert has_element?(view, "a[href='/admin/media']", "Media")
     assert has_element?(view, "a[href='/calibration.json']")
     assert has_element?(view, "a[href='/calibration.jsonl']")
     refute html =~ "/admin/rooms"
-    refute html =~ "/admin/media"
     refute html =~ "/admin/timing"
     refute html =~ "coming soon"
   end
