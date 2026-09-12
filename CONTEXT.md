@@ -41,11 +41,11 @@ A themed run of Pages exploring one meaning-space — a place, an era, a season 
 _Avoid_: campaign, level, theme pack, world, mode
 
 **Give**:
-A theme a player supplies to open a Page — improv's audience suggestion, at Page scale rather than Chapter scale. Every Seat gives one before a Page is written, each Bookend comes from a different Give, and a Give is secret to its giver until the Page's first reveal. Player-facing copy says "setting".
-_Avoid_: suggestion, request, custom theme, prompt
+A theme a player supplies to open a Page — improv's audience suggestion, which may be a place, feeling, idea, or anything else. Each Seat supplies a Give, secret to its giver until the Page's first reveal; player-facing language also says Give / Gives.
+_Avoid_: setting, gift, suggestion, request, custom theme, prompt
 
 **Mask**:
-The small picture a Seat wears for one Page, drawn by the Limner from that Seat's Give: abstracted a step away from the Give rather than illustrating it, so it hints without telling. A Mask shows to its own giver at once; on the Stage it lies face-down from the moment the Give lands until the Page's first reveal, then turns over and stays with the Page in the Chronicle. It is also the marker that lights when that Seat's Bridge lands.
+The small picture a Seat wears for one Page, drawn by the Limner to make that Seat's Give recognizable in a shared illustration style. Its giver sees it as soon as it is ready, everyone else sees it at the first Attempt's reveal after the Bridges are committed, and it stays with the Page in the Chronicle as the Seat's marker.
 _Avoid_: avatar, icon (in copy), profile picture, token, sigil, portrait
 
 **Steward**:
@@ -77,7 +77,7 @@ The one device in a Room that plays what Foley makes — the Stage from the one 
 _Avoid_: audio device, output, host phone, "the sound", speakerphone
 
 **Voice**:
-Foley speaking the Assayer's band word, and its Quip when Quips are shown, at the reveal. A setting of the device holding the Speaker, off unless that device turns it on; stings sound regardless.
+Foley announcing an Attempt's Bookends, with optional speech of the Assayer's band word and Quip at the reveal. Voice belongs to the device holding the Speaker and stays off until enabled; its remembered choices initially enable Bookends and leave Verdict/Quip speech off.
 _Avoid_: narration, TTS, voiceover, announcer, read-aloud
 
 **Track**:
@@ -89,7 +89,7 @@ The three sentences that tell a table what Thereish is and what a Meld is, spoke
 _Avoid_: tutorial, onboarding, intro (in code), how-to-play, rules screen, narration
 
 **Vamp**:
-The short instrumental Foley gets back in seconds so the Speaker has something written for this Page's Gives while the Track is still being made. Thrown away once the Track lands: never titled, never kept, never a Repertoire member. (Theatre's word for the band playing until the singer is ready.)
+The short instrumental Foley supplies from a Page's Gives while its Track is still being made — theatre's word for the band playing until the singer is ready. It is kept with the Page for playback in the Chronicle, but is not a Repertoire member.
 _Avoid_: intro clip, placeholder track, bed (the listen report's word), stopgap, preview
 
 **Repertoire**:
@@ -161,7 +161,7 @@ The cached verdict that future identical inputs inherit — the grade the player
 _Avoid_: cache entry, ruling, second opinion
 
 **Recap**:
-The Scribe's paragraph about one closed Page, written after play in the players' own words back to them. It carries no number: the grade is the Verdict's and a recap never restates one. Player-editable like everything else in the Chronicle, and a Page the Scribe could not write about simply has none.
+The Scribe's paragraph about one closed Page, written after play in the players' own words back to them. It carries no number because the grade is the Verdict's, and a Page the Scribe could not write about simply has none.
 _Avoid_: summary, narration, AI summary, blurb
 
 **Callback**:
@@ -169,5 +169,5 @@ The line in a Recap that reaches back to an earlier Page — the sentence next m
 _Avoid_: reference, easter egg, throwback, memory
 
 **Chronicle**:
-The persistent, player-visible and player-editable record of one Room's play history — every Page, every ruling, every overrule — kept by the machine and woven back into that Room's future Pages. Every Room has its own.
+The persistent, player-visible record of one Room's play history — its Pages, Verdicts, overrules, retained media, and player feedback. Feedback evaluates the Assayer without rewriting recorded play; earlier corrections remain part of the record.
 _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)
