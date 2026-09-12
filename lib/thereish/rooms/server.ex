@@ -813,15 +813,44 @@ defmodule Thereish.Rooms.Server do
     closed? = Thereish.Game.phase(state.game) == :closed
     scoring? = Map.get(state, :score_task_running, false)
 
-    state = Map.put(state, :vamp_task_running, false)
+    state =
+      if current_page? do
+        Map.put(state, :vamp_task_running, false)
+      else
+        state
+      end
 
-    if current_page? and not closed? and scoring? do
-      log_music_event(state, page_ref, "vamp landed")
-      state = Map.put(state, :current_vamp, vamp)
-      broadcast(state.room.slug)
-      {:noreply, state}
-    else
-      {:noreply, state}
+    vamp_meta = build_vamp_meta(vamp)
+
+    page_id =
+      (state[:recorded_pages] || %{})[page_ref] ||
+        if current_page?, do: state[:current_page_id]
+
+    if not is_nil(page_id) do
+      Chronicle.replace_page_vamp(page_id, vamp_meta)
+    end
+
+    cond do
+      current_page? and not closed? and scoring? ->
+        log_music_event(state, page_ref, "vamp landed")
+
+        state =
+          state
+          |> Map.put(:current_vamp, vamp)
+          |> Map.put(:vamp_meta, vamp_meta)
+
+        broadcast(state.room.slug)
+        {:noreply, state}
+
+      current_page? ->
+        log_music_event(state, page_ref, "vamp landed")
+        state = Map.put(state, :vamp_meta, vamp_meta)
+        if not is_nil(page_id), do: broadcast(state.room.slug)
+        {:noreply, state}
+
+      true ->
+        if not is_nil(page_id), do: broadcast(state.room.slug)
+        {:noreply, state}
     end
   end
 
@@ -861,7 +890,7 @@ defmodule Thereish.Rooms.Server do
         track[:meta] || %{}
       end
 
-    music_meta = build_music_meta(base_meta, attrs)
+    music_meta = put_meta(base_meta, attrs)
 
     page_id =
       (state[:recorded_pages] || %{})[page_ref] ||
@@ -989,7 +1018,7 @@ defmodule Thereish.Rooms.Server do
         _ -> track[:meta] || %{}
       end
 
-    music_meta = build_music_meta(base_meta, attrs)
+    music_meta = put_meta(base_meta, attrs)
 
     state = %{state | current_track: track, music_meta: music_meta}
     if page_ref, do: Map.put(state, :track_page_ref, page_ref), else: state
@@ -1250,7 +1279,10 @@ defmodule Thereish.Rooms.Server do
           Thereish.Steward.score_failure(:unfinished)
       end
 
-    entry = Map.put(entry, :music_meta, music_meta)
+    entry =
+      entry
+      |> Map.put(:music_meta, music_meta)
+      |> Map.put(:vamp_meta, state[:vamp_meta])
 
     if waiting_for_voice_meta?(state, entry) do
       %{state | pending_chronicle: entry}
@@ -1324,6 +1356,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:current_gives, gives)
       |> Map.put(:gives_landed_at, now)
       |> Map.put(:current_vamp, nil)
+      |> Map.put(:vamp_meta, nil)
       |> Map.put(:current_title, nil)
       |> Map.put(:title_meta, nil)
       |> Map.put(:music_meta, nil)
@@ -1383,6 +1416,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:current_gives, nil)
       |> Map.put(:gives_landed_at, nil)
       |> Map.put(:current_vamp, nil)
+      |> Map.put(:vamp_meta, nil)
       |> Map.put(:vamp_task_running, false)
       |> Map.put(:score_task_running, false)
       |> Map.put(:title_task_running, false)
@@ -1415,7 +1449,7 @@ defmodule Thereish.Rooms.Server do
         log_music_event(state, page_ref, "cache hit")
 
         music_meta =
-          build_music_meta(cached_track.meta,
+          put_meta(cached_track.meta,
             title: cached_track.title,
             path: cached_track.path,
             title_cost_usd: 0.0
@@ -1427,6 +1461,7 @@ defmodule Thereish.Rooms.Server do
         |> Map.put(:current_title, cached_track.title)
         |> Map.put(:music_meta, music_meta)
         |> Map.put(:current_vamp, nil)
+        |> Map.put(:vamp_meta, nil)
         |> Map.put(:vamp_task_running, false)
         |> Map.put(:score_task_running, false)
         |> Map.put(:title_task_running, false)
@@ -1529,12 +1564,23 @@ defmodule Thereish.Rooms.Server do
     state
   end
 
-  defp build_music_meta(base, pairs) do
+  defp put_meta(base, pairs) do
     Enum.reduce(pairs, base || %{}, fn {key, val}, acc ->
       acc
       |> Map.put(key, val)
       |> Map.put(to_string(key), val)
     end)
+  end
+
+  defp build_vamp_meta(vamp) when is_map(vamp) do
+    base = vamp[:meta] || vamp["meta"] || %{}
+
+    put_meta(base,
+      path: vamp[:path] || vamp["path"],
+      duration: vamp[:duration] || vamp["duration"],
+      format: vamp[:format] || vamp["format"],
+      loop: Map.get(vamp, :loop, Map.get(vamp, "loop", true))
+    )
   end
 
   defp extract_give_strings(request) do

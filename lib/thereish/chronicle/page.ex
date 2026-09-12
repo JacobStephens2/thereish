@@ -19,6 +19,7 @@ defmodule Thereish.Chronicle.Page do
     field :document, :map
     field :author_meta, :map
     field :music_meta, :map
+    field :vamp_meta, :map
     field :masks_meta, :map
     field :closed_because, :string
     field :melded, :boolean
@@ -44,6 +45,7 @@ defmodule Thereish.Chronicle.Page do
       :document,
       :author_meta,
       :music_meta,
+      :vamp_meta,
       :masks_meta,
       :closed_because,
       :melded,

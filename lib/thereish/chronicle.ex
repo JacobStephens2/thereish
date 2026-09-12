@@ -840,10 +840,10 @@ defmodule Thereish.Chronicle do
   def page_track(nil), do: nil
 
   def page_track(page) when is_map(page) do
-    case page[:music_meta] || page["music_meta"] do
+    case field_meta(page, :music_meta) do
       %{} = meta ->
-        path = meta[:path] || meta["path"]
-        title = meta[:title] || meta["title"]
+        path = meta_get(meta, :path)
+        title = meta_get(meta, :title)
 
         if is_binary(path) and path != "" and is_binary(title) and title != "" do
           %{path: path, title: title}
@@ -857,38 +857,51 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Extracts Vamp information (`%{path: path, duration: duration, loop: loop}`) from a Page
+  or page view map when its vamp record carries a playable path. Answers `nil` otherwise.
+  """
+  @spec page_vamp(map() | struct() | nil) ::
+          %{path: String.t(), duration: integer() | nil, loop: boolean()} | nil
+  def page_vamp(nil), do: nil
+
+  def page_vamp(page) when is_map(page) do
+    case field_meta(page, :vamp_meta) do
+      %{} = meta ->
+        path = meta_get(meta, :path)
+
+        if is_binary(path) and path != "" do
+          %{
+            path: path,
+            duration: meta_get(meta, :duration),
+            loop: meta_get(meta, :loop) not in [nil, false]
+          }
+        else
+          nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
   Replaces the music_meta on an existing Chronicle page with a successful track record.
   """
   @spec replace_page_music(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
-  def replace_page_music(%Page{} = page, music_meta) do
-    page
-    |> Page.changeset(%{music_meta: music_meta})
-    |> Repo.update()
-  end
+  def replace_page_music(page, music_meta), do: replace_page_field(page, :music_meta, music_meta)
 
-  def replace_page_music(page_id, music_meta) when is_binary(page_id) do
-    case Repo.get(Page, page_id) do
-      nil -> {:error, :not_found}
-      page -> replace_page_music(page, music_meta)
-    end
-  end
+  @doc """
+  Replaces the vamp_meta on an existing Chronicle page with a playable Vamp record.
+  """
+  @spec replace_page_vamp(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
+  def replace_page_vamp(page, vamp_meta), do: replace_page_field(page, :vamp_meta, vamp_meta)
 
   @doc """
   Replaces the masks_meta on an existing Chronicle page with the latest masks record.
   """
   @spec replace_page_masks(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
-  def replace_page_masks(%Page{} = page, masks_meta) do
-    page
-    |> Page.changeset(%{masks_meta: sanitize_masks(masks_meta)})
-    |> Repo.update()
-  end
-
-  def replace_page_masks(page_id, masks_meta) when is_binary(page_id) do
-    case Repo.get(Page, page_id) do
-      nil -> {:error, :not_found}
-      page -> replace_page_masks(page, masks_meta)
-    end
-  end
+  def replace_page_masks(page, masks_meta),
+    do: replace_page_field(page, :masks_meta, sanitize_masks(masks_meta))
 
   @doc """
   Updates or adds a single seat's mask on a Page's masks_meta.
@@ -922,6 +935,27 @@ defmodule Thereish.Chronicle do
 
   defp sanitize_mask(other), do: other
 
+  defp replace_page_field(%Page{} = page, field, value) do
+    page
+    |> Page.changeset(%{field => value})
+    |> Repo.update()
+  end
+
+  defp replace_page_field(page_id, field, value) when is_binary(page_id) do
+    case Repo.get(Page, page_id) do
+      nil -> {:error, :not_found}
+      page -> replace_page_field(page, field, value)
+    end
+  end
+
+  defp field_meta(page, field) when is_map(page) and is_atom(field) do
+    Map.get(page, field) || Map.get(page, Atom.to_string(field))
+  end
+
+  defp meta_get(meta, key) when is_map(meta) and is_atom(key) do
+    Map.get(meta, key) || Map.get(meta, Atom.to_string(key))
+  end
+
   @doc """
   Answers spend for all Rooms across Author, Assayer, and Scribe calls.
   """
@@ -945,6 +979,7 @@ defmodule Thereish.Chronicle do
             room_id: p.room_id,
             author_meta: p.author_meta,
             music_meta: p.music_meta,
+            vamp_meta: p.vamp_meta,
             masks_meta: p.masks_meta
           }
         )
@@ -1009,6 +1044,7 @@ defmodule Thereish.Chronicle do
           select: %{
             author_meta: p.author_meta,
             music_meta: p.music_meta,
+            vamp_meta: p.vamp_meta,
             masks_meta: p.masks_meta
           }
         )
@@ -1157,19 +1193,10 @@ defmodule Thereish.Chronicle do
             acc
           end
 
-        music_meta = Map.get(page, :music_meta)
-
         acc =
-          if is_map(music_meta) and map_size(music_meta) > 0 do
-            model =
-              music_meta["model"] || music_meta[:model] ||
-                music_meta["provider"] || music_meta[:provider] || "unknown"
-
-            cost = to_decimal(music_meta["cost_usd"] || music_meta[:cost_usd])
-            record_call(acc, :foley, model, cost)
-          else
-            acc
-          end
+          acc
+          |> record_foley_meta(Map.get(page, :music_meta))
+          |> record_foley_meta(Map.get(page, :vamp_meta))
 
         masks_meta = Map.get(page, :masks_meta)
 
@@ -1335,6 +1362,19 @@ defmodule Thereish.Chronicle do
         by_role: merged_roles,
         by_model: merged_models
     }
+  end
+
+  defp record_foley_meta(acc, meta) do
+    if is_map(meta) and map_size(meta) > 0 do
+      model =
+        meta["model"] || meta[:model] ||
+          meta["provider"] || meta[:provider] || "unknown"
+
+      cost = to_decimal(meta["cost_usd"] || meta[:cost_usd])
+      record_call(acc, :foley, model, cost)
+    else
+      acc
+    end
   end
 
   defp record_call(acc, role, model, cost) do
@@ -1864,6 +1904,7 @@ defmodule Thereish.Chronicle do
       gives: formatted_gives,
       author_meta: page.author_meta,
       music_meta: page.music_meta,
+      vamp_meta: page.vamp_meta,
       masks_meta: page.masks_meta,
       masks: page.masks_meta,
       give: page.document["give"] || page.document[:give],
@@ -2048,6 +2089,12 @@ defmodule Thereish.Chronicle do
         Map.get(entry, :music_meta) ||
         Map.get(entry, "music_meta")
 
+    vamp_meta =
+      Map.get(page_data, :vamp_meta) ||
+        Map.get(page_data, "vamp_meta") ||
+        Map.get(entry, :vamp_meta) ||
+        Map.get(entry, "vamp_meta")
+
     masks_meta =
       (Map.get(page_data, :masks_meta) ||
          Map.get(page_data, "masks_meta") ||
@@ -2066,6 +2113,7 @@ defmodule Thereish.Chronicle do
         document: page_data,
         author_meta: author_meta,
         music_meta: music_meta,
+        vamp_meta: vamp_meta,
         masks_meta: masks_meta,
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,
