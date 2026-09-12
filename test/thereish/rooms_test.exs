@@ -1427,6 +1427,66 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  describe "hiding a Room from this browser's list" do
+    test "drops the shortcut without dropping the Seat, the Room, or the Chronicle" do
+      phone = device_token()
+      slug = open_room()
+      {:ok, mara} = Rooms.join(slug, "Mara", phone)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, mara.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      await_phase(slug, :closed)
+
+      room = Rooms.get_room(slug)
+      assert [page] = Chronicle.pages(room.id)
+
+      assert [%{room: %{slug: ^slug}}] = Rooms.listed_for_device(phone)
+      assert :ok = Rooms.hide(slug, phone)
+
+      assert Rooms.listed_for_device(phone) == []
+      assert [%{room: kept_room, seat: kept_seat}] = Rooms.for_device(phone)
+      assert kept_room.id == room.id
+      assert kept_seat.id == mara.id
+      assert kept_seat.device_tokens == [phone]
+      assert Rooms.get_room(slug).id == room.id
+      assert [kept_page] = Chronicle.pages(room.id)
+      assert kept_page.id == page.id
+      assert {:ok, seated} = Rooms.rejoin(slug, phone)
+      assert seated.id == mara.id
+    end
+
+    test "another browser that holds the same Seat still sees the Room" do
+      slug = open_room()
+      pixel = device_token()
+      ipad = device_token()
+      {:ok, seat} = Rooms.join(slug, "Mara", pixel)
+      {:ok, same} = Rooms.join(slug, "Mara", ipad)
+      assert same.id == seat.id
+
+      assert :ok = Rooms.hide(slug, pixel)
+
+      assert Rooms.listed_for_device(pixel) == []
+      assert [%{room: %{slug: ^slug}, seat: listed}] = Rooms.listed_for_device(ipad)
+      assert listed.id == seat.id
+      assert {:ok, seated} = Rooms.rejoin(slug, pixel)
+      assert seated.id == seat.id
+    end
+
+    test "hiding twice is still hidden, and a Code nobody has cannot be hidden" do
+      phone = device_token()
+      slug = open_room()
+      {:ok, _} = Rooms.join(slug, "Mara", phone)
+
+      assert :ok = Rooms.hide(slug, phone)
+      assert :ok = Rooms.hide(slug, phone)
+      assert Rooms.listed_for_device(phone) == []
+      assert {:error, :no_such_room} = Rooms.hide("zzzz", phone)
+    end
+  end
+
   describe "subscriptions" do
     test "a subscriber hears about a new Seat" do
       slug = open_room()
