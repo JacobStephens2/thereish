@@ -839,7 +839,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
 
       assert has_element?(
                view,
-               ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=vamp] audio[src="/media/vamps/harbour-vamp.mp3"])
+               ~s([data-role=chronicle-page][data-page-id="#{p1.id}"] [data-role=vamp] audio[src="/media/vamps/harbour-vamp.mp3"][loop])
              )
 
       vamp_html =
