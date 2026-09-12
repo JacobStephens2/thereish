@@ -1094,6 +1094,12 @@ defmodule Thereish.ChronicleTest do
       assert verdict.bridges == bridges
       assert length(verdict.seat_ids) == 4
       assert verdict.furthest == ["beacon", "seagull"]
+
+      # Pages from before the rule still render: no Full table field, Carried is the furthest pair.
+      assert view.full_table == nil
+      assert attempt.carried == ["beacon", "seagull"]
+      markdown = Chronicle.to_markdown(room.id)
+      refute markdown =~ "- Rule:"
     end
 
     test "are absent from a Verdict that never arrived, and that is not an error", ctx do
@@ -1216,7 +1222,22 @@ defmodule Thereish.ChronicleTest do
       assert [v] = attempt.verdicts
       assert v.reasoning != nil and v.reasoning != ""
       assert v.furthest == verdict.furthest
-      assert attempt.carried == verdict.furthest
+      assert attempt.carried == ["beacon", "cairn", "lamp", "seagull"]
+      assert view.full_table == true
+
+      assert Enum.map(view.bookend_origins, & &1.give) == [
+               "setting one",
+               "setting two",
+               "setting three",
+               "setting four"
+             ]
+
+      assert Enum.map(attempt.bookend_chips, & &1.give) == [
+               "setting one",
+               "setting two",
+               "setting three",
+               "setting four"
+             ]
 
       # Markdown export renders every Bridge, the one Verdict, and the carried words
       markdown = Chronicle.to_markdown(room.id)
@@ -1225,14 +1246,16 @@ defmodule Thereish.ChronicleTest do
       assert markdown =~ "Ada: lamp"
       assert markdown =~ "Sam: seagull"
       assert markdown =~ "- Reasoning: #{v.reasoning}"
-      assert markdown =~ "- Carried: #{Enum.join(verdict.furthest, " · ")}"
+      assert markdown =~ "- Carried: beacon, cairn, lamp and seagull"
+      assert markdown =~ "- Rule: Full table"
+      assert markdown =~ "from Melissa's setting one"
 
       # Round-trip parsing from Markdown
       assert {:ok, [parsed_page]} = Chronicle.from_markdown(markdown)
       assert length(parsed_page.gives) == 4
       [parsed_attempt] = parsed_page.attempts
       assert length(parsed_attempt.bridges) == 4
-      assert parsed_attempt.carried == verdict.furthest
+      assert parsed_attempt.carried == ["beacon", "cairn", "lamp", "seagull"]
     end
 
     test "a book that holds two Verdicts on one Attempt, each covering two Seats, still renders" do

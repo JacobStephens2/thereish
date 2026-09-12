@@ -137,6 +137,25 @@ defmodule Thereish.GameTest do
     ])
   end
 
+  # Four Seats on the two-Bookend rule: furthest pair carries, roster fallback.
+  defp four_two_bookends do
+    Game.init(
+      seat_limit: 4,
+      seats: Enum.map(["Melissa", "Jacob", "Ada", "Ida"], &seat/1),
+      page: Map.put(@page, :full_table, false),
+      full_table: false
+    )
+  end
+
+  defp four_committed_two do
+    commit_all(four_two_bookends(), [
+      {"Melissa", "cairn"},
+      {"Jacob", "beacon"},
+      {"Ada", "wharf"},
+      {"Ida", "signal"}
+    ])
+  end
+
   describe "seats are a list of N" do
     test "a Room of three seats takes a third player the same way it took the first two" do
       state =
@@ -1113,7 +1132,7 @@ defmodule Thereish.GameTest do
     end
 
     test "at four Seats it is the two the Assayer named, whoever wrote them" do
-      {state, effects} = four_committed()
+      {state, effects} = four_committed_two()
       state = grade(state, effects, 30, ["beacon", "signal"])
 
       # The Assayer read four words together and said these two are the ends of
@@ -1124,7 +1143,7 @@ defmodule Thereish.GameTest do
     end
 
     test "with no Verdict the first two in roster order carry, and the view says so" do
-      {state, _effects} = four_committed()
+      {state, _effects} = four_committed_two()
       {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
 
       assert Game.view(state, nil).next_bookends == ["cairn", "beacon"]
@@ -1133,7 +1152,7 @@ defmodule Thereish.GameTest do
     end
 
     test "a word nobody wrote is no choice: the roster carries, and the view says so" do
-      {state, effects} = four_committed()
+      {state, effects} = four_committed_two()
       state = grade(state, effects, 30, ["beacon", "lighthouse"])
 
       # "lighthouse" is a paraphrase of nobody's Bridge. Sending the table to an
@@ -2347,6 +2366,158 @@ defmodule Thereish.GameTest do
 
       state = written(state, ["tide", "wick"], false)
       assert Game.view(state, nil).full_table == false
+    end
+  end
+
+  describe "every Bridge carries forward at a Full table (ticket 05, #122)" do
+    @six ~w(Melissa Jacob Ada Ida Ola Ora)
+    @six_bookends ~w(lantern harbour summit ember grove spire)
+    @six_bridges ~w(cairn beacon wharf signal torch lamp)
+
+    defp six_full(opts \\ []) do
+      page =
+        %{id: "six", bookends: @six_bookends, full_table: true}
+        |> Map.merge(Keyword.get(opts, :page, %{}))
+
+      Game.init(
+        seat_limit: 6,
+        seats: Enum.map(@six, &seat/1),
+        page: page,
+        full_table: true
+      )
+    end
+
+    defp six_off do
+      Game.init(
+        seat_limit: 6,
+        seats: Enum.map(@six, &seat/1),
+        page: %{id: "six", bookends: ["lantern", "harbour"], full_table: false},
+        full_table: false
+      )
+    end
+
+    defp six_committed(state, bridges \\ @six_bridges) do
+      commit_all(state, Enum.zip(@six, bridges))
+    end
+
+    test "at a Full table a miss carries N Bridges in roster order" do
+      {state, effects} = six_committed(six_full())
+      # The Assayer still names a furthest pair; the rule does not use it.
+      state = grade(state, effects, 10, ["beacon", "signal"])
+
+      assert Game.view(state, nil).next_bookends == @six_bridges
+
+      state = again(state)
+      view = Game.view(state, nil)
+
+      assert view.bookends == @six_bridges
+      assert view.attempt.number == 2
+      assert Enum.map(view.bookend_chips, & &1.word) == @six_bridges
+      assert Enum.map(view.bookend_chips, & &1.seat_id) == Enum.map(@six, &("seat-" <> &1))
+    end
+
+    test "Full table off carries the furthest pair, with the roster fallback" do
+      {state, effects} = six_committed(six_off())
+      state = grade(state, effects, 10, ["beacon", "signal"])
+
+      assert Game.view(state, nil).next_bookends == ["beacon", "signal"]
+      assert Game.view(state, nil).next_bookends_chosen? == true
+      assert Game.view(again(state), nil).bookends == ["beacon", "signal"]
+
+      {state, _effects} = six_committed(six_off())
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
+
+      assert Game.view(state, nil).next_bookends == ["cairn", "beacon"]
+      assert Game.view(state, nil).next_bookends_chosen? == false
+    end
+
+    test "join_and names two words with and, and more with commas and a final and" do
+      assert Game.join_and(["cairn", "beacon"]) == "cairn and beacon"
+
+      assert Game.join_and(~w(cairn beacon wharf signal torch lamp)) ==
+               "cairn, beacon, wharf, signal, torch and lamp"
+    end
+
+    test "the next-Bookends projection is any length" do
+      {state, effects} = six_committed(six_full())
+      state = grade(state, effects, 10)
+
+      assert length(Game.view(state, nil).next_bookends) == 6
+    end
+
+    test "carried Bookends carry their Seat id, and first-Attempt Bookends carry their Give" do
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      {:ok, state, []} =
+        Game.apply(
+          state,
+          {:page_written,
+           %{
+             bookends: ["cliff", "wax"],
+             from: ["Melissa", "Jacob"],
+             full_table: true
+           }}
+        )
+
+      first = Game.view(state, nil)
+      assert Enum.map(first.bookend_chips, & &1.word) == ["cliff", "wax"]
+      assert Enum.map(first.bookend_chips, & &1.give) == ["lighthouse", "candle"]
+      assert Enum.all?(first.bookend_chips, &is_nil(&1.mask))
+
+      {state, effects} = commit_all(state, [{"Melissa", "cairn"}, {"Jacob", "beacon"}])
+      state = grade(state, effects, 10)
+      state = again(state)
+
+      carried = Game.view(state, nil)
+      assert Enum.map(carried.bookend_chips, & &1.word) == ["cairn", "beacon"]
+      assert Enum.map(carried.bookend_chips, & &1.seat_id) == ["seat-Melissa", "seat-Jacob"]
+      assert Enum.all?(carried.bookend_chips, &is_nil(&1.give))
+    end
+
+    test "a carried Bookend shows its Seat's Mask, and a first-Attempt Bookend never does" do
+      state = Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")])
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
+
+      mask_m = %{url: "/media/masks/mask-melissa.png"}
+
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Melissa", mask: mask_m}})
+
+      {:ok, state, _} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      mask_j = %{url: "/media/masks/mask-jacob.png"}
+
+      {:ok, state, []} =
+        Game.apply(state, {:mask_landed, %{seat_id: "seat-Jacob", mask: mask_j}})
+
+      {:ok, state, []} =
+        Game.apply(
+          state,
+          {:page_written,
+           %{bookends: ["cliff", "wax"], from: ["Melissa", "Jacob"], full_table: true}}
+        )
+
+      assert Enum.all?(Game.view(state, nil).bookend_chips, &is_nil(&1.mask))
+
+      {state, effects} = commit_all(state, [{"Melissa", "cairn"}, {"Jacob", "beacon"}])
+      state = grade(state, effects, 10)
+
+      # Still attempt 1 at the reveal: first-Attempt Bookends stay unattributed.
+      assert Enum.all?(Game.view(state, nil).bookend_chips, &is_nil(&1.mask))
+
+      state = again(state)
+      chips = Game.view(state, nil).bookend_chips
+
+      assert Enum.map(chips, & &1.mask) == [mask_m, mask_j]
     end
   end
 end

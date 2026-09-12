@@ -72,7 +72,8 @@ defmodule Thereish.Game do
     track: nil,
     track_held_over: false,
     masks: %{},
-    full_table: true
+    full_table: true,
+    bookend_origins: nil
   ]
 
   @type seat :: %{
@@ -136,7 +137,8 @@ defmodule Thereish.Game do
           track: map() | nil,
           track_held_over: boolean(),
           masks: %{String.t() => term()},
-          full_table: boolean()
+          full_table: boolean(),
+          bookend_origins: [map()] | nil
         }
 
   @type viewer :: String.t() | nil
@@ -159,6 +161,7 @@ defmodule Thereish.Game do
           | {:page_written,
              %{
                required(:bookends) => [String.t()],
+               optional(:from) => [String.t()],
                optional(:meta) => map(),
                optional(:full_table) => boolean()
              }}
@@ -278,7 +281,8 @@ defmodule Thereish.Game do
       track: track,
       track_held_over: track_held_over,
       masks: %{},
-      full_table: full_table == true
+      full_table: full_table == true,
+      bookend_origins: page_origins(page)
     }
   end
 
@@ -294,6 +298,35 @@ defmodule Thereish.Game do
   """
   @spec attempt_cap() :: pos_integer()
   def attempt_cap, do: Application.fetch_env!(:thereish, :attempts_per_page)
+
+  @doc """
+  Names a list of words the way the table hears them: two stay "cairn and beacon",
+  six become "cairn, beacon, wharf, signal, torch and lamp".
+  """
+  @spec join_and([String.t() | map()]) :: String.t()
+  def join_and(words) when is_list(words) do
+    words = Enum.map(words, &join_and_word/1)
+
+    case Enum.reject(words, &(&1 == "")) do
+      [] ->
+        ""
+
+      [one] ->
+        one
+
+      [left, right] ->
+        "#{left} and #{right}"
+
+      many ->
+        {last, rest} = List.pop_at(many, -1)
+        Enum.join(rest, ", ") <> " and " <> last
+    end
+  end
+
+  defp join_and_word(%{word: word}) when is_binary(word), do: word
+  defp join_and_word(%{"word" => word}) when is_binary(word), do: word
+  defp join_and_word(word) when is_binary(word), do: word
+  defp join_and_word(_), do: ""
 
   @doc """
   Applies one event, returning the next state and whatever the Room now owes.
@@ -433,8 +466,11 @@ defmodule Thereish.Game do
         {:error, :not_writing}
 
       true ->
+        origins = origins_from(state, attrs[:from] || attrs["from"], bookends)
+
         page = %{
           bookends: bookends,
+          bookend_origins: origins,
           gives: state.gives,
           meta: meta,
           full_table: page_full_table(attrs, state.full_table)
@@ -445,6 +481,7 @@ defmodule Thereish.Game do
            state
            | page: page,
              bookends: bookends,
+             bookend_origins: origins,
              attempt: 1,
              bridges: %{},
              verdict: nil,
@@ -661,10 +698,13 @@ defmodule Thereish.Game do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- playing_page_seat(state, seat_id),
          :ok <- open_reveal(state) do
+      carried = carried(state)
+
       {:ok,
        %{
          state
-         | bookends: carried_bookends(state),
+         | bookends: Enum.map(carried, & &1.word),
+           bookend_origins: Enum.map(carried, &Map.take(&1, [:seat_id])),
            attempt: state.attempt + 1,
            bridges: %{},
            verdict: nil,
@@ -684,6 +724,7 @@ defmodule Thereish.Game do
          state
          | page: page,
            bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
+           bookend_origins: page_origins(page),
            attempt: 1,
            bridges: %{},
            verdict: nil,
@@ -746,6 +787,7 @@ defmodule Thereish.Game do
          state
          | page: nil,
            bookends: nil,
+           bookend_origins: nil,
            attempt: 1,
            gives: %{},
            last_gives: last_gives,
@@ -792,6 +834,7 @@ defmodule Thereish.Game do
       seat_limit: state.seat_limit,
       open_seats: state.seat_limit - length(state.seats),
       bookends: bookends(state, phase),
+      bookend_chips: bookend_chips(state, phase),
       page_give: state.page && (state.page[:give] || state.page["give"]),
       page_chapter: state.page && (state.page[:chapter] || state.page["chapter"]),
       page_theme: state.page && (state.page[:theme] || state.page["theme"]),
@@ -809,9 +852,9 @@ defmodule Thereish.Game do
       next_bookends: if(phase == :reveal, do: carried_bookends(state)),
       # Whether the Assayer picked those two words or the game fell back to the
       # first two Bridges in roster order. The couple are about to spend an
-      # attempt on them, so which of the two happened is theirs to know.
-      next_bookends_chosen?:
-        if(phase == :reveal, do: state.furthest != nil || chosen_furthest(state) != nil),
+      # attempt on them, so which of the two happened is theirs to know. At a
+      # Full table the table's own Bridges carry, so there is no choice to miss.
+      next_bookends_chosen?: if(phase == :reveal, do: next_bookends_chosen?(state)),
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
@@ -1097,21 +1140,118 @@ defmodule Thereish.Game do
 
   defp headline(_state), do: nil
 
-  # Medium's carry-forward rule, written for a list of Seats: the two Bridges
-  # the Assayer named as landing furthest apart become the next attempt's
-  # Bookends. At two Seats that is simply the two Bridges, which is the rule as
-  # the design states it.
+  # Carry-forward reads the Page's rule (ADR-0016). At a Full table every
+  # Seat's Bridge becomes the next Attempt's Bookends, in roster order. Off, the
+  # two the Assayer named as furthest apart carry — Medium's rule — and with no
+  # Verdict the first two in roster order carry, which `next_bookends_chosen?`
+  # tells the screens.
   #
-  # With no Verdict there is nobody to have chosen, and the game says so rather
-  # than inventing a choice: the first two Bridges in roster order carry, and
-  # `next_bookends_chosen?` tells the screens that this is what happened.
-  #
-  # Nothing here defends against the two carried words being the same word: that
+  # Nothing here defends against two carried words being the same word: that
   # needs an Assayer that names a word twice, and if one ever does, the next
   # attempt is a Page with one word twice rather than a crash.
-  defp carried_bookends(state) do
-    chosen_furthest(state) || state |> written_bridges() |> Enum.take(2)
+  defp carried_bookends(state), do: Enum.map(carried(state), & &1.word)
+
+  defp carried(state) do
+    if page_full_table(state.page, state.full_table) do
+      Enum.map(page_seats(state), fn seat ->
+        %{word: state.bridges[seat.id], seat_id: seat.id}
+      end)
+    else
+      two_carried(state)
+    end
   end
+
+  defp two_carried(state) do
+    words = chosen_furthest(state) || Enum.take(written_bridges(state), 2)
+
+    {origins, _remaining} =
+      Enum.map_reduce(words, written_seat_bridges(state), fn word, remaining ->
+        case Enum.split_while(remaining, fn {_seat, bridge} -> bridge != word end) do
+          {passed, [{seat, _} | rest]} ->
+            {%{word: word, seat_id: seat.id}, passed ++ rest}
+
+          {_all, []} ->
+            {%{word: word}, remaining}
+        end
+      end)
+
+    origins
+  end
+
+  defp written_seat_bridges(state) do
+    for seat <- page_seats(state), Map.has_key?(state.bridges, seat.id) do
+      {seat, state.bridges[seat.id]}
+    end
+  end
+
+  defp next_bookends_chosen?(state) do
+    page_full_table(state.page, state.full_table) or chosen_furthest(state) != nil
+  end
+
+  defp bookend_chips(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
+
+  defp bookend_chips(state, _phase) do
+    words = state.bookends || []
+    origins = pad_origins(state.bookend_origins, length(words))
+
+    Enum.zip(words, origins)
+    |> Enum.map(fn {word, origin} ->
+      seat_id = origin[:seat_id] || origin["seat_id"]
+      give = origin[:give] || origin["give"]
+      show_mask? = state.attempt > 1 and is_binary(seat_id)
+
+      %{
+        word: word,
+        seat_id: seat_id,
+        give: give,
+        mask: if(show_mask?, do: Map.get(state.masks || %{}, seat_id))
+      }
+    end)
+  end
+
+  defp pad_origins(origins, count) when is_list(origins) and length(origins) >= count,
+    do: Enum.take(origins, count)
+
+  defp pad_origins(origins, count) when is_list(origins) do
+    origins ++ List.duplicate(%{}, count - length(origins))
+  end
+
+  defp pad_origins(_, count), do: List.duplicate(%{}, count)
+
+  defp page_origins(nil), do: nil
+
+  defp page_origins(page) when is_map(page) do
+    page[:bookend_origins] || page["bookend_origins"] ||
+      page[:bookend_gives] || page["bookend_gives"] ||
+      Enum.map(page[:bookends] || page["bookends"] || [], fn _ -> %{} end)
+  end
+
+  defp origins_from(_state, nil, bookends), do: Enum.map(bookends, fn _ -> %{} end)
+
+  defp origins_from(state, from, bookends) when is_list(from) do
+    by_name =
+      Map.new(page_seats(state), fn seat ->
+        {String.downcase(String.trim(seat.name)), seat}
+      end)
+
+    Enum.zip(bookends, from)
+    |> Enum.map(fn {word, name} ->
+      case Map.get(by_name, name |> to_string() |> String.trim() |> String.downcase()) do
+        nil ->
+          %{word: word}
+
+        seat ->
+          %{
+            word: word,
+            seat_id: seat.id,
+            seat_name: seat.name,
+            give: state.gives[seat.id]
+          }
+      end
+    end)
+  end
+
+  defp origins_from(_state, _from, bookends), do: Enum.map(bookends, fn _ -> %{} end)
 
   # The two words the Assayer named, but only if the roster can account for both
   # of them: they are about to be Bookends, and a Bookend nobody wrote is a Page

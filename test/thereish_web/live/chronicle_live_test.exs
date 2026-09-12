@@ -490,8 +490,11 @@ defmodule ThereishWeb.ChronicleLiveTest do
         |> render()
 
       assert carried_text =~ "Carried:"
-      assert carried_text =~ "cairn"
-      assert carried_text =~ "beacon"
+      assert carried_text =~ "cairn and beacon"
+
+      assert has_element?(view, "[data-role=page-rule]", "Full table")
+      assert has_element?(view, "[data-role=bookend-give]", "lantern from Melissa's setting one")
+      assert has_element?(view, "[data-role=bookend-give]", "harbour from Jacob's setting two")
     end
 
     test "book view displays each Seat's Mask on the Page", %{conn: conn, slug: slug} = ctx do

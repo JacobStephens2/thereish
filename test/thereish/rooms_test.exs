@@ -60,6 +60,56 @@ defmodule Thereish.RoomsTest do
       assert view.full_table == true
     end
 
+    test "a six-Seat Full table Page plays from Gives to close" do
+      slug = open_room(seat_limit: 6)
+      names = ~w(Melissa Jacob Ada Ida Ola Ora)
+      bridges = ~w(cairn beacon wharf signal torch lamp)
+
+      seats =
+        for name <- names do
+          {:ok, seat} = Rooms.join(slug, name, device_token())
+          seat
+        end
+
+      Enum.each(seats, &(:ok = Rooms.give(slug, &1.id, "setting #{&1.name}")))
+      view = await_phase(slug, :bridging)
+      assert length(view.bookends) == 6
+
+      for {seat, word} <- Enum.zip(seats, bridges) do
+        :ok = Rooms.commit_bridge(slug, seat.id, word)
+      end
+
+      view = await_reveal(slug)
+      assert view.next_bookends == bridges
+      assert Enum.map(view.bookend_chips, & &1.word) == view.bookends
+      refute Enum.any?(view.bookend_chips, & &1.mask)
+
+      :ok = Rooms.next_attempt(slug, hd(seats).id)
+      view = await_phase(slug, :bridging)
+      assert view.bookends == bridges
+      assert Enum.map(view.bookend_chips, & &1.seat_id) == Enum.map(seats, & &1.id)
+
+      Enum.each(seats, &(:ok = Rooms.commit_bridge(slug, &1.id, "stone")))
+      view = await_reveal(slug)
+      assert view.phase == :closed
+      assert view.reveal.melded?
+
+      room = Store.get_room(slug)
+      [page] = Chronicle.book(room.id)
+      assert page.full_table == true
+
+      assert hd(page.attempts).bookends == [
+               "lantern",
+               "harbour",
+               "summit",
+               "ember",
+               "grove",
+               "spire"
+             ]
+
+      assert hd(page.attempts).carried == bridges
+    end
+
     test "a Room at the Assayer's cap plays, and every Bridge in it is graded together" do
       slug = open_room(seat_limit: Thereish.Steward.seat_cap())
 
@@ -418,7 +468,7 @@ defmodule Thereish.RoomsTest do
       assert is_integer(view.reveal.closeness)
       assert view.reveal.quip != nil
       assert length(view.reveal.furthest) == 2
-      assert view.next_bookends == Enum.map(view.reveal.furthest, & &1.bridge)
+      assert view.next_bookends == ~w(cairn cairo beacon signal)
     end
 
     test "a phone that slept through it snapshots back into the same reveal", ctx do
