@@ -13,4 +13,6 @@ ADR-0007 made Rooms N-seat and sketched group play as a pairwise map: every unor
 
 ## Consequences
 
+Amendment (2026-09-12, [issue #126](https://github.com/JacobStephens2/thereish/issues/126)): remove all supplemental individual-pair grading evaluations still running alongside the whole-set evaluation. At eight Seats these would add 28 evaluations and hold up the shared reveal; the whole set of Bridges alone determines how well the Room melded. The Assayer continues to identify the furthest-apart Bridges within that same Verdict, without separately grading them.
+
 The Closeness of a set is defined as convergence — how far the set is from being one mind, so three tight words and one stray read as close rather than as a miss — and the Assayer's prompt says so; at two words that is the old definition. The Verdict schema gains the two furthest-apart Bridges. The prompt version bumps, which orphans the cached precedents (three verdicts and no overrules in production on the day). This supersedes the pairwise sentence in ADR-0007; the rest of ADR-0007 stands.
