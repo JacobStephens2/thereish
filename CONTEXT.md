@@ -53,7 +53,7 @@ The one seam through which the game talks to generative models — language, mus
 _Avoid_: Keeper (the earlier name), AI, "the LLM", model service, brain
 
 **Author**:
-The machine role that writes a Page at the table: two Bookends drawn from the Seats' Gives, in the seconds after the last Give lands. It wrote Pages ahead of play, with Bait, until ADR-0011.
+The machine role that writes a Page at the table: the Bookends, drawn from the Seats' Gives, in the seconds after the last Give lands — one per Give at a Full table, two from two different Gives otherwise. It wrote Pages ahead of play, with Bait, until ADR-0011.
 _Avoid_: generator, constructor, game master, "the LLM"
 
 **Assayer**:
@@ -105,15 +105,19 @@ A Room's verdict that one Repertoire member will not be drawn again in that Room
 _Avoid_: dismiss, hide, ban, skip (that is Next)
 
 **Bookends**:
-The two words — or two-word phrases — a Page shows; each player writes the Bridge between them. Chosen from different Gives to stand far apart.
+The words — or two-word phrases — an Attempt shows, two or more; each player writes the Bridge whose meaning spans all of them. On a Page's first Attempt they are the Author's, each drawn from a different Give and chosen to stand far apart; on every Attempt after a miss they are the Bridges carried forward. How many there are is the Room's rule: two, or one per Seat at a Full table.
 _Avoid_: anchors (the earlier name), clues, prompt (collides with the model-prompt sense), pair, cue
+
+**Full table**:
+The Room's rule, on unless a Room turns it off, that an Attempt has one Bookend per Seat: the Author draws one from every Give, and after a miss every Seat's Bridge carries forward. Off, an Attempt has two Bookends and a miss carries the two Bridges that landed furthest apart. A Room fact, flipped from any device, that a Page keeps from the moment it is written.
+_Avoid_: settings page, difficulty, mode, N-bookend rule, "all bridges"
 
 **Bridge**:
 A player's answer — the word or phrase whose meaning spans the Bookends. Anything goes except a Bookend or a Bridge this Page has already seen, root and all.
 _Avoid_: answer, guess, submission
 
 **Attempt**:
-One try at a Page: a set of Bookends, a Bridge from every Seat, and one Verdict on all of them. A Page gets a fixed number of them, and a miss carries the two Bridges that landed furthest apart forward as the next Attempt's Bookends, so the Attempts of one Page are a converging arc rather than repeated guesses.
+One try at a Page: a set of Bookends, a Bridge from every Seat, and one Verdict on all of them. A Page gets a fixed number of them, and a miss carries Bridges forward as the next Attempt's Bookends — every Seat's at a Full table, otherwise the two that landed furthest apart — so the Attempts of one Page are a converging arc rather than repeated guesses.
 _Avoid_: try, turn, round, guess, retry
 
 **Meld**:
@@ -121,7 +125,7 @@ A converged Bridge — the players' Bridges assayed close enough to count as one
 _Avoid_: match, hit, win
 
 **Verdict**:
-What the Assayer says about one Attempt's Bridges, read together: a Closeness, the reasoning behind it, and which two Bridges landed furthest apart. An Attempt the Assayer could not grade has no Verdict, which is a thing the game says out loud rather than a zero it invents.
+What the Assayer says about one Attempt's Bridges, read together: a Closeness, the reasoning behind it, and which two Bridges landed furthest apart (named on every Attempt, and the carry-forward only when the Room is not a Full table). An Attempt the Assayer could not grade has no Verdict, which is a thing the game says out loud rather than a zero it invents.
 _Avoid_: result, judgement, ruling (the players rule; the Assayer only grades)
 
 **Quip**:
