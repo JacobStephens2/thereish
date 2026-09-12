@@ -697,6 +697,150 @@ defmodule ThereishWeb.RoomLiveTest do
     end
   end
 
+  describe "the reveal hold on every screen" do
+    setup do
+      reveal_hold(60_000)
+      slug = open_room()
+      mara_conn = phone(slug)
+      {:ok, mara, _} = live(mara_conn)
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
+
+      %{
+        slug: slug,
+        mara: mara,
+        jacob: jacob,
+        stage: stage,
+        mara_conn: mara_conn,
+        screens: [mara, jacob, stage]
+      }
+    end
+
+    test "phones and the Stage hold until the deadline, and a click cannot bypass it", ctx do
+      miss(ctx)
+
+      for view <- [ctx.mara, ctx.jacob] do
+        assert has_element?(view, "[data-role=reveal-hold]")
+        assert has_element?(view, "[data-role=again][disabled]")
+      end
+
+      assert has_element?(ctx.stage, "[data-role=reveal-hold]")
+      refute has_element?(ctx.stage, "[data-role=again]")
+
+      render_click(ctx.mara, "next_attempt", %{})
+      render_click(ctx.jacob, "next_attempt", %{})
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=reveal]")
+        refute has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
+      end
+    end
+
+    test "an early Meld holds One more? the same way", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairns")
+      await_reveal_on(ctx.mara)
+
+      assert has_element?(ctx.mara, "[data-role=reveal-hold]")
+      assert has_element?(ctx.mara, "[data-role=one-more][disabled]")
+      assert has_element?(ctx.stage, "[data-role=reveal-hold]")
+
+      render_click(ctx.mara, "next_page", %{})
+
+      assert has_element?(ctx.mara, "[data-role=ending]")
+      refute has_element?(ctx.mara, "[data-role=setting-form]")
+    end
+
+    test "exhausted Attempts hold One more? after the last reveal", ctx do
+      attempt_cap(2)
+      reveal_hold(30)
+      miss(ctx)
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=again]:not([disabled])") end)
+      press(ctx.mara, "again")
+      await_phase(ctx.slug, :bridging)
+
+      reveal_hold(60_000)
+      miss(ctx, "wharf", "gantry")
+
+      assert has_element?(ctx.mara, "[data-role=one-more][disabled]")
+      assert has_element?(ctx.stage, "[data-role=reveal-hold]")
+      render_click(ctx.mara, "next_page", %{})
+      assert has_element?(ctx.mara, "[data-role=ending]")
+      refute has_element?(ctx.mara, "[data-role=setting-form]")
+    end
+
+    test "a late Stage and a reconnecting phone see the Room's deadline, not a fresh one",
+         ctx do
+      miss(ctx)
+
+      {:ok, late_stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+      {:ok, reconnected, _} = live(ctx.mara_conn)
+      mara_id = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Mara")).id
+
+      assert has_element?(late_stage, "[data-role=reveal-hold]")
+      assert has_element?(reconnected, "[data-role=again][disabled]")
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, mara_id)
+    end
+  end
+
+  describe "the reveal hold unlocking" do
+    test "controls unlock when the deadline passes, and one eligible tap advances" do
+      reveal_hold(30)
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
+
+      commit(mara, "cairn")
+      commit(jacob, "beacon")
+      await_reveal_on(mara)
+
+      eventually(fn -> has_element?(mara, "[data-role=again]:not([disabled])") end)
+      refute has_element?(mara, "[data-role=reveal-hold]")
+      refute has_element?(stage, "[data-role=reveal-hold]")
+
+      press(mara, "again")
+
+      for view <- [mara, jacob, stage] do
+        assert has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
+      end
+    end
+
+    test "One more? unlocks when the deadline passes, and one tap opens the next Page" do
+      reveal_hold(30)
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(jacob, "Jacob")
+      play_to_bridging(mara, jacob, slug)
+
+      commit(mara, "cairn")
+      commit(jacob, "cairns")
+      await_reveal_on(mara)
+
+      eventually(fn -> has_element?(mara, "[data-role=one-more]:not([disabled])") end)
+      refute has_element?(mara, "[data-role=reveal-hold]")
+      refute has_element?(stage, "[data-role=reveal-hold]")
+
+      press(mara, "one-more")
+
+      assert has_element?(mara, "[data-role=setting-form]")
+      assert has_element?(jacob, "[data-role=setting-form]")
+    end
+  end
+
   describe "a URL with no Room behind it" do
     test "is a 404 rather than a Room conjured out of the typo" do
       assert_error_sent 404, fn -> get(build_conn(), "/r/Not_A_Code") end

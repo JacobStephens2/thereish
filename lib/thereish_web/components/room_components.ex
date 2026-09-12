@@ -706,6 +706,23 @@ defmodule ThereishWeb.RoomComponents do
   attr :room, :map, required: true
 
   @doc """
+  The shared pause after a reveal, on every screen, until anyone may advance.
+  """
+  def reveal_hold(assigns) do
+    ~H"""
+    <p
+      :if={@room.phase in [:reveal, :closed] and @room[:can_advance?] == false}
+      data-role="reveal-hold"
+      class="text-center text-sm opacity-70"
+    >
+      A moment for the reveal.
+    </p>
+    """
+  end
+
+  attr :room, :map, required: true
+
+  @doc """
   What a miss means, said out loud on every screen: the two Bridges that landed
   furthest apart are the next attempt's Bookends, named.
 
