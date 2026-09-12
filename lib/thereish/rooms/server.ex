@@ -119,6 +119,7 @@ defmodule Thereish.Rooms.Server do
         voice_audio: nil,
         voice_meta: %{},
         voice_pending_attempt: nil,
+        bookends_pending_attempt: nil,
         pending_chronicle: nil,
         giving_ref: make_ref(),
         prologue: nil
@@ -259,7 +260,8 @@ defmodule Thereish.Rooms.Server do
               | opened_at: nil,
                 voice_audio: nil,
                 voice_meta: %{},
-                voice_pending_attempt: nil
+                voice_pending_attempt: nil,
+                bookends_pending_attempt: nil
             }
             |> Map.put(:current_arm, nil)
             |> Map.put(:current_page_id, nil)
@@ -305,6 +307,12 @@ defmodule Thereish.Rooms.Server do
         {:ok, room} ->
           state = %{state | room: room}
           broadcast(state.room.slug)
+
+          state =
+            state
+            |> maybe_offer_voice()
+            |> maybe_start_bookends_voice()
+
           {:reply, :ok, state}
 
         {:error, reason} ->
@@ -327,6 +335,12 @@ defmodule Thereish.Rooms.Server do
           end
 
         broadcast(state.room.slug)
+
+        state =
+          state
+          |> maybe_offer_voice()
+          |> maybe_start_bookends_voice()
+
         {:reply, :ok, state}
 
       {:error, reason} ->
@@ -513,11 +527,19 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  def handle_call({:voice_audio, attempt}, _from, state) do
-    case state[:voice_audio] do
-      %{attempt: ^attempt, audio: audio, format: format}
-      when is_binary(audio) and attempt == state.game.attempt ->
-        {:reply, {:ok, audio, format}, state}
+  def handle_call({:voice_audio, attempt, kind}, _from, state) do
+    kind = voice_kind(kind)
+
+    case {kind, state[:voice_audio]} do
+      {kind, %{attempt: ^attempt} = clips}
+      when kind in [:bookends, :verdict] and attempt == state.game.attempt ->
+        case clips[kind] do
+          %{audio: audio, format: format} when is_binary(audio) ->
+            {:reply, {:ok, audio, format}, state}
+
+          _ ->
+            {:reply, {:error, :not_found}, state}
+        end
 
       _ ->
         {:reply, {:error, :not_found}, state}
@@ -599,7 +621,7 @@ defmodule Thereish.Rooms.Server do
     state =
       state
       |> answered()
-      |> maybe_start_voice_task(event)
+      |> maybe_start_verdict_voice(event)
 
     if state.beat do
       {:noreply, %{state | held: state.held ++ [event]}}
@@ -608,68 +630,73 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  def handle_info({:voice_spoken, attempt, {:ok, result}}, state) do
-    if attempt == state.game.attempt do
-      raw_meta = result[:meta] || %{}
-      provider = raw_meta[:provider] || raw_meta["provider"] || "hume"
+  def handle_info({:voice_spoken, attempt, kind, {:ok, result}}, state) do
+    kind = voice_kind(kind)
 
-      voice =
-        raw_meta[:voice] || raw_meta["voice"] || raw_meta[:voice_id] || raw_meta["voice_id"] ||
-          "default"
-
-      cost =
-        raw_meta[:cost_usd] || raw_meta["cost_usd"] || raw_meta[:cost] || raw_meta["cost"]
-
-      latency =
-        raw_meta[:latency_ms] || raw_meta["latency_ms"] || raw_meta[:latency] ||
-          raw_meta["latency"]
-
-      voice_meta = %{
-        "provider" => to_string(provider),
-        "voice" => to_string(voice),
-        "model" => to_string(raw_meta[:model] || raw_meta["model"] || voice),
-        "cost_usd" => cost,
-        "latency_ms" => latency
-      }
-
+    if attempt == state.game.attempt and kind in [:bookends, :verdict] do
       format = Map.get(result, :format, :mp3)
-
-      state = %{
-        state
-        | voice_audio: %{attempt: attempt, audio: result.audio, format: format},
-          voice_meta: Map.put(state.voice_meta, attempt, voice_meta)
-      }
+      state = put_voice_clip(state, attempt, kind, result.audio, format)
+      state = clear_voice_pending(state, attempt, kind)
 
       state =
-        state
-        |> clear_voice_pending(attempt)
-        |> flush_pending_chronicle()
+        if kind == :verdict do
+          raw_meta = result[:meta] || %{}
+          provider = raw_meta[:provider] || raw_meta["provider"] || "hume"
 
-      broadcast(state.room.slug, {:voice_ready, attempt})
+          voice =
+            raw_meta[:voice] || raw_meta["voice"] || raw_meta[:voice_id] || raw_meta["voice_id"] ||
+              "default"
+
+          cost =
+            raw_meta[:cost_usd] || raw_meta["cost_usd"] || raw_meta[:cost] || raw_meta["cost"]
+
+          latency =
+            raw_meta[:latency_ms] || raw_meta["latency_ms"] || raw_meta[:latency] ||
+              raw_meta["latency"]
+
+          voice_meta = %{
+            "provider" => to_string(provider),
+            "voice" => to_string(voice),
+            "model" => to_string(raw_meta[:model] || raw_meta["model"] || voice),
+            "cost_usd" => cost,
+            "latency_ms" => latency
+          }
+
+          state = %{state | voice_meta: Map.put(state.voice_meta, attempt, voice_meta)}
+          broadcast(state.room.slug, {:voice_ready, attempt})
+          flush_pending_chronicle(state)
+        else
+          if Game.phase(state.game) == :bridging do
+            broadcast(state.room.slug, {:bookends_ready, attempt})
+          end
+
+          state
+        end
+
       {:noreply, state}
     else
       Logger.warning(
-        "Voice for attempt #{attempt} arrived after next attempt started (current: #{state.game.attempt}), dropping"
+        "Voice for attempt #{attempt} (#{kind}) arrived after next attempt started (current: #{state.game.attempt}), dropping"
       )
 
       {:noreply, state}
     end
   end
 
-  def handle_info({:voice_spoken, attempt, {:error, reason}}, state) do
-    Logger.warning("Voice synthesis failed for attempt #{attempt}: #{inspect(reason)}")
+  def handle_info({:voice_spoken, attempt, kind, {:error, reason}}, state) do
+    Logger.warning("Voice synthesis failed for attempt #{attempt} (#{kind}): #{inspect(reason)}")
 
-    failure_meta = Thereish.Steward.voice_failure(reason)
-
-    state = %{
-      state
-      | voice_meta: Map.put(state.voice_meta, attempt, failure_meta)
-    }
+    state = clear_voice_pending(state, attempt, kind)
 
     state =
-      state
-      |> clear_voice_pending(attempt)
-      |> flush_pending_chronicle()
+      if voice_kind(kind) == :verdict do
+        failure_meta = Thereish.Steward.voice_failure(reason)
+
+        %{state | voice_meta: Map.put(state.voice_meta, attempt, failure_meta)}
+        |> flush_pending_chronicle()
+      else
+        state
+      end
 
     {:noreply, state}
   end
@@ -1162,7 +1189,17 @@ defmodule Thereish.Rooms.Server do
   defp maybe_clear_track_on_never(state, _playing), do: state
 
   defp advance(state, game, effects) do
-    state = Enum.reduce(effects, opened(%{state | game: game}), &perform/2)
+    state =
+      if game.attempt != state.game.attempt do
+        %{state | voice_audio: nil, bookends_pending_attempt: nil}
+      else
+        state
+      end
+
+    state =
+      Enum.reduce(effects, opened(%{state | game: game}), &perform/2)
+      |> maybe_start_bookends_voice()
+
     broadcast(state.room.slug)
 
     state
@@ -1695,8 +1732,8 @@ defmodule Thereish.Rooms.Server do
     Phoenix.PubSub.broadcast(Thereish.PubSub, Thereish.Rooms.topic(slug), message)
   end
 
-  defp maybe_start_voice_task(state, {:verdict_received, verdict}) do
-    if not is_nil(state.room.speaker) and state.room.speaker != "" do
+  defp maybe_start_verdict_voice(state, {:verdict_received, verdict}) do
+    if speaker?(state) do
       closeness = verdict[:closeness] || verdict["closeness"]
 
       band =
@@ -1714,34 +1751,117 @@ defmodule Thereish.Rooms.Server do
           band_word
         end
 
-      room = self()
-      attempt = state.game.attempt
-
-      Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-        try do
-          case Steward.speak(line) do
-            {:ok, result} ->
-              send(room, {:voice_spoken, attempt, {:ok, result}})
-
-            {:error, reason} ->
-              send(room, {:voice_spoken, attempt, {:error, reason}})
-          end
-        rescue
-          error ->
-            send(room, {:voice_spoken, attempt, {:error, error}})
-        catch
-          :exit, reason ->
-            send(room, {:voice_spoken, attempt, {:error, {:exit, reason}}})
-        end
-      end)
-
-      %{state | voice_pending_attempt: attempt}
+      speak_line(state, :verdict, line)
     else
       state
     end
   end
 
-  defp maybe_start_voice_task(state, _event), do: state
+  defp maybe_start_verdict_voice(state, _event), do: state
+
+  defp maybe_start_bookends_voice(state) do
+    bookends = state.game.bookends
+    attempt = state.game.attempt
+
+    cond do
+      not speaker?(state) ->
+        state
+
+      Game.phase(state.game) != :bridging ->
+        state
+
+      not is_list(bookends) or bookends == [] ->
+        state
+
+      has_voice_clip?(state, :bookends) ->
+        state
+
+      state[:bookends_pending_attempt] == attempt ->
+        state
+
+      true ->
+        speak_line(state, :bookends, Enum.join(bookends, ". "))
+    end
+  end
+
+  defp maybe_offer_voice(state) do
+    attempt = state.game.attempt
+    phase = Game.phase(state.game)
+
+    case state.voice_audio do
+      %{attempt: ^attempt} = clips ->
+        if phase == :bridging and voice_clip?(clips[:bookends]) do
+          broadcast(state.room.slug, {:bookends_ready, attempt})
+        end
+
+        if phase == :reveal and voice_clip?(clips[:verdict]) do
+          broadcast(state.room.slug, {:voice_ready, attempt})
+        end
+
+        state
+
+      _ ->
+        state
+    end
+  end
+
+  defp speak_line(state, kind, line) do
+    room = self()
+    attempt = state.game.attempt
+
+    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
+      try do
+        case Steward.speak(line) do
+          {:ok, result} ->
+            send(room, {:voice_spoken, attempt, kind, {:ok, result}})
+
+          {:error, reason} ->
+            send(room, {:voice_spoken, attempt, kind, {:error, reason}})
+        end
+      rescue
+        error ->
+          send(room, {:voice_spoken, attempt, kind, {:error, error}})
+      catch
+        :exit, reason ->
+          send(room, {:voice_spoken, attempt, kind, {:error, {:exit, reason}}})
+      end
+    end)
+
+    case kind do
+      :verdict -> %{state | voice_pending_attempt: attempt}
+      :bookends -> %{state | bookends_pending_attempt: attempt}
+    end
+  end
+
+  defp speaker?(state) do
+    not is_nil(state.room.speaker) and state.room.speaker != ""
+  end
+
+  defp voice_kind(kind) when kind in [:bookends, "bookends"], do: :bookends
+  defp voice_kind(kind) when kind in [:verdict, "verdict"], do: :verdict
+  defp voice_kind(_), do: nil
+
+  defp voice_clip?(%{audio: audio}) when is_binary(audio), do: true
+  defp voice_clip?(_), do: false
+
+  defp has_voice_clip?(state, kind) do
+    attempt = state.game.attempt
+
+    case state.voice_audio do
+      %{attempt: ^attempt} = clips -> voice_clip?(clips[kind])
+      _ -> false
+    end
+  end
+
+  defp put_voice_clip(state, attempt, kind, audio, format) do
+    clips =
+      case state.voice_audio do
+        %{attempt: ^attempt} = existing -> existing
+        _ -> %{attempt: attempt, bookends: nil, verdict: nil}
+      end
+
+    %{state | voice_audio: Map.put(clips, kind, %{audio: audio, format: format})}
+  end
 
   defp waiting_for_voice_meta?(state, entry) do
     pending = state.voice_pending_attempt
@@ -1751,11 +1871,16 @@ defmodule Thereish.Rooms.Server do
       Enum.any?(entry.attempts, fn attempt -> attempt.number == pending end)
   end
 
-  defp clear_voice_pending(state, attempt) do
-    if state.voice_pending_attempt == attempt do
-      %{state | voice_pending_attempt: nil}
-    else
-      state
+  defp clear_voice_pending(state, attempt, kind) do
+    cond do
+      kind == :verdict and state.voice_pending_attempt == attempt ->
+        %{state | voice_pending_attempt: nil}
+
+      kind == :bookends and state[:bookends_pending_attempt] == attempt ->
+        %{state | bookends_pending_attempt: nil}
+
+      true ->
+        state
     end
   end
 
