@@ -32,6 +32,7 @@ defmodule ThereishWeb.Router do
 
     get "/r/:slug/chronicle.md", ChronicleController, :export
     get "/r/:slug/voice/:attempt", VoiceController, :show
+    get "/r/:slug/voice/:attempt/:kind", VoiceController, :show
 
     # Every Room's calibration at once, which is an operator's export rather
     # than a Room's, and so is the one thing here that names no Code.
