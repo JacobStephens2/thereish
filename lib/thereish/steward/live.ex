@@ -100,9 +100,10 @@ defmodule Thereish.Steward.Live do
       Keyword.get(opts, :digest) ||
         (is_map(request) && (request[:digest] || request["digest"]))
 
-    prompt = Thereish.Steward.Author.prompt(gives, digest)
+    count = Thereish.Steward.Author.requested_count(request)
+    prompt = Thereish.Steward.Author.prompt(gives, digest, count)
 
-    case Gate.answer(role, prompt, &Thereish.Steward.Author.check(&1, gives)) do
+    case Gate.answer(role, prompt, &Thereish.Steward.Author.check(&1, gives, count)) do
       {:ok, answer} ->
         bookends = answer.json["bookends"]
         why = answer.json["why"]
@@ -118,7 +119,8 @@ defmodule Thereish.Steward.Live do
              cost_usd: answer.cost_usd,
              latency_ms: answer.latency_ms,
              attempts: answer.attempts,
-             why: why
+             why: why,
+             count: count
            }
          }}
 

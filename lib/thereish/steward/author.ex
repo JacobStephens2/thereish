@@ -2,16 +2,26 @@ defmodule Thereish.Steward.Author do
   @moduledoc """
   The Author role: writes a Page live from the Seats' Gives.
 
-  Takes Gives with player names in roster order, plus a digest of the Room's
-  Chronicle when available, and answers two Bookends and a sentence of why.
-  Prompt version: author-3.
+  Takes Gives with player names in roster order, the count of Bookends wanted
+  (one per Give at a Full table, or two), plus a digest of the Room's Chronicle
+  when available, and answers that many Bookends and a sentence of why.
+  Prompt version: author-4.
   """
 
   alias Thereish.Steward.Legality
 
-  @version "author-3"
+  @version "author-4"
 
   def version, do: @version
+
+  @doc "The count of Bookends a request asked for. Two when the request is silent."
+  def requested_count(request) do
+    cond do
+      is_map(request) and is_integer(request[:count]) -> request[:count]
+      is_map(request) and is_integer(request["count"]) -> request["count"]
+      true -> 2
+    end
+  end
 
   @doc "The JSON schema the Author's responses must satisfy."
   def schema do
@@ -24,7 +34,14 @@ defmodule Thereish.Steward.Author do
             {"type", "array"},
             {"items", ordered_object([{"type", "string"}])},
             {"description",
-             "Exactly two words or two-word phrases, each drawn from a different setting when there are two or more."}
+             "The words or two-word phrases asked for, each drawn from a different setting when there are two or more."}
+          ])},
+         {"from",
+          ordered_object([
+            {"type", "array"},
+            {"items", ordered_object([{"type", "string"}])},
+            {"description",
+             "The Seat name heading the setting each Bookend was drawn from, in the same order as bookends. At a Full table this is every setting once."}
           ])},
          {"why",
           ordered_object([
@@ -53,7 +70,7 @@ defmodule Thereish.Steward.Author do
   end
 
   defp validator do
-    key = {__MODULE__, :schema_validator_author_3}
+    key = {__MODULE__, :schema_validator_author_4}
 
     case :persistent_term.get(key, nil) do
       nil ->
@@ -73,14 +90,17 @@ defmodule Thereish.Steward.Author do
   defp to_map(other), do: other
 
   @doc """
-  Deterministic gate: checks schema, exactly two bookends, each 1 or 2 words of
-  letters/hyphens/apostrophes, at most 20 chars, distinct roots between them,
-  and no word sharing a root with any word of any Give.
+  Deterministic gate: checks schema, exactly `count` bookends, each 1 or 2 words
+  of letters/hyphens/apostrophes, at most 20 chars, distinct roots across them,
+  no word sharing a root with any word of any Give, and at a Full table one
+  Bookend from each Give.
   """
-  def check(json, gives \\ []) do
+  def check(json, gives \\ [], count \\ 2)
+
+  def check(json, gives, count) when is_integer(count) and count >= 1 do
     with :ok <- check_schema(json),
          :ok <- check_why(json["why"]),
-         :ok <- check_bookends(json["bookends"], gives) do
+         :ok <- check_bookends(json["bookends"], json["from"], gives, count) do
       :ok
     end
   end
@@ -91,18 +111,75 @@ defmodule Thereish.Steward.Author do
 
   defp check_why(_), do: {:error, "why must be a string"}
 
-  defp check_bookends([a, b], gives) when is_binary(a) and is_binary(b) do
-    with {:ok, words_a} <- validate_bookend(a),
-         {:ok, words_b} <- validate_bookend(b),
-         :ok <- check_distinct_roots(a, words_a, b, words_b),
-         :ok <- check_no_root_with_gives(words_a ++ words_b, gives) do
-      :ok
+  defp check_bookends(bookends, from, gives, count) when is_list(bookends) do
+    cond do
+      length(bookends) != count or not Enum.all?(bookends, &is_binary/1) ->
+        {:error, "bookends must be a list of exactly #{count} items"}
+
+      true ->
+        with {:ok, word_lists} <- validate_bookends(bookends),
+             :ok <- check_all_distinct_roots(bookends, word_lists),
+             :ok <- check_no_root_with_gives(List.flatten(word_lists), gives),
+             :ok <- check_from(from, gives, count) do
+          :ok
+        end
     end
   end
 
-  defp check_bookends(_, _gives) do
-    {:error, "bookends must be a list of exactly two items"}
+  defp check_bookends(_, _from, _gives, count) do
+    {:error, "bookends must be a list of exactly #{count} items"}
   end
+
+  defp validate_bookends(bookends) do
+    Enum.reduce_while(bookends, {:ok, []}, fn bookend, {:ok, acc} ->
+      case validate_bookend(bookend) do
+        {:ok, words} -> {:cont, {:ok, acc ++ [words]}}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp check_all_distinct_roots(bookends, word_lists) do
+    pairs =
+      for {a, i} <- Enum.with_index(bookends),
+          {b, j} <- Enum.with_index(bookends),
+          i < j do
+        {a, Enum.at(word_lists, i), b, Enum.at(word_lists, j)}
+      end
+
+    Enum.reduce_while(pairs, :ok, fn {a, words_a, b, words_b}, :ok ->
+      case check_distinct_roots(a, words_a, b, words_b) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp check_from(_from, gives, _count) when gives == [] or is_nil(gives), do: :ok
+
+  defp check_from(from, gives, count) do
+    required? = length(gives) == count and count >= 2
+    known = MapSet.new(Enum.map(gives, &(&1 |> give_name() |> normalize_name())))
+
+    cond do
+      is_nil(from) and not required? ->
+        :ok
+
+      not is_list(from) or length(from) != count or not Enum.all?(from, &is_binary/1) ->
+        {:error, "each bookend must name the setting it was drawn from"}
+
+      from |> Enum.map(&normalize_name/1) |> Enum.uniq() |> length() != length(from) ->
+        {:error, "two bookends from the same setting"}
+
+      not Enum.all?(from, &(normalize_name(&1) in known)) ->
+        {:error, "each bookend must name the setting it was drawn from"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp normalize_name(name), do: name |> to_string() |> String.trim() |> String.downcase()
 
   defp validate_bookend(bookend) do
     trimmed = String.trim(bookend)
@@ -188,27 +265,16 @@ defmodule Thereish.Steward.Author do
     |> List.flatten()
   end
 
-  @system_prompt """
-  You are the Author for Thereish, a couch word game.
-
-  Your job:
-  Given settings provided by the seats in the Room, write two Bookends:
-  1. Exactly two Bookends, each a common English word or two-word phrase (letters, hyphens, apostrophes only, at most 20 characters).
-  2. When there are two or more settings, each Bookend MUST be drawn from a DIFFERENT setting.
-  3. The two Bookends must stand as far apart in meaning as the settings allow, while each still belongs to its setting's world.
-  4. The two Bookends must NOT share a root with each other.
-  5. Neither Bookend may use or share a root with any word from any setting.
-  6. Provide one sentence explaining why these Bookends stand far apart in meaning while honoring the settings.
-  """
-
   @doc "Builds the request prompt for the Author."
-  def prompt(gives, digest \\ nil) do
+  def prompt(gives, digest \\ nil, count \\ 2) do
     gives_list =
       cond do
         is_list(gives) -> gives
         is_map(gives) and is_list(gives[:gives]) -> gives[:gives]
         true -> []
       end
+
+    full_table? = count == length(gives_list) and count >= 2
 
     settings_text =
       if gives_list == [] do
@@ -231,10 +297,39 @@ defmodule Thereish.Steward.Author do
 
     %{
       role: :author,
-      system: @system_prompt,
+      system: system_prompt(count, full_table?),
       user: user,
       schema: schema(),
       schema_name: "authored_page"
     }
+  end
+
+  defp system_prompt(count, full_table?) do
+    {rule, from_each, from_line} =
+      if full_table? do
+        {"This Page is a Full table.",
+         "Each Bookend MUST belong to a DIFFERENT setting's world — one Bookend from each setting.",
+         "Name the Seat heading each setting in `from`, in the same order as `bookends`. At a Full table this is every setting once."}
+      else
+        {"This Page is not a Full table.",
+         "When there are two or more settings, each Bookend MUST be drawn from a DIFFERENT setting.",
+         "Name the Seat heading each setting in `from`, in the same order as `bookends`."}
+      end
+
+    """
+    You are the Author for Thereish, a couch word game.
+
+    #{rule}
+
+    Your job:
+    Given settings provided by the seats in the Room, write Bookends:
+    1. Exactly #{count} Bookends, each a common English word or two-word phrase (letters, hyphens, apostrophes only, at most 20 characters).
+    2. #{from_each}
+    3. The Bookends must stand as far apart from one another in meaning as the settings allow, while each still belongs to its setting's world.
+    4. The Bookends must NOT share a root with each other.
+    5. No Bookend may use or share a root with any word from any setting.
+    6. #{from_line}
+    7. Provide one sentence explaining why these Bookends stand far apart in meaning while honoring the settings.
+    """
   end
 end

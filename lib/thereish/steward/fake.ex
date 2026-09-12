@@ -58,15 +58,20 @@ defmodule Thereish.Steward.Fake do
     end
   end
 
+  @bookend_pool ~w(lantern harbour summit ember grove spire)
+
   @impl true
-  def author(_request, opts \\ []) do
+  def author(request, opts \\ []) do
     delay = author_delay_ms()
     if delay > 0, do: Process.sleep(delay)
 
     case author_mode() do
       :ok ->
+        count = Thereish.Steward.Author.requested_count(request)
+
         bookends =
-          Keyword.get(opts, :bookends) || config_get(:author_bookends, ["lantern", "harbour"])
+          Keyword.get(opts, :bookends) ||
+            config_get(:author_bookends, Enum.take(@bookend_pool, count))
 
         why =
           Keyword.get(opts, :why) ||
@@ -89,7 +94,8 @@ defmodule Thereish.Steward.Fake do
              cost_usd: 0.0,
              latency_ms: delay,
              attempts: 1,
-             why: why
+             why: why,
+             count: count
            }
          }}
 

@@ -317,6 +317,7 @@ defmodule Thereish.GameTest do
       assert [%{name: "Mara", give: "lighthouse"}, %{name: "Jacob", give: "candle"}] =
                request.gives
 
+      assert request.count == 2
       assert Game.view(state, nil).phase == :writing
     end
 
@@ -456,6 +457,62 @@ defmodule Thereish.GameTest do
     end
   end
 
+  describe "the Author writes one Bookend per Give at a Full table (ticket 03, #120)" do
+    @six ~w(Mara Jacob Ada Ida Ola Ora)
+
+    defp six_table(opts \\ []) do
+      Game.init(
+        Keyword.merge(
+          [seat_limit: 6, seats: Enum.map(@six, &seat/1)],
+          opts
+        )
+      )
+    end
+
+    defp give_all(state, names \\ @six) do
+      Enum.reduce(names, {state, []}, fn name, {state, _effects} ->
+        {:ok, state, effects} =
+          Game.apply(
+            state,
+            {:give_committed, %{seat_id: "seat-" <> name, give: "setting #{name}"}}
+          )
+
+        {state, effects}
+      end)
+    end
+
+    test "a six-Seat Full table asks for six Bookends, one per Give" do
+      {state, effects} = give_all(six_table())
+      assert [{:author, request}] = effects
+      assert request.count == 6
+      assert Enum.map(request.gives, & &1.name) == @six
+
+      six_bookends = ~w(lantern harbour summit ember grove spire)
+
+      assert {:ok, bridging, []} =
+               Game.apply(state, {:page_written, %{bookends: six_bookends}})
+
+      view = Game.view(bridging, nil)
+      assert view.phase == :bridging
+      assert view.bookends == six_bookends
+      assert view.full_table == true
+    end
+
+    test "Full table off asks for two Bookends from two different Gives" do
+      {state, effects} = give_all(six_table(full_table: false))
+      assert [{:author, request}] = effects
+      assert request.count == 2
+      assert length(request.gives) == 6
+
+      assert {:ok, bridging, []} =
+               Game.apply(state, {:page_written, %{bookends: ["lantern", "harbour"]}})
+
+      view = Game.view(bridging, nil)
+      assert view.bookends == ["lantern", "harbour"]
+      assert view.full_table == false
+    end
+  end
+
   describe "the Room starts when everyone is here (ticket 08)" do
     test "a Page starts when the Seats present declare their Gives are in rather than waiting for Room to fill" do
       state =
@@ -482,6 +539,7 @@ defmodule Thereish.GameTest do
                Game.apply(state, {:start_page, %{seat_id: "seat-Mara"}})
 
       assert length(request.gives) == 3
+      assert request.count == 3
       assert Enum.map(request.gives, & &1.name) == ["Mara", "Jacob", "Ada"]
       assert Game.view(writing_state, nil).phase == :writing
 

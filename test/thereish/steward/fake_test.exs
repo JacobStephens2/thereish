@@ -112,6 +112,17 @@ defmodule Thereish.Steward.FakeTest do
     test "a table that all wrote the same word is a hundred" do
       assert graded(["moon", "moon", "moon", "moon"]).closeness == 100
     end
+
+    test "grades N Bridges against N Bookends the same as against two" do
+      {:ok, verdict} =
+        Fake.assay(%{
+          bookends: ["lantern", "harbour", "summit", "ember"],
+          bridges: @table
+        })
+
+      assert verdict.closeness == 27
+      assert verdict.furthest == ["cairn", "beacon"]
+    end
   end
 
   describe "N Bookends" do
@@ -230,6 +241,30 @@ defmodule Thereish.Steward.FakeTest do
 
       fake(quip_text: "A sweet room.")
       assert Fake.quip_code("cane") == {:ok, "A sweet room."}
+    end
+
+    test "the fake Author answers N Bookends offline" do
+      six_gives =
+        for name <- ~w(Mara Jacob Ada Ida Ola Ora) do
+          %{name: name, text: "setting #{name}"}
+        end
+
+      assert {:ok, two} = Fake.author(%{gives: Enum.take(six_gives, 2), count: 2})
+      assert two.bookends == ["lantern", "harbour"]
+      assert two.meta.count == 2
+
+      assert {:ok, six} = Fake.author(%{gives: six_gives, count: 6})
+      assert length(six.bookends) == 6
+      assert six.bookends == ["lantern", "harbour", "summit", "ember", "grove", "spire"]
+      assert six.meta.count == 6
+      assert six.bookends == Enum.uniq(six.bookends)
+    end
+
+    test "the fake Author still honours a configured pair" do
+      fake(author_bookends: ["cactus", "dune"])
+
+      assert {:ok, result} = Fake.author(%{gives: [%{name: "Mara", text: "desert"}], count: 2})
+      assert result.bookends == ["cactus", "dune"]
     end
 
     test "the fake Scribe quip_code answers nothing or raises when configured to" do

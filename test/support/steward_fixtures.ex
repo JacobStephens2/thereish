@@ -435,9 +435,9 @@ defmodule Thereish.StewardFixtures do
     })
   end
 
-  @doc "A well-formed Author-3 JSON string."
+  @doc "A well-formed Author JSON string."
   def author_json(opts \\ []) do
-    Jason.encode!(%{
+    json = %{
       "bookends" => Keyword.get(opts, :bookends, ["harbour", "cairn"]),
       "why" =>
         Keyword.get(
@@ -445,7 +445,15 @@ defmodule Thereish.StewardFixtures do
           :why,
           "A coastal shelter stands far apart in meaning from a mountain monument."
         )
-    })
+    }
+
+    json =
+      case Keyword.get(opts, :from) do
+        nil -> json
+        from -> Map.put(json, "from", from)
+      end
+
+    Jason.encode!(json)
   end
 
   @doc "Legacy alias for author_json."
