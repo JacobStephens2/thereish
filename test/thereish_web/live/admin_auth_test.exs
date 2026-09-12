@@ -18,6 +18,7 @@ defmodule ThereishWeb.AdminAuthTest do
       assert {:error, {:redirect, %{to: "/admin/sign-in"}}} = live(conn, ~p"/admin")
       assert {:error, {:redirect, %{to: "/admin/sign-in"}}} = live(conn, ~p"/spend")
       assert {:error, {:redirect, %{to: "/admin/sign-in"}}} = live(conn, ~p"/admin/experiments")
+      assert {:error, {:redirect, %{to: "/admin/sign-in"}}} = live(conn, ~p"/admin/media")
 
       conn = get(conn, ~p"/calibration.json")
       assert redirected_to(conn) == "/admin/sign-in"
@@ -64,10 +65,10 @@ defmodule ThereishWeb.AdminAuthTest do
       assert html =~ "Spend"
       assert has_element?(overview, "a[href='/spend']")
       assert has_element?(overview, "a[href='/admin/experiments']")
+      assert has_element?(overview, "a[href='/admin/media']")
       assert has_element?(overview, "a[href='/calibration.json']")
       assert has_element?(overview, "a[href='/calibration.jsonl']")
       refute html =~ "/admin/rooms"
-      refute html =~ "/admin/media"
       refute html =~ "/admin/timing"
 
       conn = delete(recycle(conn), ~p"/admin/sign-out")
