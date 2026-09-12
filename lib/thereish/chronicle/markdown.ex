@@ -81,6 +81,15 @@ defmodule Thereish.Chronicle.Markdown do
           []
       end
 
+    vamp_lines =
+      case Chronicle.page_vamp(page) do
+        %{path: path} when is_binary(path) and path != "" ->
+          ["- Vamp: the short piece"]
+
+        _ ->
+          []
+      end
+
     mask_lines =
       cond do
         page[:gives] && page[:gives] != [] ->
@@ -131,6 +140,7 @@ defmodule Thereish.Chronicle.Markdown do
         bookend_give_lines ++
         give_lines ++
         track_lines ++
+        vamp_lines ++
         mask_lines ++
         experiment_lines ++
         [
@@ -411,6 +421,23 @@ defmodule Thereish.Chronicle.Markdown do
         if track_title == "", do: nil, else: track_title
       end
 
+    vamp_line =
+      Enum.find(
+        meta_lines,
+        &(String.starts_with?(&1, "- Vamp:") or String.starts_with?(&1, "Vamp:"))
+      )
+
+    vamp =
+      if vamp_line do
+        vamp_label =
+          vamp_line
+          |> String.replace_prefix("- Vamp:", "")
+          |> String.replace_prefix("Vamp:", "")
+          |> String.trim()
+
+        if vamp_label == "", do: nil, else: vamp_label
+      end
+
     attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
 
     %{
@@ -422,6 +449,7 @@ defmodule Thereish.Chronicle.Markdown do
       experiment: experiment,
       arm: arm,
       track: track,
+      vamp: vamp,
       recap: parse_recap(meta_lines),
       attempts: attempts
     }

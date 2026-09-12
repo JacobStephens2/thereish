@@ -1677,6 +1677,50 @@ defmodule Thereish.ChronicleTest do
       assert line =~ "Foley $0.0400"
     end
 
+    test "spend includes Foley from page vamp_meta beside the Track", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      entry = %{
+        document: %{"bookends" => ["desert", "oasis"]},
+        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
+        vamp_meta: %{
+          path: "/media/vamps/oasis-vamp.mp3",
+          provider: "eleven_labs",
+          model: "eleven_text_to_sound_v2",
+          cost_usd: 0.0120
+        },
+        closed_because: :meld,
+        melded?: true,
+        closeness: 90,
+        attempts: [
+          %{
+            number: 1,
+            bookends: ["desert", "oasis"],
+            closeness: 90,
+            melded?: true,
+            bridges: [
+              %{seat_id: ctx.mara.id, bridge: "water"},
+              %{seat_id: ctx.jacob.id, bridge: "water"}
+            ],
+            verdicts: []
+          }
+        ]
+      }
+
+      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+
+      spend = Chronicle.spend(room.id)
+      assert spend.by_role.foley.calls_count == 2
+      assert Decimal.equal?(spend.by_role.foley.total_usd, Decimal.new("0.0520"))
+      assert spend.by_role.foley.by_model["mureka-v1"].calls_count == 1
+      assert spend.by_role.foley.by_model["eleven_text_to_sound_v2"].calls_count == 1
+
+      line = Chronicle.spend_line(spend)
+      assert line =~ "Foley $0.0520"
+    end
+
     test "spend counts a zero-cost voice failure as a Foley call", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
       now = DateTime.utc_now()
@@ -1986,6 +2030,169 @@ defmodule Thereish.ChronicleTest do
 
       markdown = Thereish.Chronicle.Markdown.render(room.id)
       assert markdown =~ "/media/masks/mask-mara.png"
+    end
+  end
+
+  describe "vamps in Chronicle (ticket 08, #139)" do
+    defp closed_page(ctx, attrs) do
+      Map.merge(
+        %{
+          document: %{"bookends" => ["lantern", "harbour"]},
+          author_meta: %{model: "gemini-3.8-flash"},
+          closed_because: :meld,
+          melded?: true,
+          closeness: 95,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["lantern", "harbour"],
+              closeness: 95,
+              melded?: true,
+              bridges: [
+                %{seat_id: ctx.mara.id, bridge: "lighthouse"},
+                %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
+              ],
+              verdicts: []
+            }
+          ]
+        },
+        attrs
+      )
+    end
+
+    test "a written Page keeps its Vamp beside its Track, and a Page with none invents no audio",
+         ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      assert {:ok, with_both} =
+               Chronicle.write(
+                 room.id,
+                 closed_page(ctx, %{
+                   music_meta: %{
+                     path: "/media/tracks/harbour-lights.mp3",
+                     title: "Harbour Lights"
+                   },
+                   vamp_meta: %{
+                     path: "/media/vamps/harbour-vamp.mp3",
+                     duration: 30,
+                     format: "mp3",
+                     loop: true,
+                     provider: "fake"
+                   }
+                 }),
+                 now
+               )
+
+      assert {:ok, without} =
+               Chronicle.write(
+                 room.id,
+                 closed_page(ctx, %{
+                   document: %{"bookends" => ["desert", "oasis"]},
+                   music_meta: nil,
+                   vamp_meta: nil
+                 }),
+                 DateTime.add(now, 60, :second)
+               )
+
+      views = Chronicle.page_views(room.id)
+      both_view = Enum.find(views, &(&1.id == with_both.id))
+      without_view = Enum.find(views, &(&1.id == without.id))
+
+      assert vamp = Chronicle.page_vamp(both_view)
+      assert vamp.path == "/media/vamps/harbour-vamp.mp3"
+      assert vamp.loop == true
+      assert vamp.duration == 30
+
+      assert track = Chronicle.page_track(both_view)
+      assert track.path == "/media/tracks/harbour-lights.mp3"
+      assert track.title == "Harbour Lights"
+
+      assert Chronicle.page_vamp(without_view) == nil
+      assert Chronicle.page_track(without_view) == nil
+    end
+
+    test "replace_page_vamp attaches a late Vamp to the Page without touching its Track", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      assert {:ok, page} =
+               Chronicle.write(
+                 room.id,
+                 closed_page(ctx, %{
+                   music_meta: %{
+                     path: "/media/tracks/harbour-lights.mp3",
+                     title: "Harbour Lights"
+                   }
+                 }),
+                 now
+               )
+
+      assert Chronicle.page_vamp(page) == nil
+
+      assert {:ok, updated} =
+               Chronicle.replace_page_vamp(page.id, %{
+                 path: "/media/vamps/late-harbour.mp3",
+                 duration: 30,
+                 loop: true
+               })
+
+      [view] = Chronicle.page_views(room.id)
+      assert view.id == updated.id
+      assert Chronicle.page_vamp(view).path == "/media/vamps/late-harbour.mp3"
+      assert Chronicle.page_track(view).path == "/media/tracks/harbour-lights.mp3"
+      assert Chronicle.page_track(view).title == "Harbour Lights"
+    end
+
+    test "to_markdown writes a Vamp line beside Track when the Page has one, and omits it otherwise",
+         ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      now = DateTime.utc_now()
+
+      assert {:ok, _} =
+               Chronicle.write(
+                 room.id,
+                 closed_page(ctx, %{
+                   music_meta: %{
+                     path: "/media/tracks/harbour-lights.mp3",
+                     title: "Harbour Lights"
+                   },
+                   vamp_meta: %{
+                     path: "/media/vamps/harbour-vamp.mp3",
+                     loop: true
+                   }
+                 }),
+                 now
+               )
+
+      assert {:ok, _} =
+               Chronicle.write(
+                 room.id,
+                 closed_page(ctx, %{
+                   document: %{"bookends" => ["desert", "oasis"]},
+                   music_meta: %{
+                     path: "/media/tracks/oasis.mp3",
+                     title: "Oasis"
+                   }
+                 }),
+                 DateTime.add(now, 60, :second)
+               )
+
+      markdown = Chronicle.to_markdown(room.id)
+
+      assert markdown =~ "- Track: Harbour Lights"
+      assert markdown =~ "- Vamp: the short piece"
+      assert markdown =~ "- Track: Oasis"
+
+      vamp_matches = Regex.scan(~r/(?:^|\n)-? ?Vamp:\s*(.*)/, markdown)
+      assert length(vamp_matches) == 1
+      assert hd(vamp_matches) |> List.last() |> String.trim() == "the short piece"
+
+      assert {:ok, [parsed_with, parsed_without]} = Chronicle.from_markdown(markdown)
+      assert parsed_with.track == "Harbour Lights"
+      assert parsed_with.vamp == "the short piece"
+      assert parsed_without.track == "Oasis"
+      assert parsed_without.vamp == nil
     end
   end
 end
