@@ -6,6 +6,7 @@ defmodule Thereish.Steward.ScoreTest do
   alias Thereish.Steward
   alias Thereish.Steward.Live
   alias Thereish.Steward.Fake
+  alias Thereish.Steward.Music
   alias Thereish.Steward.TrackCache
   alias Thereish.Steward.Mureka
 
@@ -152,14 +153,12 @@ defmodule Thereish.Steward.ScoreTest do
         end
       end)
 
-      fresh_gives = ["alpine meadow", "deep space"]
+      fresh_gives = ["Kiss Heavy Metal", "bossa nova"]
       assert {:ok, track} = Live.score(fresh_gives)
 
       assert_receive {:mureka_generate, body}
       assert body["n"] == 1
-      assert body["prompt"] =~ "conversation"
-      assert body["prompt"] =~ "alpine meadow"
-      assert body["prompt"] =~ "deep space"
+      assert body["prompt"] == Music.prompt(fresh_gives)
 
       assert String.starts_with?(track.path, "/media/tracks/")
       assert track.meta.cost_usd == 0.04

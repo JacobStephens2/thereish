@@ -18,6 +18,27 @@ defmodule ThereishWeb.VoiceControllerTest do
     %{slug: slug, mara: mara, jacob: jacob, token_a: token_a, token_b: token_b}
   end
 
+  describe "GET /r/:slug/voice/:attempt/bookends" do
+    test "serves Bookends audio for the current Attempt and 404 otherwise",
+         %{conn: conn} = ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      assert_receive {:bookends_ready, 1}, 2000
+
+      conn1 = get(conn, ~p"/r/#{ctx.slug}/voice/1/bookends")
+      assert response(conn1, 200)
+      assert response_content_type(conn1, :mp3) =~ "audio/mpeg"
+      assert byte_size(response(conn1, 200)) > 0
+
+      conn_verdict = get(conn, ~p"/r/#{ctx.slug}/voice/1")
+      assert response(conn_verdict, 404)
+
+      conn2 = get(conn, ~p"/r/#{ctx.slug}/voice/2/bookends")
+      assert response(conn2, 404)
+    end
+  end
+
   describe "GET /r/:slug/voice/:attempt" do
     test "serves audio bytes for the current attempt and 404 for any other",
          %{conn: conn} = ctx do

@@ -38,6 +38,7 @@ defmodule ThereishWeb.Router do
     live "/r/:slug/book", ChronicleLive, :room
 
     get "/r/:slug/voice/:attempt", VoiceController, :show
+    get "/r/:slug/voice/:attempt/:kind", VoiceController, :show
 
     live "/check", CheckLive, :show
 
@@ -57,6 +58,7 @@ defmodule ThereishWeb.Router do
     live_session :admin, on_mount: [{ThereishWeb.AdminAuth, :require_admin}] do
       live "/admin", AdminOverviewLive, :index
       live "/admin/experiments", AdminExperimentsLive, :index
+      live "/admin/media", AdminMediaLive, :index
       live "/spend", SpendLive, :index
     end
 

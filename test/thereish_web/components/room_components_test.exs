@@ -295,10 +295,15 @@ defmodule ThereishWeb.RoomComponentsTest do
   end
 
   describe "foley components" do
-    test "foley_switches renders voice switch only on speaker, and quips switch on any view" do
+    test "foley_switches keeps Voice immediate and moves Quips, Full table, and music into a settings modal" do
       room_with_speaker = %{speaker?: true, quips: true, music: "page"}
       html = render_component(&foley_switches/1, room: room_with_speaker)
+      assert html =~ ~s(data-role="quick-sound")
       assert html =~ ~s(data-role="voice-switch")
+      assert html =~ ~s(data-role="settings-open")
+      assert html =~ ~s(data-role="settings-modal")
+      assert html =~ ~s(data-role="voice-bookends-switch")
+      assert html =~ ~s(data-role="voice-verdict-switch")
       assert html =~ ~s(data-role="quips-switch")
       assert html =~ ~s(data-role="music-control")
       assert html =~ "Voice"
@@ -309,11 +314,17 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "House loop"
       refute html =~ "Written for this Page"
 
-      # Voice switch does NOT render without speaker, but Quips switch does
+      # Voice is in the immediate row; Room facts live in the modal
+      refute html =~ ~s(data-role="quick-sound") <> ~s() <> ~s(data-role="quips-switch")
+      assert html =~ ~s(data-role="settings-modal")
+
+      # Voice master is Speaker-only; Bookends/Verdict prefs are device-owned
       room_without_speaker = %{speaker?: false, quips: false, music: "off"}
       html_without = render_component(&foley_switches/1, room: room_without_speaker)
       refute html_without =~ ~s(data-role="voice-switch")
-      refute html_without =~ "Voice"
+      assert html_without =~ ~s(data-role="voice-bookends-switch")
+      assert html_without =~ ~s(data-role="voice-verdict-switch")
+      assert html_without =~ ~s(data-role="settings-open")
       assert html_without =~ ~s(data-role="quips-switch")
       assert html_without =~ "Quips"
       assert html_without =~ ~s(data-role="music-control")
@@ -338,7 +349,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ ~s(data-active="true")
 
       assert html =~
-               "Full table: one Bookend from every player's Give, and every bridge carries forward"
+               "Full table: one Bookend from every player's Give, and every Bridge carries forward"
 
       assert html =~ ~s(data-role="full-table-note")
       assert html =~ "Matters from three Seats"
@@ -510,9 +521,9 @@ defmodule ThereishWeb.RoomComponentsTest do
         resume() { return Promise.resolve(); }
       }
 
-      const storage = { "foley:voice": "on" };
+      const storage = { "foley:voice": "on", "foley:voice-verdict": "on" };
       global.localStorage = {
-        getItem: (k) => storage[k] || null,
+        getItem: (k) => (Object.prototype.hasOwnProperty.call(storage, k) ? storage[k] : null),
         setItem: (k, v) => { storage[k] = String(v); }
       };
 
@@ -525,11 +536,21 @@ defmodule ThereishWeb.RoomComponentsTest do
         ok: true,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(8))
       });
+      const listeners = {};
       global.document = {
         getElementById: () => null,
         querySelector: (sel) => (sel === "[data-role=quip]" ? {} : null),
-        addEventListener: () => {},
-        removeEventListener: () => {},
+        addEventListener: (name, fn) => {
+          listeners[name] = listeners[name] || [];
+          listeners[name].push(fn);
+        },
+        removeEventListener: (name, fn) => {
+          listeners[name] = (listeners[name] || []).filter((f) => f !== fn);
+        },
+        dispatchEvent: (event) => {
+          (listeners[event.type] || []).forEach((fn) => fn(event));
+          return true;
+        },
         body: {}
       };
 
@@ -702,6 +723,138 @@ defmodule ThereishWeb.RoomComponentsTest do
           await events["foley:prologue"]({path: "/audio/prologue-1.mp3"});
           assert.strictEqual(hook.isDucked(), false);
           assert.strictEqual(hook.voiceSource, null);
+        }
+
+        // 6. Bookends play immediately, without waiting for the reveal
+        {
+          storage["foley:voice"] = "on";
+          delete storage["foley:voice-verdict"];
+          delete storage["foley:voice-bookends"];
+          const previousQuery = global.document.querySelector;
+          global.document.querySelector = () => null;
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:voice"]({attempt: 1, url: "/voice/1/bookends", kind: "bookends"});
+          assert.notStrictEqual(hook.voiceSource, null);
+          assert.strictEqual(hook.isDucked(), true);
+          global.document.querySelector = previousQuery;
+        }
+
+        // 7. Verdict speech stays off until that choice is enabled
+        {
+          storage["foley:voice"] = "on";
+          delete storage["foley:voice-verdict"];
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:voice"]({attempt: 1, url: "/voice/1", kind: "verdict"});
+          assert.strictEqual(hook.voiceSource, null);
+          assert.strictEqual(hook.isStingsDucked(), false);
+        }
+
+        // 8. Disabling Voice stops speech that is already playing
+        {
+          storage["foley:voice"] = "on";
+          delete storage["foley:voice-bookends"];
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:voice"]({attempt: 1, url: "/voice/1/bookends", kind: "bookends"});
+          assert.notStrictEqual(hook.voiceSource, null);
+
+          global.document.dispatchEvent({ type: "thereish:voice-pref", detail: { enabled: false, kind: "master" } });
+          assert.strictEqual(hook.voiceSource, null);
+        }
+
+        // 9. foley:stop_voice cancels speech; a later Attempt's Bookends replace the earlier one
+        {
+          storage["foley:voice"] = "on";
+          delete storage["foley:voice-bookends"];
+          const el = {
+            dataset: {
+              speaker: 'true',
+              mode: 'speaker',
+              levelMusic: '0.5',
+              levelStings: '1.2',
+              levelVoice: '1.2',
+              levelDuck: '0.15',
+              levelDuckStings: '0.35',
+              meldCueDelayMs: '0'
+            }
+          };
+
+          const hook = Object.create(hookExport);
+          hook.el = el;
+          const events = {};
+          hook.handleEvent = (name, fn) => { events[name] = fn; };
+          hook.mounted();
+          hook.initAudio();
+
+          await events["foley:voice"]({attempt: 1, url: "/voice/1/bookends", kind: "bookends"});
+          assert.notStrictEqual(hook.voiceSource, null);
+
+          events["foley:stop_voice"]({attempt: 2});
+          assert.strictEqual(hook.voiceSource, null);
+          assert.strictEqual(hook.currentVoiceAttempt, null);
+
+          await events["foley:voice"]({attempt: 2, url: "/voice/2/bookends", kind: "bookends"});
+          assert.notStrictEqual(hook.voiceSource, null);
+          assert.strictEqual(hook.currentVoiceAttempt, 2);
+
+          await events["foley:voice"]({attempt: 1, url: "/voice/1/bookends", kind: "bookends"});
+          assert.strictEqual(hook.currentVoiceAttempt, 2);
         }
 
         console.log('HOOK_TESTS_PASSED');

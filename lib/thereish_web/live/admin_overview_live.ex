@@ -2,7 +2,7 @@ defmodule ThereishWeb.AdminOverviewLive do
   @moduledoc """
   Discoverable access to existing operator tools (ticket 09).
 
-  Later Room, timing, and media slices add their destinations here; this page
+  Later Room and timing slices add their destinations here; this page
   does not invent placeholder links for them.
   """
   use ThereishWeb, :live_view
@@ -44,6 +44,12 @@ defmodule ThereishWeb.AdminOverviewLive do
             Experiments
           </.link>
           <p class="text-sm opacity-70">Blinded readouts and deliberate unblinding.</p>
+        </li>
+        <li>
+          <.link navigate={~p"/admin/media"} class="text-lg underline hover:opacity-80">
+            Media
+          </.link>
+          <p class="text-sm opacity-70">Generated Tracks, Vamps, and Masks.</p>
         </li>
         <li>
           <span class="text-lg">Calibration</span>

@@ -12,7 +12,8 @@ defmodule ThereishWeb.RoomLiveTest do
 
   alias Thereish.Rooms
 
-  defp join(view, name), do: view |> form("form", %{"name" => name}) |> render_submit()
+  defp join(view, name),
+    do: view |> form("form[phx-submit=join]", %{"name" => name}) |> render_submit()
 
   defp commit(view, bridge) do
     view |> form("[data-role=bridge-form]", %{"bridge" => bridge}) |> render_submit()
@@ -90,7 +91,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
       assert html =~ "You are"
       assert has_element?(mara, "[data-seat]", "Mara")
-      refute has_element?(mara, "form")
+      refute has_element?(mara, "form[phx-submit=join]")
 
       # After joining in :waiting, Code card renders before "In the Room"
       assert_order(html, [~s(data-role="room-code"), "In the Room"])
@@ -241,7 +242,7 @@ defmodule ThereishWeb.RoomLiveTest do
       {:ok, mara, _} = live(phone(slug))
 
       assert join(mara, "  ") =~ "Type a name first."
-      assert has_element?(mara, "form")
+      assert has_element?(mara, "form[phx-submit=join]")
     end
 
     test "a phone arriving at a full Room is told so" do
@@ -266,7 +267,7 @@ defmodule ThereishWeb.RoomLiveTest do
       {:ok, again, _} = live(get(conn, ~p"/r/#{slug}"))
 
       assert render(again) =~ "You are <span class=\"font-semibold\">Mara</span>"
-      refute has_element?(again, "form")
+      refute has_element?(again, "form[phx-submit=join]")
     end
 
     test "a device token that belongs to another Room cannot claim a Seat" do
@@ -281,7 +282,7 @@ defmodule ThereishWeb.RoomLiveTest do
       # asked for a name like anyone else.
       {:ok, in_b, _} = live(get(conn, ~p"/r/#{room_b}"))
 
-      assert has_element?(in_b, "form")
+      assert has_element?(in_b, "form[phx-submit=join]")
       refute render(in_b) =~ "You are"
     end
 
@@ -2341,14 +2342,38 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.mara, "[data-role=speaker-toggle][data-speaker=other]")
       assert has_element?(ctx.jacob, "[data-role=speaker-toggle][data-speaker=other]")
 
-      assert has_element?(ctx.stage, "[data-role=voice-switch]")
-      assert has_element?(ctx.stage, "[data-role=music-control]")
-      assert has_element?(ctx.stage, "[data-role=quips-switch]")
-      assert has_element?(ctx.stage, "[data-role=full-table-switch]")
+      assert has_element?(ctx.stage, "[data-role=quick-sound] [data-role=voice-switch]")
+      assert has_element?(ctx.stage, "[data-role=quick-sound] [data-role=settings-open]")
+      assert has_element?(ctx.stage, "[data-role=settings-modal] [data-role=music-control]")
+      assert has_element?(ctx.stage, "[data-role=settings-modal] [data-role=quips-switch]")
+      assert has_element?(ctx.stage, "[data-role=settings-modal] [data-role=full-table-switch]")
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=settings-modal] [data-role=voice-bookends-switch]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=settings-modal] [data-role=voice-verdict-switch]"
+             )
+
       refute has_element?(ctx.mara, "[data-role=voice-switch]")
-      assert has_element?(ctx.mara, "[data-role=music-control]")
-      assert has_element?(ctx.mara, "[data-role=quips-switch]")
-      assert has_element?(ctx.mara, "[data-role=full-table-switch]")
+      assert has_element?(ctx.mara, "[data-role=quick-sound] [data-role=settings-open]")
+      assert has_element?(ctx.mara, "[data-role=settings-modal] [data-role=music-control]")
+      assert has_element?(ctx.mara, "[data-role=settings-modal] [data-role=quips-switch]")
+      assert has_element?(ctx.mara, "[data-role=settings-modal] [data-role=full-table-switch]")
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=settings-modal] [data-role=voice-bookends-switch]"
+             )
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=settings-modal] [data-role=voice-verdict-switch]"
+             )
+
       assert has_element?(ctx.mara, "[data-role=local-sound-toggle]")
 
       assert has_element?(
@@ -2357,9 +2382,16 @@ defmodule ThereishWeb.RoomLiveTest do
              )
 
       refute has_element?(ctx.jacob, "[data-role=voice-switch]")
-      assert has_element?(ctx.jacob, "[data-role=music-control]")
-      assert has_element?(ctx.jacob, "[data-role=quips-switch]")
-      assert has_element?(ctx.jacob, "[data-role=full-table-switch]")
+      assert has_element?(ctx.jacob, "[data-role=quick-sound] [data-role=settings-open]")
+      assert has_element?(ctx.jacob, "[data-role=settings-modal] [data-role=music-control]")
+      assert has_element?(ctx.jacob, "[data-role=settings-modal] [data-role=quips-switch]")
+      assert has_element?(ctx.jacob, "[data-role=settings-modal] [data-role=full-table-switch]")
+
+      assert has_element?(
+               ctx.jacob,
+               "[data-role=settings-modal] [data-role=voice-bookends-switch]"
+             )
+
       assert has_element?(ctx.jacob, "[data-role=local-sound-toggle]")
       refute has_element?(ctx.stage, "[data-role=local-sound-toggle]")
 
@@ -2576,6 +2608,17 @@ defmodule ThereishWeb.RoomLiveTest do
       refute_push_event(ctx.mara, "foley:page", %{})
       refute_push_event(ctx.jacob, "foley:page", %{})
 
+      expected_bookends_url = "/r/#{ctx.slug}/voice/1/bookends"
+
+      assert_push_event(ctx.stage, "foley:voice", %{
+        attempt: 1,
+        kind: "bookends",
+        url: ^expected_bookends_url
+      })
+
+      refute_push_event(ctx.mara, "foley:voice", %{})
+      refute_push_event(ctx.jacob, "foley:voice", %{})
+
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
@@ -2591,7 +2634,13 @@ defmodule ThereishWeb.RoomLiveTest do
       refute_push_event(ctx.jacob, "foley:sting", %{})
 
       expected_stage_url = "/r/#{ctx.slug}/voice/1"
-      assert_push_event(ctx.stage, "foley:voice", %{attempt: 1, url: ^expected_stage_url})
+
+      assert_push_event(ctx.stage, "foley:voice", %{
+        attempt: 1,
+        kind: "verdict",
+        url: ^expected_stage_url
+      })
+
       refute_push_event(ctx.mara, "foley:voice", %{})
       refute_push_event(ctx.jacob, "foley:voice", %{})
 
@@ -2603,6 +2652,14 @@ defmodule ThereishWeb.RoomLiveTest do
       eventually(fn -> has_element?(ctx.mara, "[data-role=bridge-form]") end)
       eventually(fn -> has_element?(ctx.jacob, "[data-role=bridge-form]") end)
 
+      expected_mara_bookends = "/r/#{ctx.slug}/voice/2/bookends"
+
+      assert_push_event(ctx.mara, "foley:voice", %{
+        attempt: 2,
+        kind: "bookends",
+        url: ^expected_mara_bookends
+      })
+
       commit(ctx.mara, "stone")
       commit(ctx.jacob, "stone")
 
@@ -2613,10 +2670,37 @@ defmodule ThereishWeb.RoomLiveTest do
 
       assert_push_event(ctx.mara, "foley:sting", %{band: _})
       expected_mara_url = "/r/#{ctx.slug}/voice/2"
-      assert_push_event(ctx.mara, "foley:voice", %{attempt: 2, url: ^expected_mara_url})
+
+      assert_push_event(ctx.mara, "foley:voice", %{
+        attempt: 2,
+        kind: "verdict",
+        url: ^expected_mara_url
+      })
+
       refute_push_event(ctx.stage, "foley:sting", %{})
       refute_push_event(ctx.stage, "foley:voice", %{})
       refute_push_event(ctx.jacob, "foley:voice", %{})
+    end
+
+    test "a later Room change or phone resync does not replay Bookends speech", ctx do
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      expected_bookends_url = "/r/#{ctx.slug}/voice/1/bookends"
+
+      assert_push_event(ctx.stage, "foley:voice", %{
+        attempt: 1,
+        kind: "bookends",
+        url: ^expected_bookends_url
+      })
+
+      Rooms.set_quips(ctx.slug, false)
+      refute_push_event(ctx.stage, "foley:voice", %{})
+
+      render_hook(ctx.mara, "resync", %{})
+      refute_push_event(ctx.mara, "foley:voice", %{})
+      refute_push_event(ctx.stage, "foley:voice", %{})
     end
 
     test "ticket 10: quips toggle hides reveal quip everywhere while room quip still shows, and stings still push with voice off" do

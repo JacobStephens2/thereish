@@ -107,6 +107,38 @@ defmodule Thereish.Foley.RepertoireTest do
       refute "/media/tracks/desert.mp3" in paths_a
     end
 
+    test "a Page's Vamp is not a Repertoire member, even when kept beside its Track" do
+      room = create_test_room("vamp-not-repertoire")
+      now = DateTime.utc_now()
+
+      %Page{}
+      |> Page.changeset(%{
+        room_id: room.id,
+        document: %{bookends: ["sun", "moon"]},
+        author_meta: %{arm: "flash"},
+        music_meta: %{
+          path: "/media/tracks/cabin.mp3",
+          title: "Cabin Warmth",
+          provider: "fake"
+        },
+        vamp_meta: %{
+          path: "/media/vamps/cabin-vamp.mp3",
+          duration: 30,
+          loop: true
+        },
+        closed_because: "meld",
+        melded: true,
+        closeness: 95,
+        opened_at: now,
+        closed_at: now
+      })
+      |> Repo.insert!()
+
+      paths = Enum.map(Repertoire.members(room.id), & &1.path)
+      assert "/media/tracks/cabin.mp3" in paths
+      refute "/media/vamps/cabin-vamp.mp3" in paths
+    end
+
     test "failed or unfinished scores in Chronicle do not count toward settled status" do
       room = create_test_room("failed-score-room")
 
