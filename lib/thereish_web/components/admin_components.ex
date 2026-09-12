@@ -76,19 +76,45 @@ defmodule ThereishWeb.AdminComponents do
           :if={@readout.experiment.id == "author_model"}
           class="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
-          <.author_arm_readout_card
+          <.arm_readout_card
             data_role="readout-arm-flash"
             title="Gemini 3.8 Flash"
             title_class="text-secondary"
             summary={@readout.flash}
-          />
+          >
+            <div>
+              Best streak: <span class="font-semibold">{@readout.flash.longest_meld_streak}</span>
+            </div>
+            <div class="mt-1 opacity-75">Preferences: {@readout.flash.preferences_summary}</div>
+            <div
+              :if={@readout.flash[:closing_bands] && map_size(@readout.flash.closing_bands) > 0}
+              class="mt-0.5 opacity-60 text-[11px]"
+            >
+              Bands: {Enum.map_join(@readout.flash.closing_bands, ", ", fn {k, v} ->
+                "#{k}: #{v}"
+              end)}
+            </div>
+          </.arm_readout_card>
 
-          <.author_arm_readout_card
+          <.arm_readout_card
             data_role="readout-arm-astra"
             title="GPT-6 Astra"
             title_class="opacity-80"
             summary={@readout.astra}
-          />
+          >
+            <div>
+              Best streak: <span class="font-semibold">{@readout.astra.longest_meld_streak}</span>
+            </div>
+            <div class="mt-1 opacity-75">Preferences: {@readout.astra.preferences_summary}</div>
+            <div
+              :if={@readout.astra[:closing_bands] && map_size(@readout.astra.closing_bands) > 0}
+              class="mt-0.5 opacity-60 text-[11px]"
+            >
+              Bands: {Enum.map_join(@readout.astra.closing_bands, ", ", fn {k, v} ->
+                "#{k}: #{v}"
+              end)}
+            </div>
+          </.arm_readout_card>
         </div>
 
         <div
@@ -100,18 +126,24 @@ defmodule ThereishWeb.AdminComponents do
             title="Bait-scored Pages"
             title_class="text-secondary"
             summary={@readout.bait}
-            extra_label="Traps sprung"
-            extra_value={@readout.bait.trap_sprung_count}
-          />
+          >
+            <div>
+              Traps sprung: <span class="font-semibold">{@readout.bait.trap_sprung_count}</span>
+            </div>
+            <div class="mt-1 opacity-75">Fairness: {@readout.bait.fairness_summary}</div>
+          </.arm_readout_card>
 
           <.arm_readout_card
             data_role="readout-arm-plain"
             title="Plain Pages"
             title_class="opacity-80"
             summary={@readout.plain}
-            extra_label="Overrules"
-            extra_value={@readout.plain.overrules_count}
-          />
+          >
+            <div>
+              Overrules: <span class="font-semibold">{@readout.plain.overrules_count}</span>
+            </div>
+            <div class="mt-1 opacity-75">Fairness: {@readout.plain.fairness_summary}</div>
+          </.arm_readout_card>
         </div>
 
         <div
@@ -129,8 +161,7 @@ defmodule ThereishWeb.AdminComponents do
   attr :title, :string, required: true
   attr :title_class, :string, default: "opacity-80"
   attr :summary, :map, required: true
-  attr :extra_label, :string, default: nil
-  attr :extra_value, :any, default: nil
+  slot :inner_block, required: true
 
   defp arm_readout_card(assigns) do
     ~H"""
@@ -141,38 +172,7 @@ defmodule ThereishWeb.AdminComponents do
       <div>
         Mean attempts: <span class="font-semibold">{@summary.mean_attempts_to_meld}</span>
       </div>
-      <div :if={@extra_label && @extra_value != nil}>
-        {@extra_label}: <span class="font-semibold">{@extra_value}</span>
-      </div>
-      <div class="mt-1 opacity-75">Fairness: {@summary.fairness_summary}</div>
-    </div>
-    """
-  end
-
-  attr :data_role, :string, required: true
-  attr :title, :string, required: true
-  attr :title_class, :string, default: "opacity-80"
-  attr :summary, :map, required: true
-
-  defp author_arm_readout_card(assigns) do
-    ~H"""
-    <div data-role={@data_role} class="rounded-lg bg-base-200/60 p-3 flex flex-col gap-1 text-xs">
-      <span class={["font-bold text-sm", @title_class]}>{@title}</span>
-      <div>Pages played: <span class="font-semibold">{@summary.pages_count}</span></div>
-      <div>Meld rate: <span class="font-semibold">{@summary.meld_rate}</span></div>
-      <div>
-        Mean attempts: <span class="font-semibold">{@summary.mean_attempts_to_meld}</span>
-      </div>
-      <div>
-        Best streak: <span class="font-semibold">{@summary.longest_meld_streak}</span>
-      </div>
-      <div class="mt-1 opacity-75">Preferences: {@summary.preferences_summary}</div>
-      <div
-        :if={@summary[:closing_bands] && map_size(@summary.closing_bands) > 0}
-        class="mt-0.5 opacity-60 text-[11px]"
-      >
-        Bands: {Enum.map_join(@summary.closing_bands, ", ", fn {k, v} -> "#{k}: #{v}" end)}
-      </div>
+      {render_slot(@inner_block)}
     </div>
     """
   end
