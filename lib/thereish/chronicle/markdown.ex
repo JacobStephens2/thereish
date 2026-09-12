@@ -301,7 +301,7 @@ defmodule Thereish.Chronicle.Markdown do
           items =
             Enum.map(taps, fn t ->
               display_label = Thereish.Chronicle.FairnessTap.label_human(t.label)
-              "#{t.seat_name}: #{display_label}"
+              "#{t[:reviewer_name] || t.seat_name}: #{display_label}"
             end)
             |> Enum.join(", ")
 

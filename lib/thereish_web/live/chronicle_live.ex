@@ -1,18 +1,18 @@
 defmodule ThereishWeb.ChronicleLive do
   @moduledoc """
-  The Chronicle as a book read on a phone (ticket 08).
+  The Chronicle as a book read on a phone (ticket 08, ticket 11).
 
   Reads the Chronicle in reverse chronological order: every Page, every attempt,
-  both Bridges, the grade, the reasoning, and any overrule. Players can correct
-  an entry, and the correction is recorded as another append-only event rather
-  than mutating past Pages (design law 5, ADR-0003).
-
-  Every view is computed from the event log.
+  both Bridges, the grade, the reasoning, and any overrule. Original participants
+  and the authenticated admin can record Too harsh / Fair / Too kind opinions
+  without rewriting recorded play (ADR-0019). Historical corrections remain
+  readable. Every view is computed from the event log.
   """
   use ThereishWeb, :live_view
 
   import ThereishWeb.RoomComponents
 
+  alias Thereish.Admin
   alias Thereish.Chronicle
   alias Thereish.Repo
   alias Thereish.Rooms
@@ -34,67 +34,31 @@ defmodule ThereishWeb.ChronicleLive do
      |> assign(:room, room)
      |> assign(:seat, seat)
      |> assign(:device_token, device_token)
-     |> assign(:correcting_page_id, nil)
-     |> assign(:correction_params, default_correction_params())
+     |> assign(:current_admin, admin_from_session(session))
      |> assign(:enlarged_mask, nil)
      |> load_pages()}
   end
 
   @impl true
-  def handle_event("open_correction", %{"page-id" => page_id}, socket) do
-    {:noreply,
-     assign(socket, correcting_page_id: page_id, correction_params: default_correction_params())}
+  def handle_event(
+        "record_opinion",
+        %{"page-id" => page_id, "attempt" => attempt, "label" => label},
+        socket
+      ) do
+    {:noreply, record_chronicle_opinion(socket, page_id, attempt, label, participant: true)}
   end
 
-  def handle_event("cancel_correction", _params, socket) do
-    {:noreply,
-     assign(socket, correcting_page_id: nil, correction_params: default_correction_params())}
+  def handle_event(
+        "admin_review",
+        %{"page-id" => page_id, "attempt" => attempt, "label" => label},
+        socket
+      ) do
+    {:noreply, record_chronicle_opinion(socket, page_id, attempt, label, admin: true)}
   end
 
-  def handle_event("record_correction", %{"correction" => params}, socket) do
-    page_id = socket.assigns.correcting_page_id
-    seat_id = socket.assigns.seat && socket.assigns.seat.id
-
-    attempt_number =
-      case params["attempt_number"] do
-        nil ->
-          nil
-
-        "" ->
-          nil
-
-        num when is_binary(num) ->
-          case Integer.parse(num) do
-            {val, _} -> val
-            :error -> nil
-          end
-
-        num when is_integer(num) ->
-          num
-      end
-
-    attrs = %{
-      page_id: page_id,
-      seat_id: seat_id,
-      attempt_number: attempt_number,
-      target: params["target"] || "bridge",
-      original_value: blank_to_nil(params["original_value"]),
-      corrected_value: params["corrected_value"],
-      note: blank_to_nil(params["note"])
-    }
-
-    case Chronicle.record_correction(socket.assigns.room.id, attrs) do
-      {:ok, _correction} ->
-        Phoenix.PubSub.broadcast(Thereish.PubSub, "room:#{socket.assigns.slug}", :room_changed)
-
-        {:noreply,
-         socket
-         |> assign(correcting_page_id: nil, correction_params: default_correction_params())
-         |> load_pages()}
-
-      {:error, _changeset} ->
-        {:noreply, assign(socket, :correction_params, params)}
-    end
+  def handle_event(event, _params, socket)
+      when event in ["open_correction", "cancel_correction", "record_correction"] do
+    {:noreply, socket}
   end
 
   def handle_event("enlarge_mask", %{"url" => url} = params, socket) do
@@ -120,14 +84,42 @@ defmodule ThereishWeb.ChronicleLive do
     assign(socket, :pages, Chronicle.book(socket.assigns.room.id))
   end
 
-  defp default_correction_params do
-    %{
-      "attempt_number" => "",
-      "target" => "bridge",
-      "original_value" => "",
-      "corrected_value" => "",
-      "note" => ""
-    }
+  defp record_chronicle_opinion(socket, page_id, attempt, label, opts) do
+    reviewer =
+      cond do
+        opts[:admin] && socket.assigns.current_admin ->
+          {:admin, socket.assigns.current_admin.id}
+
+        opts[:participant] && socket.assigns.seat ->
+          {:participant, socket.assigns.seat.id}
+
+        true ->
+          nil
+      end
+
+    if reviewer do
+      attempt_number =
+        case Integer.parse(to_string(attempt)) do
+          {number, _} -> number
+          :error -> attempt
+        end
+
+      case Chronicle.record_opinion(socket.assigns.room.id, %{
+             page_id: page_id,
+             attempt_number: attempt_number,
+             label: label,
+             as: reviewer
+           }) do
+        {:ok, _} ->
+          Phoenix.PubSub.broadcast(Thereish.PubSub, "room:#{socket.assigns.slug}", :room_changed)
+          load_pages(socket)
+
+        {:error, _} ->
+          socket
+      end
+    else
+      socket
+    end
   end
 
   defp seat_for_device(slug, device_token) do
@@ -139,12 +131,11 @@ defmodule ThereishWeb.ChronicleLive do
     end
   end
 
-  defp blank_to_nil(nil), do: nil
-
-  defp blank_to_nil(str) when is_binary(str) do
-    trimmed = String.trim(str)
-    if trimmed == "", do: nil, else: trimmed
+  defp admin_from_session(%{"admin_token" => token}) when is_binary(token) do
+    Admin.get_identity_by_session_token(token)
   end
+
+  defp admin_from_session(_session), do: nil
 
   @impl true
   def render(assigns) do
@@ -376,7 +367,8 @@ defmodule ThereishWeb.ChronicleLive do
                 </span>
                 <span
                   :for={t <- attempt.fairness_taps}
-                  data-role="fairness-tap-entry"
+                  data-role={if t[:source] == "admin", do: "admin-review", else: "fairness-tap-entry"}
+                  data-source={t[:source] || "participant"}
                   class={[
                     "rounded px-1.5 py-0.5 text-xs font-medium",
                     case t.label do
@@ -387,8 +379,40 @@ defmodule ThereishWeb.ChronicleLive do
                     end
                   ]}
                 >
-                  {t.seat_name}: {human_label(t.label)}
+                  {t[:reviewer_name] || t.seat_name}: {human_label(t.label)}
                 </span>
+              </div>
+
+              <div
+                :if={participant_of?(attempt, @seat)}
+                data-role="opinion-controls"
+                class="mt-2 flex flex-col gap-1"
+              >
+                <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Was this grade fair?
+                </span>
+                <.opinion_row
+                  event="record_opinion"
+                  page_id={page.id}
+                  attempt={attempt.number}
+                  current={current_opinion(attempt, {:participant, @seat.id})}
+                />
+              </div>
+
+              <div
+                :if={@current_admin}
+                data-role="admin-review-controls"
+                class="mt-2 flex flex-col gap-1"
+              >
+                <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Admin review
+                </span>
+                <.opinion_row
+                  event="admin_review"
+                  page_id={page.id}
+                  attempt={attempt.number}
+                  current={current_opinion(attempt, :admin)}
+                />
               </div>
 
               <!-- Overrule on this attempt -->
@@ -460,121 +484,6 @@ defmodule ThereishWeb.ChronicleLive do
               </p>
             </div>
           </div>
-
-          <!-- Correction Toggle / Form -->
-          <div class="mt-2 flex flex-col gap-2 border-t border-base-200 pt-3">
-            <div :if={@correcting_page_id != page.id} class="flex justify-end">
-              <button
-                type="button"
-                data-role="open-correction"
-                data-page-id={page.id}
-                phx-click="open_correction"
-                phx-value-page-id={page.id}
-                class="text-xs underline opacity-60 hover:opacity-100"
-              >
-                Correct entry
-              </button>
-            </div>
-
-            <!-- Correction Form -->
-            <form
-              :if={@correcting_page_id == page.id}
-              data-role="correction-form"
-              phx-submit="record_correction"
-              class="flex flex-col gap-3 rounded-lg bg-base-200/80 p-3 text-sm"
-            >
-              <span class="font-semibold">Correct this entry</span>
-
-              <div :if={page.attempts != []} class="flex flex-col gap-1">
-                <label class="text-xs opacity-70">Attempt (optional)</label>
-                <select
-                  name="correction[attempt_number]"
-                  class="select select-sm w-full rounded border border-base-300 bg-base-100"
-                >
-                  <option value="" selected={@correction_params["attempt_number"] in ["", nil]}>
-                    Whole page
-                  </option>
-                  <option
-                    :for={att <- page.attempts}
-                    value={att.number}
-                    selected={
-                      to_string(att.number) == to_string(@correction_params["attempt_number"])
-                    }
-                  >
-                    Attempt {att.number}
-                  </option>
-                </select>
-              </div>
-
-              <div class="flex flex-col gap-1">
-                <label class="text-xs opacity-70">What are you correcting?</label>
-                <select
-                  name="correction[target]"
-                  class="select select-sm w-full rounded border border-base-300 bg-base-100"
-                >
-                  <option value="recap" selected={@correction_params["target"] == "recap"}>
-                    Recap
-                  </option>
-                  <option value="bridge" selected={@correction_params["target"] == "bridge"}>
-                    Bridge
-                  </option>
-                  <option value="note" selected={@correction_params["target"] == "note"}>Note</option>
-                </select>
-              </div>
-
-              <div class="flex flex-col gap-1">
-                <label class="text-xs opacity-70">Original value (optional)</label>
-                <input
-                  type="text"
-                  name="correction[original_value]"
-                  value={@correction_params["original_value"]}
-                  placeholder="e.g. what was mistyped"
-                  class="input input-sm w-full rounded border border-base-300 bg-base-100"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium">Correction / Fix</label>
-                <input
-                  type="text"
-                  name="correction[corrected_value]"
-                  value={@correction_params["corrected_value"]}
-                  required
-                  placeholder="e.g. what it should be"
-                  class="input input-sm w-full rounded border border-base-300 bg-base-100"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1">
-                <label class="text-xs opacity-70">Reason or note (optional)</label>
-                <input
-                  type="text"
-                  name="correction[note]"
-                  value={@correction_params["note"]}
-                  placeholder="e.g. autocorrect error"
-                  class="input input-sm w-full rounded border border-base-300 bg-base-100"
-                />
-              </div>
-
-              <div class="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  data-role="cancel-correction"
-                  phx-click="cancel_correction"
-                  class="btn btn-ghost btn-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  data-role="submit-correction"
-                  class="btn btn-primary btn-xs"
-                >
-                  Record correction
-                </button>
-              </div>
-            </form>
-          </div>
         </article>
       </div>
 
@@ -617,6 +526,97 @@ defmodule ThereishWeb.ChronicleLive do
   defp room_path(slug), do: ~p"/r/#{slug}"
 
   defp human_label(label), do: Thereish.Chronicle.FairnessTap.label_human(label)
+
+  defp participant_of?(_attempt, nil), do: false
+
+  defp participant_of?(attempt, seat) do
+    Enum.any?(attempt.bridges, &(&1.seat_id == seat.id))
+  end
+
+  defp current_opinion(attempt, {:participant, seat_id}) do
+    attempt
+    |> Map.get(:fairness_taps, [])
+    |> Enum.filter(&(&1[:source] != "admin" and &1.seat_id == seat_id))
+    |> List.last()
+    |> then(&(&1 && &1.label))
+  end
+
+  defp current_opinion(attempt, :admin) do
+    attempt
+    |> Map.get(:fairness_taps, [])
+    |> Enum.filter(&(&1[:source] == "admin"))
+    |> List.last()
+    |> then(&(&1 && &1.label))
+  end
+
+  attr :event, :string, required: true
+  attr :page_id, :string, required: true
+  attr :attempt, :integer, required: true
+  attr :current, :string, default: nil
+
+  defp opinion_row(assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-1.5">
+      <.opinion_button
+        event={@event}
+        page_id={@page_id}
+        attempt={@attempt}
+        label="too_harsh"
+        current={@current}
+      >
+        Too harsh
+      </.opinion_button>
+      <.opinion_button
+        event={@event}
+        page_id={@page_id}
+        attempt={@attempt}
+        label="fair"
+        current={@current}
+      >
+        Fair
+      </.opinion_button>
+      <.opinion_button
+        event={@event}
+        page_id={@page_id}
+        attempt={@attempt}
+        label="too_kind"
+        current={@current}
+      >
+        Too kind
+      </.opinion_button>
+    </div>
+    """
+  end
+
+  attr :event, :string, required: true
+  attr :page_id, :string, required: true
+  attr :attempt, :integer, required: true
+  attr :label, :string, required: true
+  attr :current, :string, default: nil
+  slot :inner_block, required: true
+
+  defp opinion_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      phx-click={@event}
+      phx-value-page-id={@page_id}
+      phx-value-attempt={@attempt}
+      phx-value-label={@label}
+      data-role={"tap-#{String.replace(@label, "_", "-")}"}
+      data-tap={@label}
+      class={[
+        "btn btn-xs font-medium",
+        if(@current == @label,
+          do: "btn-primary font-bold",
+          else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+        )
+      ]}
+    >
+      {render_slot(@inner_block)}
+    </button>
+    """
+  end
 
   defp page_track(page), do: Chronicle.page_track(page)
   defp page_vamp(page), do: Chronicle.page_vamp(page)

@@ -227,13 +227,16 @@ defmodule Thereish.ScribeTest do
       [stored] = Chronicle.pages(room_id(ctx.slug))
 
       {:ok, _} =
-        Chronicle.record_correction(room_id(ctx.slug), %{
+        %Thereish.Chronicle.Correction{}
+        |> Thereish.Chronicle.Correction.changeset(%{
+          room_id: room_id(ctx.slug),
           page_id: stored.id,
           seat_id: ctx.mara.id,
           target: "recap",
           original_value: recap.recap,
           corrected_value: "We both wrote cairn, near enough."
         })
+        |> Repo.insert()
 
       assert [page] = Chronicle.book(ctx.slug)
       assert page.recap.recap == "We both wrote cairn, near enough."

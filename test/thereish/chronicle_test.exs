@@ -41,6 +41,14 @@ defmodule Thereish.ChronicleTest do
     Chronicle.pages(Repo.get_by!(Room, slug: slug).id)
   end
 
+  defp insert_historical_correction(room_id, attrs) do
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    %Thereish.Chronicle.Correction{}
+    |> Thereish.Chronicle.Correction.changeset(attrs)
+    |> Repo.insert()
+  end
+
   defp record_completed_outcomes(room_id, experiment_id, count, opts \\ []) when count > 0 do
     arm = Keyword.get(opts, :arm, default_experiment_arm(experiment_id))
 
@@ -326,7 +334,7 @@ defmodule Thereish.ChronicleTest do
         note: "Typo on phone keyboard"
       }
 
-      assert {:ok, correction} = Chronicle.record_correction(page.room_id, correction_attrs)
+      assert {:ok, correction} = insert_historical_correction(page.room_id, correction_attrs)
       assert correction.page_id == page.id
       assert correction.target == "bridge"
       assert correction.original_value == "cairns"
@@ -378,9 +386,9 @@ defmodule Thereish.ChronicleTest do
           couple_reasoning: "We both saw water in the desert"
         })
 
-      # Record a correction on page 1
+      # Historical correction on page 1 — writes are retired, the row remains readable
       {:ok, _correction} =
-        Chronicle.record_correction(room.id, %{
+        insert_historical_correction(room.id, %{
           page_id: p1.id,
           seat_id: ctx.jacob.id,
           attempt_number: 1,
@@ -446,9 +454,8 @@ defmodule Thereish.ChronicleTest do
           couple_reasoning: "We both saw water in the desert"
         })
 
-      # Record a correction
       {:ok, _correction} =
-        Chronicle.record_correction(room.id, %{
+        insert_historical_correction(room.id, %{
           page_id: p1.id,
           seat_id: ctx.jacob.id,
           attempt_number: 1,
@@ -2263,6 +2270,272 @@ defmodule Thereish.ChronicleTest do
 
       markdown = Thereish.Chronicle.Markdown.render(room.id)
       assert markdown =~ "/media/masks/mask-mara.png"
+    end
+  end
+
+  describe "historical feedback without rewriting play (ticket 11, #142)" do
+    test "an original participant can mark an Attempt they played too harsh", ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.book(room.id)
+      [attempt] = page.attempts
+
+      assert {:ok, opinion} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "too_harsh",
+                 as: {:participant, ctx.mara.id}
+               })
+
+      assert opinion.label == "too_harsh"
+      assert opinion.seat_id == ctx.mara.id
+      assert opinion.source == "participant"
+
+      [page_view] = Chronicle.book(room.id)
+      [attempt_view] = page_view.attempts
+      labels = Enum.map(attempt_view.fairness_taps, &{&1.reviewer_name, &1.label, &1.source})
+      assert {"Mara", "too_harsh", "participant"} in labels
+    end
+
+    test "a Seat that did not play the Attempt cannot submit participant feedback", ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.book(room.id)
+      [attempt] = page.attempts
+
+      outsider_slug = open_room()
+      {:ok, outsider} = Rooms.join(outsider_slug, "Ada", device_token())
+
+      assert {:error, :not_a_participant} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "fair",
+                 as: {:participant, outsider.id}
+               })
+
+      assert Chronicle.fairness_taps(room.id) == []
+    end
+
+    test "updating an opinion appends history rather than replacing it", ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.book(room.id)
+      [attempt] = page.attempts
+
+      assert {:ok, first} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "fair",
+                 as: {:participant, ctx.mara.id}
+               })
+
+      assert {:ok, second} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "too_kind",
+                 as: {:participant, ctx.mara.id}
+               })
+
+      taps = Chronicle.fairness_taps(room.id)
+      assert Enum.map(taps, & &1.id) == [first.id, second.id]
+      assert Enum.map(taps, & &1.label) == ["fair", "too_kind"]
+
+      [page_view] = Chronicle.book(room.id)
+      [attempt_view] = page_view.attempts
+      assert Enum.map(attempt_view.fairness_taps, & &1.label) == ["fair", "too_kind"]
+    end
+
+    test "the authenticated admin's review is attributed separately from participant opinions",
+         ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.book(room.id)
+      [attempt] = page.attempts
+      admin = Thereish.AdminFixtures.identity()
+
+      assert {:ok, _} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "fair",
+                 as: {:participant, ctx.mara.id}
+               })
+
+      assert {:ok, admin_review} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "too_kind",
+                 as: {:admin, admin.id}
+               })
+
+      assert admin_review.source == "admin"
+      assert admin_review.admin_id == admin.id
+      assert admin_review.seat_id == nil
+
+      [page_view] = Chronicle.book(room.id)
+      [attempt_view] = page_view.attempts
+
+      by_source =
+        Map.new(attempt_view.fairness_taps, &{{&1.source, &1.reviewer_name}, &1.label})
+
+      assert by_source[{"participant", "Mara"}] == "fair"
+      assert by_source[{"admin", "Admin"}] == "too_kind"
+      assert Enum.find(attempt_view.fairness_taps, &(&1.source == "admin")).seat_name == nil
+
+      calibration = Chronicle.calibration_dataset(room.id)
+      assert length(calibration) == 1
+      assert hd(calibration).seat_name == "Mara"
+      refute Map.has_key?(hd(calibration), :source)
+    end
+
+    test "an unrelated visitor cannot submit or replace participant feedback", ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.book(room.id)
+      [attempt] = page.attempts
+
+      assert {:ok, original} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "fair",
+                 as: {:participant, ctx.mara.id}
+               })
+
+      assert {:error, :not_a_participant} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "too_harsh",
+                 as: {:participant, Ecto.UUID.generate()}
+               })
+
+      assert {:error, :not_a_participant} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "too_harsh",
+                 as: :visitor
+               })
+
+      assert {:error, :not_admin} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: attempt.number,
+                 label: "too_kind",
+                 as: {:admin, Ecto.UUID.generate()}
+               })
+
+      assert [saved] = Chronicle.fairness_taps(room.id)
+      assert saved.id == original.id
+      assert saved.label == "fair"
+    end
+
+    test "an opinion on an overruled Attempt evaluates the original grade and leaves the record untouched",
+         ctx do
+      play(ctx, "cairn", "beacon")
+      :ok = Rooms.propose_overrule(ctx.slug, ctx.mara.id)
+      :ok = Rooms.agree_overrule(ctx.slug, ctx.jacob.id)
+
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.pages(room.id)
+      [attempt] = page.attempts
+      [verdict] = attempt.verdicts
+      [overrule] = Chronicle.overrules(room.id)
+
+      assert overrule.machine_closeness == 0
+      assert overrule.couple_closeness == 90
+      assert verdict.closeness == 90
+
+      precedents_before =
+        Steward.Precedent
+        |> Repo.all()
+        |> Enum.map(&{&1.id, &1.key, &1.closeness, &1.reasoning})
+
+      refute precedents_before == []
+
+      verdict_before = {verdict.id, verdict.closeness, verdict.overruled, verdict.reasoning}
+      overrule_before = {overrule.id, overrule.machine_closeness, overrule.couple_closeness}
+
+      assert {:ok, opinion} =
+               Chronicle.record_opinion(room.id, %{
+                 page_id: page.id,
+                 attempt_number: 1,
+                 label: "too_harsh",
+                 as: {:participant, ctx.mara.id}
+               })
+
+      assert opinion.closeness == 0
+      assert opinion.grade == 0
+
+      fresh_verdict = Repo.get!(Thereish.Chronicle.Verdict, verdict.id)
+
+      assert {fresh_verdict.id, fresh_verdict.closeness, fresh_verdict.overruled,
+              fresh_verdict.reasoning} ==
+               verdict_before
+
+      [fresh_overrule] = Chronicle.overrules(room.id)
+
+      assert {fresh_overrule.id, fresh_overrule.machine_closeness,
+              fresh_overrule.couple_closeness} ==
+               overrule_before
+
+      precedents_after =
+        Steward.Precedent
+        |> Repo.all()
+        |> Enum.map(&{&1.id, &1.key, &1.closeness, &1.reasoning})
+
+      assert precedents_after == precedents_before
+    end
+
+    test "correction writes are rejected while historical corrections remain readable", ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.pages(room.id)
+
+      assert {:error, :corrections_retired} =
+               Chronicle.record_correction(room.id, %{
+                 page_id: page.id,
+                 seat_id: ctx.jacob.id,
+                 attempt_number: 1,
+                 target: "bridge",
+                 original_value: "cairns",
+                 corrected_value: "cairn",
+                 note: "Typo on phone keyboard"
+               })
+
+      assert Chronicle.corrections(room.id) == []
+
+      {:ok, historical} =
+        %Thereish.Chronicle.Correction{}
+        |> Thereish.Chronicle.Correction.changeset(%{
+          room_id: room.id,
+          page_id: page.id,
+          seat_id: ctx.jacob.id,
+          attempt_number: 1,
+          target: "bridge",
+          original_value: "cairns",
+          corrected_value: "cairn",
+          note: "Phone autocorrect"
+        })
+        |> Repo.insert()
+
+      assert [saved] = Chronicle.corrections(room.id)
+      assert saved.id == historical.id
+
+      [book] = Chronicle.book(room.id)
+      jacob_bridge = Enum.find(hd(book.attempts).bridges, &(&1.seat_name == "Jacob"))
+      assert jacob_bridge.bridge == "cairn"
+      assert jacob_bridge.original_bridge == "cairns"
+      assert jacob_bridge.corrected? == true
+      assert [c] = book.corrections
+      assert c.corrected_value == "cairn"
+      assert c.author_name == "Jacob"
     end
   end
 

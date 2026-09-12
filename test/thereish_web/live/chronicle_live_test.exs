@@ -80,34 +80,34 @@ defmodule ThereishWeb.ChronicleLiveTest do
       refute has_element?(view, "[data-role=recap]")
     end
 
-    test "is the players' to rewrite, like everything else in the book",
+    test "a historical recap correction still reads over the Scribe, without a correction form",
          %{conn: conn, slug: slug} = ctx do
       play(ctx, "cairn", "cairns")
       await_recap(slug)
+      [page] = Chronicle.book(slug)
+      room = Repo.get_by!(Room, slug: slug)
+
+      {:ok, _} =
+        %Thereish.Chronicle.Correction{}
+        |> Thereish.Chronicle.Correction.changeset(%{
+          room_id: room.id,
+          page_id: page.id,
+          seat_id: ctx.mara.id,
+          target: "recap",
+          original_value: page.recap.recap,
+          corrected_value: "We both wrote cairn, near enough, and went to bed.",
+          note: "The Scribe missed the point"
+        })
+        |> Repo.insert()
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
-      [page] = Chronicle.book(slug)
-
-      view
-      |> element(~s([data-role=open-correction][data-page-id="#{page.id}"]))
-      |> render_click()
-
-      view
-      |> form(~s(form[data-role=correction-form]), %{
-        "correction" => %{
-          "attempt_number" => "",
-          "target" => "recap",
-          "original_value" => page.recap.recap,
-          "corrected_value" => "We both wrote cairn, near enough, and went to bed.",
-          "note" => "The Scribe missed the point"
-        }
-      })
-      |> render_submit()
 
       assert render(element(view, "[data-role=recap-prose]")) =~
                "We both wrote cairn, near enough"
 
       assert render(view) =~ "The Scribe missed the point"
+      refute has_element?(view, "[data-role=open-correction]")
+      refute has_element?(view, "[data-role=correction-form]")
     end
 
     test "arrives on a book that is already open", %{conn: conn, slug: slug} = ctx do
@@ -265,14 +265,13 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert html =~ "The seagull is having its own evening."
     end
 
-    test "shows overrules and player corrections, and allows recording an edit",
+    test "shows overrules and historical corrections without a correction form",
          %{conn: conn, slug: slug} = ctx do
       play(ctx, "cairn", "cairns")
 
       room = Repo.get_by!(Room, slug: slug)
       [page] = Chronicle.pages(room.id)
 
-      # Record an overrule
       {:ok, _overrule} =
         Chronicle.record_overrule(room.id, %{
           page_id: page.id,
@@ -287,47 +286,31 @@ defmodule ThereishWeb.ChronicleLiveTest do
           couple_reasoning: "Deep meld in our hearts"
         })
 
+      {:ok, _} =
+        %Thereish.Chronicle.Correction{}
+        |> Thereish.Chronicle.Correction.changeset(%{
+          room_id: room.id,
+          page_id: page.id,
+          seat_id: ctx.jacob.id,
+          attempt_number: 1,
+          target: "bridge",
+          original_value: "cairns",
+          corrected_value: "cairn",
+          note: "Fixed spelling on phone"
+        })
+        |> Repo.insert()
+
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
 
-      # Overrule is shown
       assert has_element?(view, "[data-role=overrule]")
       assert render(view) =~ "Deep meld in our hearts"
-
-      # Open correction form
-      assert has_element?(view, ~s([data-role=open-correction][data-page-id="#{page.id}"]))
-
-      view
-      |> element(~s([data-role=open-correction][data-page-id="#{page.id}"]))
-      |> render_click()
-
-      assert has_element?(view, ~s(form[data-role=correction-form]))
-
-      # Submit correction
-      view
-      |> form(~s(form[data-role=correction-form]), %{
-        "correction" => %{
-          "attempt_number" => "1",
-          "target" => "bridge",
-          "original_value" => "cairns",
-          "corrected_value" => "cairn",
-          "note" => "Fixed spelling on phone"
-        }
-      })
-      |> render_submit()
-
-      # Form is closed and correction is visible
-      refute has_element?(view, ~s(form[data-role=correction-form]))
+      assert has_element?(view, "[data-role=corrections]")
       rendered = render(view)
       assert rendered =~ "Fixed spelling on phone"
       assert rendered =~ "cairn"
       assert rendered =~ "(cairns)"
-
-      # Database verifies it appended rather than mutating
-      assert [correction] = Chronicle.corrections(room.id)
-      assert correction.page_id == page.id
-      assert correction.attempt_number == 1
-      assert correction.corrected_value == "cairn"
-      assert correction.original_value == "cairns"
+      refute has_element?(view, "[data-role=open-correction]")
+      refute has_element?(view, "[data-role=correction-form]")
     end
 
     test "shows fairness taps alongside the page and attempt they judge",
@@ -816,6 +799,181 @@ defmodule ThereishWeb.ChronicleLiveTest do
       {:ok, view, _html} = live(build_conn(), ~p"/r/#{slug}/chronicle")
 
       assert has_element?(view, "header a[href='/']", "Thereish")
+    end
+  end
+
+  describe "historical feedback without rewriting play (ticket 11, #142)" do
+    test "an original participant can submit and update their opinion from the Chronicle" do
+      slug = open_room()
+      mara_token = device_token()
+      jacob_token = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", mara_token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", jacob_token)
+
+      play(%{slug: slug, mara: mara, jacob: jacob}, "cairn", "cairns")
+      [page] = Chronicle.book(slug)
+
+      conn = init_test_session(build_conn(), %{"device_token" => mara_token})
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=opinion-controls]")
+      refute has_element?(view, "[data-role=admin-review-controls]")
+
+      view
+      |> element(~s([data-role=opinion-controls] [data-role=tap-too-harsh]))
+      |> render_click()
+
+      assert has_element?(view, "[data-role=fairness-tap-entry]", "Mara: too harsh")
+
+      view
+      |> element(~s([data-role=opinion-controls] [data-role=tap-fair]))
+      |> render_click()
+
+      rendered = render(view)
+      assert rendered =~ "Mara: too harsh"
+      assert rendered =~ "Mara: fair"
+
+      taps = Chronicle.fairness_taps(Repo.get_by!(Room, slug: slug).id)
+      assert Enum.map(taps, & &1.label) == ["too_harsh", "fair"]
+      assert Enum.all?(taps, &(&1.seat_id == mara.id))
+      assert page.id == hd(Chronicle.book(slug)).id
+    end
+
+    test "a visitor without a Seat cannot submit participant feedback", %{conn: conn} = ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      [page] = Chronicle.book(room.id)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{ctx.slug}/chronicle")
+
+      refute has_element?(view, "[data-role=opinion-controls]")
+      refute has_element?(view, "[data-role=admin-review-controls]")
+
+      render_click(view, "record_opinion", %{
+        "page-id" => page.id,
+        "attempt" => "1",
+        "label" => "too_harsh"
+      })
+
+      assert Chronicle.fairness_taps(room.id) == []
+    end
+
+    test "a Seat cannot replace another participant's opinion" do
+      slug = open_room()
+      mara_token = device_token()
+      jacob_token = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", mara_token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", jacob_token)
+      play(%{slug: slug, mara: mara, jacob: jacob}, "cairn", "cairns")
+
+      mara_conn = init_test_session(build_conn(), %{"device_token" => mara_token})
+      {:ok, mara_view, _} = live(mara_conn, ~p"/r/#{slug}/chronicle")
+
+      mara_view
+      |> element(~s([data-role=opinion-controls] [data-role=tap-fair]))
+      |> render_click()
+
+      jacob_conn = init_test_session(build_conn(), %{"device_token" => jacob_token})
+      {:ok, jacob_view, _} = live(jacob_conn, ~p"/r/#{slug}/chronicle")
+
+      jacob_view
+      |> element(~s([data-role=opinion-controls] [data-role=tap-too-kind]))
+      |> render_click()
+
+      room = Repo.get_by!(Room, slug: slug)
+      taps = Chronicle.fairness_taps(room.id)
+      assert Enum.find(taps, &(&1.seat_id == mara.id)).label == "fair"
+      assert Enum.find(taps, &(&1.seat_id == jacob.id)).label == "too_kind"
+    end
+
+    test "the authenticated admin can review any Attempt with distinct attribution", ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      conn = log_in_admin(build_conn())
+      {:ok, view, _html} = live(conn, ~p"/r/#{ctx.slug}/chronicle")
+
+      refute has_element?(view, "[data-role=opinion-controls]")
+      assert has_element?(view, "[data-role=admin-review-controls]")
+
+      view
+      |> element(~s([data-role=admin-review-controls] [data-role=tap-too-kind]))
+      |> render_click()
+
+      assert has_element?(view, "[data-role=admin-review]", "Admin: too kind")
+
+      [tap] = Chronicle.fairness_taps(room.id)
+      assert tap.source == "admin"
+      assert tap.seat_id == nil
+      assert tap.label == "too_kind"
+    end
+
+    test "an overruled Attempt can be reviewed without changing the Verdict or Precedent" do
+      slug = open_room()
+      mara_token = device_token()
+      jacob_token = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", mara_token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", jacob_token)
+      play(%{slug: slug, mara: mara, jacob: jacob}, "cairn", "beacon")
+      :ok = Rooms.propose_overrule(slug, mara.id)
+      :ok = Rooms.agree_overrule(slug, jacob.id)
+
+      room = Repo.get_by!(Room, slug: slug)
+      [page] = Chronicle.pages(room.id)
+      [attempt] = page.attempts
+      [verdict] = attempt.verdicts
+      verdict_before = {verdict.id, verdict.closeness, verdict.overruled}
+
+      precedents_before =
+        Thereish.Steward.Precedent
+        |> Repo.all()
+        |> Enum.map(&{&1.id, &1.key, &1.closeness})
+
+      conn = init_test_session(build_conn(), %{"device_token" => mara_token})
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(view, "[data-role=overrule]")
+
+      view
+      |> element(~s([data-role=opinion-controls] [data-role=tap-too-harsh]))
+      |> render_click()
+
+      assert has_element?(view, "[data-role=fairness-tap-entry]", "Mara: too harsh")
+      assert has_element?(view, "[data-role=overrule]")
+
+      [tap] = Chronicle.fairness_taps(room.id)
+      assert tap.label == "too_harsh"
+      assert tap.closeness == 0
+
+      fresh = Repo.get!(Thereish.Chronicle.Verdict, verdict.id)
+      assert {fresh.id, fresh.closeness, fresh.overruled} == verdict_before
+
+      precedents_after =
+        Thereish.Steward.Precedent
+        |> Repo.all()
+        |> Enum.map(&{&1.id, &1.key, &1.closeness})
+
+      assert precedents_after == precedents_before
+    end
+
+    test "an obsolete correction event does not write", %{conn: conn} = ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{ctx.slug}/chronicle")
+
+      render_click(view, "record_correction", %{
+        "correction" => %{
+          "attempt_number" => "1",
+          "target" => "bridge",
+          "original_value" => "cairns",
+          "corrected_value" => "cairn",
+          "note" => "stale client"
+        }
+      })
+
+      assert Chronicle.corrections(room.id) == []
+      refute has_element?(view, "[data-role=correction-form]")
     end
   end
 end
