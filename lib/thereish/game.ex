@@ -22,10 +22,11 @@ defmodule Thereish.Game do
 
   ## A Page is a ladder of attempts, not one shot
 
-  A miss does not end the Page. The two Bridges the Assayer names as landing
-  furthest apart become the next attempt's Bookends — Medium's carry-forward
-  rule — so the words the couple reach for narrow towards each other and a
-  missed Page converges rather than collapsing. After `attempt_cap/0` tries the Page closes
+  A miss does not end the Page. Carry-forward still takes the two Bridges the
+  Assayer named as furthest apart — Medium's rule, and the two-Bookend rule
+  when Full table is off. At a Full table the first Attempt already has one
+  Bookend per Seat on the Page (ADR-0016); carrying every Seat's Bridge after a
+  miss is the rest of that rule. After `attempt_cap/0` tries the Page closes
   unmelded, and a Meld closes it the moment it lands.
 
   ## Phase is derived, never stored
@@ -70,7 +71,8 @@ defmodule Thereish.Game do
     page_seat_ids: nil,
     track: nil,
     track_held_over: false,
-    masks: %{}
+    masks: %{},
+    full_table: true
   ]
 
   @type seat :: %{
@@ -133,7 +135,8 @@ defmodule Thereish.Game do
           page_seat_ids: [String.t()] | nil,
           track: map() | nil,
           track_held_over: boolean(),
-          masks: %{String.t() => term()}
+          masks: %{String.t() => term()},
+          full_table: boolean()
         }
 
   @type viewer :: String.t() | nil
@@ -202,7 +205,7 @@ defmodule Thereish.Game do
   """
   @type effect ::
           :beat
-          | {:author, %{gives: [map()]}}
+          | {:author, %{gives: [map()], count: pos_integer()}}
           | {:assay, %{bookends: [String.t()], bridges: [String.t()]}}
           | {:chronicle, map()}
           | {:overrule, map()}
@@ -256,6 +259,13 @@ defmodule Thereish.Game do
     track = normalize_track(Keyword.get(opts, :track))
     track_held_over = not is_nil(track) and is_nil(page)
 
+    full_table =
+      cond do
+        Keyword.has_key?(opts, :full_table) -> Keyword.get(opts, :full_table)
+        is_map(page) -> page_full_table(page, true)
+        true -> true
+      end
+
     %__MODULE__{
       seat_limit: seat_limit,
       seats: seats,
@@ -267,7 +277,8 @@ defmodule Thereish.Game do
       page_seat_ids: page_seat_ids,
       track: track,
       track_held_over: track_held_over,
-      masks: %{}
+      masks: %{},
+      full_table: full_table == true
     }
   end
 
@@ -426,7 +437,7 @@ defmodule Thereish.Game do
           bookends: bookends,
           gives: state.gives,
           meta: meta,
-          full_table: page_full_table(attrs)
+          full_table: page_full_table(attrs, state.full_table)
         }
 
         {:ok,
@@ -784,7 +795,6 @@ defmodule Thereish.Game do
       page_give: state.page && (state.page[:give] || state.page["give"]),
       page_chapter: state.page && (state.page[:chapter] || state.page["chapter"]),
       page_theme: state.page && (state.page[:theme] || state.page["theme"]),
-      full_table: page_full_table(state.page),
       your_give: Map.get(state.gives, viewer),
       your_last_give: Map.get(state.last_gives, viewer),
       your_mask: if(viewer, do: Map.get(state.masks || %{}, viewer)),
@@ -811,7 +821,8 @@ defmodule Thereish.Game do
       bookends_taps: state.bookends_taps || %{},
       barred_words: if(phase != :waiting, do: barred_words(state)),
       track: track_view(state),
-      gives: if(phase in [:reveal, :closed] or state.played != [], do: gives_view(state))
+      gives: if(phase in [:reveal, :closed] or state.played != [], do: gives_view(state)),
+      full_table: page_full_table(state.page, state.full_table)
     }
   end
 
@@ -847,13 +858,30 @@ defmodule Thereish.Game do
     seat_ids = state.page_seat_ids || Enum.map(state.seats, & &1.id)
     participating = Enum.filter(state.seats, &(&1.id in seat_ids))
 
-    %{
-      gives:
-        Enum.map(participating, fn s ->
-          %{seat_id: s.id, name: s.name, text: state.gives[s.id], give: state.gives[s.id]}
-        end)
-    }
+    gives =
+      Enum.map(participating, fn s ->
+        %{seat_id: s.id, name: s.name, text: state.gives[s.id], give: state.gives[s.id]}
+      end)
+
+    %{gives: gives, count: bookend_count(state, participating)}
   end
+
+  defp bookend_count(%{full_table: false}, _seats), do: 2
+  defp bookend_count(_state, seats), do: length(seats)
+
+  # A Page keeps the rule it was written under. Omitted or missing (Pages from
+  # before the rule, or a Room that has not written one yet) reads as the
+  # Room's current rule, default on.
+  defp page_full_table(attrs, default \\ true)
+
+  defp page_full_table(attrs, default) when is_map(attrs) do
+    case Map.get(attrs, :full_table, Map.get(attrs, "full_table", default)) do
+      false -> false
+      _ -> true
+    end
+  end
+
+  defp page_full_table(_, default), do: default == true
 
   # The last Bridge in is the moment the Page turns: the Assayer is asked once,
   # about every Bridge together, and the beat starts alongside rather than
@@ -871,17 +899,6 @@ defmodule Thereish.Game do
   # typing their name.
   defp bookends(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
   defp bookends(state, _phase), do: state.bookends
-
-  # A Page keeps the rule it was written under. Omitted or missing (Pages from
-  # before the rule, or a Room that has not written one yet) reads as on.
-  defp page_full_table(attrs) when is_map(attrs) do
-    case Map.get(attrs, :full_table, Map.get(attrs, "full_table", true)) do
-      false -> false
-      _ -> true
-    end
-  end
-
-  defp page_full_table(_), do: true
 
   # The Bridges go in roster order, the order the reveal puts them in, so that
   # the sentence the Assayer writes, the joke it makes and the two words it

@@ -82,7 +82,9 @@ defmodule Thereish.Rooms.Server do
     # a Room to bring into being.
     with %{} = room <- Store.get_room(slug) do
       seats = Store.list_seats(room.id)
-      game = Game.init(seat_limit: room.seat_limit, seats: seats)
+
+      game =
+        Game.init(seat_limit: room.seat_limit, seats: seats, full_table: room.full_table)
 
       eligible_members = Thereish.Foley.Repertoire.members(room.id)
       wait_music = Thereish.Foley.Repertoire.draw(eligible_members)
@@ -373,7 +375,8 @@ defmodule Thereish.Rooms.Server do
   def handle_call({:set_full_table, enabled}, _from, state) do
     case Store.update_room(state.room, %{full_table: enabled}) do
       {:ok, room} ->
-        state = %{state | room: room}
+        game = %{state.game | full_table: enabled == true}
+        state = %{state | room: room, game: game}
         broadcast(state.room.slug)
         {:reply, :ok, state}
 
