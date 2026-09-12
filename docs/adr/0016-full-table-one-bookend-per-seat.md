@@ -18,4 +18,6 @@ Sides were already retired (ADR-0015), so this rule is one table. The group as a
 
 ## Consequences
 
+Amendment (2026-09-12, [issue #126](https://github.com/JacobStephens2/thereish/issues/126)): Rooms must accommodate eight Seats. The six-Seat layout assumption above no longer sets the capacity; Full table still means one Bookend per Seat. Room rules move into a settings modal as the controls have grown, with Voice and a simple sound control remaining immediately available.
+
 The glossary's Bookends become "two or more", and Full table is defined. The Author's interface gains one fact, the count of Bookends wanted, and its gate checks that count. The Assayer's prompt bumps (assay-4) to read N Bookends, orphaning cached Precedents once; the Precedent key already treats Bookends and Bridges as sets, so N of each needs nothing more. Two-Seat play is unchanged by this rule; two-Seat difficulty is issue #115. Whether phones should hide the Bookends under a Stage is filed separately.
