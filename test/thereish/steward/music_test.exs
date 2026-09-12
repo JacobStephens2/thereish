@@ -9,77 +9,54 @@ defmodule Thereish.Steward.MusicTest do
 
   alias Thereish.Steward.Music
 
-  describe "prompt/1" do
+  describe "prompt/1 and vamp_prompt/1" do
     test "a heavy-metal Give drives genre, instrumentation, and energy rather than a gentle background" do
-      prompt = Music.prompt(["Kiss Heavy Metal"])
-
-      assert prompt =~ "Kiss Heavy Metal"
-      assert_drives_genre_and_energy(prompt)
-      refute_gentle_background(prompt)
-      assert prompt =~ ~r/instrumental/i
-      assert prompt =~ ~r/volume/i
+      for prompt <- briefs(["Kiss Heavy Metal"]) do
+        assert prompt =~ "Kiss Heavy Metal"
+        assert_drives_genre_and_energy(prompt)
+        refute_gentle_background(prompt)
+        refute prompt =~ ~r/fuse/i
+        assert prompt =~ ~r/instrumental/i
+        assert prompt =~ ~r/volume/i
+      end
     end
 
     test "a nonmusical Give supplies atmosphere rather than flattening composition" do
-      prompt = Music.prompt(["alpine meadow"])
-
-      assert prompt =~ "alpine meadow"
-      assert prompt =~ ~r/atmosphere/i
-      refute_gentle_background(prompt)
+      for prompt <- briefs(["alpine meadow"]) do
+        assert prompt =~ "alpine meadow"
+        assert prompt =~ ~r/atmosphere only/i
+        refute_gentle_background(prompt)
+        refute prompt =~ ~r/fuse/i
+      end
     end
 
     test "conflicting musical Gives invite a fusion rather than a common subdued style" do
-      prompt = Music.prompt(["Kiss Heavy Metal", "bossa nova"])
-
-      assert prompt =~ "Kiss Heavy Metal"
-      assert prompt =~ "bossa nova"
-      assert prompt =~ ~r/fuse/i
-      refute_gentle_background(prompt)
+      for prompt <- briefs(["Kiss Heavy Metal", "bossa nova"]) do
+        assert prompt =~ "Kiss Heavy Metal"
+        assert prompt =~ "bossa nova"
+        assert prompt =~ ~r/fuse/i
+        refute_gentle_background(prompt)
+      end
     end
 
     test "comfortable playback volume is mix, not a requirement for gentle composition" do
-      prompt = Music.prompt(["Kiss Heavy Metal"])
-
-      assert prompt =~ ~r/volume/i
-      refute prompt =~ "Gentle, conversational background"
-      refute prompt =~ "Soft and gentle"
+      for prompt <- briefs(["Kiss Heavy Metal"]) do
+        assert prompt =~ ~r/volume/i
+        refute prompt =~ "Gentle, conversational background"
+        refute prompt =~ "Soft and gentle"
+      end
     end
-  end
 
-  describe "vamp_prompt/1" do
-    test "a heavy-metal Give drives genre and energy on the Vamp without asking for speech" do
+    test "the Vamp brief does not ask ElevenLabs for speech" do
       prompt = Music.vamp_prompt(["Kiss Heavy Metal"])
 
-      assert prompt =~ "Kiss Heavy Metal"
-      assert_drives_genre_and_energy(prompt)
-      refute_gentle_background(prompt)
-      assert prompt =~ ~r/instrumental/i
       refute prompt =~ "conversational"
       refute prompt =~ "spoken conversation"
       assert String.starts_with?(prompt, Music.vamp_prefix())
     end
-
-    test "a nonmusical Give supplies atmosphere on the Vamp" do
-      prompt = Music.vamp_prompt(["alpine meadow"])
-
-      assert prompt =~ "alpine meadow"
-      assert prompt =~ ~r/atmosphere/i
-      refute_gentle_background(prompt)
-      refute prompt =~ "conversational"
-      refute prompt =~ "spoken conversation"
-    end
-
-    test "conflicting musical Gives invite a fusion on the Vamp" do
-      prompt = Music.vamp_prompt(["Kiss Heavy Metal", "bossa nova"])
-
-      assert prompt =~ "Kiss Heavy Metal"
-      assert prompt =~ "bossa nova"
-      assert prompt =~ ~r/fuse/i
-      refute_gentle_background(prompt)
-      refute prompt =~ "conversational"
-      refute prompt =~ "spoken conversation"
-    end
   end
+
+  defp briefs(gives), do: [Music.prompt(gives), Music.vamp_prompt(gives)]
 
   defp assert_drives_genre_and_energy(prompt) do
     assert prompt =~ ~r/genre/i

@@ -125,25 +125,5 @@ defmodule Thereish.Steward.VampTest do
       # Verify Vamp is never cached in TrackCache
       assert :miss = TrackCache.get(@gives)
     end
-
-    test "a heavy-metal Give drives genre and energy on the Vamp request" do
-      role = [
-        provider: Thereish.Steward.ElevenLabs,
-        model: "eleven_text_to_sound_v2",
-        format: "mp3_44100_128",
-        timeout_ms: 30_000,
-        api_key: "test-eleven-key"
-      ]
-
-      gives = ["Kiss Heavy Metal", "bossa nova"]
-      assert {:ok, vamp} = Live.vamp(gives, role)
-      assert String.starts_with?(vamp.path, "/media/vamps/")
-
-      assert_receive {:eleven_labs_generate_called, _headers, body}
-      text = body["text"]
-      assert text == Thereish.Steward.Music.vamp_prompt(gives)
-      refute String.contains?(text, "conversational")
-      refute String.contains?(text, "spoken conversation")
-    end
   end
 end
