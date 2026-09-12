@@ -2165,6 +2165,136 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
     end
 
+    test "opening Attempt announces Bookends when a Speaker is already held, without blocking Bridges" do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      Rooms.subscribe(slug)
+      :ok = Rooms.claim_speaker(slug, token_a)
+
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      view = await_phase(slug, :bridging)
+
+      assert is_list(view.bookends) and view.bookends != []
+      assert :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+
+      assert_receive {:bookends_ready, 1}, 2000
+      assert {:ok, audio, :mp3} = Rooms.voice_audio(slug, 1, :bookends)
+      assert is_binary(audio) and byte_size(audio) > 0
+      assert {:error, :not_found} = Rooms.voice_audio(slug, 1, :verdict)
+    end
+
+    test "claiming the Speaker during bridging announces Bookends and still accepts a Bridge",
+         ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_recipient, self()))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.phase == :bridging
+      line = Enum.join(view.bookends, ". ")
+
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+
+      assert_receive {:bookends_ready, 1}, 2000
+      assert_receive {:fake_speak, ^line}, 2000
+      assert {:ok, audio, :mp3} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+      assert is_binary(audio) and byte_size(audio) > 0
+    end
+
+    test "a later Attempt announces its Bookends on the Speaker", ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      view = await_phase(ctx.slug, :bridging)
+
+      assert_receive {:bookends_ready, 2}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 2, :bookends)
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "valley")
+      assert view.bookends != []
+    end
+
+    test "Bookends are not spoken when no speaker exists", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      refute_receive {:bookends_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+    end
+
+    test "failing Bookends synthesis is dropped and play continues", ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_mode, :unavailable))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      refute_receive {:bookends_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      view = await_reveal(ctx.slug)
+      assert view.phase in [:reveal, :closed]
+    end
+
+    test "late Bookends arriving after the next Attempt started are dropped", ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_delay_ms, 200))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :bridging)
+
+      Process.sleep(250)
+
+      refute_receive {:bookends_ready, 1}
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+    end
+
     test "when a speaker exists, broadcasts voice_ready and holds audio for attempt", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
@@ -2206,7 +2336,11 @@ defmodule Thereish.RoomsTest do
       end)
 
       Rooms.subscribe(ctx.slug)
+      opening = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      assert_receive {:fake_speak, opening_line}, 2000
+      assert opening_line == Enum.join(opening.bookends, ". ")
 
       # Attempt 1: quips is default on
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
@@ -2220,7 +2354,10 @@ defmodule Thereish.RoomsTest do
       # Attempt 2: turn quips off
       :ok = Rooms.set_quips(ctx.slug, false)
       :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
-      await_phase(ctx.slug, :bridging)
+      next_view = await_phase(ctx.slug, :bridging)
+
+      assert_receive {:fake_speak, next_line}, 2000
+      assert next_line == Enum.join(next_view.bookends, ". ")
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "valley")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "valley")

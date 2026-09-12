@@ -247,7 +247,11 @@ defmodule ThereishWeb.RoomLive do
   end
 
   def handle_info({:voice_ready, attempt}, socket) do
-    {:noreply, ThereishWeb.Foley.push_voice(socket, attempt)}
+    {:noreply, ThereishWeb.Foley.push_voice(socket, attempt, :verdict)}
+  end
+
+  def handle_info({:bookends_ready, attempt}, socket) do
+    {:noreply, ThereishWeb.Foley.push_voice(socket, attempt, :bookends)}
   end
 
   defp seat_for_device(slug, device_token) do

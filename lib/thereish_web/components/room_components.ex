@@ -1113,86 +1113,156 @@ defmodule ThereishWeb.RoomComponents do
 
     ~H"""
     <div class="flex flex-wrap items-center gap-3 text-xs opacity-80">
-      <label :if={@room[:speaker?]} class="flex items-center gap-1.5 cursor-pointer">
-        <input
-          id="voice-switch"
-          phx-hook=".VoiceSwitch"
-          type="checkbox"
-          data-role="voice-switch"
-          data-active="false"
-          class="checkbox checkbox-xs"
-        />
-        <span>Voice</span>
-      </label>
-      <label class="flex items-center gap-1.5 cursor-pointer">
-        <input
-          type="checkbox"
-          data-role="quips-switch"
-          data-active={to_string(Map.get(@room, :quips, true))}
-          checked={Map.get(@room, :quips, true)}
-          phx-click="toggle_quips"
-          class="checkbox checkbox-xs"
-        />
-        <span>Quips</span>
-      </label>
-      <label class="flex items-center gap-1.5 cursor-pointer">
-        <input
-          type="checkbox"
-          data-role="full-table-switch"
-          data-active={to_string(Map.get(@room, :full_table, true))}
-          checked={Map.get(@room, :full_table, true)}
-          phx-click="toggle_full_table"
-          class="checkbox checkbox-xs"
-        />
-        <span>Full table: one Bookend from every player's setting, and every bridge carries forward</span>
-      </label>
-      <p
-        :if={length(Map.get(@room, :seats, []) || []) == 2}
-        data-role="full-table-note"
-        class="opacity-70"
-      >
-        Matters from three Seats
-      </p>
-      <div data-role="music-control" class="join">
+      <div data-role="quick-sound" class="flex flex-wrap items-center gap-3">
+        <label :if={@room[:speaker?]} class="flex items-center gap-1.5 cursor-pointer">
+          <input
+            id="voice-switch"
+            phx-hook=".VoicePref"
+            type="checkbox"
+            data-role="voice-switch"
+            data-pref="foley:voice"
+            data-default="off"
+            data-kind="master"
+            data-active="false"
+            class="checkbox checkbox-xs"
+          />
+          <span>Voice</span>
+        </label>
         <button
-          :for={{mode, role, label} <- @music_options}
           type="button"
-          phx-click="set_music"
-          phx-value-music={mode}
-          data-role={role}
-          data-music={mode}
-          data-active={to_string(@current_music == mode)}
-          class={"btn btn-xs join-item " <> if(@current_music == mode, do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
+          data-role="settings-open"
+          class="btn btn-xs btn-ghost opacity-80 hover:opacity-100"
+          aria-haspopup="dialog"
+          aria-controls="room-settings"
+          onclick="document.getElementById('room-settings').showModal()"
         >
-          {label}
+          Settings
         </button>
       </div>
-      <button
-        :if={@room[:speaker?] and @room[:next?]}
-        type="button"
-        phx-click="next_music"
-        data-role="music-next"
-        class="btn btn-xs btn-ghost opacity-70 hover:opacity-100"
-      >
-        Next
-      </button>
-      <button
-        :if={@room[:speaker?] and @room[:never?]}
-        type="button"
-        phx-click="never_music"
-        data-role="music-never"
-        class="btn btn-xs btn-ghost opacity-70 hover:opacity-100"
-      >
-        Never
-      </button>
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".VoiceSwitch">
+    <dialog id="room-settings" data-role="settings-modal" class="modal">
+      <div class="modal-box max-w-sm space-y-4 text-sm">
+        <h3 class="text-base font-semibold">Settings</h3>
+        <div :if={@room[:speaker?]} class="flex flex-col gap-2">
+          <p class="text-xs uppercase tracking-wide opacity-60">Voice on this device</p>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input
+              id="voice-bookends-switch"
+              phx-hook=".VoicePref"
+              type="checkbox"
+              data-role="voice-bookends-switch"
+              data-pref="foley:voice-bookends"
+              data-default="on"
+              data-kind="bookends"
+              data-active="true"
+              class="checkbox checkbox-xs"
+            />
+            <span>Bookends</span>
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input
+              id="voice-verdict-switch"
+              phx-hook=".VoicePref"
+              type="checkbox"
+              data-role="voice-verdict-switch"
+              data-pref="foley:voice-verdict"
+              data-default="off"
+              data-kind="verdict"
+              data-active="false"
+              class="checkbox checkbox-xs"
+            />
+            <span>Verdict</span>
+          </label>
+        </div>
+        <div class="flex flex-col gap-2">
+          <p class="text-xs uppercase tracking-wide opacity-60">This Room</p>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              data-role="quips-switch"
+              data-active={to_string(Map.get(@room, :quips, true))}
+              checked={Map.get(@room, :quips, true)}
+              phx-click="toggle_quips"
+              class="checkbox checkbox-xs"
+            />
+            <span>Quips</span>
+          </label>
+          <label class="flex items-start gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              data-role="full-table-switch"
+              data-active={to_string(Map.get(@room, :full_table, true))}
+              checked={Map.get(@room, :full_table, true)}
+              phx-click="toggle_full_table"
+              class="checkbox checkbox-xs mt-0.5"
+            />
+            <span>Full table: one Bookend from every player's setting, and every bridge carries forward</span>
+          </label>
+          <p
+            :if={length(Map.get(@room, :seats, []) || []) == 2}
+            data-role="full-table-note"
+            class="opacity-70 pl-6 text-xs"
+          >
+            Matters from three Seats
+          </p>
+        </div>
+        <div class="flex flex-col gap-2">
+          <p class="text-xs uppercase tracking-wide opacity-60">Music</p>
+          <div data-role="music-control" class="join">
+            <button
+              :for={{mode, role, label} <- @music_options}
+              type="button"
+              phx-click="set_music"
+              phx-value-music={mode}
+              data-role={role}
+              data-music={mode}
+              data-active={to_string(@current_music == mode)}
+              class={"btn btn-xs join-item " <> if(@current_music == mode, do: "btn-active font-semibold", else: "btn-ghost opacity-60")}
+            >
+              {label}
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              :if={@room[:speaker?] and @room[:next?]}
+              type="button"
+              phx-click="next_music"
+              data-role="music-next"
+              class="btn btn-xs btn-ghost opacity-70 hover:opacity-100"
+            >
+              Next
+            </button>
+            <button
+              :if={@room[:speaker?] and @room[:never?]}
+              type="button"
+              phx-click="never_music"
+              data-role="music-never"
+              class="btn btn-xs btn-ghost opacity-70 hover:opacity-100"
+            >
+              Never
+            </button>
+          </div>
+        </div>
+        <form method="dialog" class="modal-action">
+          <button type="submit" data-role="settings-close" class="btn btn-sm">Close</button>
+        </form>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button type="submit">close</button>
+      </form>
+    </dialog>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".VoicePref">
       export default {
         mounted() {
+          const key = this.el.dataset.pref
+          const defaultOn = this.el.dataset.default !== "off"
+          const kind = this.el.dataset.kind
           this.syncUI = () => {
-            let enabled = false
+            let enabled = defaultOn
             try {
-              enabled = localStorage.getItem("foley:voice") === "on"
+              const stored = localStorage.getItem(key)
+              if (stored === "on") enabled = true
+              else if (stored === "off") enabled = false
             } catch (_) {}
             this.el.checked = enabled
             this.el.dataset.active = enabled ? "true" : "false"
@@ -1203,9 +1273,12 @@ defmodule ThereishWeb.RoomComponents do
           this.handleChange = () => {
             const next = !!this.el.checked
             try {
-              localStorage.setItem("foley:voice", next ? "on" : "off")
+              localStorage.setItem(key, next ? "on" : "off")
             } catch (_) {}
             this.syncUI()
+            document.dispatchEvent(
+              new CustomEvent("thereish:voice-pref", { detail: { enabled: next, kind } })
+            )
           }
 
           this.el.addEventListener("change", this.handleChange)
@@ -1341,8 +1414,34 @@ defmodule ThereishWeb.RoomComponents do
           this.voiceSource = null
           this.voiceObserver = null
           this.currentVoiceAttempt = null
+          this.currentVoiceKind = null
           this.musicOff = false
           this.audioBuffers = new Map()
+
+          this.storedPref = (key, defaultOn) => {
+            try {
+              const stored = localStorage.getItem(key)
+              if (stored === "on") return true
+              if (stored === "off") return false
+            } catch (_) {}
+            return defaultOn
+          }
+          this.voiceMasterOn = () => this.storedPref("foley:voice", false)
+          this.bookendsOn = () => this.voiceMasterOn() && this.storedPref("foley:voice-bookends", true)
+          this.verdictOn = () => this.voiceMasterOn() && this.storedPref("foley:voice-verdict", false)
+          this.clearVoice = () => {
+            this.stopVoice()
+            this.currentVoiceAttempt = null
+            this.currentVoiceKind = null
+          }
+          this.onVoicePref = (e) => {
+            const detail = (e && e.detail) || {}
+            if (detail.enabled !== false) return
+            if (!detail.kind || detail.kind === "master" || detail.kind === this.currentVoiceKind) {
+              this.clearVoice()
+            }
+          }
+          document.addEventListener("thereish:voice-pref", this.onVoicePref)
 
           const parseLevel = (val, fallback) => {
             const parsed = parseFloat(val)
@@ -1614,8 +1713,7 @@ defmodule ThereishWeb.RoomComponents do
           })
 
           this.handleEvent("foley:beat", async () => {
-            this.stopVoice()
-            this.currentVoiceAttempt = null
+            this.clearVoice()
             this.playEffect("/audio/beat.mp3", this.stingsBus, 2.5)
           })
 
@@ -1645,19 +1743,28 @@ defmodule ThereishWeb.RoomComponents do
             source.start(0)
           }
 
-          this.handleEvent("foley:voice", async ({url, attempt}) => {
+          this.handleEvent("foley:voice", async ({url, attempt, kind}) => {
             if (!this.canPlay()) return
-            let voiceEnabled = false
-            try {
-              voiceEnabled = localStorage.getItem("foley:voice") === "on"
-            } catch (_) {}
-            if (!voiceEnabled) return
+            const voiceKind = kind || "verdict"
+            const allowed = voiceKind === "bookends" ? this.bookendsOn() : this.verdictOn()
+            if (!allowed) return
 
             await this.resumeAudio()
             if (!this.ctx) return
 
             this.stopVoice()
             this.currentVoiceAttempt = attempt
+            this.currentVoiceKind = voiceKind
+
+            const stillCurrent = () =>
+              this.currentVoiceAttempt === attempt && this.currentVoiceKind === voiceKind
+
+            if (voiceKind === "bookends") {
+              const buf = await this.fetchBuffer(url)
+              if (!buf || !this.ctx || !stillCurrent()) return
+              this.playVoiceBuffer(buf, false)
+              return
+            }
 
             const isRevealReady = () =>
               document.querySelector("[data-role=quip]") ||
@@ -1666,22 +1773,19 @@ defmodule ThereishWeb.RoomComponents do
               document.querySelector("[data-role=no-verdict]")
 
             const playWhenReady = (buf) => {
-              if (!buf || !this.ctx || this.currentVoiceAttempt !== attempt) return
+              if (!buf || !this.ctx || !stillCurrent()) return
               if (!isRevealReady()) return
-
-              this.currentVoiceAttempt = attempt
               this.playVoiceBuffer(buf, true)
             }
 
-            const voiceUrl = url
-            const bufPromise = this.fetchBuffer(voiceUrl)
+            const bufPromise = this.fetchBuffer(url)
 
             if (isRevealReady()) {
               const buf = await bufPromise
               playWhenReady(buf)
             } else {
               const observer = new MutationObserver(async (_mutations, obs) => {
-                if (this.currentVoiceAttempt !== attempt) {
+                if (!stillCurrent()) {
                   obs.disconnect()
                   if (this.voiceObserver === obs) this.voiceObserver = null
                   return
@@ -1703,6 +1807,10 @@ defmodule ThereishWeb.RoomComponents do
                 }
               }, 15000)
             }
+          })
+
+          this.handleEvent("foley:stop_voice", () => {
+            this.clearVoice()
           })
 
           this.handleEvent("foley:prologue", async ({path}) => {
@@ -1780,8 +1888,7 @@ defmodule ThereishWeb.RoomComponents do
 
           this.handleEvent("foley:stop", () => {
             this.clearEndingTimeout()
-            this.stopVoice()
-            this.currentVoiceAttempt = null
+            this.clearVoice()
             this.stopMusic()
           })
         },
@@ -1792,8 +1899,7 @@ defmodule ThereishWeb.RoomComponents do
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
           if (!this.speaker) {
             if (this.clearEndingTimeout) this.clearEndingTimeout()
-            this.stopVoice()
-            this.currentVoiceAttempt = null
+            this.clearVoice()
             this.stopMusic()
           }
         },
@@ -1803,8 +1909,8 @@ defmodule ThereishWeb.RoomComponents do
           if (this.onFormSubmit) document.removeEventListener("submit", this.onFormSubmit)
           if (this.onCommitClick) document.removeEventListener("click", this.onCommitClick)
           if (this.onTapClick) document.removeEventListener("click", this.onTapClick)
-          this.stopVoice()
-          this.currentVoiceAttempt = null
+          if (this.onVoicePref) document.removeEventListener("thereish:voice-pref", this.onVoicePref)
+          this.clearVoice()
           this.stopMusic()
           if (this.ctx) {
             try { this.ctx.close() } catch (_) {}

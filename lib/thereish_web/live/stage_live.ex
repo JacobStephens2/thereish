@@ -120,7 +120,11 @@ defmodule ThereishWeb.StageLive do
     do: {:noreply, socket}
 
   def handle_info({:voice_ready, attempt}, socket) do
-    {:noreply, ThereishWeb.Foley.push_voice(socket, attempt)}
+    {:noreply, ThereishWeb.Foley.push_voice(socket, attempt, :verdict)}
+  end
+
+  def handle_info({:bookends_ready, attempt}, socket) do
+    {:noreply, ThereishWeb.Foley.push_voice(socket, attempt, :bookends)}
   end
 
   # The stage holds no Seat, so it sees the Room the way anyone standing behind
