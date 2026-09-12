@@ -23,6 +23,10 @@ config :thereish,
   # grade in v1: whether a harsh grade should be revealed sooner is a question
   # the couch answers, not one to guess at here.
   reveal_beat_ms: 2500,
+  # After the shared reveal, every Seat is given this long to absorb it before
+  # anyone may start the next Attempt or open the next Page. Distinct from the
+  # beat that runs before the reveal.
+  reveal_hold_ms: 5_000,
   # How the reveal escalates when the Assayer is slow (design law 10). Visible
   # activity through four seconds; at ten the game states it has no verdict and
   # hands the ruling to the players. Ten seconds is a ceiling, not a target: the
