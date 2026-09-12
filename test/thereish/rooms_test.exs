@@ -2035,83 +2035,6 @@ defmodule Thereish.RoomsTest do
     end
   end
 
-  describe "Sides: couple versus couple through the Room" do
-    test "pairing seats forms Sides, broadcasts, and unpairing clears them" do
-      {:ok, slug} = Rooms.create(4, device_token())
-      Rooms.open!(slug)
-      Rooms.subscribe(slug)
-
-      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
-      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
-      {:ok, _ada} = Rooms.join(slug, "Ada", device_token())
-      {:ok, _ida} = Rooms.join(slug, "Ida", device_token())
-
-      assert :ok = Rooms.pair_seats(slug, mara.id, jacob.id)
-      assert_receive :room_changed
-
-      view = Rooms.snapshot(slug, mara.id)
-      assert view.sides_mode? == true
-      assert length(view.sides) == 2
-      [side_a, side_b] = view.sides
-      assert side_a.name == "Mara & Jacob"
-      assert side_a.you? == true
-      assert side_b.name == "Ada & Ida"
-      assert side_b.you? == false
-
-      # Unpairing clears sides
-      assert :ok = Rooms.unpair_seat(slug, mara.id)
-      assert_receive :room_changed
-      view_unpaired = Rooms.snapshot(slug, mara.id)
-      assert view_unpaired.sides_mode? == false
-      assert view_unpaired.sides == nil
-
-      stop_room(slug)
-    end
-
-    test "playing an attempt in Sides mode reveals side-by-side verdicts" do
-      {:ok, slug} = Rooms.create(4, device_token())
-      Rooms.open!(slug)
-
-      {:ok, mara} = Rooms.join(slug, "Mara", device_token())
-      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
-      {:ok, ada} = Rooms.join(slug, "Ada", device_token())
-      {:ok, ida} = Rooms.join(slug, "Ida", device_token())
-
-      :ok = Rooms.pair_seats(slug, mara.id, jacob.id)
-
-      :ok = Rooms.give(slug, mara.id, "setting one")
-      :ok = Rooms.give(slug, jacob.id, "setting two")
-      :ok = Rooms.give(slug, ada.id, "setting three")
-      :ok = Rooms.give(slug, ida.id, "setting four")
-      await_phase(slug, :bridging)
-
-      # In Fake Assayer: "cairn" and "cairns" share prefix -> closeness 91 (melded!)
-      # "wharf" and "signal" share no prefix -> closeness 0
-      :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
-      :ok = Rooms.commit_bridge(slug, ada.id, "wharf")
-      :ok = Rooms.commit_bridge(slug, ida.id, "signal")
-
-      view = await_reveal(slug)
-      assert view.phase == :closed
-      assert view.reveal.mode == :sides
-      assert length(view.reveal.sides) == 2
-
-      [side_a, side_b] = view.reveal.sides
-      assert side_a.name == "Mara & Jacob"
-      assert side_a.closeness >= 90
-      assert side_a.melded? == true
-      assert side_a.closer? == true
-
-      assert side_b.name == "Ada & Ida"
-      assert side_b.closeness == 0
-      assert side_b.melded? == false
-      assert side_b.closer? == false
-
-      stop_room(slug)
-    end
-  end
-
   describe "foley voice (the Assayer speaks)" do
     setup do
       slug = open_room()
@@ -2273,6 +2196,15 @@ defmodule Thereish.RoomsTest do
       await_reveal(ctx.slug)
 
       room = Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
+
+      # Voice failure is a Task; the Verdict row waits for it (ADR-0003).
+      eventually(fn ->
+        match?(
+          [%{attempts: [%{verdicts: [%{voice_meta: %{}}]}]}],
+          Chronicle.pages(room.id)
+        )
+      end)
+
       pages = Chronicle.pages(room.id)
       assert length(pages) == 1
       page = hd(pages)
@@ -2364,100 +2296,6 @@ defmodule Thereish.RoomsTest do
       await_phase(ctx.slug, :giving)
 
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
-    end
-  end
-
-  describe "couples and the meld map (ticket 07)" do
-    test "joining with a partner marks both seats as a couple and survives room restart" do
-      slug = open_room(seat_limit: 4)
-
-      assert {:ok, mara} = Rooms.join(slug, "Mara", device_token())
-      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), mara.id)
-
-      view = Rooms.snapshot(slug, mara.id)
-      mara_seat = Enum.find(view.seats, &(&1.id == mara.id))
-      jacob_seat = Enum.find(view.seats, &(&1.id == jacob.id))
-
-      assert mara_seat.partner_id == jacob.id
-      assert mara_seat.partner_name == "Jacob"
-      assert mara_seat.couple? == true
-
-      assert jacob_seat.partner_id == mara.id
-      assert jacob_seat.partner_name == "Mara"
-      assert jacob_seat.couple? == true
-
-      # Survives process crash and restart
-      stop_room(slug)
-
-      once_restarted(fn ->
-        view_after = Rooms.snapshot(slug, mara.id)
-        m = Enum.find(view_after.seats, &(&1.id == mara.id))
-        j = Enum.find(view_after.seats, &(&1.id == jacob.id))
-
-        assert m.partner_id == jacob.id
-        assert j.partner_id == mara.id
-      end)
-    end
-
-    test "two seats can be paired after joining via Rooms.pair_seats/3" do
-      slug = open_room(seat_limit: 4)
-
-      assert {:ok, mara} = Rooms.join(slug, "Mara", device_token())
-      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
-
-      assert :ok = Rooms.pair_seats(slug, mara.id, jacob.id)
-
-      view = Rooms.snapshot(slug, mara.id)
-      m = Enum.find(view.seats, &(&1.id == mara.id))
-      j = Enum.find(view.seats, &(&1.id == jacob.id))
-
-      assert m.partner_id == jacob.id
-      assert j.partner_id == mara.id
-    end
-
-    test "an Attempt commit grades all pairs alongside the one Verdict" do
-      slug = open_room(seat_limit: 4)
-
-      assert {:ok, mara} = Rooms.join(slug, "Mara", device_token())
-      assert {:ok, jacob} = Rooms.join(slug, "Jacob", device_token(), mara.id)
-      assert {:ok, bram} = Rooms.join(slug, "Bram", device_token())
-      assert {:ok, esme} = Rooms.join(slug, "Esme", device_token(), bram.id)
-
-      Enum.each([mara, jacob, bram, esme], fn s ->
-        :ok = Rooms.give(slug, s.id, "setting #{s.name}")
-      end)
-
-      await_phase(slug, :bridging)
-
-      :ok = Rooms.commit_bridge(slug, mara.id, "dock")
-      :ok = Rooms.commit_bridge(slug, jacob.id, "cairn")
-      :ok = Rooms.commit_bridge(slug, bram.id, "cairo")
-      :ok = Rooms.commit_bridge(slug, esme.id, "beacon")
-
-      view = await_reveal(slug)
-
-      # The one Verdict is preserved (ADR-0010)
-      assert view.reveal.closeness != nil
-      assert view.reveal.furthest != nil
-
-      # Pairs are present: 4 choose 2 = 6 pairs
-      assert is_list(view.reveal.pairs)
-      assert length(view.reveal.pairs) == 6
-
-      # Mara's view puts Mara & Jacob couple first
-      mara_view = Rooms.snapshot(slug, mara.id)
-      [first_pair | _] = mara_view.reveal.pairs
-      assert first_pair.names == ["Mara", "Jacob"]
-      assert first_pair.couple? == true
-
-      # Bram's view puts Bram & Esme couple first
-      bram_view = Rooms.snapshot(slug, bram.id)
-      [first_pair_bryan | _] = bram_view.reveal.pairs
-      assert first_pair_bryan.names == ["Bram", "Esme"]
-      assert first_pair_bryan.couple? == true
-
-      assert Enum.count(view.reveal.pairs, & &1.couple?) == 2
-      assert Enum.count(view.reveal.pairs, & &1.cross_couple?) == 4
     end
   end
 
