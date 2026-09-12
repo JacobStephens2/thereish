@@ -521,7 +521,7 @@ defmodule ThereishWeb.RoomLive do
       >
         <.carry_forward room={@room} />
         <.button phx-click="next_attempt" data-role="again" variant="primary">
-          Again — {Enum.join(@room.next_bookends, " and ")}
+          Again — {join_and(@room.next_bookends)}
         </.button>
       </div>
 

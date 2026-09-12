@@ -153,42 +153,98 @@ defmodule ThereishWeb.RoomComponents do
   attr :room, :map, required: true
   attr :mode, :atom, default: :phone
 
-  @doc "The two words the Page hangs between, shown to everyone at once."
+  @doc """
+  The words the Page hangs between, shown to everyone at once.
+
+  A wrapping row of word chips under the Bookends caption at any count, with an
+  optional Mask beside a carried word. First-Attempt Bookends stay unattributed.
+  """
   def bookends(assigns) do
+    chips = bookend_chips(assigns.room)
+    assigns = assign(assigns, :chips, chips)
+
     ~H"""
     <div
-      :if={@room.bookends}
+      :if={@chips != []}
       class={[
         "flex flex-col items-center",
         if(@mode == :stage, do: "gap-2", else: "gap-3")
       ]}
     >
-      <.caption :if={@mode == :stage} data-role="bookends-caption">
+      <.caption data-role="bookends-caption">
         Bookends
       </.caption>
       <div
         data-role="bookends"
         class={[
           "flex flex-wrap items-center justify-center",
-          if(@mode == :stage, do: "gap-3 sm:gap-4", else: "gap-4")
+          if(@mode == :stage, do: "gap-2 sm:gap-3", else: "gap-2 sm:gap-3")
         ]}
       >
         <span
-          :for={bookend <- @room.bookends}
+          :for={chip <- @chips}
+          data-role="bookend-chip"
           class={[
-            "rounded-lg bg-base-200 font-semibold tracking-tight",
+            "inline-flex items-center rounded-lg bg-base-200 font-semibold tracking-tight",
             if(@mode == :stage,
-              do: "px-4 py-2 sm:px-5 sm:py-2.5 text-2xl sm:text-3xl",
-              else: "px-5 py-3 text-3xl"
+              do: "gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 text-xl sm:text-2xl",
+              else: "gap-1.5 px-3 py-2 text-2xl sm:text-3xl"
             )
           ]}
         >
-          {bookend}
+          <img
+            :if={bookend_mask_url(chip)}
+            src={bookend_mask_url(chip)}
+            alt=""
+            data-role="bookend-mask"
+            class={[
+              "rounded object-cover border border-base-300",
+              if(@mode == :stage, do: "size-4 sm:size-5", else: "size-5")
+            ]}
+          />
+          {bookend_word(chip)}
         </span>
       </div>
     </div>
     """
   end
+
+  @doc """
+  Joins words with commas and a final "and": two stay "cairn and beacon", six
+  become "cairn, beacon, wharf, signal, torch and lamp".
+  """
+  def join_and(words) when is_list(words) do
+    words = Enum.map(words, &bookend_word/1)
+
+    case words do
+      [] ->
+        ""
+
+      [one] ->
+        one
+
+      [left, right] ->
+        "#{left} and #{right}"
+
+      many ->
+        {last, rest} = List.pop_at(many, -1)
+        Enum.join(rest, ", ") <> " and " <> last
+    end
+  end
+
+  defp bookend_chips(%{bookend_chips: chips}) when is_list(chips) and chips != [], do: chips
+  defp bookend_chips(%{bookends: bookends}) when is_list(bookends), do: bookends
+  defp bookend_chips(_), do: []
+
+  defp bookend_word(%{word: word}) when is_binary(word), do: word
+  defp bookend_word(%{"word" => word}) when is_binary(word), do: word
+  defp bookend_word(word) when is_binary(word), do: word
+  defp bookend_word(_), do: ""
+
+  defp bookend_mask_url(%{mask: url}) when is_binary(url) and url != "", do: url
+  defp bookend_mask_url(%{mask: mask}) when is_map(mask), do: mask[:url] || mask["url"]
+  defp bookend_mask_url(%{"mask" => mask}) when is_map(mask), do: mask[:url] || mask["url"]
+  defp bookend_mask_url(_), do: nil
 
   attr :room, :map, required: true
 
@@ -684,7 +740,7 @@ defmodule ThereishWeb.RoomComponents do
       <span :if={@room[:next_bookends_chosen?] == false}>
         No verdict, so nobody chose:
       </span>
-      <span class="font-semibold">{Enum.join(@room.next_bookends, " and ")}</span>
+      <span class="font-semibold">{join_and(@room.next_bookends)}</span>
       become the next bookends.
     </p>
     """

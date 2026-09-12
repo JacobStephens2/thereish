@@ -713,6 +713,7 @@ defmodule Thereish.Rooms.Server do
       {:page_written,
        %{
          bookends: result.bookends,
+         from: result[:from],
          meta: result.meta,
          full_table: state.room.full_table
        }}
