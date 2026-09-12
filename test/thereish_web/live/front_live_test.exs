@@ -11,6 +11,7 @@ defmodule ThereishWeb.FrontLiveTest do
   import Thereish.RoomFixtures
   import Phoenix.LiveViewTest
 
+  alias Thereish.Chronicle
   alias Thereish.Rooms
 
   defp type_code(view, code), do: view |> form("form", %{"code" => code}) |> render_submit()
@@ -138,6 +139,108 @@ defmodule ThereishWeb.FrontLiveTest do
       assert has_element?(front, "[data-role=rejoin-quip]", "A room with a quip.")
       html = render(front)
       assert [_match] = Regex.scan(~r/data-role="rejoin-quip"/, html)
+    end
+
+    test "a phone can hide a Room from its list, reload, and still come back by Code" do
+      slug = open_room()
+      phone = build_conn() |> get(~p"/r/#{slug}")
+
+      {:ok, view, _} = live(phone)
+      join(view, "Melissa")
+
+      melissa = hd(Rooms.snapshot(slug, nil).seats)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+      :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(slug, jacob.id, "cairns")
+      await_phase(slug, :closed)
+
+      room = Rooms.get_room(slug)
+      assert [page] = Chronicle.pages(room.id)
+
+      {:ok, front, _} = live(get(phone, ~p"/"))
+
+      assert has_element?(front, "[data-role=rejoin][data-code=#{slug}]")
+      assert has_element?(front, "[data-role=hide][data-code=#{slug}]")
+
+      front |> element("[data-role=hide][data-code=#{slug}]") |> render_click()
+
+      refute has_element?(front, "[data-role=rejoin][data-code=#{slug}]")
+      refute has_element?(front, "[data-role=hide][data-code=#{slug}]")
+
+      {:ok, reloaded, _} = live(get(phone, ~p"/"))
+      refute has_element?(reloaded, "[data-role=rejoin][data-code=#{slug}]")
+
+      assert {:error, {:live_redirect, %{to: to}}} = type_code(reloaded, slug)
+      assert to == "/r/#{slug}"
+
+      {:ok, back, html} = live(get(phone, to))
+
+      assert html =~ "You are"
+      assert has_element?(back, "[data-role=you]", "Melissa")
+      assert Enum.map(Rooms.snapshot(slug, nil).seats, & &1.id) == [melissa.id, jacob.id]
+      assert [kept] = Chronicle.pages(room.id)
+      assert kept.id == page.id
+    end
+
+    test "a saved Room link still lands in the same Seat after the shortcut is hidden" do
+      slug = open_room()
+      phone = build_conn() |> get(~p"/r/#{slug}")
+
+      {:ok, view, _} = live(phone)
+      join(view, "Melissa")
+
+      {:ok, front, _} = live(get(phone, ~p"/"))
+      front |> element("[data-role=hide][data-code=#{slug}]") |> render_click()
+
+      {:ok, back, html} = live(get(phone, ~p"/r/#{slug}"))
+
+      assert html =~ "You are"
+      assert has_element?(back, "[data-role=you]", "Melissa")
+      refute has_element?(back, "input[name=name]")
+      assert length(Rooms.snapshot(slug, nil).seats) == 1
+    end
+
+    test "hiding on one browser leaves another browser's list alone" do
+      slug = open_room()
+      pixel = build_conn() |> get(~p"/r/#{slug}")
+
+      {:ok, view, _} = live(pixel)
+      join(view, "Melissa")
+
+      ipad = build_conn() |> get(~p"/r/#{slug}")
+      {:ok, view, _} = live(ipad)
+      join(view, "Melissa")
+
+      {:ok, pixel_front, _} = live(get(pixel, ~p"/"))
+      pixel_front |> element("[data-role=hide][data-code=#{slug}]") |> render_click()
+
+      {:ok, pixel_again, _} = live(get(pixel, ~p"/"))
+      refute has_element?(pixel_again, "[data-role=rejoin][data-code=#{slug}]")
+
+      {:ok, ipad_front, _} = live(get(ipad, ~p"/"))
+      assert has_element?(ipad_front, "[data-role=rejoin][data-code=#{slug}]")
+      assert has_element?(ipad_front, "[data-role=hide][data-code=#{slug}]")
+    end
+
+    test "hiding one Room leaves the others on the list" do
+      first = open_room()
+      second = open_room()
+      phone = build_conn() |> get(~p"/r/#{first}")
+
+      {:ok, view, _} = live(phone)
+      join(view, "Melissa")
+
+      {:ok, view, _} = live(get(phone, ~p"/r/#{second}"))
+      join(view, "Mel")
+
+      {:ok, front, _} = live(get(phone, ~p"/"))
+      front |> element("[data-role=hide][data-code=#{first}]") |> render_click()
+
+      refute has_element?(front, "[data-role=rejoin][data-code=#{first}]")
+      assert has_element?(front, "[data-role=rejoin][data-code=#{second}]", "as Mel")
     end
   end
 
