@@ -10,6 +10,10 @@ defmodule ThereishWeb.SpendLiveTest do
   alias Thereish.Rooms.Room
 
   describe "operator spend page (/spend)" do
+    setup %{conn: conn} do
+      %{conn: log_in_admin(conn)}
+    end
+
     test "renders noindex header and empty state when no rooms exist", %{conn: conn} do
       {:ok, view, html} = live(conn, ~p"/spend")
 
@@ -156,6 +160,8 @@ defmodule ThereishWeb.SpendLiveTest do
       rooms_text = render(element(view, "[data-role=spend-by-room]"))
       assert rooms_text =~ slug1
       assert rooms_text =~ slug2
+      assert has_element?(view, "a[href='/r/#{slug1}/chronicle.md']", "Markdown")
+      assert has_element?(view, "a[href='/r/#{slug1}/calibration.json']", "Calibration")
       assert rooms_text =~ "$0.0447"
       assert rooms_text =~ "$0.0000"
       assert rooms_text =~ "Opened"

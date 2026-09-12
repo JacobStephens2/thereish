@@ -107,6 +107,9 @@ config :thereish, author_escalation_ms: [still_writing: 100, deadline: 250]
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+# Bcrypt's real cost is for production; tests only need the hash to round-trip.
+config :bcrypt_elixir, log_rounds: 1
+
 # Disable swoosh api client as it is not needed for tests
 config :swoosh, :api_client, false
 

@@ -35,4 +35,17 @@ defmodule ThereishWeb.ConnCase do
     Thereish.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc """
+  Signs the conn in as the operator identity, setting a password if it has none.
+  """
+  def log_in_admin(conn, opts \\ []) do
+    password = Keyword.get(opts, :password, Thereish.AdminFixtures.valid_admin_password())
+    identity = Thereish.AdminFixtures.identity_with_password(password)
+    token = Thereish.Admin.generate_session_token(identity)
+
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> Plug.Conn.put_session("admin_token", token)
+  end
 end
