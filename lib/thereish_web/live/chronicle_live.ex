@@ -36,6 +36,7 @@ defmodule ThereishWeb.ChronicleLive do
      |> assign(:device_token, device_token)
      |> assign(:correcting_page_id, nil)
      |> assign(:correction_params, default_correction_params())
+     |> assign(:enlarged_mask, nil)
      |> load_pages()}
   end
 
@@ -94,6 +95,18 @@ defmodule ThereishWeb.ChronicleLive do
       {:error, _changeset} ->
         {:noreply, assign(socket, :correction_params, params)}
     end
+  end
+
+  def handle_event("enlarge_mask", %{"url" => url} = params, socket) do
+    {:noreply,
+     assign(socket, :enlarged_mask, %{
+       url: url,
+       alt: params["alt"] || "Mask"
+     })}
+  end
+
+  def handle_event("close_mask", _params, socket) do
+    {:noreply, assign(socket, :enlarged_mask, nil)}
   end
 
   @impl true
@@ -203,12 +216,12 @@ defmodule ThereishWeb.ChronicleLive do
                   data-role="give-tag"
                   class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
-                  <img
+                  <.enlargeable_mask
                     :if={is_map(g[:mask]) and (g.mask[:url] || g.mask["url"])}
-                    src={g.mask[:url] || g.mask["url"]}
+                    url={g.mask[:url] || g.mask["url"]}
                     alt={"Mask for " <> g.seat_name}
+                    seat_id={g.seat_id}
                     class="h-4 w-4 rounded-full object-cover"
-                    data-role="page-mask"
                   />
                   <span>Give ({g.seat_name}): {g.text}</span>
                 </span>
@@ -251,13 +264,13 @@ defmodule ThereishWeb.ChronicleLive do
           >
             <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Masks</span>
             <div class="flex flex-wrap items-center gap-2">
-              <img
-                :for={{_seat_id, mask} <- page.masks}
+              <.enlargeable_mask
+                :for={{seat_id, mask} <- page.masks}
                 :if={is_map(mask) and (mask[:url] || mask["url"])}
-                src={mask[:url] || mask["url"]}
+                url={mask[:url] || mask["url"]}
                 alt="Mask"
+                seat_id={seat_id}
                 class="h-8 w-8 rounded-md border border-base-300 object-cover shadow-sm"
-                data-role="page-mask"
               />
             </div>
           </div>
@@ -568,6 +581,37 @@ defmodule ThereishWeb.ChronicleLive do
       </div>
 
       <Layouts.made_by />
+
+      <dialog
+        :if={@enlarged_mask}
+        open
+        data-role="enlarged-mask"
+        class="modal"
+        phx-window-keydown="close_mask"
+        phx-key="Escape"
+      >
+        <div class="modal-box max-w-3xl p-4">
+          <button
+            type="button"
+            phx-click="close_mask"
+            aria-label="Close"
+            data-role="close-enlarged-mask"
+            class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+          >
+            ✕
+          </button>
+          <img
+            src={@enlarged_mask.url}
+            alt={@enlarged_mask.alt}
+            class="mx-auto max-h-[80vh] w-full max-w-full rounded-lg object-contain"
+            data-role="enlarged-mask-image"
+          />
+          <p class="mt-3 text-center text-sm font-medium">{@enlarged_mask.alt}</p>
+        </div>
+        <form phx-click="close_mask" class="modal-backdrop">
+          <button type="button" aria-label="Close">close</button>
+        </form>
+      </dialog>
     </main>
     """
   end
@@ -577,4 +621,26 @@ defmodule ThereishWeb.ChronicleLive do
   defp human_label(label), do: Thereish.Chronicle.FairnessTap.label_human(label)
 
   defp page_track(page), do: Chronicle.page_track(page)
+
+  attr :url, :string, required: true
+  attr :alt, :string, required: true
+  attr :seat_id, :any, default: nil
+  attr :class, :string, default: "h-8 w-8 rounded-md object-cover"
+
+  defp enlargeable_mask(assigns) do
+    ~H"""
+    <button
+      type="button"
+      phx-click="enlarge_mask"
+      phx-value-url={@url}
+      phx-value-alt={@alt}
+      data-role="enlarge-mask"
+      data-seat={@seat_id}
+      class="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      aria-label={"Enlarge #{@alt}"}
+    >
+      <img src={@url} alt={@alt} class={@class} data-role="page-mask" />
+    </button>
+    """
+  end
 end

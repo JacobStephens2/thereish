@@ -47,7 +47,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       }
 
       html = render_component(&author_writing/1, room: writing_room)
-      assert html =~ "The Author is reading your settings..."
+      assert html =~ "The Author is reading your Gives..."
       assert html =~ ~s(data-role="beat-meter")
       assert html =~ ~s(data-step="writing")
 
@@ -338,7 +338,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ ~s(data-active="true")
 
       assert html =~
-               "Full table: one Bookend from every player's setting, and every bridge carries forward"
+               "Full table: one Bookend from every player's Give, and every bridge carries forward"
 
       assert html =~ ~s(data-role="full-table-note")
       assert html =~ "Matters from three Seats"
@@ -1020,8 +1020,18 @@ defmodule ThereishWeb.RoomComponentsTest do
           band: :deep_meld,
           quip: "one mind",
           gives: [
-            %{seat_id: "s1", name: "Melissa", text: "lighthouse"},
-            %{seat_id: "s2", name: "Jacob", text: "candle"}
+            %{
+              seat_id: "s1",
+              name: "Melissa",
+              text: "lighthouse",
+              mask: %{url: "/media/masks/mask-melissa.png"}
+            },
+            %{
+              seat_id: "s2",
+              name: "Jacob",
+              text: "candle",
+              mask: %{url: "/media/masks/mask-jacob.png"}
+            }
           ]
         }
       }
@@ -1030,10 +1040,16 @@ defmodule ThereishWeb.RoomComponentsTest do
 
       assert html =~ ~s(data-role="gives")
       assert html =~ ~s(data-role="give")
-      assert html =~ "Melissa:"
+      assert html =~ "Melissa"
       assert html =~ "lighthouse"
-      assert html =~ "Jacob:"
+      assert html =~ "Jacob"
       assert html =~ "candle"
+      assert html =~ ~s(data-role="give-mask")
+      assert html =~ "/media/masks/mask-melissa.png"
+      assert html =~ "/media/masks/mask-jacob.png"
+      refute html =~ "Settings:"
+      assert html =~ "Gives"
+      assert html =~ "size-16" or html =~ "size-20" or html =~ "text-lg"
     end
 
     test "does not render gives before page is closed" do
