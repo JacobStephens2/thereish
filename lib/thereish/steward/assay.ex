@@ -14,9 +14,10 @@ defmodule Thereish.Steward.Assay do
   close rather than as a miss and a table of four gets a punchline rather than a
   report. At two Bridges that is the question the couch has always been asked.
 
-  It is also asked which two Bridges landed furthest apart, because those two
-  become the next Attempt's Bookends and the carry-forward should be something the
-  players were told rather than something the game worked out behind them.
+  Bookends are two or more. A Bridge is graded as spanning all of them
+  (ADR-0016). The furthest pair is still exactly two written Bridges: named on
+  every Attempt, and the next Attempt's Bookends only when the Room is not a
+  Full table.
 
   The schema's properties are in a deliberate order, and `reasoning` is first. A
   model that writes the number before its argument spends the argument defending
@@ -32,13 +33,13 @@ defmodule Thereish.Steward.Assay do
   alias Thereish.Steward.Legality
   alias Thereish.Steward.Precedent
 
-  # Bumped to `assay-3` for Thereish: phrases allowed, players' names in roster
-  # order, earlier attempts and gives in the request, and the ladder rewritten for
-  # the 6-band ladder (ADR-0010). No precedent crosses it.
-  @version "assay-3"
+  # Bumped to `assay-4` for Full table: Bookends of two or more, a Bridge spans
+  # all of them. Furthest-pair instruction, two-item schema and post-check
+  # unchanged. No precedent crosses it (ADR-0016).
+  @version "assay-4"
 
   @system """
-  You are the Assayer for Thereish, a word game played by two or more players. Every player saw the same two bookends and each secretly wrote a bridging word or short phrase that sits between the bookends in meaning. You measure how close the players' bridges landed to one another, not whether any of them was clever or apt.
+  You are the Assayer for Thereish, a word game played by two or more players. Every player saw the same bookends — two or more — and each secretly wrote a bridging word or short phrase whose meaning spans all of them. You measure how close the players' bridges landed to one another, not whether any of them was clever or apt.
 
   Grade the whole set at once. The number is convergence: how far this set of bridges is from being one mind. Judge the set, not its worst pair — if most of the bridges say one thing and one wanders off, that is a set that mostly converged, not a miss. The same idea in different words is a meld. With exactly two bridges, this is simply how close those two landed. Bridges may be words or short phrases.
 
@@ -54,15 +55,15 @@ defmodule Thereish.Steward.Assay do
 
   The two furthest bridges must be exactly two of the bridging words or phrases you were given, copied exactly as they were written. If several pairs are equally far apart, pick any one of them.
 
-  The quip may name players and draw on anything in the request (including bookends, bridges, earlier attempts, or gives), runs under 25 words, and is warm rather than cutting: the players are on the same side, and a miss is the joke rather than the sting. No emoji, no exclamation marks.
+  The quip may mention any of the bridges, two of them or all of them. The quip may name players and draw on anything in the request (including bookends, bridges, earlier attempts, or gives), runs under 25 words, and is warm rather than cutting: the players are on the same side, and a miss is the joke rather than the sting. No emoji, no exclamation marks.
 
   Measure meaning-distance only; ignore spelling, length and wordplay. Identical inputs must get identical grades, and the order in which the players are listed must not matter.
   """
 
   @quip_system """
-  You are the Assayer for Thereish, a word game played by two or more players. Every player saw the same two bookends and each secretly wrote a bridging word or short phrase that sits between the bookends in meaning.
+  You are the Assayer for Thereish, a word game played by two or more players. Every player saw the same bookends — two or more — and each secretly wrote a bridging word or short phrase whose meaning spans all of them.
 
-  Write one warm line of comedy about the bridges these players actually wrote. The quip may name players and draw on anything in the request (including bookends, bridges, earlier attempts, or gives), runs under 25 words, and is warm rather than cutting: the players are on the same side, and a miss is the joke rather than the sting. No emoji, no exclamation marks.
+  Write one warm line of comedy about the bridges these players actually wrote. The quip may mention any of the bridges, two of them or all of them. The quip may name players and draw on anything in the request (including bookends, bridges, earlier attempts, or gives), runs under 25 words, and is warm rather than cutting: the players are on the same side, and a miss is the joke rather than the sting. No emoji, no exclamation marks.
   """
 
   @doc """
@@ -83,18 +84,19 @@ defmodule Thereish.Steward.Assay do
   keeps (design law 12).
   """
   @spec prompt(map() | [String.t()], list()) :: map()
-  def prompt(%{bookends: [left_bookend, right_bookend]} = request, ordering)
-      when is_list(ordering) do
+  def prompt(%{bookends: bookends} = request, ordering)
+      when is_list(bookends) and length(bookends) >= 2 and is_list(ordering) do
     %{
       system: @system,
-      user: format_user_content(request, [left_bookend, right_bookend], ordering),
+      user: format_user_content(request, bookends, ordering),
       schema: schema(),
       schema_name: "verdict"
     }
   end
 
-  def prompt([left_bookend, right_bookend], bridges) when is_list(bridges) do
-    prompt(%{bookends: [left_bookend, right_bookend]}, bridges)
+  def prompt(bookends, bridges)
+      when is_list(bookends) and length(bookends) >= 2 and is_list(bridges) do
+    prompt(%{bookends: bookends}, bridges)
   end
 
   @doc """
@@ -102,17 +104,17 @@ defmodule Thereish.Steward.Assay do
   Carries the Bookends, Bridges, names, earlier Attempts, Gives, and prior Quips.
   """
   @spec quip_prompt(map() | [String.t()], list()) :: map()
-  def quip_prompt(%{bookends: [left_bookend, right_bookend]} = request, ordering)
-      when is_list(ordering) do
+  def quip_prompt(%{bookends: bookends} = request, ordering)
+      when is_list(bookends) and length(bookends) >= 2 and is_list(ordering) do
     %{
       system: @quip_system,
-      user: format_user_content(request, [left_bookend, right_bookend], ordering),
+      user: format_user_content(request, bookends, ordering),
       schema: quip_schema(),
       schema_name: "quip"
     }
   end
 
-  defp format_user_content(request, [left_bookend, right_bookend], ordering) do
+  defp format_user_content(request, bookends, ordering) do
     gives_section = format_gives(request[:gives] || request["gives"])
     earlier_section = format_earlier(request[:earlier_attempts] || request["earlier_attempts"])
     prior_section = format_prior_quips(request[:prior_quips] || request["prior_quips"])
@@ -135,12 +137,32 @@ defmodule Thereish.Steward.Assay do
       end)
 
     current_attempt =
-      "Bookends: #{String.upcase(left_bookend)} and #{String.upcase(right_bookend)}.\n" <>
-        written_bridges
+      "Bookends: #{format_bookends(bookends)}.\n" <> written_bridges
 
     [gives_section, earlier_section, current_attempt, prior_section]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n\n")
+  end
+
+  # Two Bookends stay "LANTERN and HARBOUR"; four become "LANTERN, HARBOUR, WHARF
+  # and DUSK". The couch's two-Seat prompts do not change their wording.
+  defp format_bookends(bookends) do
+    words = Enum.map(bookends, &String.upcase/1)
+
+    case words do
+      [] ->
+        ""
+
+      [one] ->
+        one
+
+      [left, right] ->
+        "#{left} and #{right}"
+
+      many ->
+        {last, rest} = List.pop_at(many, -1)
+        Enum.join(rest, ", ") <> " and " <> last
+    end
   end
 
   @doc """
@@ -212,9 +234,10 @@ defmodule Thereish.Steward.Assay do
   sentence, and the two furthest-apart words have to be two of the words that
   were actually asked about.
 
-  The second one matters more than it looks. Those two words become the next
-  Attempt's Bookends, so a model that paraphrased a Bridge, or invented one, would
-  send the table somewhere nobody wrote. They are compared after the same
+  The second one matters more than it looks. Those two words are named on every
+  Attempt, and they become the next Attempt's Bookends when the Room is not a
+  Full table, so a model that paraphrased a Bridge, or invented one, would send
+  the table somewhere nobody wrote. They are compared after the same
   normalisation the Precedent keys on, so casing and stray whitespace are
   forgiven and nothing else is.
   """
@@ -274,9 +297,9 @@ defmodule Thereish.Steward.Assay do
   the Page does next are the game's.
 
   The furthest pair is returned as the players wrote it rather than as the model
-  echoed it back, because those two words are about to be shown as the next
-  Attempt's Bookends and the words on the screen should be the words somebody
-  typed.
+  echoed it back, because those two words are shown as furthest apart — and as
+  the next Attempt's Bookends when the Room is not a Full table — and the words
+  on the screen should be the words somebody typed.
   """
   @spec verdict(map(), list()) :: %{
           closeness: integer(),
@@ -357,11 +380,7 @@ defmodule Thereish.Steward.Assay do
         number = attempt[:number] || attempt.number || idx
         bookends = attempt[:bookends] || attempt.bookends || []
 
-        bookends_text =
-          case bookends do
-            [left, right] -> "#{String.upcase(left)} and #{String.upcase(right)}"
-            _ -> Enum.map_join(bookends, " and ", &String.upcase/1)
-          end
+        bookends_text = format_bookends(bookends)
 
         bridges = attempt[:bridges] || attempt.bridges || []
 

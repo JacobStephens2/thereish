@@ -16,7 +16,8 @@ defmodule Thereish.Steward.Fake do
   first in roster order. At exactly two Bridges there is one pair, so the mean is
   that pair's grade and the furthest two are the only two — which is what makes
   every grade the couch's tests were written against still the grade they get
-  (ADR-0010).
+  (ADR-0010). Bookends of two or more are accepted and ignored: this Assayer
+  grades the Bridges, not the table they were written against.
 
   Two knobs, both configuration, both for the tests that need the Room to be
   waiting on something:
@@ -41,7 +42,8 @@ defmodule Thereish.Steward.Fake do
   @behaviour Thereish.Steward
 
   @impl true
-  def assay(%{bookends: [_, _], bridges: bridges} = request) when length(bridges) >= 2 do
+  def assay(%{bookends: bookends, bridges: bridges} = request)
+      when is_list(bookends) and length(bookends) >= 2 and length(bridges) >= 2 do
     case config_get(:assay_capture, nil) do
       pid when is_pid(pid) -> send(pid, {:assay, request})
       _ -> :ok
