@@ -26,15 +26,142 @@ defmodule Thereish.Steward.AuthorTest do
     test "rejects bookends not being a list of two" do
       json = Jason.decode!(author_json(bookends: ["single"]))
       assert {:error, why} = Author.check(json)
-      assert why =~ "exactly two items"
+      assert why =~ "exactly 2 items"
 
       json3 = Jason.decode!(author_json(bookends: ["one", "two", "three"]))
       assert {:error, why} = Author.check(json3)
-      assert why =~ "exactly two items"
+      assert why =~ "exactly 2 items"
     end
 
-    test "prompts and pages carry bumped prompt_version author-3" do
-      assert Author.version() == "author-3"
+    test "prompts and pages carry bumped prompt_version author-4" do
+      assert Author.version() == "author-4"
+    end
+  end
+
+  describe "the count of Bookends the Author was asked for" do
+    @four_gives [
+      %{name: "Melissa", text: "a candlelit cathedral"},
+      %{name: "Jacob", text: "a cyberpunk nightclub"},
+      %{name: "Ada", text: "a deep sea trench"},
+      %{name: "Sam", text: "a vintage bookstore"}
+    ]
+
+    test "accepts exactly the count asked for" do
+      json =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "abyss", "folio"],
+            from: ["Melissa", "Jacob", "Ada", "Sam"]
+          )
+        )
+
+      assert :ok = Author.check(json, @four_gives, 4)
+    end
+
+    test "rejects one more or fewer than the count asked for" do
+      four =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "abyss", "folio"],
+            from: ["Melissa", "Jacob", "Ada", "Sam"]
+          )
+        )
+
+      assert {:error, too_few} = Author.check(four, @four_gives, 6)
+      assert too_few =~ "exactly 6 items"
+
+      three =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "abyss"],
+            from: ["Melissa", "Jacob", "Ada"]
+          )
+        )
+
+      assert {:error, too_few_for_four} = Author.check(three, @four_gives, 4)
+      assert too_few_for_four =~ "exactly 4 items"
+
+      five =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "abyss", "folio", "ember"],
+            from: ["Melissa", "Jacob", "Ada", "Sam", "Melissa"]
+          )
+        )
+
+      assert {:error, too_many} = Author.check(five, @four_gives, 4)
+      assert too_many =~ "exactly 4 items"
+    end
+
+    test "at a Full table rejects two Bookends from the same Give" do
+      json =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "abyss", "folio"],
+            from: ["Melissa", "Jacob", "Melissa", "Sam"]
+          )
+        )
+
+      assert {:error, why} = Author.check(json, @four_gives, 4)
+      assert why =~ "same setting"
+    end
+
+    test "root rules hold across N Bookends" do
+      shared =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "folio", "folios"],
+            from: ["Melissa", "Jacob", "Ada", "Sam"]
+          )
+        )
+
+      assert {:error, shared_why} = Author.check(shared, @four_gives, 4)
+      assert shared_why =~ "share a root"
+
+      with_give =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "abyss", "folio"],
+            from: ["Melissa", "Jacob", "Ada", "Sam"]
+          )
+        )
+
+      gives = [
+        %{name: "Melissa", text: "a candlelit cathedral"},
+        %{name: "Jacob", text: "a cyberpunk nightclub"},
+        %{name: "Ada", text: "an abyssal trench"},
+        %{name: "Sam", text: "a vintage bookstore"}
+      ]
+
+      assert {:error, give_why} = Author.check(with_give, gives, 4)
+      assert give_why =~ "shares a root with setting word"
+    end
+  end
+
+  describe "the Author brief names the count and the rule" do
+    @four_gives [
+      %{name: "Melissa", text: "a candlelit cathedral"},
+      %{name: "Jacob", text: "a cyberpunk nightclub"},
+      %{name: "Ada", text: "a deep sea trench"},
+      %{name: "Sam", text: "a vintage bookstore"}
+    ]
+
+    test "a Full table brief asks for one Bookend from each setting's world" do
+      prompt = Author.prompt(@four_gives, nil, 4)
+      combined = prompt.system <> "\n" <> prompt.user
+
+      assert combined =~ "Exactly 4"
+      assert combined =~ "Full table"
+      assert combined =~ "one Bookend from each"
+    end
+
+    test "a two-Bookend brief asks for two Bookends from two different settings" do
+      prompt = Author.prompt(@four_gives, nil, 2)
+      combined = prompt.system <> "\n" <> prompt.user
+
+      assert combined =~ "Exactly 2"
+      assert combined =~ "not a Full table"
+      refute combined =~ "one Bookend from each"
     end
   end
 
@@ -105,7 +232,7 @@ defmodule Thereish.Steward.AuthorTest do
         case call_num do
           1 ->
             # First attempt produces a bookend sharing a root with give ("beach")
-            illegal = author_json(bookends: ["beach", "tree"])
+            illegal = author_json(bookends: ["beach", "tree"], from: ["Alice", "Bob"])
             Req.Test.json(conn, author_response(illegal))
 
           2 ->
@@ -116,7 +243,7 @@ defmodule Thereish.Steward.AuthorTest do
             assert user_prompt =~ "Your previous answer was rejected by the validator"
             assert user_prompt =~ "shares a root"
 
-            legal = author_json(bookends: ["ocean", "woods"])
+            legal = author_json(bookends: ["ocean", "woods"], from: ["Alice", "Bob"])
             Req.Test.json(conn, author_response(legal))
         end
       end)
@@ -164,6 +291,44 @@ defmodule Thereish.Steward.AuthorTest do
       assert astra_role.deadline_ms == 8_000
     end
 
+    test "the A/B harness passes the count through and its records carry it" do
+      gives = [
+        %{seat_id: "s1", name: "Melissa", text: "a candlelit cathedral"},
+        %{seat_id: "s2", name: "Jacob", text: "a cyberpunk nightclub"},
+        %{seat_id: "s3", name: "Ada", text: "a deep sea trench"},
+        %{seat_id: "s4", name: "Sam", text: "a vintage bookstore"}
+      ]
+
+      recorded_author(fn conn, body ->
+        [%{"content" => user_prompt}] =
+          Enum.filter(body["messages"], &(&1["role"] == "user"))
+
+        [%{"content" => system_prompt}] =
+          Enum.filter(body["messages"], &(&1["role"] == "system"))
+
+        combined = system_prompt <> "\n" <> user_prompt
+        assert combined =~ "Exactly 4"
+        assert combined =~ "Full table"
+        assert combined =~ "one Bookend from each"
+
+        Req.Test.json(
+          conn,
+          author_response(
+            author_json(
+              bookends: ["nave", "neon", "abyss", "folio"],
+              from: ["Melissa", "Jacob", "Ada", "Sam"]
+            )
+          )
+        )
+      end)
+
+      assert {:ok, result} = Steward.author(%{gives: gives, count: 4}, job: :flash)
+      assert result.bookends == ["nave", "neon", "abyss", "folio"]
+      assert result.meta.count == 4
+      assert result.meta.arm == :flash
+      assert result.meta.prompt_version == "author-4"
+    end
+
     test "Steward writes with the job named by the Page's arm" do
       gives = [
         %{seat_id: "s1", name: "Alice", text: "walking along the beach"},
@@ -171,7 +336,10 @@ defmodule Thereish.Steward.AuthorTest do
       ]
 
       recorded_author(fn conn, _body ->
-        Req.Test.json(conn, author_response(author_json(bookends: ["ocean", "woods"])))
+        Req.Test.json(
+          conn,
+          author_response(author_json(bookends: ["ocean", "woods"], from: ["Alice", "Bob"]))
+        )
       end)
 
       assert {:ok, flash_res} = Steward.author(%{gives: gives}, job: :flash)
@@ -189,7 +357,7 @@ defmodule Thereish.Steward.AuthorTest do
               "finish_reason" => "stop",
               "message" => %{
                 "role" => "assistant",
-                "content" => author_json(bookends: ["beacon", "haven"])
+                "content" => author_json(bookends: ["beacon", "haven"], from: ["Alice", "Bob"])
               }
             }
           ],

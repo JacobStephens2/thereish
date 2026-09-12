@@ -383,7 +383,10 @@ defmodule Thereish.Steward do
   end
 
   @doc """
-  Writes two Bookends live from player settings (Gives).
+  Writes Bookends live from player settings (Gives).
+
+  The request carries the count of Bookends wanted — one per Give at a Full
+  table, or two — alongside the Gives and the Chronicle digest.
   """
   @spec author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   def author(request, opts \\ []) do
