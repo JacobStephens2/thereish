@@ -3882,6 +3882,8 @@ defmodule ThereishWeb.RoomLiveTest do
       # Words show on the Stage
       assert has_element?(stage, "[data-role=prologue-words]")
       assert has_element?(stage, "[data-role=prologue-words]", "Welcome to Thereish")
+      assert has_element?(stage, "[data-role=prologue-words]", "Give")
+      refute has_element?(stage, "[data-role=prologue-words]", "setting")
       assert has_element?(stage, "[data-role=prologue-skip]", "Skip")
     end
 
