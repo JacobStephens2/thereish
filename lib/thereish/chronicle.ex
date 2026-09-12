@@ -1750,6 +1750,7 @@ defmodule Thereish.Chronicle do
               verdicts,
               bridges
             ),
+          bookend_chips: bookend_chips_for(page, attempt, index),
           overrules: Enum.map(attempt_overrules, &format_overrule/1),
           corrections: Enum.map(attempt_corrections, &format_correction/1),
           fairness_taps: Enum.map(attempt_taps, &format_fairness_tap/1)
@@ -1832,7 +1833,7 @@ defmodule Thereish.Chronicle do
       theme: page.document["theme"] || page.document[:theme],
       chapter: page.document["chapter"] || page.document[:chapter],
       bookends: opening_bookends,
-      bookend_gives: page_bookend_gives(page.document),
+      bookend_origins: page_bookend_origins(page.document),
       full_table: page_full_table(page.document),
       closed_because: page.closed_because,
       melded: page.melded,
@@ -2175,8 +2176,10 @@ defmodule Thereish.Chronicle do
 
   defp page_full_table(_), do: nil
 
-  defp page_bookend_gives(doc) when is_map(doc) do
-    raw = Map.get(doc, "bookend_gives") || Map.get(doc, :bookend_gives) || []
+  defp page_bookend_origins(doc) when is_map(doc) do
+    raw =
+      Map.get(doc, "bookend_origins") || Map.get(doc, :bookend_origins) ||
+        Map.get(doc, "bookend_gives") || Map.get(doc, :bookend_gives) || []
 
     Enum.map(raw, fn origin ->
       %{
@@ -2188,5 +2191,49 @@ defmodule Thereish.Chronicle do
     end)
   end
 
-  defp page_bookend_gives(_), do: []
+  defp page_bookend_origins(_), do: []
+
+  defp bookend_chips_for(page, attempt, index) do
+    origins = page_bookend_origins(page.document)
+    masks = page.masks_meta || %{}
+
+    cond do
+      attempt.number == 1 and origins != [] ->
+        Enum.map(origins, fn origin ->
+          %{
+            word: origin.word,
+            give: origin.give,
+            seat_id: origin.seat_id,
+            seat_name: origin.seat_name,
+            mask: nil
+          }
+        end)
+
+      attempt.number == 1 ->
+        Enum.map(attempt.bookends || [], &%{word: &1, mask: nil})
+
+      true ->
+        prev = Enum.at(page.attempts, index - 1)
+        unclaimed = (prev && prev.bridges) || []
+
+        {chips, _rest} =
+          Enum.map_reduce(attempt.bookends || [], unclaimed, fn word, remaining ->
+            case Enum.split_while(remaining, &(&1.bridge != word)) do
+              {passed, [claimed | rest]} ->
+                seat_id = claimed.seat_id
+
+                mask =
+                  seat_id &&
+                    (Map.get(masks, seat_id) || Map.get(masks, to_string(seat_id)))
+
+                {%{word: word, seat_id: seat_id, mask: mask}, passed ++ rest}
+
+              {_all, []} ->
+                {%{word: word, mask: nil}, remaining}
+            end
+          end)
+
+        chips
+    end
+  end
 end

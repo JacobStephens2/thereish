@@ -485,16 +485,17 @@ defmodule ThereishWeb.ChronicleLive do
               </div>
 
               <.bookends
-                room={%{bookend_chips: attempt_bookend_chips(page, attempt)}}
+                room={%{bookend_chips: attempt[:bookend_chips] || []}}
                 mode={:phone}
               />
 
               <p
-                :for={origin <- first_attempt_gives(page, attempt)}
+                :for={chip <- attempt[:bookend_chips] || []}
+                :if={chip[:give]}
                 data-role="bookend-give"
                 class="text-xs opacity-70"
               >
-                {origin.word} from {origin.seat_name}'s {origin.give}
+                {chip.word} from {chip.seat_name}'s {chip.give}
               </p>
 
               <!-- Bridges -->
@@ -783,49 +784,6 @@ defmodule ThereishWeb.ChronicleLive do
   defp human_label(label), do: Thereish.Chronicle.FairnessTap.label_human(label)
 
   defp page_track(page), do: Chronicle.page_track(page)
-
-  defp first_attempt_gives(page, %{number: 1}) do
-    Enum.filter(page[:bookend_gives] || [], & &1[:give])
-  end
-
-  defp first_attempt_gives(_page, _attempt), do: []
-
-  defp attempt_bookend_chips(page, attempt) do
-    if attempt.number == 1 do
-      case page[:bookend_gives] do
-        [_ | _] = origins ->
-          Enum.map(origins, fn origin ->
-            %{word: origin.word || origin[:word], mask: nil, give: origin[:give]}
-          end)
-
-        _ ->
-          attempt.bookends || page.bookends || []
-      end
-    else
-      prev = Enum.find(page.attempts, &(&1.number == attempt.number - 1))
-      masks = page[:masks_meta] || page[:masks] || %{}
-      unclaimed = (prev && prev.bridges) || []
-
-      {chips, _rest} =
-        Enum.map_reduce(attempt.bookends || [], unclaimed, fn word, remaining ->
-          case Enum.split_while(remaining, &(&1.bridge != word)) do
-            {passed, [claimed | rest]} ->
-              seat_id = claimed.seat_id
-
-              mask =
-                seat_id &&
-                  (Map.get(masks, seat_id) || Map.get(masks, to_string(seat_id)))
-
-              {%{word: word, seat_id: seat_id, mask: mask}, passed ++ rest}
-
-            {_all, []} ->
-              {%{word: word, mask: nil}, remaining}
-          end
-        end)
-
-      chips
-    end
-  end
 
   attr :data_role, :string, required: true
   attr :title, :string, required: true

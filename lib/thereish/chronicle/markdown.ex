@@ -111,7 +111,7 @@ defmodule Thereish.Chronicle.Markdown do
       end
 
     bookend_give_lines =
-      Enum.flat_map(page[:bookend_gives] || [], fn origin ->
+      Enum.flat_map(page[:bookend_origins] || [], fn origin ->
         if origin[:give] && origin[:word] do
           who = origin[:seat_name] || "Seat"
           ["- Bookend (#{origin.word}): from #{who}'s #{origin.give}"]
@@ -214,7 +214,7 @@ defmodule Thereish.Chronicle.Markdown do
 
           lines =
             if attempt[:carried] && attempt.carried != [] do
-              lines ++ ["- Carried: #{join_and(attempt.carried)}"]
+              lines ++ ["- Carried: #{Thereish.Game.join_and(attempt.carried)}"]
             else
               lines
             end
@@ -703,23 +703,6 @@ defmodule Thereish.Chronicle.Markdown do
       Repo.get!(Room, room_id_or_slug)
     else
       Repo.get_by!(Room, slug: room_id_or_slug)
-    end
-  end
-
-  defp join_and(words) when is_list(words) do
-    case words do
-      [] ->
-        ""
-
-      [one] ->
-        one
-
-      [left, right] ->
-        "#{left} and #{right}"
-
-      many ->
-        {last, rest} = List.pop_at(many, -1)
-        Enum.join(rest, ", ") <> " and " <> last
     end
   end
 

@@ -147,22 +147,7 @@ defmodule Thereish.Steward.Assay do
   # Two Bookends stay "LANTERN and HARBOUR"; four become "LANTERN, HARBOUR, WHARF
   # and DUSK". The couch's two-Seat prompts do not change their wording.
   defp format_bookends(bookends) do
-    words = Enum.map(bookends, &String.upcase/1)
-
-    case words do
-      [] ->
-        ""
-
-      [one] ->
-        one
-
-      [left, right] ->
-        "#{left} and #{right}"
-
-      many ->
-        {last, rest} = List.pop_at(many, -1)
-        Enum.join(rest, ", ") <> " and " <> last
-    end
+    bookends |> Enum.map(&String.upcase/1) |> Thereish.Game.join_and()
   end
 
   @doc """
