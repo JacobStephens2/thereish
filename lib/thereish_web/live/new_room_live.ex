@@ -64,6 +64,8 @@ defmodule ThereishWeb.NewRoomLive do
       </form>
 
       <.link navigate={~p"/"} class="text-sm underline opacity-70">Back</.link>
+
+      <Layouts.made_by />
     </main>
     """
   end

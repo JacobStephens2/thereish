@@ -138,6 +138,17 @@ defmodule ThereishWeb.RoomLiveTest do
       refute element(view, "[data-role=room-code]") |> render() =~ "Read it aloud, or send"
     end
 
+    test "a quiet credit names who made Thereish" do
+      code = open_room()
+      {:ok, view, _html} = live(phone(code))
+
+      assert has_element?(
+               view,
+               "[data-role=made-by] a[href='https://stephens.page']",
+               "Made by Jacob Stephens"
+             )
+    end
+
     test "Stage header renders the Room's quip beside the join line when present, and nothing when absent" do
       slug_with_quip = open_room(quip: "A gentle word for quiet hours.")
       {:ok, stage, _html} = live(build_conn(), ~p"/r/#{slug_with_quip}/stage")
@@ -698,6 +709,150 @@ defmodule ThereishWeb.RoomLiveTest do
     end
   end
 
+  describe "the reveal hold on every screen" do
+    setup do
+      reveal_hold(60_000)
+      slug = open_room()
+      melissa_conn = phone(slug)
+      {:ok, melissa, _} = live(melissa_conn)
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+      play_to_bridging(melissa, jacob, slug)
+
+      %{
+        slug: slug,
+        melissa: melissa,
+        jacob: jacob,
+        stage: stage,
+        melissa_conn: melissa_conn,
+        screens: [melissa, jacob, stage]
+      }
+    end
+
+    test "phones and the Stage hold until the deadline, and a click cannot bypass it", ctx do
+      miss(ctx)
+
+      for view <- [ctx.melissa, ctx.jacob] do
+        assert has_element?(view, "[data-role=reveal-hold]")
+        assert has_element?(view, "[data-role=again][disabled]")
+      end
+
+      assert has_element?(ctx.stage, "[data-role=reveal-hold]")
+      refute has_element?(ctx.stage, "[data-role=again]")
+
+      render_click(ctx.melissa, "next_attempt", %{})
+      render_click(ctx.jacob, "next_attempt", %{})
+
+      for view <- ctx.screens do
+        assert has_element?(view, "[data-role=reveal]")
+        refute has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
+      end
+    end
+
+    test "an early Meld holds One more? the same way", ctx do
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairns")
+      await_reveal_on(ctx.melissa)
+
+      assert has_element?(ctx.melissa, "[data-role=reveal-hold]")
+      assert has_element?(ctx.melissa, "[data-role=one-more][disabled]")
+      assert has_element?(ctx.stage, "[data-role=reveal-hold]")
+
+      render_click(ctx.melissa, "next_page", %{})
+
+      assert has_element?(ctx.melissa, "[data-role=ending]")
+      refute has_element?(ctx.melissa, "[data-role=setting-form]")
+    end
+
+    test "exhausted Attempts hold One more? after the last reveal", ctx do
+      attempt_cap(2)
+      reveal_hold(30)
+      miss(ctx)
+
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=again]:not([disabled])") end)
+      press(ctx.melissa, "again")
+      await_phase(ctx.slug, :bridging)
+
+      reveal_hold(60_000)
+      miss(ctx, "wharf", "gantry")
+
+      assert has_element?(ctx.melissa, "[data-role=one-more][disabled]")
+      assert has_element?(ctx.stage, "[data-role=reveal-hold]")
+      render_click(ctx.melissa, "next_page", %{})
+      assert has_element?(ctx.melissa, "[data-role=ending]")
+      refute has_element?(ctx.melissa, "[data-role=setting-form]")
+    end
+
+    test "a late Stage and a reconnecting phone see the Room's deadline, not a fresh one",
+         ctx do
+      miss(ctx)
+
+      {:ok, late_stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
+      {:ok, reconnected, _} = live(ctx.melissa_conn)
+      melissa_id = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Melissa")).id
+
+      assert has_element?(late_stage, "[data-role=reveal-hold]")
+      assert has_element?(reconnected, "[data-role=again][disabled]")
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, melissa_id)
+    end
+  end
+
+  describe "the reveal hold unlocking" do
+    test "controls unlock when the deadline passes, and one eligible tap advances" do
+      reveal_hold(30)
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+      play_to_bridging(melissa, jacob, slug)
+
+      commit(melissa, "cairn")
+      commit(jacob, "beacon")
+      await_reveal_on(melissa)
+
+      eventually(fn -> has_element?(melissa, "[data-role=again]:not([disabled])") end)
+      refute has_element?(melissa, "[data-role=reveal-hold]")
+      refute has_element?(stage, "[data-role=reveal-hold]")
+
+      press(melissa, "again")
+
+      for view <- [melissa, jacob, stage] do
+        assert has_element?(view, "[data-role=attempt]", "Attempt 2 of 5")
+      end
+    end
+
+    test "One more? unlocks when the deadline passes, and one tap opens the next Page" do
+      reveal_hold(30)
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+      play_to_bridging(melissa, jacob, slug)
+
+      commit(melissa, "cairn")
+      commit(jacob, "cairns")
+      await_reveal_on(melissa)
+
+      eventually(fn -> has_element?(melissa, "[data-role=one-more]:not([disabled])") end)
+      refute has_element?(melissa, "[data-role=reveal-hold]")
+      refute has_element?(stage, "[data-role=reveal-hold]")
+
+      press(melissa, "one-more")
+
+      assert has_element?(melissa, "[data-role=setting-form]")
+      assert has_element?(jacob, "[data-role=setting-form]")
+    end
+  end
+
   describe "a URL with no Room behind it" do
     test "is a 404 rather than a Room conjured out of the typo" do
       assert_error_sent 404, fn -> get(build_conn(), "/r/Not_A_Code") end
@@ -763,11 +918,34 @@ defmodule ThereishWeb.RoomLiveTest do
       ])
     end
 
-    test "shows the URL a phone should open" do
+    test "shows thereish.app and keeps a useful Room link" do
       slug = open_room()
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
 
-      assert has_element?(stage, "[data-role=join-url]", "/r/#{slug}")
+      assert has_element?(stage, "[data-role=join-url]", "thereish.app")
+      assert has_element?(stage, ~s(a[data-role=join-url][href*="/r/#{slug}"]))
+      refute has_element?(stage, "[data-role=join-url]", "/r/#{slug}")
+    end
+
+    test "the joining screen has a small credit that play does not" do
+      slug = open_room()
+      {:ok, melissa, _} = live(phone(slug))
+      {:ok, jacob, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      assert has_element?(stage, "[data-role=stage-foot] [data-role=made-by][data-size=stage]")
+
+      assert has_element?(
+               stage,
+               "[data-role=stage-foot] [data-role=made-by] a[href='https://stephens.page']",
+               "Made by Jacob Stephens"
+             )
+
+      join(melissa, "Melissa")
+      join(jacob, "Jacob")
+      play_to_bridging(melissa, jacob, slug)
+
+      refute has_element?(stage, "[data-role=made-by]")
     end
 
     test "heading, controls, and chronicle link share the header; join URL and roster share the foot" do
@@ -786,9 +964,9 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(stage, "header a[href*='chronicle']", "The Chronicle")
       refute has_element?(stage, "header [data-role=join-url]")
 
-      # Footer strip has join URL and roster together; no separate "In the Room" heading
-      assert has_element?(stage, "footer [data-role=join-url]", "/r/#{slug}")
-      assert has_element?(stage, "[data-role=stage-foot] [data-role=join-url]", "/r/#{slug}")
+      # Footer strip has join address and roster together; no separate "In the Room" heading
+      assert has_element?(stage, "footer [data-role=join-url]", "thereish.app")
+      assert has_element?(stage, "[data-role=stage-foot] [data-role=join-url]", "thereish.app")
       assert has_element?(stage, "footer [data-role=roster]")
       assert has_element?(stage, "footer [data-seat]", "Melissa")
       assert has_element?(stage, "footer [data-seat]", "Jacob")
@@ -1269,6 +1447,26 @@ defmodule ThereishWeb.RoomLiveTest do
       %{slug: slug, melissa: melissa, jacob: jacob, stage: stage, steward: steward}
     end
 
+    test "player-facing theme language says Give and invites more than places", ctx do
+      melissa = render(ctx.melissa)
+      assert melissa =~ "Your Give"
+      refute melissa =~ "Your setting"
+      assert has_element?(ctx.melissa, "[data-role=give-examples]")
+
+      examples = element(ctx.melissa, "[data-role=give-examples]") |> render()
+      assert examples =~ "restless"
+      assert examples =~ "can of worms"
+      assert examples =~ "first snow"
+      assert examples =~ "Kiss Heavy Metal"
+
+      stage = render(ctx.stage)
+      assert stage =~ "Waiting for Gives"
+      refute stage =~ "Waiting for settings"
+
+      give_setting(ctx.melissa, "   ")
+      assert has_element?(ctx.melissa, "[data-role=give-error]", "Type a Give first.")
+    end
+
     test "each seat gives a setting, stage shows count, second give triggers author writing",
          ctx do
       fake_config = Keyword.get(ctx.steward, :fake, [])
@@ -1355,6 +1553,113 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(ctx.jacob, "[data-role=your-mask]")
     end
 
+    test "owner sees their Mask at once; other phone and Stage wait until the first reveal",
+         ctx do
+      give_setting(ctx.melissa, "candlelit cathedral")
+      melissa = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Melissa"))
+
+      eventually(fn -> has_element?(ctx.melissa, "[data-role=your-mask]") end)
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-seat='#{melissa.id}'] [data-role=seat-mask]"
+             )
+
+      refute has_element?(
+               ctx.jacob,
+               "[data-seat='#{melissa.id}'] [data-role=seat-mask]"
+             )
+
+      assert has_element?(
+               ctx.jacob,
+               "[data-seat='#{melissa.id}'] [data-role=mask-face-down]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=mask-face-down][data-seat='#{melissa.id}']"
+             )
+
+      refute has_element?(
+               ctx.stage,
+               "[data-seat='#{melissa.id}'] [data-role=seat-mask]"
+             )
+
+      give_setting(ctx.jacob, "misty harbor")
+      await_phase(ctx.slug, :bridging)
+      jacob = Enum.find(Rooms.snapshot(ctx.slug, nil).seats, &(&1.name == "Jacob"))
+
+      refute has_element?(
+               ctx.jacob,
+               "[data-seat='#{melissa.id}'] [data-role=seat-mask]"
+             )
+
+      assert has_element?(
+               ctx.jacob,
+               "[data-seat='#{melissa.id}'] [data-role=mask-face-down]"
+             )
+
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "tallow")
+      await_reveal_on(ctx.melissa)
+      await_reveal_on(ctx.jacob)
+      await_reveal_on(ctx.stage)
+
+      refute has_element?(ctx.melissa, "[data-role=mask-face-down]")
+      refute has_element?(ctx.jacob, "[data-role=mask-face-down]")
+      refute has_element?(ctx.stage, "[data-role=mask-face-down]")
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-seat='#{melissa.id}'] [data-role=seat-mask]"
+             )
+
+      assert has_element?(
+               ctx.jacob,
+               "[data-seat='#{melissa.id}'] [data-role=seat-mask]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=stage-mask][data-seat='#{melissa.id}'] [data-role=seat-mask]"
+             )
+
+      assert has_element?(
+               ctx.stage,
+               "[data-role=stage-mask][data-seat='#{jacob.id}'] [data-role=seat-mask]"
+             )
+    end
+
+    test "a Meld's final reveal pairs each written Give with its Mask on phones and Stage", ctx do
+      play_to_bridging(ctx.melissa, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "cairns")
+      await_reveal_on(ctx.melissa)
+      await_phase(ctx.slug, :closed)
+
+      for view <- [ctx.melissa, ctx.jacob, ctx.stage] do
+        assert has_element?(view, "[data-role=gives]")
+        assert has_element?(view, "[data-role=give]", "candlelit cathedral")
+        assert has_element?(view, "[data-role=give]", "misty harbor")
+        assert has_element?(view, "[data-role=give-mask]")
+      end
+    end
+
+    test "an exhausted Page's final reveal pairs Gives with Masks on phones and Stage", ctx do
+      attempt_cap(1)
+      play_to_bridging(ctx.melissa, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
+      commit(ctx.melissa, "cairn")
+      commit(ctx.jacob, "beacon")
+      await_reveal_on(ctx.melissa)
+      await_phase(ctx.slug, :closed)
+
+      for view <- [ctx.melissa, ctx.jacob, ctx.stage] do
+        assert has_element?(view, "[data-role=gives]")
+        assert has_element?(view, "[data-role=give]", "candlelit cathedral")
+        assert has_element?(view, "[data-role=give-mask]")
+      end
+    end
+
     test "next_page returns to giving phase prefilled with the previous give", ctx do
       play_to_bridging(ctx.melissa, ctx.jacob, ctx.slug, "candlelit cathedral", "misty harbor")
 
@@ -1390,7 +1695,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # 1. Stage shows waiting count with no give text
       give_setting(ctx.melissa, "secret cathedral")
-      eventually(fn -> render(ctx.stage) =~ "Waiting for settings: 1 of 2" end)
+      eventually(fn -> render(ctx.stage) =~ "Waiting for Gives: 1 of 2" end)
       refute render(ctx.stage) =~ "secret cathedral"
 
       # 2. Last give in: writing animation on stage and phones
@@ -1398,8 +1703,8 @@ defmodule ThereishWeb.RoomLiveTest do
       eventually(fn -> has_element?(ctx.stage, "[data-role=writing-stage]") end)
       assert has_element?(ctx.melissa, "[data-role=writing-phase]")
       assert has_element?(ctx.jacob, "[data-role=writing-phase]")
-      assert render(ctx.stage) =~ "The Author is reading your settings..."
-      assert render(ctx.melissa) =~ "The Author is reading your settings..."
+      assert render(ctx.stage) =~ "The Author is reading your Gives..."
+      assert render(ctx.melissa) =~ "The Author is reading your Gives..."
 
       # 3. At five seconds (30ms test time): every screen says the Author is still writing
       eventually(fn -> render(ctx.stage) =~ "The Author is still writing..." end)
@@ -1418,19 +1723,19 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(
                ctx.stage,
                "[data-role=author-failure]",
-               "The Author couldn't write from these settings: timed out"
+               "The Author couldn't write from these Gives: timed out"
              )
 
       assert has_element?(
                ctx.melissa,
                "[data-role=author-failure]",
-               "The Author couldn't write from these settings: timed out"
+               "The Author couldn't write from these Gives: timed out"
              )
 
       assert has_element?(
                ctx.jacob,
                "[data-role=author-failure]",
-               "The Author couldn't write from these settings: timed out"
+               "The Author couldn't write from these Gives: timed out"
              )
     end
 
@@ -1457,12 +1762,12 @@ defmodule ThereishWeb.RoomLiveTest do
       # Both phones see Try again and New settings
       for phone <- [ctx.melissa, ctx.jacob] do
         assert has_element?(phone, "[data-role=retry-author]", "Try again")
-        assert has_element?(phone, "[data-role=reset-gives]", "New settings")
+        assert has_element?(phone, "[data-role=reset-gives]", "New Gives")
 
         assert has_element?(
                  phone,
                  "[data-role=author-failure]",
-                 "The Author couldn't write from these settings"
+                 "The Author couldn't write from these Gives"
                )
       end
 
@@ -1508,7 +1813,7 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=author-failure]")
 
       # Melissa clicks New settings
-      ctx.melissa |> element("[data-role=reset-gives]", "New settings") |> render_click()
+      ctx.melissa |> element("[data-role=reset-gives]", "New Gives") |> render_click()
 
       # Both phones return to giving form
       eventually(fn -> has_element?(ctx.melissa, "[data-role=setting-form]") end)
@@ -1519,12 +1824,12 @@ defmodule ThereishWeb.RoomLiveTest do
       assert render(ctx.jacob) =~ "value=\"setting jacob\""
 
       # Stage returns to giving count 0 of 2
-      eventually(fn -> render(ctx.stage) =~ "Waiting for settings: 0 of 2" end)
+      eventually(fn -> render(ctx.stage) =~ "Waiting for Gives: 0 of 2" end)
     end
 
     test "submitting an empty Give shows an error", ctx do
       give_setting(ctx.melissa, "   ")
-      assert has_element?(ctx.melissa, "[data-role=give-error]", "Type a setting first.")
+      assert has_element?(ctx.melissa, "[data-role=give-error]", "Type a Give first.")
     end
   end
 
@@ -1614,10 +1919,10 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # Stage giving state while phones give
       assert has_element?(stage, "[data-role=giving-stage]")
-      assert render(stage) =~ "Waiting for settings: 0 of 2"
+      assert render(stage) =~ "Waiting for Gives: 0 of 2"
 
       give_setting(melissa, "lanterns on the quay")
-      eventually(fn -> render(stage) =~ "Waiting for settings: 1 of 2" end)
+      eventually(fn -> render(stage) =~ "Waiting for Gives: 1 of 2" end)
 
       give_setting(jacob, "fog over the harbour")
       await_phase(slug, :bridging)
@@ -1920,11 +2225,11 @@ defmodule ThereishWeb.RoomLiveTest do
         end
 
       assert has_element?(stage, "[data-role=giving-stage]")
-      assert render(stage) =~ "Waiting for settings: 0 of 4"
+      assert render(stage) =~ "Waiting for Gives: 0 of 4"
 
       [p1, p2, p3, p4] = phones
       give_setting(p1, "setting one")
-      eventually(fn -> render(stage) =~ "Waiting for settings: 1 of 4" end)
+      eventually(fn -> render(stage) =~ "Waiting for Gives: 1 of 4" end)
       give_setting(p2, "setting two")
       give_setting(p3, "setting three")
       give_setting(p4, "setting four")
@@ -2058,7 +2363,17 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.melissa, "[data-role=settings-modal] [data-role=music-control]")
       assert has_element?(ctx.melissa, "[data-role=settings-modal] [data-role=quips-switch]")
       assert has_element?(ctx.melissa, "[data-role=settings-modal] [data-role=full-table-switch]")
-      refute has_element?(ctx.melissa, "[data-role=voice-bookends-switch]")
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=settings-modal] [data-role=voice-bookends-switch]"
+             )
+
+      assert has_element?(
+               ctx.melissa,
+               "[data-role=settings-modal] [data-role=voice-verdict-switch]"
+             )
+
       assert has_element?(ctx.melissa, "[data-role=local-sound-toggle]")
 
       assert has_element?(
@@ -2071,6 +2386,12 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=settings-modal] [data-role=music-control]")
       assert has_element?(ctx.jacob, "[data-role=settings-modal] [data-role=quips-switch]")
       assert has_element?(ctx.jacob, "[data-role=settings-modal] [data-role=full-table-switch]")
+
+      assert has_element?(
+               ctx.jacob,
+               "[data-role=settings-modal] [data-role=voice-bookends-switch]"
+             )
+
       assert has_element?(ctx.jacob, "[data-role=local-sound-toggle]")
       refute has_element?(ctx.stage, "[data-role=local-sound-toggle]")
 
@@ -2359,6 +2680,27 @@ defmodule ThereishWeb.RoomLiveTest do
       refute_push_event(ctx.stage, "foley:sting", %{})
       refute_push_event(ctx.stage, "foley:voice", %{})
       refute_push_event(ctx.jacob, "foley:voice", %{})
+    end
+
+    test "a later Room change or phone resync does not replay Bookends speech", ctx do
+      give_setting(ctx.melissa, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      await_phase(ctx.slug, :bridging)
+
+      expected_bookends_url = "/r/#{ctx.slug}/voice/1/bookends"
+
+      assert_push_event(ctx.stage, "foley:voice", %{
+        attempt: 1,
+        kind: "bookends",
+        url: ^expected_bookends_url
+      })
+
+      Rooms.set_quips(ctx.slug, false)
+      refute_push_event(ctx.stage, "foley:voice", %{})
+
+      render_hook(ctx.melissa, "resync", %{})
+      refute_push_event(ctx.melissa, "foley:voice", %{})
+      refute_push_event(ctx.stage, "foley:voice", %{})
     end
 
     test "ticket 10: quips toggle hides reveal quip everywhere while room quip still shows, and stings still push with voice off" do
@@ -3562,7 +3904,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
   describe "the Room starts when everyone is here (ticket 08)" do
     test "count-free start with Start Page button and late seat joins next page" do
-      # 1. Front page -> New Room (no player count chosen, opens at seat cap 6)
+      # 1. Front page -> New Room (no player count chosen, opens at the seat cap)
       conn1 = build_conn()
       {:ok, front, _} = live(conn1, ~p"/")
       assert has_element?(front, "[data-role=new-room]")
@@ -3576,7 +3918,7 @@ defmodule ThereishWeb.RoomLiveTest do
       "/r/" <> code = to
       on_exit(fn -> stop_room(code) end)
 
-      assert Rooms.snapshot(code, nil).seat_limit == 6
+      assert Rooms.snapshot(code, nil).seat_limit == Thereish.Steward.seat_cap()
 
       # Phone 1 connects and joins
       {:ok, phone1, _} = live(conn1, to)
@@ -3802,6 +4144,8 @@ defmodule ThereishWeb.RoomLiveTest do
       # Words show on the Stage
       assert has_element?(stage, "[data-role=prologue-words]")
       assert has_element?(stage, "[data-role=prologue-words]", "Welcome to Thereish")
+      assert has_element?(stage, "[data-role=prologue-words]", "Give")
+      refute has_element?(stage, "[data-role=prologue-words]", "setting")
       assert has_element?(stage, "[data-role=prologue-skip]", "Skip")
     end
 
@@ -4091,6 +4435,99 @@ defmodule ThereishWeb.RoomLiveTest do
                ctx.stage,
                "[data-role=stage-mask][data-seat='#{jacob.id}'] [data-role=seat-mask]"
              )
+    end
+  end
+
+  describe "eight-Seat Rooms (ticket 01, #132)" do
+    @eight ~w(Melissa Jacob Ada Ida Ola Ora Ivy Ned)
+    @eight_bridges ~w(cairn beacon wharf signal torch lamp stone flare)
+
+    test "phones and the Stage play a full Page with eight distinguishable Seats" do
+      slug = open_room(seat_limit: 8)
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      phones =
+        for name <- @eight do
+          {:ok, view, _} = live(phone(slug))
+          join(view, name)
+          view
+        end
+
+      {:ok, ninth, _} = live(phone(slug))
+      assert join(ninth, "Ninth") =~ "Every seat is taken"
+
+      snapshot = Rooms.snapshot(slug, nil)
+      assert length(snapshot.seats) == 8
+
+      for {phone_view, name} <- Enum.zip(phones, @eight) do
+        assert has_element?(phone_view, "[data-role=roster] [data-seat]", name)
+        assert has_element?(phone_view, "[data-role=setting-form]")
+      end
+
+      for name <- @eight do
+        assert has_element?(stage, "[data-role=roster] [data-seat]", name)
+      end
+
+      for {phone_view, name} <- Enum.zip(phones, @eight) do
+        give_setting(phone_view, "setting #{name}")
+      end
+
+      await_phase(slug, :bridging)
+
+      snapshot = Rooms.snapshot(slug, nil)
+      colours = Enum.map(snapshot.seats, & &1.colour)
+      assert length(Enum.uniq(colours)) == 8
+
+      for seat <- snapshot.seats do
+        assert has_element?(stage, "[data-role=bridge-marker][data-seat='#{seat.id}']", seat.name)
+      end
+
+      for phone_view <- phones do
+        eventually(fn -> has_element?(phone_view, "[data-role=bridge-form]") end)
+        assert has_element?(phone_view, "[data-role=bookend-chip]", "lantern")
+        assert has_element?(phone_view, "[data-role=bookend-chip]", "hearth")
+      end
+
+      assert has_element?(stage, "[data-role=bookend-chip]", "lantern")
+      assert has_element?(stage, "[data-role=bookend-chip]", "hearth")
+
+      for {phone_view, bridge} <- Enum.zip(phones, @eight_bridges) do
+        commit(phone_view, bridge)
+      end
+
+      await_reveal(slug)
+      await_reveal_on(stage)
+
+      for bridge <- @eight_bridges do
+        assert has_element?(stage, "[data-bridge]", bridge)
+      end
+
+      refute has_element?(stage, "[data-role=pair]")
+      assert has_element?(stage, "[data-role=closeness]")
+      assert has_element?(stage, "[data-role=quip]")
+
+      for {phone_view, name} <- Enum.zip(phones, @eight) do
+        eventually(fn -> has_element?(phone_view, "[data-role=reveal]") end)
+        assert has_element?(phone_view, "[data-seat]", name)
+        refute has_element?(phone_view, "[data-role=pair]")
+      end
+
+      hd(phones) |> element("[data-role=again]") |> render_click()
+      await_phase(slug, :bridging)
+
+      for phone_view <- phones do
+        eventually(fn -> has_element?(phone_view, "[data-role=bridge-form]") end)
+      end
+
+      Enum.each(phones, &commit(&1, "peak"))
+      await_reveal(slug)
+      await_phase(slug, :closed)
+
+      for phone_view <- phones do
+        eventually(fn -> has_element?(phone_view, "[data-role=one-more]") end)
+      end
+
+      refute has_element?(stage, "[data-role=pair]")
     end
   end
 end

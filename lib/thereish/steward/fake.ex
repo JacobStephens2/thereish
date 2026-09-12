@@ -58,7 +58,7 @@ defmodule Thereish.Steward.Fake do
     end
   end
 
-  @bookend_pool ~w(lantern harbour summit ember grove spire)
+  @bookend_pool ~w(lantern harbour summit ember grove spire ridge hearth)
 
   @impl true
   def author(request, opts \\ []) do

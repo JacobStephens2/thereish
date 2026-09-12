@@ -5,7 +5,7 @@ defmodule Thereish.Foley.Prologue do
   the same take.
   """
 
-  @script "Welcome to Thereish. Every Page shows two words, and each of you writes the one word that sits between them. Land on the same word and that's a Meld: one mind. Start by giving the Page a setting."
+  @script "Welcome to Thereish. Every Page shows two words, and each of you writes the one word that sits between them. Land on the same word and that's a Meld: one mind. Start by offering a Give."
 
   @readings [
     "/audio/prologue-1.mp3",
