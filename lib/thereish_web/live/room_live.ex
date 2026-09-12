@@ -114,6 +114,9 @@ defmodule ThereishWeb.RoomLive do
       :ok ->
         {:noreply, socket |> assign(:page_error, nil) |> resync()}
 
+      {:error, :reveal_held} ->
+        {:noreply, resync(socket)}
+
       {:error, reason} ->
         {:noreply, assign(socket, :page_error, message(reason))}
     end
@@ -520,7 +523,13 @@ defmodule ThereishWeb.RoomLive do
         class="flex flex-col items-center gap-2 border-t border-base-300 pt-6"
       >
         <.carry_forward room={@room} />
-        <.button phx-click="next_attempt" data-role="again" variant="primary">
+        <.reveal_hold room={@room} />
+        <.button
+          phx-click="next_attempt"
+          data-role="again"
+          variant="primary"
+          disabled={not @room[:can_advance?]}
+        >
           Again — {join_and(@room.next_bookends)}
         </.button>
       </div>
@@ -528,8 +537,16 @@ defmodule ThereishWeb.RoomLive do
       <.ending room={@room} seat={@seat} mode={:phone} />
 
       <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
+        <.reveal_hold room={@room} />
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>
-        <.button phx-click="next_page" data-role="one-more" variant="primary">One more?</.button>
+        <.button
+          phx-click="next_page"
+          data-role="one-more"
+          variant="primary"
+          disabled={not @room[:can_advance?]}
+        >
+          One more?
+        </.button>
       </div>
 
       <%= if playing_phase?(@room) do %>

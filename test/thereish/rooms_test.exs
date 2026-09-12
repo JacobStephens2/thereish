@@ -680,6 +680,137 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  describe "the reveal hold" do
+    setup do
+      reveal_hold(5_000)
+      clock = freeze_clock(0)
+      slug = open_room()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      await_phase(slug, :bridging)
+
+      %{slug: slug, melissa: melissa, jacob: jacob, clock: clock}
+    end
+
+    test "a miss cannot advance immediately before the deadline and can at it", ctx do
+      view = play(ctx, "cairn", "beacon")
+
+      assert view.phase == :reveal
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+
+      travel(ctx.clock, 4_999)
+
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+      refute Rooms.snapshot(ctx.slug, ctx.jacob.id).can_advance?
+      assert Rooms.snapshot(ctx.slug, nil).phase == :reveal
+
+      travel(ctx.clock, 5_000)
+
+      assert Rooms.snapshot(ctx.slug, ctx.melissa.id).can_advance?
+      assert :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
+      assert Rooms.snapshot(ctx.slug, nil).attempt.number == 2
+    end
+
+    test "an early Meld cannot open the next Page immediately before the deadline and can at it",
+         ctx do
+      view = play(ctx, "cairn", "cairn")
+
+      assert view.phase == :closed
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.melissa.id)
+
+      travel(ctx.clock, 4_999)
+
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.jacob.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :closed
+
+      travel(ctx.clock, 5_000)
+
+      assert Rooms.snapshot(ctx.slug, nil).can_advance?
+      assert :ok = Rooms.next_page(ctx.slug, ctx.jacob.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
+    end
+
+    test "exhausted Attempts hold the closing reveal the same way", ctx do
+      attempt_cap(2)
+
+      play(ctx, "cairn", "beacon")
+      travel(ctx.clock, 5_000)
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+
+      view = play(ctx, "wharf", "gantry")
+
+      assert view.phase == :closed
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.melissa.id)
+
+      travel(ctx.clock, 9_999)
+      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.jacob.id)
+
+      travel(ctx.clock, 10_000)
+      assert :ok = Rooms.next_page(ctx.slug, ctx.jacob.id)
+      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
+    end
+
+    test "another Seat or a direct event cannot bypass the shared deadline", ctx do
+      play(ctx, "cairn", "beacon")
+
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+
+      for viewer <- [ctx.melissa.id, ctx.jacob.id, nil] do
+        view = Rooms.snapshot(ctx.slug, viewer)
+        assert view.phase == :reveal
+        refute view.can_advance?
+      end
+    end
+
+    test "nothing advances on its own once the deadline has passed", ctx do
+      play(ctx, "cairn", "beacon")
+      travel(ctx.clock, 5_000)
+
+      view = Rooms.snapshot(ctx.slug, nil)
+      assert view.phase == :reveal
+      assert view.can_advance?
+      assert view.attempt.number == 1
+    end
+
+    test "the pre-reveal Beat is still the theatre before the reveal, not this hold", ctx do
+      beat(40)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+
+      assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
+      assert Rooms.snapshot(ctx.slug, nil).reveal == nil
+      refute Map.get(Rooms.snapshot(ctx.slug, nil), :can_advance?, false)
+
+      view = await_reveal(ctx.slug)
+
+      assert view.phase == :reveal
+      refute view.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+    end
+
+    test "a later snapshot does not restart or bypass the Room's deadline", ctx do
+      play(ctx, "cairn", "beacon")
+      travel(ctx.clock, 2_000)
+
+      later = Rooms.snapshot(ctx.slug, nil)
+      refute later.can_advance?
+      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+
+      travel(ctx.clock, 5_000)
+
+      assert Rooms.snapshot(ctx.slug, ctx.melissa.id).can_advance?
+      assert :ok = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
+    end
+  end
+
   describe "the Assayer remembers its Quips (ticket 11)" do
     test "the assay request carries the Room's last five Quips, oldest dropped" do
       slug = open_room()
