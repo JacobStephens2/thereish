@@ -423,7 +423,8 @@ defmodule Thereish.Rooms do
   @doc """
   Deliberately unblinds an experiment in the Room (ticket 13).
   """
-  @spec unblind_experiment(String.t(), String.t() | nil, String.t()) :: :ok | {:error, term()}
+  @spec unblind_experiment(String.t(), String.t() | nil, String.t()) ::
+          :ok | {:error, :sample_incomplete | term()}
   def unblind_experiment(slug, seat_id, experiment_id \\ "bait_against_plain") do
     call(slug, {:unblind_experiment, seat_id, experiment_id})
   end
@@ -488,14 +489,16 @@ defmodule Thereish.Rooms do
 
   @doc """
   Fetches the voice audio bytes and format for `attempt` from the Room.
-  Answers `{:ok, audio, format}` or `{:error, :not_found}`.
+
+  `kind` is `:bookends` (the Attempt's announcement) or `:verdict` (the Assayer
+  at the reveal). Answers `{:ok, audio, format}` or `{:error, :not_found}`.
   """
-  @spec voice_audio(String.t(), integer()) ::
+  @spec voice_audio(String.t(), integer(), atom()) ::
           {:ok, binary(), atom() | String.t()} | {:error, :not_found}
-  def voice_audio(code, attempt) when is_integer(attempt) do
+  def voice_audio(code, attempt, kind \\ :verdict) when is_integer(attempt) do
     case ensure_started(code) do
       {:ok, normalised, _pid} ->
-        GenServer.call(Server.via(normalised), {:voice_audio, attempt})
+        GenServer.call(Server.via(normalised), {:voice_audio, attempt, kind})
 
       {:error, _} ->
         {:error, :not_found}

@@ -34,6 +34,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Recap
   alias Thereish.Chronicle.Verdict
   alias Thereish.Repo
+  alias Thereish.Steward.TrackCache
 
   @doc """
   Writes one closed Page, with its attempts, its Bridges and its verdicts.
@@ -462,15 +463,25 @@ defmodule Thereish.Chronicle do
 
   @doc """
   Records an unblinding action for an experiment as an append-only event (ticket 13).
+
+  Rejected until the Room has recorded the experiment's declared sample of
+  completed-Page outcomes.
   """
   @spec record_experiment_unblinding(Ecto.UUID.t(), map()) ::
-          {:ok, ExperimentUnblinding.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, ExperimentUnblinding.t()}
+          | {:error, :sample_incomplete | Ecto.Changeset.t()}
   def record_experiment_unblinding(room_id, attrs) do
-    attrs = Map.put(attrs, :room_id, room_id)
+    experiment_id = attrs[:experiment_id] || attrs["experiment_id"]
 
-    %ExperimentUnblinding{}
-    |> ExperimentUnblinding.changeset(attrs)
-    |> Repo.insert()
+    if experiment_progress(room_id, experiment_id).ready? do
+      attrs = Map.put(attrs, :room_id, room_id)
+
+      %ExperimentUnblinding{}
+      |> ExperimentUnblinding.changeset(attrs)
+      |> Repo.insert()
+    else
+      {:error, :sample_incomplete}
+    end
   end
 
   @doc """
@@ -493,6 +504,32 @@ defmodule Thereish.Chronicle do
         )
         |> Repo.all()
     end
+  end
+
+  @doc """
+  Experiment ids recorded in a Room, from assignments then outcomes.
+  """
+  @spec room_experiment_ids(Ecto.UUID.t() | String.t()) :: [String.t()]
+  def room_experiment_ids(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    assignment_ids =
+      from(a in ExperimentAssignment,
+        where: a.room_id == ^room_id,
+        distinct: true,
+        select: a.experiment_id
+      )
+      |> Repo.all()
+
+    outcome_ids =
+      from(o in ExperimentOutcome,
+        where: o.room_id == ^room_id,
+        distinct: true,
+        select: o.experiment_id
+      )
+      |> Repo.all()
+
+    Enum.uniq(assignment_ids ++ outcome_ids)
   end
 
   @doc """
@@ -609,6 +646,24 @@ defmodule Thereish.Chronicle do
     )
     |> Repo.all()
     |> Enum.map(&String.to_atom/1)
+  end
+
+  @doc """
+  Blinded progress toward an experiment's declared sample size in one Room.
+
+  Counts recorded completed-Page outcomes across both arms combined. Assignments
+  that never produced an outcome (still in play, or abandoned) do not count.
+  """
+  @spec experiment_progress(Ecto.UUID.t() | String.t(), String.t()) :: %{
+          recorded: non_neg_integer(),
+          required: pos_integer(),
+          ready?: boolean()
+        }
+  def experiment_progress(room_id_or_slug, experiment_id) do
+    required = Thereish.Experiments.definition(experiment_id).sample_size
+    recorded = length(experiment_outcomes(room_id_or_slug, experiment_id))
+
+    %{recorded: recorded, required: required, ready?: recorded >= required}
   end
 
   @doc """
@@ -835,7 +890,11 @@ defmodule Thereish.Chronicle do
     all_taps = fairness_taps(room_id)
     all_assignments = experiment_assignments(room_id)
     all_outcomes = experiment_outcomes(room_id)
-    unblinded? = experiment_unblinded?(room_id)
+
+    unblinded_experiments =
+      room_id
+      |> experiment_unblindings()
+      |> MapSet.new(& &1.experiment_id)
 
     Enum.map(
       pages,
@@ -847,7 +906,7 @@ defmodule Thereish.Chronicle do
         all_assignments,
         all_outcomes,
         all_recaps,
-        unblinded?
+        unblinded_experiments
       )
     )
   end
@@ -872,10 +931,10 @@ defmodule Thereish.Chronicle do
   def page_track(nil), do: nil
 
   def page_track(page) when is_map(page) do
-    case page[:music_meta] || page["music_meta"] do
+    case field_meta(page, :music_meta) do
       %{} = meta ->
-        path = meta[:path] || meta["path"]
-        title = meta[:title] || meta["title"]
+        path = meta_get(meta, :path)
+        title = meta_get(meta, :title)
 
         if is_binary(path) and path != "" and is_binary(title) and title != "" do
           %{path: path, title: title}
@@ -889,38 +948,51 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
+  Extracts Vamp information (`%{path: path, duration: duration, loop: loop}`) from a Page
+  or page view map when its vamp record carries a playable path. Answers `nil` otherwise.
+  """
+  @spec page_vamp(map() | struct() | nil) ::
+          %{path: String.t(), duration: integer() | nil, loop: boolean()} | nil
+  def page_vamp(nil), do: nil
+
+  def page_vamp(page) when is_map(page) do
+    case field_meta(page, :vamp_meta) do
+      %{} = meta ->
+        path = meta_get(meta, :path)
+
+        if is_binary(path) and path != "" do
+          %{
+            path: path,
+            duration: meta_get(meta, :duration),
+            loop: meta_get(meta, :loop) not in [nil, false]
+          }
+        else
+          nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
   Replaces the music_meta on an existing Chronicle page with a successful track record.
   """
   @spec replace_page_music(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
-  def replace_page_music(%Page{} = page, music_meta) do
-    page
-    |> Page.changeset(%{music_meta: music_meta})
-    |> Repo.update()
-  end
+  def replace_page_music(page, music_meta), do: replace_page_field(page, :music_meta, music_meta)
 
-  def replace_page_music(page_id, music_meta) when is_binary(page_id) do
-    case Repo.get(Page, page_id) do
-      nil -> {:error, :not_found}
-      page -> replace_page_music(page, music_meta)
-    end
-  end
+  @doc """
+  Replaces the vamp_meta on an existing Chronicle page with a playable Vamp record.
+  """
+  @spec replace_page_vamp(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
+  def replace_page_vamp(page, vamp_meta), do: replace_page_field(page, :vamp_meta, vamp_meta)
 
   @doc """
   Replaces the masks_meta on an existing Chronicle page with the latest masks record.
   """
   @spec replace_page_masks(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
-  def replace_page_masks(%Page{} = page, masks_meta) do
-    page
-    |> Page.changeset(%{masks_meta: sanitize_masks(masks_meta)})
-    |> Repo.update()
-  end
-
-  def replace_page_masks(page_id, masks_meta) when is_binary(page_id) do
-    case Repo.get(Page, page_id) do
-      nil -> {:error, :not_found}
-      page -> replace_page_masks(page, masks_meta)
-    end
-  end
+  def replace_page_masks(page, masks_meta),
+    do: replace_page_field(page, :masks_meta, sanitize_masks(masks_meta))
 
   @doc """
   Updates or adds a single seat's mask on a Page's masks_meta.
@@ -954,6 +1026,120 @@ defmodule Thereish.Chronicle do
 
   defp sanitize_mask(other), do: other
 
+  defp replace_page_field(%Page{} = page, field, value) do
+    page
+    |> Page.changeset(%{field => value})
+    |> Repo.update()
+  end
+
+  defp replace_page_field(page_id, field, value) when is_binary(page_id) do
+    case Repo.get(Page, page_id) do
+      nil -> {:error, :not_found}
+      page -> replace_page_field(page, field, value)
+    end
+  end
+
+  defp field_meta(page, field) when is_map(page) and is_atom(field) do
+    Map.get(page, field) || Map.get(page, Atom.to_string(field))
+  end
+
+  defp meta_get(meta, key) when is_map(meta) and is_atom(key) do
+    Map.get(meta, key) || Map.get(meta, Atom.to_string(key))
+  end
+
+  @doc """
+  Retained generated media across Rooms, for the operator gallery.
+
+  Assembles Tracks from the track cache and Page music records, Vamps from Page
+  vamp records, and Masks from Page mask records. A Room or Page is named only
+  when the record actually belongs to one; missing files are marked present or
+  not rather than deleted.
+  """
+  @spec gallery() :: %{tracks: [map()], vamps: [map()], masks: [map()]}
+  def gallery do
+    pages =
+      from(p in Page, preload: [:room], order_by: [desc: p.closed_at])
+      |> Repo.all()
+
+    cache_rows = Repo.all(from(t in TrackCache, order_by: [desc: t.inserted_at]))
+
+    %{
+      tracks: gallery_audio(pages, cache_rows, :music_meta),
+      vamps: gallery_audio(pages, [], :vamp_meta),
+      masks: gallery_masks(pages)
+    }
+  end
+
+  defp gallery_audio(pages, cache_rows, field) do
+    page_hits =
+      for page <- pages,
+          meta = field_meta(page, field),
+          is_map(meta),
+          path = meta_get(meta, :path),
+          is_binary(path) and path != "" do
+        {path, page, meta}
+      end
+
+    by_path = Enum.group_by(page_hits, &elem(&1, 0))
+    cache_by_path = Map.new(cache_rows, &{&1.path, &1})
+
+    paths =
+      (Enum.map(cache_rows, & &1.path) ++ Enum.map(page_hits, &elem(&1, 0)))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    Enum.map(paths, fn path ->
+      hits = Map.get(by_path, path, [])
+      cache = cache_by_path[path]
+
+      first_meta =
+        case hits do
+          [{_path, _page, meta} | _] -> meta
+          _ -> %{}
+        end
+
+      %{
+        path: path,
+        title: (cache && cache.title) || meta_get(first_meta, :title),
+        loop: meta_get(first_meta, :loop) not in [nil, false],
+        present?: TrackCache.file_exists?(path),
+        associations: Enum.map(hits, fn {_path, page, _meta} -> gallery_association(page) end)
+      }
+    end)
+  end
+
+  defp gallery_masks(pages) do
+    hits =
+      for page <- pages,
+          is_map(page.masks_meta),
+          {_seat, mask} <- page.masks_meta,
+          is_map(mask),
+          url = meta_get(mask, :url),
+          is_binary(url) and url != "" do
+        {url, page}
+      end
+
+    hits
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.map(fn {url, assoc_pages} ->
+      %{
+        url: url,
+        present?: TrackCache.file_exists?(url),
+        associations: Enum.map(assoc_pages, &gallery_association/1)
+      }
+    end)
+  end
+
+  defp gallery_association(page) do
+    document = page.document || %{}
+    bookends = document["bookends"] || document[:bookends] || []
+
+    %{
+      room_slug: page.room.slug,
+      bookends: bookends
+    }
+  end
+
   @doc """
   Answers spend for all Rooms across Author, Assayer, and Scribe calls.
   """
@@ -977,6 +1163,7 @@ defmodule Thereish.Chronicle do
             room_id: p.room_id,
             author_meta: p.author_meta,
             music_meta: p.music_meta,
+            vamp_meta: p.vamp_meta,
             masks_meta: p.masks_meta
           }
         )
@@ -1041,6 +1228,7 @@ defmodule Thereish.Chronicle do
           select: %{
             author_meta: p.author_meta,
             music_meta: p.music_meta,
+            vamp_meta: p.vamp_meta,
             masks_meta: p.masks_meta
           }
         )
@@ -1189,19 +1377,10 @@ defmodule Thereish.Chronicle do
             acc
           end
 
-        music_meta = Map.get(page, :music_meta)
-
         acc =
-          if is_map(music_meta) and map_size(music_meta) > 0 do
-            model =
-              music_meta["model"] || music_meta[:model] ||
-                music_meta["provider"] || music_meta[:provider] || "unknown"
-
-            cost = to_decimal(music_meta["cost_usd"] || music_meta[:cost_usd])
-            record_call(acc, :foley, model, cost)
-          else
-            acc
-          end
+          acc
+          |> record_foley_meta(Map.get(page, :music_meta))
+          |> record_foley_meta(Map.get(page, :vamp_meta))
 
         masks_meta = Map.get(page, :masks_meta)
 
@@ -1367,6 +1546,19 @@ defmodule Thereish.Chronicle do
         by_role: merged_roles,
         by_model: merged_models
     }
+  end
+
+  defp record_foley_meta(acc, meta) do
+    if is_map(meta) and map_size(meta) > 0 do
+      model =
+        meta["model"] || meta[:model] ||
+          meta["provider"] || meta[:provider] || "unknown"
+
+      cost = to_decimal(meta["cost_usd"] || meta[:cost_usd])
+      record_call(acc, :foley, model, cost)
+    else
+      acc
+    end
   end
 
   defp record_call(acc, role, model, cost) do
@@ -1693,7 +1885,7 @@ defmodule Thereish.Chronicle do
         all_assignments \\ [],
         all_outcomes \\ [],
         all_recaps \\ [],
-        unblinded? \\ false
+        unblinded_experiments \\ MapSet.new()
       ) do
     page_overrules =
       Enum.filter(all_overrules, fn o ->
@@ -1889,6 +2081,8 @@ defmodule Thereish.Chronicle do
         (matching_outcome && matching_outcome.experiment_id) ||
         "bait_against_plain"
 
+    unblinded? = MapSet.member?(unblinded_experiments, experiment_id)
+
     %{
       id: page.id,
       room_id: page.room_id,
@@ -1896,6 +2090,7 @@ defmodule Thereish.Chronicle do
       gives: formatted_gives,
       author_meta: page.author_meta,
       music_meta: page.music_meta,
+      vamp_meta: page.vamp_meta,
       masks_meta: page.masks_meta,
       masks: page.masks_meta,
       give: page.document["give"] || page.document[:give],
@@ -2165,6 +2360,12 @@ defmodule Thereish.Chronicle do
         Map.get(entry, :music_meta) ||
         Map.get(entry, "music_meta")
 
+    vamp_meta =
+      Map.get(page_data, :vamp_meta) ||
+        Map.get(page_data, "vamp_meta") ||
+        Map.get(entry, :vamp_meta) ||
+        Map.get(entry, "vamp_meta")
+
     masks_meta =
       (Map.get(page_data, :masks_meta) ||
          Map.get(page_data, "masks_meta") ||
@@ -2183,6 +2384,7 @@ defmodule Thereish.Chronicle do
         document: page_data,
         author_meta: author_meta,
         music_meta: music_meta,
+        vamp_meta: vamp_meta,
         masks_meta: masks_meta,
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,

@@ -116,13 +116,9 @@ defmodule Thereish.Steward.VampTest do
       assert body["loop"] == true
 
       text = body["text"]
-      assert String.contains?(text, "summer camp, viking beaches")
-      assert String.contains?(text, "instrumental")
-      # ElevenLabs sound-generation hears these as people talking, not as a bed
-      # that sits under talk. The Mureka house prefix is the wrong brief here.
+      assert text == Thereish.Steward.Music.vamp_prompt(@gives)
       refute String.contains?(text, "conversational")
       refute String.contains?(text, "spoken conversation")
-      assert String.starts_with?(text, Thereish.Steward.Music.vamp_prefix())
 
       # Verify Vamp is never cached in TrackCache
       assert :miss = TrackCache.get(@gives)

@@ -28,6 +28,7 @@ defmodule ThereishWeb.Foley do
 
       Map.get(new_room, :speaker?) ->
         socket
+        |> maybe_stop_stale_voice(old_room, new_room)
         |> maybe_push_page(old_room, new_room)
         |> maybe_push_beat(old_room, new_room)
         |> maybe_push_sting(old_room, new_room)
@@ -54,14 +55,23 @@ defmodule ThereishWeb.Foley do
 
   @doc """
   Pushes a foley:voice event to the socket if this view is the speaker.
+
+  `kind` is `:bookends` (Attempt announcement) or `:verdict` (Assayer at the reveal).
   """
-  def push_voice(socket, attempt) do
+  def push_voice(socket, attempt, kind \\ :verdict) do
     room = socket.assigns[:room]
 
     if room && Map.get(room, :speaker?) do
+      url =
+        case kind do
+          :bookends -> ~p"/r/#{socket.assigns.slug}/voice/#{attempt}/bookends"
+          _ -> ~p"/r/#{socket.assigns.slug}/voice/#{attempt}"
+        end
+
       push_event(socket, "foley:voice", %{
         attempt: attempt,
-        url: ~p"/r/#{socket.assigns.slug}/voice/#{attempt}"
+        kind: to_string(kind),
+        url: url
       })
     else
       socket
@@ -150,6 +160,14 @@ defmodule ThereishWeb.Foley do
     path = item.path
 
     %{path: path, title: title, kind: "repertoire"}
+  end
+
+  defp maybe_stop_stale_voice(socket, old_room, new_room) do
+    if not is_nil(old_room) and attempt_number(old_room) != attempt_number(new_room) do
+      push_event(socket, "foley:stop_voice", %{attempt: attempt_number(new_room)})
+    else
+      socket
+    end
   end
 
   defp maybe_push_beat(socket, old_room, new_room) do

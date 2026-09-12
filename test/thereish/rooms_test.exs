@@ -2031,12 +2031,45 @@ defmodule Thereish.RoomsTest do
 
       refute Thereish.Chronicle.experiment_unblinded?(room.id)
 
+      for i <- 1..20 do
+        {:ok, _} =
+          Chronicle.record_experiment_outcome(room.id, %{
+            page_identifier: "bait-#{i}",
+            experiment_id: "bait_against_plain",
+            arm: "bait",
+            melded: true,
+            closeness: 80,
+            attempts_count: 1,
+            closed_because: "meld"
+          })
+      end
+
       assert :ok = Rooms.unblind_experiment(ctx.slug, ctx.jacob.id)
       assert Thereish.Chronicle.experiment_unblinded?(room.id)
 
       [unblinding] = Thereish.Chronicle.experiment_unblindings(room.id)
       assert unblinding.seat_id == ctx.jacob.id
       assert unblinding.experiment_id == "bait_against_plain"
+    end
+
+    test "rejects a direct unblind before the declared sample is recorded", ctx do
+      room = Thereish.Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
+
+      {:ok, _} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "bait-1",
+          experiment_id: "bait_against_plain",
+          arm: "bait",
+          melded: true,
+          closeness: 80,
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      assert {:error, :sample_incomplete} =
+               Rooms.unblind_experiment(ctx.slug, ctx.jacob.id)
+
+      refute Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
     end
 
     test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
@@ -2562,6 +2595,136 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
     end
 
+    test "opening Attempt announces Bookends when a Speaker is already held, without blocking Bridges" do
+      slug = open_room()
+      token_a = device_token()
+      token_b = device_token()
+      {:ok, melissa} = Rooms.join(slug, "Melissa", token_a)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
+      Rooms.subscribe(slug)
+      :ok = Rooms.claim_speaker(slug, token_a)
+
+      :ok = Rooms.give(slug, melissa.id, "setting one")
+      :ok = Rooms.give(slug, jacob.id, "setting two")
+      view = await_phase(slug, :bridging)
+
+      assert is_list(view.bookends) and view.bookends != []
+      assert :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
+
+      assert_receive {:bookends_ready, 1}, 2000
+      assert {:ok, audio, :mp3} = Rooms.voice_audio(slug, 1, :bookends)
+      assert is_binary(audio) and byte_size(audio) > 0
+      assert {:error, :not_found} = Rooms.voice_audio(slug, 1, :verdict)
+    end
+
+    test "claiming the Speaker during bridging announces Bookends and still accepts a Bridge",
+         ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_recipient, self()))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert view.phase == :bridging
+      line = Enum.join(view.bookends, ". ")
+
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+
+      assert_receive {:bookends_ready, 1}, 2000
+      assert_receive {:fake_speak, ^line}, 2000
+      assert {:ok, audio, :mp3} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+      assert is_binary(audio) and byte_size(audio) > 0
+    end
+
+    test "a later Attempt announces its Bookends on the Speaker", ctx do
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      view = await_phase(ctx.slug, :bridging)
+
+      assert_receive {:bookends_ready, 2}, 2000
+      assert {:ok, _audio, :mp3} = Rooms.voice_audio(ctx.slug, 2, :bookends)
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "valley")
+      assert view.bookends != []
+    end
+
+    test "Bookends are not spoken when no speaker exists", ctx do
+      Rooms.subscribe(ctx.slug)
+
+      refute_receive {:bookends_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+    end
+
+    test "failing Bookends synthesis is dropped and play continues", ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_mode, :unavailable))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      refute_receive {:bookends_ready, _}, 100
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      assert :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      view = await_reveal(ctx.slug)
+      assert view.phase in [:reveal, :closed]
+    end
+
+    test "late Bookends arriving after the next Attempt started are dropped", ctx do
+      steward_env = Application.get_env(:thereish, :steward, [])
+      fake_env = Keyword.get(steward_env, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(steward_env, :fake, Keyword.put(fake_env, :voice_delay_ms, 200))
+      )
+
+      on_exit(fn ->
+        Application.put_env(:thereish, :steward, steward_env)
+      end)
+
+      Rooms.subscribe(ctx.slug)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
+      await_reveal(ctx.slug)
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :bridging)
+
+      Process.sleep(250)
+
+      refute_receive {:bookends_ready, 1}
+      assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1, :bookends)
+    end
+
     test "when a speaker exists, broadcasts voice_ready and holds audio for attempt", ctx do
       Rooms.subscribe(ctx.slug)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
@@ -2603,7 +2766,11 @@ defmodule Thereish.RoomsTest do
       end)
 
       Rooms.subscribe(ctx.slug)
+      opening = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
+
+      assert_receive {:fake_speak, opening_line}, 2000
+      assert opening_line == Enum.join(opening.bookends, ". ")
 
       # Attempt 1: quips is default on
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
@@ -2617,7 +2784,10 @@ defmodule Thereish.RoomsTest do
       # Attempt 2: turn quips off
       :ok = Rooms.set_quips(ctx.slug, false)
       :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
-      await_phase(ctx.slug, :bridging)
+      next_view = await_phase(ctx.slug, :bridging)
+
+      assert_receive {:fake_speak, next_line}, 2000
+      assert next_line == Enum.join(next_view.bookends, ". ")
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "valley")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "valley")
@@ -3278,7 +3448,7 @@ defmodule Thereish.RoomsTest do
           assert vamp_view.playing.path == vamp_view.vamp.path
           assert is_nil(vamp_view.playing.title)
 
-          # Vamp is never titled, cached, persisted, or made a Repertoire member
+          # Vamp is never titled or made a Repertoire member
           refute Map.has_key?(vamp_view.vamp, :title) and not is_nil(vamp_view.vamp[:title])
           room = Thereish.Rooms.Store.get_room(ctx.slug)
           repertoire_paths = Enum.map(Thereish.Foley.Repertoire.members(room.id), & &1.path)
@@ -3495,6 +3665,255 @@ defmodule Thereish.RoomsTest do
       assert cached_row != nil
       assert cached_row.path != missing_path
       assert cached_row.path == view.track.path
+    end
+
+    test "a closed Page keeps its Vamp beside its Track in the Chronicle after a fresh read",
+         ctx do
+      set_fake(vamp_delay_ms: 0, music_delay_ms: 80)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "frozen lake")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:vamp]) and is_nil(view[:track])
+      end)
+
+      vamp_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).vamp.path
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      track_path = Rooms.snapshot(ctx.slug, ctx.melissa.id).track.path
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn ->
+        pages = Chronicle.page_views(ctx.slug)
+        pages != [] and Chronicle.page_vamp(hd(pages)) != nil
+      end)
+
+      stop_room(ctx.slug)
+
+      [page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page).path == vamp_path
+      assert Chronicle.page_track(page).path == track_path
+      refute vamp_path == track_path
+    end
+
+    test "a Vamp that lands after the Page closes still attaches to that Page", ctx do
+      set_fake(vamp_delay_ms: 10_000, music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "sprint")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "hoard")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "vault")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "vault")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [page_before] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page_before) == nil
+      assert Chronicle.page_track(page_before) != nil
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      page_ref = :sys.get_state(pid).current_page_ref
+
+      late_vamp = %{
+        path: "/media/vamps/late-sprint.mp3",
+        duration: 30,
+        format: :mp3,
+        loop: true,
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:vamped, page_ref, {:ok, late_vamp}})
+
+      eventually(fn ->
+        [page] = Chronicle.page_views(ctx.slug)
+        Chronicle.page_vamp(page) != nil
+      end)
+
+      [page_after] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page_after).path == "/media/vamps/late-sprint.mp3"
+      assert Chronicle.page_track(page_after).path == Chronicle.page_track(page_before).path
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:vamp]) or view.vamp.path != late_vamp.path
+    end
+
+    test "a Vamp that lands after next_page attaches to the old Page, not the one now in play",
+         ctx do
+      set_fake(vamp_delay_ms: 10_000, music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting alpha")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting beta")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      old_ref = :sys.get_state(pid).current_page_ref
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+      [closed_page] = Chronicle.page_views(ctx.slug)
+
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+
+      late_vamp = %{
+        path: "/media/vamps/old-page.mp3",
+        duration: 30,
+        format: :mp3,
+        loop: true,
+        meta: %{provider: "fake"}
+      }
+
+      send(pid, {:vamped, old_ref, {:ok, late_vamp}})
+
+      eventually(fn ->
+        page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
+        Chronicle.page_vamp(page) != nil
+      end)
+
+      page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
+      assert Chronicle.page_vamp(page).path == "/media/vamps/old-page.mp3"
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:vamp]) or view.vamp.path != late_vamp.path
+    end
+
+    test "a Page with no Vamp stays readable and invents no historical audio", ctx do
+      set_fake(vamp_mode: :unavailable, music_delay_ms: 0)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "quiet library")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "old books")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page) == nil
+      assert Chronicle.page_track(page) != nil
+    end
+
+    test "House playback does not write a Vamp onto the Page, and does not replace a kept one",
+         ctx do
+      set_fake(vamp_delay_ms: 0, music_delay_ms: 0)
+      :ok = Rooms.set_music(ctx.slug, "house")
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "quiet library")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "old books")
+      await_phase(ctx.slug, :bridging)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [house_page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(house_page) == nil
+      assert Chronicle.page_track(house_page) == nil
+
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      await_phase(ctx.slug, :giving)
+      :ok = Rooms.set_music(ctx.slug, "page")
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "frozen lake")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "northern lights")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn ->
+        pages = Chronicle.page_views(ctx.slug)
+        length(pages) == 2 and Chronicle.page_vamp(hd(pages)) != nil
+      end)
+
+      [kept | _] = Chronicle.page_views(ctx.slug)
+      vamp_path = Chronicle.page_vamp(kept).path
+      track_path = Chronicle.page_track(kept).path
+
+      :ok = Rooms.set_music(ctx.slug, "house")
+
+      [after_house | _] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(after_house).path == vamp_path
+      assert Chronicle.page_track(after_house).path == track_path
+    end
+
+    test "a cache hit writes no Vamp onto the closed Page", ctx do
+      gives = ["quiet library", "old books"]
+      cached_path = "/media/tracks/preseeded-library.mp3"
+      cached_file = Thereish.Steward.TrackCache.disk_path(cached_path)
+      File.mkdir_p!(Path.dirname(cached_file))
+      File.write!(cached_file, "mp3-bytes")
+      on_exit(fn -> File.rm(cached_file) end)
+
+      {:ok, _} =
+        Thereish.Steward.TrackCache.put(gives, %{
+          title: "Quiet Library",
+          path: cached_path,
+          duration: 120,
+          format: "mp3",
+          meta: %{provider: "fake"}
+        })
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "quiet library")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "old books")
+      await_phase(ctx.slug, :bridging)
+
+      eventually(fn ->
+        view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+        not is_nil(view[:track]) and is_nil(view[:vamp])
+      end)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_reveal(ctx.slug)
+      await_phase(ctx.slug, :closed)
+
+      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
+
+      [page] = Chronicle.page_views(ctx.slug)
+      assert Chronicle.page_vamp(page) == nil
+      assert Chronicle.page_track(page).path == cached_path
     end
 
     test "stale vamp message arriving for moved-on Page is dropped", ctx do

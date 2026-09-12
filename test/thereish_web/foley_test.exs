@@ -250,6 +250,72 @@ defmodule ThereishWeb.FoleyTest do
     end
   end
 
+  describe "push_voice/3" do
+    defp speaking_socket do
+      test_socket()
+      |> Phoenix.Component.assign(:slug, "dust")
+      |> Phoenix.Component.assign(:room, %{speaker?: true})
+    end
+
+    test "pushes Bookends speech to the speaker with a bookends url" do
+      socket = Foley.push_voice(speaking_socket(), 1, :bookends)
+
+      assert {"foley:voice", %{attempt: 1, kind: "bookends", url: "/r/dust/voice/1/bookends"}} in pushed_events(
+               socket
+             )
+    end
+
+    test "pushes verdict speech to the speaker with the attempt url" do
+      socket = Foley.push_voice(speaking_socket(), 2, :verdict)
+
+      assert {"foley:voice", %{attempt: 2, kind: "verdict", url: "/r/dust/voice/2"}} in pushed_events(
+               socket
+             )
+    end
+
+    test "does not push voice to a non-speaker" do
+      socket =
+        test_socket()
+        |> Phoenix.Component.assign(:slug, "dust")
+        |> Phoenix.Component.assign(:room, %{speaker?: false})
+
+      result = Foley.push_voice(socket, 1, :bookends)
+      assert pushed_events(result) == []
+    end
+  end
+
+  describe "push_foley_events/4 stale voice" do
+    test "stops voice when the Attempt number changes" do
+      old_room = %{
+        phase: :reveal,
+        attempt: %{number: 1, of: 5},
+        speaker?: true
+      }
+
+      new_room = %{
+        phase: :bridging,
+        attempt: %{number: 2, of: 5},
+        speaker?: true,
+        music: "off"
+      }
+
+      socket = Foley.push_foley_events(test_socket(), old_room, new_room)
+      assert {"foley:stop_voice", %{attempt: 2}} in pushed_events(socket)
+    end
+
+    test "does not stop voice when the Attempt is unchanged" do
+      room = %{
+        phase: :bridging,
+        attempt: %{number: 1, of: 5},
+        speaker?: true,
+        music: "off"
+      }
+
+      socket = Foley.push_foley_events(test_socket(), room, room)
+      refute Enum.any?(pushed_events(socket), fn {name, _} -> name == "foley:stop_voice" end)
+    end
+  end
+
   describe "push_foley_events/4 page track events" do
     test "pushes foley:page with track path, title, and kind: 'track' when room has landed track" do
       socket = test_socket()
