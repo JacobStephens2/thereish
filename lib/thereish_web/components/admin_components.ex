@@ -6,6 +6,7 @@ defmodule ThereishWeb.AdminComponents do
 
   attr :room, :map, required: true
   attr :unblinded, :boolean, required: true
+  attr :progress, :map, required: true
   attr :readout, :map, required: true
 
   def experiment_card(assigns) do
@@ -13,6 +14,7 @@ defmodule ThereishWeb.AdminComponents do
     <section
       data-role="experiment-card"
       data-slug={@room.slug}
+      data-experiment={@readout.experiment.id}
       class="flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
       <div class="flex items-start justify-between gap-2 border-b border-base-200 pb-3">
@@ -40,14 +42,19 @@ defmodule ThereishWeb.AdminComponents do
           <p class="text-xs opacity-70 mt-0.5">
             {@readout.experiment.description} Declared sample size: {@readout.experiment.sample_size} Pages.
           </p>
+          <p data-role="experiment-progress" class="text-sm mt-2">
+            {@progress.recorded} / {@progress.required} completed Pages
+          </p>
         </div>
         <div>
           <button
             :if={!@unblinded}
             phx-click="unblind_experiment"
             phx-value-room-id={@room.id}
+            phx-value-experiment-id={@readout.experiment.id}
+            disabled={!@progress.ready?}
             data-role="unblind-button"
-            class="rounded-lg bg-neutral px-3 py-1.5 text-xs font-semibold text-neutral-content hover:opacity-90 cursor-pointer"
+            class="rounded-lg bg-neutral px-3 py-1.5 text-xs font-semibold text-neutral-content hover:opacity-90 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
           >
             Unblind Experiment
           </button>
