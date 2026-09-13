@@ -14,6 +14,7 @@ defmodule Thereish.Chronicle.Give do
   schema "chronicle_gives" do
     field :text, :string
     field :order, :integer
+    field :arrived_at, :utc_datetime_usec
 
     belongs_to :page, Thereish.Chronicle.Page
     belongs_to :seat, Thereish.Rooms.Seat
@@ -24,7 +25,7 @@ defmodule Thereish.Chronicle.Give do
   @doc false
   def changeset(give, attrs) do
     give
-    |> cast(attrs, [:page_id, :seat_id, :text, :order])
+    |> cast(attrs, [:page_id, :seat_id, :text, :order, :arrived_at])
     |> validate_required([:page_id, :seat_id, :text, :order])
     |> unique_constraint([:page_id, :seat_id])
   end

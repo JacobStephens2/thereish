@@ -32,6 +32,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Overrule
   alias Thereish.Chronicle.Page
   alias Thereish.Chronicle.Recap
+  alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
   alias Thereish.Repo
   alias Thereish.Steward.TrackCache
@@ -840,7 +841,57 @@ defmodule Thereish.Chronicle do
   def pages(room_id) do
     from(p in Page, where: p.room_id == ^room_id, order_by: [asc: p.closed_at, asc: p.id])
     |> Repo.all()
-    |> Repo.preload(attempts: [:bridges, :verdicts])
+    |> Repo.preload([:gives, attempts: [:bridges, :verdicts]])
+  end
+
+  @doc """
+  Every Room, newest first, with how many Pages it has closed.
+
+  Operator discovery: a Code is not a prerequisite for finding a Room.
+  """
+  @spec admin_rooms() :: [map()]
+  def admin_rooms do
+    from(r in Thereish.Rooms.Room,
+      left_join: p in Page,
+      on: p.room_id == r.id,
+      group_by: [r.id, r.slug, r.inserted_at],
+      order_by: [desc: r.inserted_at, desc: r.id],
+      select: %{
+        id: r.id,
+        slug: r.slug,
+        opened_at: r.inserted_at,
+        pages_count: count(p.id),
+        last_closed_at: max(p.closed_at)
+      }
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Duration readouts for closed Pages, newest first.
+
+  Exact totals end at the final reveal. Pages written before occurrence
+  times were recorded are labelled as estimates.
+  """
+  @spec page_timings() :: [Timing.t()]
+  def page_timings do
+    timing_pages()
+    |> Repo.all()
+    |> Enum.map(&Timing.view/1)
+  end
+
+  @spec page_timings(String.t()) :: [Timing.t()]
+  def page_timings(slug) when is_binary(slug) do
+    case Thereish.Rooms.get_room(slug) do
+      nil ->
+        []
+
+      room ->
+        timing_pages()
+        |> where([p], p.room_id == ^room.id)
+        |> Repo.all()
+        |> Enum.map(&Timing.view/1)
+    end
   end
 
   @doc """
@@ -2345,6 +2396,14 @@ defmodule Thereish.Chronicle do
     end
   end
 
+  defp timing_pages do
+    from(p in Page,
+      join: r in assoc(p, :room),
+      order_by: [desc: p.closed_at, desc: p.id],
+      preload: [:gives, :attempts, :room]
+    )
+  end
+
   defp insert_page(room_id, entry, opened_at) do
     page_data = entry[:page] || %{}
 
@@ -2390,7 +2449,11 @@ defmodule Thereish.Chronicle do
         melded: entry.melded?,
         closeness: entry.closeness,
         opened_at: opened_at,
-        closed_at: DateTime.utc_now()
+        closed_at: DateTime.utc_now(),
+        revealed_at:
+          Map.get(entry, :revealed_at) ||
+            Map.get(entry, "revealed_at") ||
+            Timing.last_revealed(entry[:attempts] || [])
       })
       |> Repo.insert!()
 
@@ -2427,7 +2490,8 @@ defmodule Thereish.Chronicle do
         page_id: page.id,
         seat_id: seat_id,
         text: text,
-        order: position
+        order: position,
+        arrived_at: give[:arrived_at] || give["arrived_at"]
       })
       |> Repo.insert!()
     end
@@ -2441,7 +2505,11 @@ defmodule Thereish.Chronicle do
         number: attempt.number,
         bookends: attempt.bookends,
         closeness: attempt.closeness,
-        melded: attempt.melded?
+        melded: attempt.melded?,
+        started_at: attempt[:started_at] || attempt["started_at"],
+        assaying_started_at: attempt[:assaying_started_at] || attempt["assaying_started_at"],
+        revealed_at: attempt[:revealed_at] || attempt["revealed_at"],
+        advanced_at: attempt[:advanced_at] || attempt["advanced_at"]
       })
       |> Repo.insert!()
 

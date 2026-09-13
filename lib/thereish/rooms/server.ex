@@ -102,6 +102,7 @@ defmodule Thereish.Rooms.Server do
         revealed_at: nil,
         reveal_hold: nil,
         opened_at: nil,
+        timing: %{gives: %{}, attempts: %{}},
         assayer: nil,
         author: nil,
         current_arm: nil,
@@ -232,6 +233,8 @@ defmodule Thereish.Rooms.Server do
       |> author_answered()
       |> reset_score_state(keep_track: true)
       |> Map.put(:giving_ref, make_ref())
+      |> Map.put(:opened_at, nil)
+      |> Map.put(:timing, %{gives: %{}, attempts: %{}})
 
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -258,6 +261,7 @@ defmodule Thereish.Rooms.Server do
             %{
               state
               | opened_at: nil,
+                timing: %{gives: %{}, attempts: %{}},
                 voice_audio: nil,
                 voice_meta: %{},
                 voice_pending_attempt: nil,
@@ -1218,15 +1222,22 @@ defmodule Thereish.Rooms.Server do
   defp maybe_clear_track_on_never(state, _playing), do: state
 
   defp advance(state, game, effects) do
+    old_game = state.game
+
     state =
-      if game.attempt != state.game.attempt do
+      if game.attempt != old_game.attempt do
         %{state | voice_audio: nil, bookends_pending_attempt: nil}
       else
         state
       end
 
     state =
-      Enum.reduce(effects, opened(%{state | game: game}), &perform/2)
+      %{state | game: game}
+      |> record_occurrence_times(old_game)
+      |> opened()
+
+    state =
+      Enum.reduce(effects, state, &perform/2)
       |> maybe_start_bookends_voice()
 
     broadcast(state.room.slug)
@@ -1242,7 +1253,7 @@ defmodule Thereish.Rooms.Server do
     if Game.view(state.game, nil).phase == :waiting do
       state
     else
-      %{state | opened_at: DateTime.utc_now()}
+      %{state | opened_at: wall_clock()}
     end
   end
 
@@ -1283,6 +1294,7 @@ defmodule Thereish.Rooms.Server do
       entry
       |> Map.put(:music_meta, music_meta)
       |> Map.put(:vamp_meta, state[:vamp_meta])
+      |> attach_timing(state)
 
     if waiting_for_voice_meta?(state, entry) do
       %{state | pending_chronicle: entry}
@@ -1725,6 +1737,91 @@ defmodule Thereish.Rooms.Server do
       fun when is_function(fun, 0) -> fun.()
       _ -> System.monotonic_time(:millisecond)
     end
+  end
+
+  defp wall_clock, do: DateTime.utc_now()
+
+  defp record_occurrence_times(state, old_game) do
+    now = wall_clock()
+    old_phase = Game.phase(old_game)
+    new_phase = Game.phase(state.game)
+    timing = state[:timing] || %{gives: %{}, attempts: %{}}
+
+    new_give_ids = Map.keys(state.game.gives) -- Map.keys(old_game.gives)
+
+    timing =
+      if old_phase != :giving and new_phase == :giving do
+        %{timing | gives: %{}}
+      else
+        timing
+      end
+
+    timing =
+      Enum.reduce(new_give_ids, timing, fn seat_id, timing ->
+        gives = Map.put(timing[:gives] || %{}, seat_id, now)
+        %{timing | gives: gives}
+      end)
+
+    timing =
+      cond do
+        old_phase == :bridging and new_phase == :assaying ->
+          put_attempt(timing, state.game.attempt, :assaying_started_at, now)
+
+        old_phase == :assaying and new_phase in [:reveal, :closed] ->
+          put_attempt(timing, state.game.attempt, :revealed_at, now)
+
+        old_phase == :reveal and new_phase == :bridging ->
+          timing
+          |> put_attempt(old_game.attempt, :advanced_at, now)
+          |> put_attempt(state.game.attempt, :started_at, now)
+
+        old_phase == :writing and new_phase == :bridging ->
+          put_attempt(timing, state.game.attempt, :started_at, now)
+
+        true ->
+          timing
+      end
+
+    %{state | timing: timing}
+  end
+
+  defp put_attempt(timing, number, field, now) do
+    attempts = timing[:attempts] || %{}
+    current = Map.get(attempts, number, %{})
+
+    if Map.has_key?(current, field) do
+      timing
+    else
+      %{timing | attempts: Map.put(attempts, number, Map.put(current, field, now))}
+    end
+  end
+
+  defp attach_timing(entry, state) do
+    timing = state[:timing] || %{gives: %{}, attempts: %{}}
+    give_times = timing[:gives] || %{}
+    attempt_times = timing[:attempts] || %{}
+
+    gives =
+      Enum.map(entry[:gives] || [], fn give ->
+        seat_id = give[:seat_id] || give["seat_id"]
+        Map.put(give, :arrived_at, Map.get(give_times, seat_id))
+      end)
+
+    attempts =
+      Enum.map(entry.attempts, fn attempt ->
+        times = Map.get(attempt_times, attempt.number, %{})
+
+        attempt
+        |> Map.put(:started_at, times[:started_at])
+        |> Map.put(:assaying_started_at, times[:assaying_started_at])
+        |> Map.put(:revealed_at, times[:revealed_at])
+        |> Map.put(:advanced_at, times[:advanced_at])
+      end)
+
+    entry
+    |> Map.put(:gives, gives)
+    |> Map.put(:attempts, attempts)
+    |> Map.put(:revealed_at, Thereish.Chronicle.Timing.last_revealed(attempts))
   end
 
   defp maybe_arm_reveal_hold(state, old_phase) do

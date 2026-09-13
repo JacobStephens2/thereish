@@ -20,11 +20,9 @@ defmodule ThereishWeb.AdminMediaTest do
 
     test "the overview links through to an empty gallery", %{conn: conn} do
       conn = log_in_admin(conn)
-      {:ok, overview, html} = live(conn, ~p"/admin")
+      {:ok, overview, _html} = live(conn, ~p"/admin")
 
       assert has_element?(overview, "a[href='/admin/media']", "Media")
-      refute html =~ "/admin/rooms"
-      refute html =~ "/admin/timing"
 
       {:ok, gallery, gallery_html} = live(conn, ~p"/admin/media")
 
