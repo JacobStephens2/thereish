@@ -67,7 +67,7 @@ defmodule ThereishWeb.AdminTimingLive do
             label="Bridge writing"
             phase={page.phases.bridge_writing}
           />
-          <.phase name={:grading} label="Grading / Beat" phase={page.phases.grading} />
+          <.phase name={:assayer_beat} label="Assayer / Beat" phase={page.phases.assayer_beat} />
           <.phase
             name={:reveal_pauses}
             label="Reveal pauses"

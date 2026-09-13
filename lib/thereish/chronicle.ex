@@ -2450,7 +2450,10 @@ defmodule Thereish.Chronicle do
         closeness: entry.closeness,
         opened_at: opened_at,
         closed_at: DateTime.utc_now(),
-        revealed_at: Map.get(entry, :revealed_at) || Map.get(entry, "revealed_at")
+        revealed_at:
+          Map.get(entry, :revealed_at) ||
+            Map.get(entry, "revealed_at") ||
+            Timing.last_revealed(entry[:attempts] || [])
       })
       |> Repo.insert!()
 
