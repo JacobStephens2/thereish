@@ -107,7 +107,10 @@ defmodule ThereishWeb.AdminRoomsTest do
                "[data-role=page-timing] [data-phase=bridge-writing][data-kind=exact]"
              )
 
-      assert has_element?(view, "[data-role=page-timing] [data-phase=grading][data-kind=exact]")
+      assert has_element?(
+               view,
+               "[data-role=page-timing] [data-phase=assayer-beat][data-kind=exact]"
+             )
 
       assert has_element?(
                view,
@@ -131,6 +134,31 @@ defmodule ThereishWeb.AdminRoomsTest do
       assert DateTime.compare(attempt.started_at, attempt.assaying_started_at) in [:lt, :eq]
       assert DateTime.compare(attempt.assaying_started_at, attempt.revealed_at) in [:lt, :eq]
       assert DateTime.compare(page.revealed_at, page.closed_at) in [:lt, :eq]
+    end
+
+    test "resetting Gives reopens Give entry so a failed Author wait is not billed there", ctx do
+      steward(author_mode: :unavailable)
+
+      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).author_failure end)
+
+      Process.sleep(120)
+      marker = DateTime.utc_now()
+      :ok = Rooms.reset_gives(ctx.slug, ctx.melissa.id)
+
+      steward(author_mode: :ok)
+      play_meld(ctx, "cairn", "cairns")
+
+      [page] = chronicled(ctx.slug)
+      assert DateTime.compare(page.opened_at, marker) in [:gt, :eq]
+
+      {:ok, view, _} = live(ctx.conn, ~p"/admin/timing/#{ctx.slug}")
+
+      assert has_element?(
+               view,
+               "[data-role=page-timing][data-kind=exact][data-outcome=early-meld]"
+             )
     end
 
     test "a fifth-Attempt Meld is distinct from an earlier Meld, and exhaustion is distinct from either",
@@ -258,7 +286,7 @@ defmodule ThereishWeb.AdminRoomsTest do
       assert has_element?(view, "[data-phase=give-entry][data-kind=unavailable]")
       assert has_element?(view, "[data-phase=generation][data-kind=unavailable]")
       assert has_element?(view, "[data-phase=bridge-writing][data-kind=unavailable]")
-      assert has_element?(view, "[data-phase=grading][data-kind=unavailable]")
+      assert has_element?(view, "[data-phase=assayer-beat][data-kind=unavailable]")
       refute has_element?(view, "[data-kind=exact]")
     end
   end

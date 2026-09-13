@@ -27,7 +27,7 @@ defmodule Thereish.Chronicle.Timing do
             give_entry: phase(),
             generation: phase(),
             bridge_writing: phase(),
-            grading: phase(),
+            assayer_beat: phase(),
             reveal_pauses: phase()
           }
         }
@@ -57,11 +57,24 @@ defmodule Thereish.Chronicle.Timing do
         give_entry: give_entry(page, gives),
         generation: generation(gives, attempts),
         bridge_writing: span_sum(attempts, :started_at, :assaying_started_at),
-        grading: span_sum(attempts, :assaying_started_at, :revealed_at),
+        assayer_beat: span_sum(attempts, :assaying_started_at, :revealed_at),
         reveal_pauses: reveal_pauses(attempts)
       }
     }
   end
+
+  @doc "The last Attempt reveal among recorded occurrence times."
+  @spec last_revealed([map()]) :: DateTime.t() | nil
+  def last_revealed(attempts) when is_list(attempts) do
+    attempts
+    |> Enum.map(&revealed_at/1)
+    |> Enum.filter(&match?(%DateTime{}, &1))
+    |> List.last()
+  end
+
+  defp revealed_at(%{revealed_at: time}), do: time
+  defp revealed_at(%{"revealed_at" => time}), do: time
+  defp revealed_at(_), do: nil
 
   @doc "A short label for how the Page ended."
   @spec outcome_label(t()) :: String.t()
@@ -160,13 +173,6 @@ defmodule Thereish.Chronicle.Timing do
     else
       phase(Enum.sum(spans))
     end
-  end
-
-  defp last_revealed(attempts) do
-    attempts
-    |> Enum.map(& &1.revealed_at)
-    |> Enum.filter(&match?(%DateTime{}, &1))
-    |> List.last()
   end
 
   defp phase(nil), do: unavailable()

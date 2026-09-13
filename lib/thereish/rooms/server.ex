@@ -233,6 +233,8 @@ defmodule Thereish.Rooms.Server do
       |> author_answered()
       |> reset_score_state(keep_track: true)
       |> Map.put(:giving_ref, make_ref())
+      |> Map.put(:opened_at, nil)
+      |> Map.put(:timing, %{gives: %{}, attempts: %{}})
 
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
       {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
@@ -1737,12 +1739,7 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  defp wall_clock do
-    case Application.get_env(:thereish, :now) do
-      fun when is_function(fun, 0) -> fun.()
-      _ -> DateTime.utc_now()
-    end
-  end
+  defp wall_clock, do: DateTime.utc_now()
 
   defp record_occurrence_times(state, old_game) do
     now = wall_clock()
@@ -1821,16 +1818,10 @@ defmodule Thereish.Rooms.Server do
         |> Map.put(:advanced_at, times[:advanced_at])
       end)
 
-    revealed_at =
-      attempts
-      |> Enum.map(& &1.revealed_at)
-      |> Enum.filter(&match?(%DateTime{}, &1))
-      |> List.last()
-
     entry
     |> Map.put(:gives, gives)
     |> Map.put(:attempts, attempts)
-    |> Map.put(:revealed_at, revealed_at)
+    |> Map.put(:revealed_at, Thereish.Chronicle.Timing.last_revealed(attempts))
   end
 
   defp maybe_arm_reveal_hold(state, old_phase) do
