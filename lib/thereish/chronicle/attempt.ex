@@ -22,6 +22,10 @@ defmodule Thereish.Chronicle.Attempt do
     field :bookends, {:array, :string}
     field :closeness, :integer
     field :melded, :boolean
+    field :started_at, :utc_datetime_usec
+    field :assaying_started_at, :utc_datetime_usec
+    field :revealed_at, :utc_datetime_usec
+    field :advanced_at, :utc_datetime_usec
 
     belongs_to :page, Thereish.Chronicle.Page
     has_many :bridges, Thereish.Chronicle.Bridge, preload_order: [asc: :position]
@@ -33,7 +37,17 @@ defmodule Thereish.Chronicle.Attempt do
   @doc false
   def changeset(attempt, attrs) do
     attempt
-    |> cast(attrs, [:page_id, :number, :bookends, :closeness, :melded])
+    |> cast(attrs, [
+      :page_id,
+      :number,
+      :bookends,
+      :closeness,
+      :melded,
+      :started_at,
+      :assaying_started_at,
+      :revealed_at,
+      :advanced_at
+    ])
     |> validate_required([:page_id, :number, :bookends, :melded])
     |> unique_constraint([:page_id, :number])
   end

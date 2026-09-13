@@ -1,9 +1,6 @@
 defmodule ThereishWeb.AdminOverviewLive do
   @moduledoc """
-  Discoverable access to existing operator tools (ticket 09).
-
-  Later Room and timing slices add their destinations here; this page
-  does not invent placeholder links for them.
+  Discoverable access to operator tools (tickets 09 and 10).
   """
   use ThereishWeb, :live_view
 
@@ -38,6 +35,18 @@ defmodule ThereishWeb.AdminOverviewLive do
         <li>
           <.link navigate={~p"/spend"} class="text-lg underline hover:opacity-80">Spend</.link>
           <p class="text-sm opacity-70">Operator ledger across all Rooms.</p>
+        </li>
+        <li>
+          <.link navigate={~p"/admin/rooms"} class="text-lg underline hover:opacity-80">
+            Rooms
+          </.link>
+          <p class="text-sm opacity-70">Find a Room and open its Chronicle or timing.</p>
+        </li>
+        <li>
+          <.link navigate={~p"/admin/timing"} class="text-lg underline hover:opacity-80">
+            Timing
+          </.link>
+          <p class="text-sm opacity-70">How long Pages take, with phase breakdowns.</p>
         </li>
         <li>
           <.link navigate={~p"/admin/experiments"} class="text-lg underline hover:opacity-80">

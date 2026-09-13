@@ -10,7 +10,7 @@ defmodule ThereishWeb.AdminOverviewTest do
     %{conn: log_in_admin(conn)}
   end
 
-  test "lists existing operator tools and no later-slice placeholders", %{conn: conn} do
+  test "lists operator tools without placeholder copy", %{conn: conn} do
     {:ok, view, html} = live(conn, ~p"/admin")
 
     assert has_element?(view, "[data-role=admin-overview]")
@@ -18,10 +18,10 @@ defmodule ThereishWeb.AdminOverviewTest do
     assert has_element?(view, "a[href='/spend']", "Spend")
     assert has_element?(view, "a[href='/admin/experiments']", "Experiments")
     assert has_element?(view, "a[href='/admin/media']", "Media")
+    assert has_element?(view, "a[href='/admin/rooms']", "Rooms")
+    assert has_element?(view, "a[href='/admin/timing']", "Timing")
     assert has_element?(view, "a[href='/calibration.json']")
     assert has_element?(view, "a[href='/calibration.jsonl']")
-    refute html =~ "/admin/rooms"
-    refute html =~ "/admin/timing"
     refute html =~ "coming soon"
   end
 end
