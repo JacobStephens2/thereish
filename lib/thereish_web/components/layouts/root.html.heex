@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
     <meta :if={assigns[:robots]} name="robots" content={@robots} />
+    <meta :if={assigns[:description]} name="description" content={@description} />
+    <meta :if={assigns[:description]} property="og:title" content={assigns[:page_title]} />
+    <meta :if={assigns[:description]} property="og:description" content={@description} />
+    <meta :if={assigns[:og_image]} property="og:image" content={@og_image} />
+    <meta :if={assigns[:og_image]} name="twitter:card" content="summary_large_image" />
     <.live_title default="Thereish" phx-no-format>{assigns[:page_title]}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
