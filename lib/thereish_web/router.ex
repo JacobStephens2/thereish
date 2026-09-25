@@ -31,6 +31,9 @@ defmodule ThereishWeb.Router do
     live "/", FrontLive, :front
     live "/new", NewRoomLive, :new
 
+    # What Thereish is, for someone nobody has told a Code yet.
+    get "/game", GameController, :show
+
     live "/r/:slug", RoomLive, :room
     live "/r/:slug/stage", StageLive, :stage
 

@@ -84,6 +84,9 @@ defmodule ThereishWeb.FrontLive do
       <div class="flex flex-col gap-2">
         <p class="text-sm uppercase tracking-wide opacity-60">Nobody told you a Code?</p>
         <.button navigate={~p"/new"} data-role="new-room">New Room</.button>
+        <.link href={~p"/game"} data-role="what-is-this" class="text-sm underline opacity-70">
+          What is Thereish?
+        </.link>
       </div>
 
       <section :if={@rooms != []} class="flex flex-col gap-3 border-t border-base-300 pt-6">
