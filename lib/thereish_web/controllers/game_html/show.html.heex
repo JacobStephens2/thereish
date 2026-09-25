@@ -1,0 +1,185 @@
+<main class="mx-auto flex max-w-3xl flex-col gap-16 px-6 py-12" data-role="game-page">
+  <header class="flex flex-col gap-5">
+    <p class="text-sm font-semibold uppercase tracking-widest text-primary">Thereish</p>
+    <h1 class="text-4xl font-bold leading-tight sm:text-5xl">
+      Two far-apart words. One bridge. How close did you land?
+    </h1>
+    <p class="text-lg opacity-80">
+      A couch word game for two to six phones and a laptop. Everyone writes the word
+      that spans the gap, and a machine grades how close the table came. No accounts,
+      nothing to install.
+    </p>
+    <div class="flex flex-wrap gap-3">
+      <.link href={~p"/new"} class="btn btn-primary" data-role="game-new-room">Open a Room</.link>
+      <.link href={~p"/"} class="btn btn-soft">I have a Code</.link>
+    </div>
+  </header>
+
+  <figure class="flex flex-col gap-2">
+    <video
+      src={~p"/images/game/stage-page.mp4"}
+      poster={~p"/images/game/stage-meld.webp"}
+      autoplay
+      muted
+      loop
+      playsinline
+      controls
+      preload="metadata"
+      class="w-full rounded-box border border-base-300"
+      aria-label="A whole Page on the Stage: longship and defibrillator miss at 14, then oars and rowing meld at 94."
+    ></video>
+    <figcaption class="text-sm opacity-60">
+      One whole Page, cut to 28 seconds: <em>longship</em>
+      and <em>defibrillator</em>
+      miss at 14, then <em>oars</em>
+      and <em>rowing</em>
+      meld at 94.
+    </figcaption>
+  </figure>
+
+  <section class="flex flex-col gap-6">
+    <h2 class="text-2xl font-semibold">How a Page goes</h2>
+    <ol class="flex flex-col gap-4">
+      <li class="flex gap-4">
+        <span class="font-mono text-2xl font-bold text-primary">1</span>
+        <p>
+          <strong>Open a Room.</strong>
+          It gets a four-letter Code. Read it aloud; everyone else types it and a name.
+        </p>
+      </li>
+      <li class="flex gap-4">
+        <span class="font-mono text-2xl font-bold text-primary">2</span>
+        <p>
+          <strong>Everyone gives a Give</strong>
+          — a setting in a phrase, like “Viking beaches” or “a hospital night shift.”
+          It stays secret until the reveal.
+        </p>
+      </li>
+      <li class="flex gap-4">
+        <span class="font-mono text-2xl font-bold text-primary">3</span>
+        <p>
+          <strong>Two Bookends appear,</strong>
+          written in seconds from two different Gives and chosen to sit far apart.
+        </p>
+      </li>
+      <li class="flex gap-4">
+        <span class="font-mono text-2xl font-bold text-primary">4</span>
+        <p>
+          <strong>Everyone writes a Bridge:</strong>
+          the word or phrase whose meaning spans both. Then the reveal: every Bridge,
+          one number, and a one-line quip about what you actually wrote.
+        </p>
+      </li>
+    </ol>
+
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <figure class="flex flex-col items-center gap-2">
+        <img
+          src={~p"/images/game/phone-give.webp"}
+          width="540"
+          height="709"
+          loading="lazy"
+          alt="A phone showing Room Code FANO and the Give 'Viking beaches'."
+          class="w-full max-w-72 rounded-box border border-base-300"
+        />
+        <figcaption class="text-sm opacity-60">Your Give, kept private.</figcaption>
+      </figure>
+      <figure class="flex flex-col items-center gap-2">
+        <img
+          src={~p"/images/game/phone-bridge.webp"}
+          width="540"
+          height="624"
+          loading="lazy"
+          alt="A phone showing the Bookends longship and defibrillator and a box for your Bridge."
+          class="w-full max-w-72 rounded-box border border-base-300"
+        />
+        <figcaption class="text-sm opacity-60">Two Bookends, one box.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="flex flex-col gap-5">
+    <h2 class="text-2xl font-semibold">The Ladder</h2>
+    <ul class="flex flex-wrap gap-2" data-role="game-ladder">
+      <li :for={{band, floor} <- ladder()} class="badge badge-lg badge-soft">
+        {band} <span class="font-semibold text-primary">{floor}</span>
+      </li>
+    </ul>
+    <p>
+      A Meld ends the Page. On a miss, the two Bridges that landed furthest apart
+      become the next Bookends, so every Attempt starts closer than the last. Five
+      Attempts, then the Page closes, melded or not. “One more?” asks for fresh Gives.
+    </p>
+    <figure class="flex flex-col gap-2">
+      <img
+        src={~p"/images/game/stage-miss.webp"}
+        width="1280"
+        height="800"
+        loading="lazy"
+        alt="The Stage: raid and paddles graded 14, a miss, with the quip: Ben brought the tools to row Ada's raid, though mostly to restart the crew's hearts afterward."
+        class="w-full rounded-box border border-base-300"
+      />
+      <figcaption class="text-sm opacity-60">
+        A miss is often the best part. The number is the punchline.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="flex flex-col gap-5">
+    <h2 class="text-2xl font-semibold">What you need</h2>
+    <ul class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <li class="rounded-box border border-base-300 p-4">
+        <p class="font-semibold">Two to six phones</p>
+        <p class="text-sm opacity-70">One per player, as a private screen.</p>
+      </li>
+      <li class="rounded-box border border-base-300 p-4">
+        <p class="font-semibold">A laptop, if you like</p>
+        <p class="text-sm opacity-70">
+          Make it the Stage and the reveal plays there for the whole table.
+        </p>
+      </li>
+      <li class="rounded-box border border-base-300 p-4">
+        <p class="font-semibold">About ten minutes</p>
+        <p class="text-sm opacity-70">A Page ends cleanly. One more is a single tap.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="flex flex-col gap-5">
+    <h2 class="text-2xl font-semibold">The machine keeps score, not a seat</h2>
+    <p>
+      Language models write the Bookends, grade the Bridges, write the quips, and
+      keep the Room's Chronicle: every Page, every grade and its reasoning, and a
+      short recap after you've gone to bed. They never play. Every player is a
+      person at the table, and if you all agree a grade was wrong, you can overrule it.
+      The same Bridges get the same grade forever.
+    </p>
+    <figure class="flex flex-col gap-2">
+      <img
+        src={~p"/images/game/stage-meld.webp"}
+        width="1280"
+        height="800"
+        loading="lazy"
+        alt="The Stage: oars and rowing graded 94, a Meld, with the quip: Longships or hospital wards, you two have finally agreed on how to propel the boat."
+        class="w-full rounded-box border border-base-300"
+      />
+    </figure>
+  </section>
+
+  <section class="flex flex-col items-start gap-4 rounded-box bg-base-200 p-6">
+    <h2 class="text-2xl font-semibold">Play tonight</h2>
+    <p>Open a Room on the laptop, make it the Stage, and read the Code to the room.</p>
+    <.link href={~p"/new"} class="btn btn-primary">Open a Room</.link>
+    <p class="text-sm opacity-70">
+      How it was built, and why:
+      <a
+        href="https://stephens.page/blog/the-machine-grades-it-never-rules/"
+        class="underline underline-offset-2"
+      >
+        The machine grades. It never rules.
+      </a>
+    </p>
+  </section>
+
+  <Layouts.made_by />
+</main>
