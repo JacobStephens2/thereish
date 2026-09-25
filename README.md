@@ -7,6 +7,11 @@ That note became **Thereish**: a couch word game for two phones and a laptop —
 two to six phones, when friends come round — with a machine author-scribe. It
 runs at **https://thereish.app**. Success is measured one way: My wife likes it.
 
+<a href="https://thereish.app/game"><img src="docs/media/thereish.gif" width="640" alt="One Page on the Stage: longship and defibrillator miss at 14, then oars and rowing meld at 94."></a>
+
+What it is, for someone who has not played: **https://thereish.app/game**.
+How and why it was built: [The machine grades. It never rules.](https://stephens.page/blog/the-machine-grades-it-never-rules/)
+
 ## How a Page goes
 
 1. Someone opens a Room at `/new` and reads its **Code** aloud — a four-letter
