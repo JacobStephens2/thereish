@@ -1828,8 +1828,8 @@ defmodule Thereish.GameTest do
     end
   end
 
-  describe "the title keeps the secret, the end screen tells it (ticket 09)" do
-    setup do
+  describe "the end screen tells every Give (ticket 09)" do
+    test "after the first reveal, every Give is shown with its Seat" do
       state =
         Game.init(
           seat_limit: 2,
@@ -1845,32 +1845,6 @@ defmodule Thereish.GameTest do
       {:ok, state, _} =
         Game.apply(state, {:page_written, %{bookends: ["cliff", "wax"]}})
 
-      {:ok, state, _} =
-        Game.apply(
-          state,
-          {:track_landed, %{title: "Summer Camp · Viking Beaches", path: "/media/tracks/p1.mp3"}}
-        )
-
-      %{state: state}
-    end
-
-    test "a Seat's view before the first reveal has no Track title; after it, the title and every Give with its Seat",
-         %{state: state} do
-      assert state |> Game.phase() == :bridging
-
-      # Before reveal, neither player nor stage sees the track title
-      melissa_view = Game.view(state, "seat-Melissa")
-      stage_view = Game.view(state, nil)
-
-      refute Map.has_key?(melissa_view.track, :title)
-      assert is_nil(melissa_view.track[:title])
-      assert melissa_view.track.path == "/media/tracks/p1.mp3"
-      assert melissa_view.reveal == nil
-
-      refute Map.has_key?(stage_view.track, :title)
-      assert is_nil(stage_view.track[:title])
-
-      # First attempt bridges committed and verdict received
       {:ok, state, _} =
         Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
 
@@ -1892,67 +1866,14 @@ defmodule Thereish.GameTest do
 
       assert Game.phase(reveal_state) == :reveal
 
-      # After first reveal, title shows and every Give with its Seat
       reveal_view = Game.view(reveal_state, "seat-Melissa")
-      assert reveal_view.track.title == "Summer Camp · Viking Beaches"
 
       assert [
                %{name: "Melissa", seat_id: "seat-Melissa", text: "lighthouse"},
                %{name: "Jacob", seat_id: "seat-Jacob", text: "candle"}
              ] = reveal_view.reveal.gives
 
-      stage_reveal_view = Game.view(reveal_state, nil)
-      assert stage_reveal_view.track.title == "Summer Camp · Viking Beaches"
-      assert stage_reveal_view.reveal.gives == reveal_view.reveal.gives
-    end
-
-    test "held-over Track's title visible during the next Page's giving", %{state: state} do
-      # Play to closed
-      {:ok, state, _} =
-        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
-
-      {:ok, state, _} =
-        Game.apply(state, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "cairn"}})
-
-      {:ok, closed_state, _} =
-        Game.apply(
-          state,
-          {:verdict_received,
-           %{
-             closeness: 95,
-             reasoning: "meld",
-             quip: "one mind",
-             furthest: ["cairn", "cairn"],
-             meta: %{}
-           }}
-        )
-
-      assert Game.phase(closed_state) == :closed
-
-      # Next page starts: phase is giving
-      {:ok, next_state, []} =
-        Game.apply(closed_state, {:next_page, %{seat_id: "seat-Melissa"}})
-
-      assert Game.phase(next_state) == :giving
-
-      # Held-over track keeps its title during giving
-      melissa_giving = Game.view(next_state, "seat-Melissa")
-      assert melissa_giving.track.title == "Summer Camp · Viking Beaches"
-
-      stage_giving = Game.view(next_state, nil)
-      assert stage_giving.track.title == "Summer Camp · Viking Beaches"
-
-      # When a new track lands for the new page, it hides its title until reveal
-      {:ok, new_track_state, []} =
-        Game.apply(
-          next_state,
-          {:track_landed, %{title: "Winter Snow · Mountain Frost", path: "/media/tracks/p2.mp3"}}
-        )
-
-      melissa_new = Game.view(new_track_state, "seat-Melissa")
-      refute Map.has_key?(melissa_new.track, :title)
-      assert is_nil(melissa_new.track[:title])
-      assert melissa_new.track.path == "/media/tracks/p2.mp3"
+      assert Game.view(reveal_state, nil).reveal.gives == reveal_view.reveal.gives
     end
   end
 

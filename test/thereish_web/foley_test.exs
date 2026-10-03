@@ -327,6 +327,11 @@ defmodule ThereishWeb.FoleyTest do
         track: %{
           path: "/media/tracks/test.mp3",
           title: "Summer Camp · Viking Beaches"
+        },
+        playing: %{
+          path: "/media/tracks/test.mp3",
+          title: "Summer Camp · Viking Beaches",
+          kind: "track"
         }
       }
 
@@ -352,7 +357,8 @@ defmodule ThereishWeb.FoleyTest do
         speaker?: true,
         music: "page",
         loop: loop,
-        track: nil
+        track: nil,
+        playing: %{path: loop.path, title: loop.name, kind: "repertoire"}
       }
 
       new_room = %{
@@ -363,6 +369,11 @@ defmodule ThereishWeb.FoleyTest do
         track: %{
           path: "/media/tracks/test.mp3",
           title: "Summer Camp · Viking Beaches"
+        },
+        playing: %{
+          path: "/media/tracks/test.mp3",
+          title: "Summer Camp · Viking Beaches",
+          kind: "track"
         }
       }
 
@@ -389,7 +400,8 @@ defmodule ThereishWeb.FoleyTest do
         track: %{
           path: "/media/tracks/test.mp3",
           title: nil
-        }
+        },
+        playing: %{path: "/media/tracks/test.mp3", title: "Track", kind: "track"}
       }
 
       new_room = %{
@@ -399,6 +411,11 @@ defmodule ThereishWeb.FoleyTest do
         track: %{
           path: "/media/tracks/test.mp3",
           title: "Summer Camp · Viking Beaches"
+        },
+        playing: %{
+          path: "/media/tracks/test.mp3",
+          title: "Summer Camp · Viking Beaches",
+          kind: "track"
         }
       }
 
@@ -502,12 +519,13 @@ defmodule ThereishWeb.FoleyTest do
       first = hd(Thereish.Foley.Loops.all())
       socket = test_socket(ThereishWeb.StageLive)
 
-      # Waiting snapshots have no Page loop yet; Foley falls back to the first shipped loop.
+      # Waiting snapshots have no Page loop yet; the Room falls back to the first shipped loop.
       new_room = %{
         phase: :waiting,
         speaker?: true,
         music: "house",
-        loop: nil
+        loop: first,
+        playing: %{path: first.path, title: first.name, kind: "repertoire"}
       }
 
       result = Foley.push_foley_events(socket, nil, new_room, stage?: true)
@@ -524,14 +542,16 @@ defmodule ThereishWeb.FoleyTest do
         phase: :waiting,
         speaker?: true,
         music: "off",
-        loop: nil
+        loop: nil,
+        playing: nil
       }
 
       new_room = %{
         phase: :waiting,
         speaker?: true,
         music: "house",
-        loop: nil
+        loop: first,
+        playing: %{path: first.path, title: first.name, kind: "repertoire"}
       }
 
       result = Foley.push_foley_events(socket, old_room, new_room, stage?: true)
