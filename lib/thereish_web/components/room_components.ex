@@ -1385,8 +1385,7 @@ defmodule ThereishWeb.RoomComponents do
   def now_playing_text(room) do
     cond do
       to_string(room[:music]) == "off" and
-          (room[:loop] != nil or room[:playing] != nil or
-             room[:phase] in [:bridging, :assaying, :revealed, :closed]) ->
+          room[:phase] in [:bridging, :assaying, :revealed, :closed] ->
         "Music is off"
 
       room[:playing] && room.playing[:kind] in ["track", "vamp"] ->
@@ -1401,20 +1400,6 @@ defmodule ThereishWeb.RoomComponents do
 
       room[:playing] && room.playing[:kind] == "repertoire" && room.playing[:title] ->
         "Now playing: #{room.playing.title} (the Repertoire)"
-
-      room[:track] && room.track[:path] && room.track[:title] ->
-        if first_reveal_happened?(room) do
-          "Now playing: #{room.track.title} (written for this Page)"
-        else
-          "Now playing: written for this Page"
-        end
-
-      room[:track] && room.track[:path] ->
-        nil
-
-      room[:loop] ->
-        title = room.loop[:title] || room.loop[:name]
-        "Now playing: #{title} (the Repertoire)"
 
       true ->
         nil
