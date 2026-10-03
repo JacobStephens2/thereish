@@ -95,6 +95,24 @@ defmodule Thereish.Foley.VoiceTest do
                Voice.spoken(voice, 1, :bookends, {:ok, @clip}, table(phase: :assaying))
     end
 
+    test "a clip arriving after the next Attempt started is dropped and logged" do
+      {voice, _} = Voice.table_moved(Voice.new(), table())
+      {voice, _} = Voice.table_moved(voice, table(attempt: 2, phase: :assaying))
+
+      assert {voice, [{:log, :warning, message}]} =
+               Voice.spoken(
+                 voice,
+                 1,
+                 :bookends,
+                 {:ok, @clip},
+                 table(attempt: 2, phase: :assaying)
+               )
+
+      assert message =~ "dropping"
+      assert {:error, :not_found} = Voice.clip(voice, 1, :bookends, table(attempt: 2))
+      assert {:error, :not_found} = Voice.clip(voice, 2, :bookends, table(attempt: 2))
+    end
+
     test "a failed synthesis is logged and nothing is announced" do
       {voice, _} = Voice.table_moved(Voice.new(), table())
 
