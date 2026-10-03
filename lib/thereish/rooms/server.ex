@@ -90,10 +90,6 @@ defmodule Thereish.Rooms.Server do
       game =
         Game.init(seat_limit: room.seat_limit, seats: seats, full_table: room.full_table)
 
-      eligible_members = Thereish.Foley.Repertoire.members(room.id)
-      wait_music = Thereish.Foley.Repertoire.draw(eligible_members)
-      deal = Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path)
-
       state = %{
         slug: slug,
         room: room,
@@ -110,10 +106,7 @@ defmodule Thereish.Rooms.Server do
         current_page_id: nil,
         current_page_ref: nil,
         recorded_pages: %{},
-        occupancy: Occupancy.new(),
-        wait_music: wait_music,
-        deal: deal,
-        eligible_members: eligible_members,
+        occupancy: Occupancy.new(Thereish.Foley.Repertoire.members(room.id)),
         voice_audio: nil,
         voice_meta: %{},
         voice_pending_attempt: nil,
@@ -249,8 +242,7 @@ defmodule Thereish.Rooms.Server do
           # Verdict row is written once).
           state = state |> clear_reveal_hold() |> flush_pending_chronicle()
 
-          eligible_members = Thereish.Foley.Repertoire.members(state.room.id)
-          wait_music = Thereish.Foley.Repertoire.draw(eligible_members, state[:wait_music])
+          members = Thereish.Foley.Repertoire.members(state.room.id)
 
           new_state =
             %{
@@ -266,10 +258,7 @@ defmodule Thereish.Rooms.Server do
             |> Map.put(:current_page_id, nil)
             |> Map.put(:current_page_ref, nil)
             |> Map.put(:giving_ref, make_ref())
-            |> Map.put(:wait_music, wait_music)
-            |> Map.put(:eligible_members, eligible_members)
-            |> Map.put(:deal, Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path))
-            |> Map.update!(:occupancy, &Occupancy.page_turned/1)
+            |> Map.update!(:occupancy, &Occupancy.page_turned(&1, members))
 
           {:reply, :ok, advance(new_state, game, effects)}
 
@@ -428,70 +417,11 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_call({:next, device_token}, _from, state) do
-    if speaking_device?(state, device_token) do
-      %{playing: playing, next?: next?} = Occupancy.view(state.occupancy, table(state))
-
-      with true <- next?,
-           {:ok, next_member, remaining_deal} <-
-             Thereish.Foley.Repertoire.next_deal(
-               eligible_members(state),
-               state[:deal] || [],
-               playing.path
-             ) do
-        state = %{state | wait_music: next_member, deal: remaining_deal}
-
-        state =
-          if playing.kind == "holdover",
-            do: Map.update!(state, :occupancy, &Occupancy.drop_track/1),
-            else: state
-
-        broadcast(state.room.slug)
-        {:reply, :ok, state}
-      else
-        _ -> {:reply, {:error, :refused}, state}
-      end
-    else
-      {:reply, :ok, state}
-    end
+    speaker_pressed(state, device_token, &Occupancy.next/2)
   end
 
   def handle_call({:never, device_token}, _from, state) do
-    if speaking_device?(state, device_token) do
-      %{playing: playing, never?: never?} = Occupancy.view(state.occupancy, table(state))
-
-      if never? do
-        path = playing.path
-        {:ok, _} = Store.record_never(state.room.id, path)
-
-        new_eligible = Enum.reject(eligible_members(state), fn m -> m.path == path end)
-        clean_deal = Enum.reject(state[:deal] || [], fn m -> m.path == path end)
-
-        case Thereish.Foley.Repertoire.advance_after_never(new_eligible, clean_deal, path) do
-          {:ok, next_member, remaining_deal} ->
-            state = %{
-              state
-              | wait_music: next_member,
-                deal: remaining_deal,
-                eligible_members: new_eligible
-            }
-
-            state =
-              if playing.kind in ["holdover", "track"],
-                do: Map.update!(state, :occupancy, &Occupancy.drop_track/1),
-                else: state
-
-            broadcast(state.room.slug)
-            {:reply, :ok, state}
-
-          {:error, :no_members} ->
-            {:reply, {:error, :refused}, state}
-        end
-      else
-        {:reply, {:error, :refused}, state}
-      end
-    else
-      {:reply, :ok, state}
-    end
+    speaker_pressed(state, device_token, &Occupancy.never/2)
   end
 
   def handle_call({:voice_audio, attempt, kind}, _from, state) do
@@ -855,15 +785,22 @@ defmodule Thereish.Rooms.Server do
     maybe_arm_reveal_hold(new_state, old_phase)
   end
 
-  defp current_wait_music(state) do
-    state[:wait_music] ||
-      (state[:room] && state.room.id && Thereish.Foley.Repertoire.draw(state.room.id)) ||
-      hd(Thereish.Foley.Repertoire.shipped_loops())
-  end
+  # Next or Never, which only the device holding the Speaker may press. Any
+  # other device's press is ignored rather than refused.
+  defp speaker_pressed(state, device_token, press) do
+    if speaking_device?(state, device_token) do
+      case press.(state.occupancy, table(state)) do
+        {:ok, occupancy, effects} ->
+          {state, _wrote?} = perform_occupancy_effects(state, occupancy, effects)
+          broadcast(state.room.slug)
+          {:reply, :ok, state}
 
-  defp eligible_members(state) do
-    state[:eligible_members] ||
-      Thereish.Foley.Repertoire.shipped_loops()
+        {:error, :refused} ->
+          {:reply, {:error, :refused}, state}
+      end
+    else
+      {:reply, :ok, state}
+    end
   end
 
   defp speaking_device?(state, device_token) do
@@ -1065,7 +1002,10 @@ defmodule Thereish.Rooms.Server do
   # Answers the new state and whether a Chronicle Page was written.
   defp run_occupancy(state, transition) do
     {occupancy, effects} = transition.(state.occupancy)
+    perform_occupancy_effects(state, occupancy, effects)
+  end
 
+  defp perform_occupancy_effects(state, occupancy, effects) do
     Enum.reduce(effects, {%{state | occupancy: occupancy}, false}, fn effect, {state, wrote?} ->
       {state, wrote_now?} = perform_occupancy_effect(effect, state)
       {state, wrote? or wrote_now?}
@@ -1126,6 +1066,11 @@ defmodule Thereish.Rooms.Server do
     {state, false}
   end
 
+  defp perform_occupancy_effect({:record_never, path}, state) do
+    {:ok, _} = Store.record_never(state.room.id, path)
+    {state, false}
+  end
+
   defp perform_occupancy_effect({:log, _page_ref, {:title_failure, reason}, _landed_at}, state) do
     Logger.warning("Scribe titling failed for room #{state.room.slug}: #{inspect(reason)}")
     {state, false}
@@ -1145,12 +1090,7 @@ defmodule Thereish.Rooms.Server do
 
   # The Room's facts Occupancy is told on each call rather than keeping a copy.
   defp table(state) do
-    %{
-      music: state.room.music,
-      closed?: closed?(state),
-      draw: current_wait_music(state),
-      members: eligible_members(state)
-    }
+    %{music: state.room.music, closed?: closed?(state)}
   end
 
   defp closed?(state), do: Game.phase(state.game) == :closed
