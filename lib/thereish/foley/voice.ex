@@ -42,8 +42,8 @@ defmodule Thereish.Foley.Voice do
   defstruct attempt: nil,
             clips: %{},
             speaking: %{bookends: nil, verdict: nil},
-            meta: %{},
-            held: nil
+            voice_meta: %{},
+            held_page: nil
 
   @type kind :: :bookends | :verdict
   @type clip :: %{audio: binary(), format: atom() | String.t()}
@@ -52,8 +52,8 @@ defmodule Thereish.Foley.Voice do
           attempt: integer() | nil,
           clips: %{optional(kind()) => clip()},
           speaking: %{bookends: integer() | nil, verdict: integer() | nil},
-          meta: %{optional(integer()) => map()},
-          held: map() | nil
+          voice_meta: %{optional(integer()) => map()},
+          held_page: map() | nil
         }
 
   @typedoc """
@@ -155,7 +155,9 @@ defmodule Thereish.Foley.Voice do
        "Voice synthesis failed for attempt #{attempt} (#{kind}): #{failure_meta["failure"]}"}
 
     if kind == :verdict do
-      {voice, release} = release(%{voice | meta: Map.put(voice.meta, attempt, failure_meta)})
+      {voice, release} =
+        release(%{voice | voice_meta: Map.put(voice.voice_meta, attempt, failure_meta)})
+
       {voice, [log | release]}
     else
       {voice, [log]}
@@ -169,7 +171,7 @@ defmodule Thereish.Foley.Voice do
   @spec page_closed(t(), map()) :: {t(), [effect()]}
   def page_closed(%__MODULE__{} = voice, entry) do
     if waiting?(voice, entry) do
-      {%{voice | held: entry}, []}
+      {%{voice | held_page: entry}, []}
     else
       {voice, [commit(voice, entry)]}
     end
@@ -228,8 +230,8 @@ defmodule Thereish.Foley.Voice do
   end
 
   defp landed(voice, attempt, :verdict, result, _table) do
-    meta = voice_meta(result[:meta] || %{})
-    {voice, release} = release(%{voice | meta: Map.put(voice.meta, attempt, meta)})
+    meta = provider_meta(result[:meta] || %{})
+    {voice, release} = release(%{voice | voice_meta: Map.put(voice.voice_meta, attempt, meta)})
     {voice, release ++ [{:broadcast, {:voice_ready, attempt}}]}
   end
 
@@ -276,7 +278,7 @@ defmodule Thereish.Foley.Voice do
     if quips? and quip != "", do: "#{band_word}. #{quip}", else: band_word
   end
 
-  defp voice_meta(raw) do
+  defp provider_meta(raw) do
     voice = pick(raw, [:voice, :voice_id]) || "default"
 
     %{
@@ -298,14 +300,16 @@ defmodule Thereish.Foley.Voice do
   defp waiting?(voice, entry) do
     pending = voice.speaking.verdict
 
-    pending != nil and is_nil(Map.get(voice.meta, pending)) and
+    pending != nil and is_nil(Map.get(voice.voice_meta, pending)) and
       Enum.any?(entry.attempts, &(&1.number == pending))
   end
 
-  defp release(%{held: nil} = voice), do: {voice, []}
-  defp release(%{held: entry} = voice), do: {%{voice | held: nil}, [commit(voice, entry)]}
+  defp release(%{held_page: nil} = voice), do: {voice, []}
 
-  defp commit(voice, entry), do: {:commit_chronicle, attach_meta(entry, voice.meta)}
+  defp release(%{held_page: entry} = voice),
+    do: {%{voice | held_page: nil}, [commit(voice, entry)]}
+
+  defp commit(voice, entry), do: {:commit_chronicle, attach_meta(entry, voice.voice_meta)}
 
   defp attach_meta(entry, meta) do
     attempts =
