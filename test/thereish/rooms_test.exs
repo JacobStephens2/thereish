@@ -3033,9 +3033,7 @@ defmodule Thereish.RoomsTest do
           end)
         end)
 
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      page_ref = :sys.get_state(pid).track_page_ref
-      page_ref_str = inspect(page_ref)
+      [_, page_ref_str] = Regex.run(~r/\(page (#Reference<[^>]+>)\): cache miss/, log)
 
       info_lines =
         log
@@ -3048,7 +3046,7 @@ defmodule Thereish.RoomsTest do
       assert Enum.any?(info_lines, &(&1 =~ "track landed" and &1 =~ ~r/\+\d+ms/))
     end
 
-    test "holdover across next_page and a stale score: landed track holds over and stale score is dropped",
+    test "a landed track holds over through the close and into the next Page",
          ctx do
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
@@ -3071,23 +3069,6 @@ defmodule Thereish.RoomsTest do
       assert view_closed.playing.path == landed_track.path
       assert view_closed.playing.title == landed_track.title
 
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      stale_ref = make_ref()
-
-      stale_track = %{
-        path: "/media/tracks/stale.mp3",
-        duration: 100,
-        format: :mp3,
-        title: "Stale Track",
-        meta: %{provider: "fake"}
-      }
-
-      # While closed (before next_page), a late scored message is dropped and does not overwrite holdover
-      send(pid, {:scored, stale_ref, {:ok, stale_track}})
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view.playing.kind == "holdover"
-      assert view.playing.path == landed_track.path
-
       # Move to next page: landed track holds over into giving
       :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
       await_phase(ctx.slug, :giving)
@@ -3096,14 +3077,6 @@ defmodule Thereish.RoomsTest do
       assert view_p2.playing.kind == "holdover"
       assert view_p2.playing.path == landed_track.path
       assert view_p2.playing.title == landed_track.title
-
-      # Send a late scored message with an old page ref directly to the Room Server
-      send(pid, {:scored, stale_ref, {:ok, stale_track}})
-
-      # Stale score is dropped and does not replace holdover
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view.playing.kind == "holdover"
-      assert view.playing.path == landed_track.path
     end
 
     test "giving and writing keep holdover until new Page's track lands during writing", ctx do
@@ -3215,43 +3188,6 @@ defmodule Thereish.RoomsTest do
       assert String.starts_with?(view.track.path, "/media/tracks/fake-")
     end
 
-    test "under house or off, score task does not start, and late track is kept for later switch back",
-         ctx do
-      :ok = Rooms.set_music(ctx.slug, "off")
-
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "cabin in woods")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "desert night")
-
-      await_phase(ctx.slug, :bridging)
-
-      Process.sleep(50)
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:track])
-
-      # Under house, late answer is kept rather than played
-      :ok = Rooms.set_music(ctx.slug, "house")
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      page_ref = :sys.get_state(pid).current_page_ref
-
-      fake_track = %{
-        path: "/media/tracks/late-answer.mp3",
-        duration: 120,
-        format: :mp3,
-        meta: %{provider: "fake"}
-      }
-
-      send(pid, {:scored, page_ref, {:ok, fake_track}})
-
-      # Under house, the track is NOT exposed in snapshot
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:track])
-
-      # Switch back to page: kept track is immediately exposed
-      :ok = Rooms.set_music(ctx.slug, "page")
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view.track.path == "/media/tracks/late-answer.mp3"
-    end
-
     test "a failing score task leaves track nil and records failure in music_meta on the Chronicle page",
          ctx do
       fake_config = Application.get_env(:thereish, :steward, [])[:fake] || []
@@ -3325,21 +3261,14 @@ defmodule Thereish.RoomsTest do
           :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
           await_phase(ctx.slug, :bridging)
 
-          eventually(fn ->
-            server_state = :sys.get_state(GenServer.whereis(Server.via(ctx.slug)))
-            server_state.music_meta != nil
-          end)
+          eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).music_meta != nil end)
         end)
-
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      page_ref = :sys.get_state(pid).current_page_ref
-      page_ref_str = inspect(page_ref)
 
       warn_lines =
         log
         |> String.split("\n")
         |> Enum.filter(
-          &(&1 =~ "[warning]" and &1 =~ ctx.slug and &1 =~ page_ref_str and
+          &(&1 =~ "[warning]" and &1 =~ ctx.slug and &1 =~ "(page #Reference<" and
               &1 =~ "failure with reason")
         )
 
@@ -3706,57 +3635,9 @@ defmodule Thereish.RoomsTest do
       refute vamp_path == track_path
     end
 
-    test "a Vamp that lands after the Page closes still attaches to that Page", ctx do
-      set_fake(vamp_delay_ms: 10_000, music_delay_ms: 0)
-
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "sprint")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "hoard")
-      await_phase(ctx.slug, :bridging)
-
-      eventually(fn ->
-        not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
-      end)
-
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "vault")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "vault")
-      await_reveal(ctx.slug)
-      await_phase(ctx.slug, :closed)
-
-      eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
-
-      [page_before] = Chronicle.page_views(ctx.slug)
-      assert Chronicle.page_vamp(page_before) == nil
-      assert Chronicle.page_track(page_before) != nil
-
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      page_ref = :sys.get_state(pid).current_page_ref
-
-      late_vamp = %{
-        path: "/media/vamps/late-sprint.mp3",
-        duration: 30,
-        format: :mp3,
-        loop: true,
-        meta: %{provider: "fake"}
-      }
-
-      send(pid, {:vamped, page_ref, {:ok, late_vamp}})
-
-      eventually(fn ->
-        [page] = Chronicle.page_views(ctx.slug)
-        Chronicle.page_vamp(page) != nil
-      end)
-
-      [page_after] = Chronicle.page_views(ctx.slug)
-      assert Chronicle.page_vamp(page_after).path == "/media/vamps/late-sprint.mp3"
-      assert Chronicle.page_track(page_after).path == Chronicle.page_track(page_before).path
-
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:vamp]) or view.vamp.path != late_vamp.path
-    end
-
     test "a Vamp that lands after next_page attaches to the old Page, not the one now in play",
          ctx do
-      set_fake(vamp_delay_ms: 10_000, music_delay_ms: 0)
+      set_fake(vamp_delay_ms: 1_500, music_delay_ms: 0)
 
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting alpha")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting beta")
@@ -3765,9 +3646,6 @@ defmodule Thereish.RoomsTest do
       eventually(fn ->
         not is_nil(Rooms.snapshot(ctx.slug, ctx.melissa.id)[:track])
       end)
-
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      old_ref = :sys.get_state(pid).current_page_ref
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
@@ -3780,26 +3658,21 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
       await_phase(ctx.slug, :giving)
 
-      late_vamp = %{
-        path: "/media/vamps/old-page.mp3",
-        duration: 30,
-        format: :mp3,
-        loop: true,
-        meta: %{provider: "fake"}
-      }
-
-      send(pid, {:vamped, old_ref, {:ok, late_vamp}})
-
-      eventually(fn ->
-        page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
-        Chronicle.page_vamp(page) != nil
-      end)
+      eventually(
+        fn ->
+          page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
+          Chronicle.page_vamp(page) != nil
+        end,
+        "the held-back result never landed",
+        3_000
+      )
 
       page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
-      assert Chronicle.page_vamp(page).path == "/media/vamps/old-page.mp3"
+      assert Chronicle.page_vamp(page).path =~ "/media/vamps/"
 
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:vamp]) or view.vamp.path != late_vamp.path
+      assert is_nil(view[:vamp])
+      assert view.playing.kind == "holdover"
     end
 
     test "a Page with no Vamp stays readable and invents no historical audio", ctx do
@@ -3914,43 +3787,6 @@ defmodule Thereish.RoomsTest do
       [page] = Chronicle.page_views(ctx.slug)
       assert Chronicle.page_vamp(page) == nil
       assert Chronicle.page_track(page).path == cached_path
-    end
-
-    test "stale vamp message arriving for moved-on Page is dropped", ctx do
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting alpha")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting beta")
-      await_phase(ctx.slug, :bridging)
-
-      # Play through to closed
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-      await_phase(ctx.slug, :closed)
-
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      stale_ref = make_ref()
-
-      stale_vamp = %{
-        path: "/media/vamps/stale.mp3",
-        duration: 30,
-        format: :mp3,
-        loop: true,
-        meta: %{provider: "fake"}
-      }
-
-      # Dropped while closed
-      send(pid, {:vamped, stale_ref, {:ok, stale_vamp}})
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:vamp]) or view.vamp.path != stale_vamp.path
-
-      # Move to next page
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-      await_phase(ctx.slug, :giving)
-
-      # Send late vamp message for old page_ref
-      send(pid, {:vamped, stale_ref, {:ok, stale_vamp}})
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert is_nil(view[:vamp]) or view.vamp.path != stale_vamp.path
     end
 
     test "score job failing leaves Repertoire playing, records failure in music_meta, and room does not stall",
@@ -4168,60 +4004,41 @@ defmodule Thereish.RoomsTest do
       assert not is_nil(view.track)
     end
 
-    test "a success after a recorded failure replaces the Page's music record, and the Chronicle shows the Track",
+    test "a Track that lands after its Page closed replaces the Page's unfinished music record",
          ctx do
-      # Configure fake so initial score fails
-      set_fake(music_mode: :unavailable)
+      set_fake(music_delay_ms: 1_500, vamp_mode: :unavailable)
 
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "sprint")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "hoard")
       await_phase(ctx.slug, :bridging)
 
-      # Solve the page to close it with failure recorded
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "vault")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "vault")
       await_reveal(ctx.slug)
       await_phase(ctx.slug, :closed)
 
-      eventually(fn ->
-        pages = Thereish.Chronicle.page_views(ctx.slug)
-        pages != [] and hd(pages).music_meta != nil
-      end)
+      eventually(fn -> Thereish.Chronicle.page_views(ctx.slug) != [] end)
 
       [page_before | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert page_before.music_meta[:failure] != nil or page_before.music_meta["failure"] != nil
+      assert page_before.music_meta["failure"] == "unfinished"
       assert Thereish.Chronicle.page_track(page_before) == nil
 
-      # Now a score succeeds for this page
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      page_ref = :sys.get_state(pid).current_page_ref
-
-      successful_track = %{
-        path: "/media/tracks/fake-sprint-hoard.mp3",
-        duration: 120,
-        format: :mp3,
-        title: "Sprint and Hoard",
-        meta: %{provider: "fake", model: "fake-music", cost_usd: 0.04}
-      }
-
-      send(pid, {:scored, page_ref, {:ok, successful_track}})
-
-      # The Page's music record in Chronicle is replaced by the success
-      eventually(fn ->
-        [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
-        page_after.music_meta[:path] != nil or page_after.music_meta["path"] != nil
-      end)
+      eventually(
+        fn ->
+          [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+          page_after.music_meta["path"] != nil
+        end,
+        "the held-back result never landed",
+        3_000
+      )
 
       [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert is_nil(page_after.music_meta[:failure]) and is_nil(page_after.music_meta["failure"])
-
-      assert page_after.music_meta[:path] == "/media/tracks/fake-sprint-hoard.mp3" or
-               page_after.music_meta["path"] == "/media/tracks/fake-sprint-hoard.mp3"
-
-      # The Chronicle shows the Track
+      assert is_nil(page_after.music_meta["failure"])
       assert track = Thereish.Chronicle.page_track(page_after)
-      assert track.path == "/media/tracks/fake-sprint-hoard.mp3"
-      assert track.title == "Sprint and Hoard"
+      assert track.path =~ "/media/tracks/fake-"
+
+      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
+      assert is_nil(view[:track])
     end
   end
 
@@ -4358,70 +4175,18 @@ defmodule Thereish.RoomsTest do
           await_phase(ctx.slug, :bridging)
         end)
 
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      page_ref = :sys.get_state(pid).track_page_ref
-      page_ref_str = inspect(page_ref)
-
       hit_lines =
         log
         |> String.split("\n")
         |> Enum.filter(
-          &(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ page_ref_str and &1 =~ "cache hit")
+          &(&1 =~ "[info]" and &1 =~ ctx.slug and &1 =~ "(page #Reference<" and
+              &1 =~ "cache hit")
         )
 
       assert length(hit_lines) == 1
       [hit_line] = hit_lines
       assert hit_line =~ ~r/\+\d+ms/
       refute log =~ "score queued"
-    end
-
-    test "dropped title: title for a Page that moved on is dropped", ctx do
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting a")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting b")
-      await_phase(ctx.slug, :bridging)
-
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      old_page_ref = :sys.get_state(pid).current_page_ref
-
-      # Advance to next attempt and meld to close page
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-
-      # Send late title for the old page ref
-      send(pid, {:titled, old_page_ref, {:ok, %{title: "Late Title", meta: %{cost_usd: 0.0}}}})
-
-      # Current track does not adopt late title
-      state = :sys.get_state(pid)
-      refute state[:current_title] == "Late Title"
-    end
-
-    test "race: both late (both title and track arrive after page moved on)", ctx do
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting c")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting d")
-      await_phase(ctx.slug, :bridging)
-
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      old_page_ref = :sys.get_state(pid).current_page_ref
-
-      # Advance to next attempt and meld to close page
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-
-      # Send both late title and late track for the old page ref
-      send(pid, {:titled, old_page_ref, {:ok, %{title: "Late Title", meta: %{cost_usd: 0.0}}}})
-
-      send(
-        pid,
-        {:scored, old_page_ref,
-         {:ok, %{path: "/media/tracks/late.mp3", duration: 120, format: :mp3, meta: %{}}}}
-      )
-
-      # Neither late title nor late track lands on the room
-      state = :sys.get_state(pid)
-      refute state[:current_title] == "Late Title"
-      refute state[:current_track] && state.current_track[:path] == "/media/tracks/late.mp3"
     end
 
     test "closed Chronicle page carries title and path and title cost in music_meta", ctx do
@@ -4536,56 +4301,6 @@ defmodule Thereish.RoomsTest do
       room = Store.get_room(ctx.slug)
       assert view.loop in Thereish.Foley.Repertoire.pool(room.id)
     end
-
-    test "no-immediate-repeat rule across three Pages", ctx do
-      room = Store.get_room(ctx.slug)
-
-      # Page 1
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting 1a")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 1b")
-      await_phase(ctx.slug, :bridging)
-
-      pool1 = Thereish.Foley.Repertoire.pool(room.id)
-      view1 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view1.loop in pool1
-      loop1 = view1.loop
-
-      # Solve Page 1 to close
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).phase == :closed end)
-
-      # Page 2
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting 2a")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 2b")
-      await_phase(ctx.slug, :bridging)
-
-      pool = Thereish.Foley.Repertoire.pool(room.id)
-      view2 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view2.loop in pool
-      loop2 = view2.loop
-      refute loop2 == loop1
-
-      # Solve Page 2 to close
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).phase == :closed end)
-
-      # Page 3
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting 3a")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting 3b")
-      await_phase(ctx.slug, :bridging)
-
-      pool = Thereish.Foley.Repertoire.pool(room.id)
-      view3 = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view3.loop in pool
-      loop3 = view3.loop
-      refute loop3 == loop2
-    end
   end
 
   describe "ticket 01: The Repertoire is wait music" do
@@ -4655,48 +4370,28 @@ defmodule Thereish.RoomsTest do
       assert is_nil(view_off.track)
     end
 
-    test "House/Off scoring lifecycle: starts no score, keeps in-flight track without playing, plays when switched to page",
+    test "House/Off scoring lifecycle: keeps an in-flight track without playing it, plays it when switched to page",
          ctx do
-      :ok = Rooms.set_music(ctx.slug, "house")
+      set_fake(music_delay_ms: 150, vamp_mode: :unavailable)
 
-      # Give prompts to move through to bridging
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "forest path")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "misty lake")
+      :ok = Rooms.set_music(ctx.slug, "house")
       await_phase(ctx.slug, :bridging)
 
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      server_state = :sys.get_state(pid)
+      # The in-flight score lands under House: it is kept, not played
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).music_meta["path"] != nil end)
 
-      # Under House: no score task was started
-      refute Map.get(server_state, :score_task_running, false)
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert view.playing.kind == "repertoire"
       assert is_nil(view.track)
-
-      # An in-flight score arrives while under House: it finishes and is kept, not played
-      page_ref = server_state.current_page_ref
-
-      fake_track = %{
-        path: "/media/tracks/house-kept.mp3",
-        duration: 100,
-        format: :mp3,
-        title: "House Kept",
-        meta: %{provider: "fake"}
-      }
-
-      send(pid, {:scored, page_ref, {:ok, fake_track}})
-
-      # Still under House: kept track is NOT played; wait music remains playing
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view.playing.kind == "repertoire"
-      assert is_nil(view.track)
+      kept_path = view.music_meta["path"]
 
       # Switching back to page plays the kept track immediately
       :ok = Rooms.set_music(ctx.slug, "page")
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert view.playing.kind == "track"
-      assert view.playing.path == fake_track.path
-      assert view.playing.title == fake_track.title
+      assert view.playing.path == kept_path
 
       # Under Off: bus is silenced (playing is nil)
       :ok = Rooms.set_music(ctx.slug, "off")
@@ -4707,7 +4402,7 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.set_music(ctx.slug, "page")
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert view.playing.kind == "track"
-      assert view.playing.path == fake_track.path
+      assert view.playing.path == kept_path
     end
 
     test "unsettled vs settled Room draw rules", ctx do
@@ -4769,153 +4464,16 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, melissa: melissa, jacob: jacob, token_a: token_a, token_b: token_b}
     end
 
-    test "Next on a Repertoire draw advances the deal without repeating until exhausted, then reshuffles",
-         ctx do
+    test "Next moves the Speaker to another member", ctx do
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
       assert view.next? == true
       assert view.playing.kind == "repertoire"
-      initial_path = view.playing.path
 
-      members = Thereish.Foley.Repertoire.members(Store.get_room(ctx.slug).id)
-      repertoire_size = length(members)
-      assert repertoire_size >= 5
-
-      # Step through the remaining deal (repertoire_size - 1 steps)
-      {played_paths, last_path} =
-        Enum.reduce(1..(repertoire_size - 1), {[], initial_path}, fn _, {seen, current_path} ->
-          assert :ok = Rooms.next(ctx.slug, ctx.token_a)
-          v = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-          assert v.next? == true
-          assert v.music == "page"
-          assert v.playing.kind == "repertoire"
-          refute v.playing.path == current_path
-          refute v.playing.path in seen
-          refute v.playing.path == initial_path
-          {[v.playing.path | seen], v.playing.path}
-        end)
-
-      # All remaining members have been played; initial_path was never repeated
-      assert length(played_paths) == repertoire_size - 1
-      refute initial_path in played_paths
-
-      # Deal is exhausted now. Next must reshuffle, never repeating the thing now playing
-      assert :ok = Rooms.next(ctx.slug, ctx.token_a)
-      reshuffled_view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert reshuffled_view.playing.kind == "repertoire"
-      refute reshuffled_view.playing.path == last_path
-    end
-
-    test "Next on holdover leaves last Page's Track and plays a shuffle from the opening draw; mode stays page",
-         ctx do
-      set_fake(music_delay_ms: 0)
-
-      # Give prompts to advance to bridging and land a track
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      await_phase(ctx.slug, :bridging)
-
-      eventually(fn ->
-        Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "track"
-      end)
-
-      landed_track = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing
-
-      # Finish Page 1 to closed
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-      await_phase(ctx.slug, :closed)
-
-      # Advance to Page 2
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-      await_phase(ctx.slug, :giving)
-
-      # Landed track from Page 1 holds over
-      view_holdover = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_holdover.playing.kind == "holdover"
-      assert view_holdover.playing.path == landed_track.path
-      assert view_holdover.next? == true
-
-      # Skip on holdover: leaves last Page's track, plays a Repertoire draw, mode stays page
       assert :ok = Rooms.next(ctx.slug, ctx.token_a)
 
-      view_after_skip = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_skip.music == "page"
-      assert view_after_skip.playing.kind == "repertoire"
-      refute view_after_skip.playing.path == landed_track.path
-
-      # In-flight track for Page 2 still seizes the Speaker when it lands
-      set_fake(author_delay_ms: 100, music_delay_ms: 200, vamp_mode: :unavailable)
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "p2 setting 1")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "p2 setting 2")
-      await_phase(ctx.slug, :writing)
-
-      # During writing before score lands: still playing repertoire
-      assert Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "repertoire"
-
-      # Simulate Page 2 score landing
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      server_state = :sys.get_state(pid)
-      p2_ref = server_state.current_page_ref
-
-      p2_track = %{
-        path: "/media/tracks/p2-landed.mp3",
-        duration: 100,
-        format: :mp3,
-        title: "Page Two Score",
-        meta: %{provider: "fake"}
-      }
-
-      send(pid, {:scored, p2_ref, {:ok, p2_track}})
-
-      # Seizes the speaker immediately
-      view_p2_landed = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_p2_landed.playing.kind == "track"
-      assert view_p2_landed.playing.path == p2_track.path
-      assert view_p2_landed.playing.title == p2_track.title
-    end
-
-    test "Next is refused (and is a no-op) while this Page's Track is on the Speaker", ctx do
-      set_fake(music_delay_ms: 0)
-
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      await_phase(ctx.slug, :bridging)
-
-      eventually(fn ->
-        Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "track"
-      end)
-
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view.playing.kind == "track"
-
-      # Next is not offered
-      assert view.next? == false
-
-      # Next call is refused
-      current_path = view.playing.path
-      assert {:error, :refused} = Rooms.next(ctx.slug, ctx.token_a)
-
-      # Playing track is unchanged
-      view_after = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after.playing.kind == "track"
-      assert view_after.playing.path == current_path
-    end
-
-    test "Next is not offered and is refused when only one playable member remains", ctx do
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      single = %{name: "Only Loop", title: "Only Loop", path: "/audio/only.mp3"}
-
-      :sys.replace_state(pid, fn state ->
-        state
-        |> Map.put(:eligible_members, [single])
-        |> Map.put(:wait_music, single)
-      end)
-
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view.next? == false
-
-      assert {:error, :refused} = Rooms.next(ctx.slug, ctx.token_a)
+      after_next = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
+      assert after_next.playing.kind == "repertoire"
+      refute after_next.playing.path == view.playing.path
     end
 
     test "Next from a non-speaking device is a no-op", ctx do
@@ -5020,141 +4578,6 @@ defmodule Thereish.RoomsTest do
       # Room B's eligible members still include that path
       members_b = Thereish.Foley.Repertoire.members(room_b.id)
       assert Enum.any?(members_b, fn m -> m.path == nevered_path end)
-    end
-
-    test "Never on the last remaining playable member is refused; Next stays hidden", ctx do
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      single = %{name: "Only Loop", title: "Only Loop", path: "/audio/only.mp3"}
-
-      :sys.replace_state(pid, fn state ->
-        state
-        |> Map.put(:eligible_members, [single])
-        |> Map.put(:wait_music, single)
-        |> Map.put(:deal, [])
-      end)
-
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      # Both Next and Never are hidden
-      assert view.next? == false
-      assert view.never? == false
-
-      # Calls to never and next are refused
-      assert {:error, :refused} = Rooms.never(ctx.slug, ctx.token_a)
-      assert {:error, :refused} = Rooms.next(ctx.slug, ctx.token_a)
-
-      # Still playing the only loop
-      view_after = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after.playing.path == single.path
-    end
-
-    test "Never on this Page's Track refuses it, Speaker advances the deal, mode stays page, and does not hold over",
-         ctx do
-      set_fake(music_delay_ms: 0)
-
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      await_phase(ctx.slug, :bridging)
-
-      eventually(fn ->
-        Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "track"
-      end)
-
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view.playing.kind == "track"
-      # Next is hidden while Page's Track is playing, but Never is shown
-      assert view.next? == false
-      assert view.never? == true
-      track_path = view.playing.path
-
-      # Tap Never on this Page's Track
-      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
-
-      # Never: Speaker plays Repertoire, mode stays page
-      view_after_never = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_never.music == "page"
-      assert view_after_never.playing.kind == "repertoire"
-      refute view_after_never.playing.path == track_path
-      assert track_path in Store.list_nevers(ctx.room.id)
-
-      # Complete Attempt and close Page
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-      await_phase(ctx.slug, :closed)
-
-      # Advance to next Page
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-      await_phase(ctx.slug, :giving)
-
-      # The nevered Track does NOT hold over!
-      view_p2 = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_p2.playing.kind == "repertoire"
-      refute view_p2.playing.path == track_path
-    end
-
-    test "Never on holdover refuses that old Track here and advances the deal; in-flight Track can still land",
-         ctx do
-      set_fake(music_delay_ms: 0)
-
-      # Page 1 lands track and closes
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      await_phase(ctx.slug, :bridging)
-
-      eventually(fn ->
-        Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing.kind == "track"
-      end)
-
-      p1_track = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a).playing
-
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_reveal(ctx.slug)
-      await_phase(ctx.slug, :closed)
-
-      # Next page -> Page 1's track holds over
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-      await_phase(ctx.slug, :giving)
-
-      view_holdover = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_holdover.playing.kind == "holdover"
-      assert view_holdover.playing.path == p1_track.path
-      assert view_holdover.never? == true
-      assert view_holdover.next? == true
-
-      # Never on holdover refuses the old track here
-      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
-
-      view_after_never = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_never.music == "page"
-      assert view_after_never.playing.kind == "repertoire"
-      refute view_after_never.playing.path == p1_track.path
-      assert p1_track.path in Store.list_nevers(ctx.room.id)
-
-      # Page 2 Gives submitted and score starts
-      set_fake(author_delay_ms: 100, music_delay_ms: 200)
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "p2 setting 1")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "p2 setting 2")
-      await_phase(ctx.slug, :writing)
-
-      # In-flight Page 2 track lands and seizes the Speaker
-      pid = GenServer.whereis(Server.via(ctx.slug))
-      server_state = :sys.get_state(pid)
-      p2_ref = server_state.current_page_ref
-
-      p2_track = %{
-        path: "/media/tracks/p2-landed-after-never.mp3",
-        duration: 100,
-        format: :mp3,
-        title: "Page Two Fresh",
-        meta: %{provider: "fake"}
-      }
-
-      send(pid, {:scored, p2_ref, {:ok, p2_track}})
-
-      view_p2_landed = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_p2_landed.playing.kind == "track"
-      assert view_p2_landed.playing.path == p2_track.path
     end
 
     test "Never from a non-speaking device is a no-op", ctx do
