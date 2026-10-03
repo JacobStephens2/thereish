@@ -6,8 +6,12 @@ defmodule Thereish.Foley.Occupancy do
   It is a pure reducer in the shape of the Game. The Room tells it what
   happened — a Page opened, a Foley result arrived, the Page turned, the Gives
   were reset, the music setting changed — and gets back a new Occupancy and a
-  list of effects to perform. It does no I/O: a TrackCache hit comes in as an
-  argument, and every write goes out as an effect.
+  list of effects to perform. It does no I/O: a TrackCache hit and the
+  Repertoire's eligible members come in as arguments, and every write goes out
+  as an effect.
+
+  It also holds the Repertoire draw, the session deal and the eligible members,
+  and decides Next and Never on them (ADR-0013).
 
   It never stores the Page's Phase or the Room's music setting. Both are the
   caller's facts, passed in on each call that needs them, so neither can drift.
@@ -21,6 +25,7 @@ defmodule Thereish.Foley.Occupancy do
       once it is in the Chronicle
     * `{:persist_music_meta, page_ref, meta}` — likewise
     * `{:cache_track, gives, track}`
+    * `{:record_never, path}` — this Room never plays `path` again
     * `{:log, page_ref, event, gives_landed_at}`
 
   ## Stale results
@@ -32,9 +37,13 @@ defmodule Thereish.Foley.Occupancy do
   nowhere else.
   """
 
+  alias Thereish.Foley.Repertoire
   alias Thereish.Steward
 
-  defstruct page_ref: nil,
+  defstruct draw: nil,
+            deal: [],
+            members: [],
+            page_ref: nil,
             gives: nil,
             gives_landed_at: nil,
             track: nil,
@@ -52,6 +61,9 @@ defmodule Thereish.Foley.Occupancy do
   @type gives :: [String.t()]
 
   @type t :: %__MODULE__{
+          draw: Repertoire.member(),
+          deal: [Repertoire.member()],
+          members: [Repertoire.member()],
           page_ref: page_ref() | nil,
           gives: gives() | nil,
           gives_landed_at: integer() | nil,
@@ -79,17 +91,18 @@ defmodule Thereish.Foley.Occupancy do
           | {:persist_vamp_meta, page_ref(), map()}
           | {:persist_music_meta, page_ref(), map()}
           | {:cache_track, gives(), map()}
+          | {:record_never, String.t()}
           | {:log, page_ref(), String.t() | {atom(), term()}, integer() | nil}
 
-  @typedoc """
-  The Room's facts for this call. Until Next and Never move here, the
-  Repertoire draw and its eligible members are the Room's too.
-  """
-  @type table :: %{music: String.t(), closed?: boolean(), draw: map(), members: [map()]}
+  @typedoc "The Room's facts for this call: its music setting and whether its Page has closed."
+  @type table :: %{music: String.t(), closed?: boolean()}
 
-  @doc "An Occupancy with no Page open and nothing of its own to play."
-  @spec new() :: t()
-  def new, do: %__MODULE__{}
+  @doc """
+  An Occupancy with no Page open, playing a Repertoire draw from `members`, the
+  Room's eligible members, with the rest of them dealt.
+  """
+  @spec new([Repertoire.member()]) :: t()
+  def new(members), do: redraw(%__MODULE__{}, members)
 
   @doc """
   A Page opened from these Gives. `cached` is the TrackCache's answer for them,
@@ -121,10 +134,12 @@ defmodule Thereish.Foley.Occupancy do
 
   @doc """
   The Page turned. A Track still playing holds over until the next Page's
-  Track lands (ADR-0013); everything else about the old Page is forgotten.
+  Track lands (ADR-0013); everything else about the old Page is forgotten. A
+  fresh draw, not the last one, and a fresh deal are made from `members`, the
+  Room's eligible members now.
   """
-  @spec page_turned(t()) :: t()
-  def page_turned(%__MODULE__{} = occ), do: forget_page(occ)
+  @spec page_turned(t(), [Repertoire.member()]) :: t()
+  def page_turned(%__MODULE__{} = occ, members), do: occ |> forget_page() |> redraw(members)
 
   @doc "The Gives were reset. A held-over Track keeps the Speaker from falling silent."
   @spec gives_reset(t()) :: t()
@@ -163,18 +178,51 @@ defmodule Thereish.Foley.Occupancy do
   end
 
   @doc """
-  Takes the Track off the Speaker, whether it is this Page's or held over.
-  Transitional: Next and Never use it until they move here.
+  Next: the Speaker moves to the next member of the deal, reshuffling when the
+  deal runs out, and a held-over Track is dropped. Refused on this Page's own
+  Track, and when no other member exists.
   """
-  @spec drop_track(t()) :: t()
-  def drop_track(%__MODULE__{} = occ), do: %{occ | track: nil, track_page_ref: nil}
+  @spec next(t(), table()) :: {:ok, t(), [effect()]} | {:error, :refused}
+  def next(%__MODULE__{} = occ, table) do
+    %{playing: playing, next?: next?} = view(occ, table)
+
+    with true <- next?,
+         {:ok, member, deal} <- Repertoire.next_deal(occ.members, occ.deal, playing.path) do
+      occ = %{occ | draw: member, deal: deal}
+      {:ok, if(playing.kind == "holdover", do: drop_track(occ), else: occ), []}
+    else
+      _ -> {:error, :refused}
+    end
+  end
+
+  @doc """
+  Never: what is playing leaves the eligible members and the deal for good, the
+  Speaker moves on, and a Track playing or held over is cleared. Answers a
+  `{:record_never, path}` effect. Refused on the last remaining member.
+  """
+  @spec never(t(), table()) :: {:ok, t(), [effect()]} | {:error, :refused}
+  def never(%__MODULE__{} = occ, table) do
+    %{playing: playing, never?: never?} = view(occ, table)
+
+    with true <- never?,
+         path = playing.path,
+         members = Enum.reject(occ.members, &(&1.path == path)),
+         deal = Enum.reject(occ.deal, &(&1.path == path)),
+         {:ok, member, deal} <- Repertoire.advance_after_never(members, deal, path) do
+      occ = %{occ | draw: member, deal: deal, members: members}
+      occ = if playing.kind in ["holdover", "track"], do: drop_track(occ), else: occ
+      {:ok, occ, [{:record_never, path}]}
+    else
+      _ -> {:error, :refused}
+    end
+  end
 
   @doc """
   The snapshot fragment: `vamp`, `track`, `music_meta`, `loop`, `playing`,
   `next?` and `never?`.
   """
   @spec view(t(), table()) :: map()
-  def view(%__MODULE__{} = occ, %{music: mode, closed?: closed?, draw: draw, members: members}) do
+  def view(%__MODULE__{draw: draw, members: members} = occ, %{music: mode, closed?: closed?}) do
     playing = playing(occ, mode, closed?, draw)
 
     %{
@@ -370,6 +418,13 @@ defmodule Thereish.Foley.Occupancy do
       |> Map.put(key, val)
       |> Map.put(to_string(key), val)
     end)
+  end
+
+  defp drop_track(occ), do: %{occ | track: nil, track_page_ref: nil}
+
+  defp redraw(occ, members) do
+    draw = Repertoire.draw(members, occ.draw)
+    %{occ | members: members, draw: draw, deal: Repertoire.deal(members, draw.path)}
   end
 
   defp forget_page(occ) do
