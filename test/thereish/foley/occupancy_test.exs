@@ -354,25 +354,34 @@ defmodule Thereish.Foley.OccupancyTest do
   end
 
   describe "the music setting changing mid-Page" do
-    test "to page starts Track work when none is running and none has landed" do
+    test "to page asks for the TrackCache, then starts Track work on a miss" do
       ref = make_ref()
       {occ, effects} = opened(ref, Occupancy.new(), nil, "house")
       assert effects == []
 
       {occ, effects} = Occupancy.music_changed(occ, "page")
+      assert effects == [{:look_up_track, ref, @gives}]
+
+      {occ, effects} = Occupancy.track_looked_up(occ, ref, nil)
       assert {:enqueue_track, ref, @gives, 1_000} in effects
       assert {:start_vamp, ref, @gives} in effects
 
       assert {_occ, []} = Occupancy.music_changed(occ, "page")
     end
 
-    test "to page plays a cached Track found when the Page opened" do
+    test "to page plays a Track the TrackCache holds by then" do
       ref = make_ref()
-      {occ, _} = opened(ref, Occupancy.new(), @cached, "off")
+      {occ, _} = opened(ref, Occupancy.new(), nil, "off")
 
-      {occ, effects} = Occupancy.music_changed(occ, "page")
+      {occ, [{:look_up_track, ^ref, @gives}]} = Occupancy.music_changed(occ, "page")
+      {occ, effects} = Occupancy.track_looked_up(occ, ref, @cached)
       assert logged(effects) == ["cache hit"]
       assert Occupancy.view(occ, table()).playing.kind == "track"
+    end
+
+    test "to page starts nothing while the Page's Track work is already running" do
+      {occ, _} = opened(make_ref())
+      assert {_occ, []} = Occupancy.music_changed(occ, "page")
     end
 
     test "to page starts nothing once this Page's Track has landed" do
@@ -385,6 +394,15 @@ defmodule Thereish.Foley.OccupancyTest do
 
     test "to page starts nothing with no Page open" do
       assert {_occ, []} = Occupancy.music_changed(Occupancy.new(), "page")
+    end
+
+    test "a TrackCache answer for a Page no longer current starts nothing" do
+      ref = make_ref()
+      {occ, _} = opened(ref, Occupancy.new(), nil, "house")
+      {occ, _} = Occupancy.music_changed(occ, "page")
+      occ = Occupancy.gives_reset(occ)
+
+      assert {_occ, []} = Occupancy.track_looked_up(occ, ref, nil)
     end
 
     test "to house or off starts nothing" do

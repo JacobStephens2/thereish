@@ -415,7 +415,7 @@ defmodule Thereish.Rooms.Server do
     if music in Room.music_modes() do
       case Store.update_room(state.room, %{music: music}) do
         {:ok, room} ->
-          state = occupy(%{state | room: room}, &Occupancy.music_changed(&1, music))
+          state = occupy_quietly(%{state | room: room}, &Occupancy.music_changed(&1, music))
           broadcast(state.room.slug)
           {:reply, :ok, state}
 
@@ -998,18 +998,16 @@ defmodule Thereish.Rooms.Server do
 
     now = System.monotonic_time(:millisecond)
 
-    cached =
-      case Thereish.Steward.TrackCache.get(gives) do
-        {:ok, track} -> track
-        _ -> nil
-      end
+    cached = cached_track(gives)
 
     state =
       state
       |> Map.put(:current_arm, arm)
       |> Map.put(:current_page_ref, page_ref)
       |> waiting_on_author(ref)
-      |> perform_music(&Occupancy.page_opened(&1, page_ref, gives, cached, now, state.room.music))
+      |> occupy_quietly(
+        &Occupancy.page_opened(&1, page_ref, gives, cached, now, state.room.music)
+      )
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       try do
@@ -1049,7 +1047,7 @@ defmodule Thereish.Rooms.Server do
   # broadcasting when what the Room shows has changed.
   defp occupy(state, transition) do
     before = Occupancy.view(state.occupancy, table(state))
-    {state, wrote?} = perform_music_effects(state, transition)
+    {state, wrote?} = run_occupancy(state, transition)
 
     if wrote? or Occupancy.view(state.occupancy, table(state)) != before do
       broadcast(state.room.slug)
@@ -1059,25 +1057,27 @@ defmodule Thereish.Rooms.Server do
   end
 
   # As `occupy/2`, for callers that broadcast on their own.
-  defp perform_music(state, transition) do
-    {state, _wrote?} = perform_music_effects(state, transition)
+  defp occupy_quietly(state, transition) do
+    {state, _wrote?} = run_occupancy(state, transition)
     state
   end
 
-  defp perform_music_effects(state, transition) do
+  # Answers the new state and whether a Chronicle Page was written.
+  defp run_occupancy(state, transition) do
     {occupancy, effects} = transition.(state.occupancy)
-    state = %{state | occupancy: occupancy}
-    wrote? = Enum.reduce(effects, false, fn effect, wrote? -> music(effect, state) or wrote? end)
-    {state, wrote?}
+
+    Enum.reduce(effects, {%{state | occupancy: occupancy}, false}, fn effect, {state, wrote?} ->
+      {state, wrote_now?} = perform_occupancy_effect(effect, state)
+      {state, wrote? or wrote_now?}
+    end)
   end
 
-  # Performs one Occupancy effect. Answers whether a Chronicle Page was written.
-  defp music({:start_vamp, page_ref, gives}, _state) do
+  defp perform_occupancy_effect({:start_vamp, page_ref, gives}, state) do
     start_music_task(page_ref, :vamped, fn -> Steward.vamp(gives) end)
-    false
+    {state, false}
   end
 
-  defp music({:enqueue_track, page_ref, gives, gives_landed_at}, state) do
+  defp perform_occupancy_effect({:enqueue_track, page_ref, gives, gives_landed_at}, state) do
     code = state.room.slug
 
     Thereish.Foley.ScoreQueue.enqueue(self(), page_ref, gives,
@@ -1086,44 +1086,61 @@ defmodule Thereish.Rooms.Server do
       end
     )
 
-    false
+    {state, false}
   end
 
-  defp music({:start_title, page_ref, gives}, _state) do
+  defp perform_occupancy_effect({:start_title, page_ref, gives}, state) do
     start_music_task(page_ref, :titled, fn -> Steward.title_track(gives) end)
-    false
+    {state, false}
   end
 
-  defp music({:persist_vamp_meta, page_ref, meta}, state) do
+  defp perform_occupancy_effect({:look_up_track, page_ref, gives}, state) do
+    cached = cached_track(gives)
+    run_occupancy(state, &Occupancy.track_looked_up(&1, page_ref, cached))
+  end
+
+  defp perform_occupancy_effect({:persist_vamp_meta, page_ref, meta}, state) do
     case page_id(state, page_ref) do
       nil ->
-        false
+        {state, false}
 
       page_id ->
         Chronicle.replace_page_vamp(page_id, meta)
-        true
+        {state, true}
     end
   end
 
-  defp music({:persist_music_meta, page_ref, meta}, state) do
+  defp perform_occupancy_effect({:persist_music_meta, page_ref, meta}, state) do
     case page_id(state, page_ref) do
       nil ->
-        false
+        {state, false}
 
       page_id ->
         Chronicle.replace_page_music(page_id, meta)
-        true
+        {state, true}
     end
   end
 
-  defp music({:cache_track, gives, track}, _state) do
+  defp perform_occupancy_effect({:cache_track, gives, track}, state) do
     Thereish.Steward.TrackCache.put(gives, track)
-    false
+    {state, false}
   end
 
-  defp music({:log, page_ref, event, gives_landed_at}, state) do
+  defp perform_occupancy_effect({:log, _page_ref, {:title_failure, reason}, _landed_at}, state) do
+    Logger.warning("Scribe titling failed for room #{state.room.slug}: #{inspect(reason)}")
+    {state, false}
+  end
+
+  defp perform_occupancy_effect({:log, page_ref, event, gives_landed_at}, state) do
     log_music_event(state.room.slug, page_ref, event, gives_landed_at)
-    false
+    {state, false}
+  end
+
+  defp cached_track(gives) do
+    case Thereish.Steward.TrackCache.get(gives) do
+      {:ok, track} -> track
+      _ -> nil
+    end
   end
 
   # The Room's facts Occupancy is told on each call rather than keeping a copy.
@@ -1695,13 +1712,8 @@ defmodule Thereish.Rooms.Server do
   def log_music_event(code, page_ref, event, gives_landed_at \\ nil)
 
   def log_music_event(code, page_ref, {fail_tag, reason}, gives_landed_at)
-      when fail_tag in [:failure, :vamp_failure, :title_failure] do
-    prefix =
-      case fail_tag do
-        :failure -> "failure"
-        :vamp_failure -> "vamp failure"
-        :title_failure -> "title failure"
-      end
+      when fail_tag in [:failure, :vamp_failure] do
+    prefix = if fail_tag == :vamp_failure, do: "vamp failure", else: "failure"
 
     log_music_event(code, page_ref, "#{prefix} with reason: #{inspect(reason)}", gives_landed_at)
   end

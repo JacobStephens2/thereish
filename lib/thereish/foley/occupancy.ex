@@ -37,7 +37,6 @@ defmodule Thereish.Foley.Occupancy do
   defstruct page_ref: nil,
             gives: nil,
             gives_landed_at: nil,
-            cached: nil,
             track: nil,
             track_page_ref: nil,
             vamp: nil,
@@ -49,8 +48,38 @@ defmodule Thereish.Foley.Occupancy do
             track_running?: false,
             title_running?: false
 
-  @type t :: %__MODULE__{}
-  @type effect :: tuple()
+  @type page_ref :: term()
+  @type gives :: [String.t()]
+
+  @type t :: %__MODULE__{
+          page_ref: page_ref() | nil,
+          gives: gives() | nil,
+          gives_landed_at: integer() | nil,
+          track: map() | nil,
+          track_page_ref: page_ref() | nil,
+          vamp: map() | nil,
+          vamp_meta: map() | nil,
+          title: String.t() | nil,
+          title_meta: map() | nil,
+          music_meta: map() | nil,
+          vamp_running?: boolean(),
+          track_running?: boolean(),
+          title_running?: boolean()
+        }
+
+  @typedoc """
+  Something for the Room to do. Effects are descriptions: Occupancy performs
+  none of them.
+  """
+  @type effect ::
+          {:start_vamp, page_ref(), gives()}
+          | {:enqueue_track, page_ref(), gives(), integer()}
+          | {:start_title, page_ref(), gives()}
+          | {:look_up_track, page_ref(), gives()}
+          | {:persist_vamp_meta, page_ref(), map()}
+          | {:persist_music_meta, page_ref(), map()}
+          | {:cache_track, gives(), map()}
+          | {:log, page_ref(), String.t() | {atom(), term()}, integer() | nil}
 
   @typedoc """
   The Room's facts for this call. Until Next and Never move here, the
@@ -70,24 +99,8 @@ defmodule Thereish.Foley.Occupancy do
   @spec page_opened(t(), term(), [String.t()], map() | nil, integer(), String.t()) ::
           {t(), [effect()]}
   def page_opened(%__MODULE__{} = occ, page_ref, gives, cached, now, mode) do
-    occ =
-      %{
-        occ
-        | page_ref: page_ref,
-          gives: gives,
-          gives_landed_at: now,
-          cached: cached,
-          vamp: nil,
-          vamp_meta: nil,
-          title: nil,
-          title_meta: nil,
-          music_meta: nil,
-          vamp_running?: false,
-          track_running?: false,
-          title_running?: false
-      }
-
-    if mode == "page", do: start_track_work(occ), else: {occ, []}
+    occ = %{forget_page(occ) | page_ref: page_ref, gives: gives, gives_landed_at: now}
+    if mode == "page", do: start_track_work(occ, cached), else: {occ, []}
   end
 
   @doc """
@@ -119,19 +132,35 @@ defmodule Thereish.Foley.Occupancy do
 
   @doc """
   The Room's music setting changed to `mode`. Turning to "page" mid-Page starts
-  Track work only when none is running and this Page's Track has not landed.
+  Track work only when none is running and this Page's Track has not landed:
+  it asks for the TrackCache to be looked up, and the answer comes back
+  through `track_looked_up/3`.
   """
   @spec music_changed(t(), String.t()) :: {t(), [effect()]}
   def music_changed(%__MODULE__{} = occ, "page") do
     if not track_for_page?(occ) and not occ.track_running? and not is_nil(occ.page_ref) and
          not is_nil(occ.gives) do
-      start_track_work(occ)
+      {occ, [{:look_up_track, occ.page_ref, occ.gives}]}
     else
       {occ, []}
     end
   end
 
   def music_changed(%__MODULE__{} = occ, _mode), do: {occ, []}
+
+  @doc """
+  The TrackCache answered a `{:look_up_track, ...}` effect with `cached`, or
+  nil. A titled hit plays at once; otherwise Track work starts. An answer for
+  a Page no longer current, or arriving once work is running, starts nothing.
+  """
+  @spec track_looked_up(t(), page_ref(), map() | nil) :: {t(), [effect()]}
+  def track_looked_up(%__MODULE__{} = occ, page_ref, cached) do
+    if current?(occ, page_ref) and not occ.track_running? and not track_for_page?(occ) do
+      start_track_work(occ, cached)
+    else
+      {occ, []}
+    end
+  end
 
   @doc """
   Takes the Track off the Speaker, whether it is this Page's or held over.
@@ -259,8 +288,8 @@ defmodule Thereish.Foley.Occupancy do
 
   # -- the Page's own Track ---------------------------------------------------
 
-  defp start_track_work(occ) do
-    case occ.cached do
+  defp start_track_work(occ, cached) do
+    case cached do
       %{title: title} = cached when not is_nil(title) ->
         {_cached, music_meta} = merge_track_meta(nil, cached, title, %{})
 
@@ -349,7 +378,6 @@ defmodule Thereish.Foley.Occupancy do
       | page_ref: nil,
         gives: nil,
         gives_landed_at: nil,
-        cached: nil,
         vamp: nil,
         vamp_meta: nil,
         title: nil,

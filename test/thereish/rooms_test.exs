@@ -3637,7 +3637,7 @@ defmodule Thereish.RoomsTest do
 
     test "a Vamp that lands after next_page attaches to the old Page, not the one now in play",
          ctx do
-      set_fake(vamp_delay_ms: 600, music_delay_ms: 0)
+      set_fake(vamp_delay_ms: 1_500, music_delay_ms: 0)
 
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting alpha")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting beta")
@@ -3658,7 +3658,7 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
       await_phase(ctx.slug, :giving)
 
-      eventually(fn ->
+      wait_until(3_000, fn ->
         page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
         Chronicle.page_vamp(page) != nil
       end)
@@ -4002,7 +4002,7 @@ defmodule Thereish.RoomsTest do
 
     test "a Track that lands after its Page closed replaces the Page's unfinished music record",
          ctx do
-      set_fake(music_delay_ms: 600, vamp_mode: :unavailable)
+      set_fake(music_delay_ms: 1_500, vamp_mode: :unavailable)
 
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "sprint")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "hoard")
@@ -4019,7 +4019,7 @@ defmodule Thereish.RoomsTest do
       assert page_before.music_meta["failure"] == "unfinished"
       assert Thereish.Chronicle.page_track(page_before) == nil
 
-      eventually(fn ->
+      wait_until(3_000, fn ->
         [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
         page_after.music_meta["path"] != nil
       end)
@@ -4043,6 +4043,22 @@ defmodule Thereish.RoomsTest do
       {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
 
       %{slug: slug, melissa: melissa, jacob: jacob}
+    end
+
+    # For a Fake result held back long enough to land after the Page has
+    # closed: longer than `eventually/1` waits.
+    defp wait_until(ms, check) do
+      cond do
+        check.() ->
+          :ok
+
+        ms <= 0 ->
+          flunk("the held-back result never landed")
+
+        true ->
+          Process.sleep(10)
+          wait_until(ms - 10, check)
+      end
     end
 
     defp set_fake(opts) do
