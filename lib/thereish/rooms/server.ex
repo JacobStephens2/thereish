@@ -61,6 +61,7 @@ defmodule Thereish.Rooms.Server do
   require Logger
 
   alias Thereish.Chronicle
+  alias Thereish.Foley.Occupancy
   alias Thereish.Game
   alias Thereish.Rooms.Room
   alias Thereish.Rooms.Seat
@@ -108,15 +109,11 @@ defmodule Thereish.Rooms.Server do
         current_arm: nil,
         current_page_id: nil,
         current_page_ref: nil,
-        current_track: nil,
-        track_page_ref: nil,
-        current_title: nil,
-        title_meta: nil,
+        recorded_pages: %{},
+        occupancy: Occupancy.new(),
         wait_music: wait_music,
         deal: deal,
         eligible_members: eligible_members,
-        music_meta: nil,
-        gives_landed_at: nil,
         voice_audio: nil,
         voice_meta: %{},
         voice_pending_attempt: nil,
@@ -231,7 +228,8 @@ defmodule Thereish.Rooms.Server do
     state =
       state
       |> author_answered()
-      |> reset_score_state(keep_track: true)
+      |> Map.put(:current_page_ref, nil)
+      |> Map.update!(:occupancy, &Occupancy.gives_reset/1)
       |> Map.put(:giving_ref, make_ref())
       |> Map.put(:opened_at, nil)
       |> Map.put(:timing, %{gives: %{}, attempts: %{}})
@@ -254,9 +252,6 @@ defmodule Thereish.Rooms.Server do
           eligible_members = Thereish.Foley.Repertoire.members(state.room.id)
           wait_music = Thereish.Foley.Repertoire.draw(eligible_members, state[:wait_music])
 
-          # A playing track holds over across next_page until the next page's track lands (ADR-0013)
-          holdover_track = state[:current_track]
-
           new_state =
             %{
               state
@@ -269,13 +264,12 @@ defmodule Thereish.Rooms.Server do
             }
             |> Map.put(:current_arm, nil)
             |> Map.put(:current_page_id, nil)
+            |> Map.put(:current_page_ref, nil)
             |> Map.put(:giving_ref, make_ref())
             |> Map.put(:wait_music, wait_music)
             |> Map.put(:eligible_members, eligible_members)
             |> Map.put(:deal, Thereish.Foley.Repertoire.deal(eligible_members, wait_music.path))
-            |> Map.put(:current_track, holdover_track)
-            |> Map.put(:track_page_ref, if(holdover_track, do: state[:track_page_ref], else: nil))
-            |> reset_score_state(keep_track: true)
+            |> Map.update!(:occupancy, &Occupancy.page_turned/1)
 
           {:reply, :ok, advance(new_state, game, effects)}
 
@@ -421,8 +415,7 @@ defmodule Thereish.Rooms.Server do
     if music in Room.music_modes() do
       case Store.update_room(state.room, %{music: music}) do
         {:ok, room} ->
-          state = %{state | room: room}
-          state = maybe_start_score_on_music_change(state)
+          state = occupy(%{state | room: room}, &Occupancy.music_changed(&1, music))
           broadcast(state.room.slug)
           {:reply, :ok, state}
 
@@ -436,47 +429,26 @@ defmodule Thereish.Rooms.Server do
 
   def handle_call({:next, device_token}, _from, state) do
     if speaking_device?(state, device_token) do
-      wait_music = current_wait_music(state)
-      playing = resolve_playing(state, wait_music)
+      %{playing: playing, next?: next?} = Occupancy.view(state.occupancy, table(state))
 
-      cond do
-        playing && playing[:kind] == "track" ->
-          {:reply, {:error, :refused}, state}
+      with true <- next?,
+           {:ok, next_member, remaining_deal} <-
+             Thereish.Foley.Repertoire.next_deal(
+               eligible_members(state),
+               state[:deal] || [],
+               playing.path
+             ) do
+        state = %{state | wait_music: next_member, deal: remaining_deal}
 
-        playing == nil ->
-          {:reply, {:error, :refused}, state}
+        state =
+          if playing.kind == "holdover",
+            do: Map.update!(state, :occupancy, &Occupancy.drop_track/1),
+            else: state
 
-        length(eligible_members(state)) <= 1 ->
-          {:reply, {:error, :refused}, state}
-
-        playing[:kind] in ["repertoire", "holdover"] ->
-          current_deal = state[:deal] || []
-          current_path = playing.path
-
-          case advance_deal_for_state(state, current_deal, current_path) do
-            {:ok, next_member, remaining_deal} ->
-              new_state =
-                if playing[:kind] == "holdover" do
-                  %{
-                    state
-                    | current_track: nil,
-                      track_page_ref: nil,
-                      wait_music: next_member,
-                      deal: remaining_deal
-                  }
-                else
-                  %{state | wait_music: next_member, deal: remaining_deal}
-                end
-
-              broadcast(state.room.slug)
-              {:reply, :ok, new_state}
-
-            {:error, :no_other_members} ->
-              {:reply, {:error, :refused}, state}
-          end
-
-        true ->
-          {:reply, {:error, :refused}, state}
+        broadcast(state.room.slug)
+        {:reply, :ok, state}
+      else
+        _ -> {:reply, {:error, :refused}, state}
       end
     else
       {:reply, :ok, state}
@@ -485,46 +457,37 @@ defmodule Thereish.Rooms.Server do
 
   def handle_call({:never, device_token}, _from, state) do
     if speaking_device?(state, device_token) do
-      wait_music = current_wait_music(state)
-      playing = resolve_playing(state, wait_music)
+      %{playing: playing, never?: never?} = Occupancy.view(state.occupancy, table(state))
 
-      cond do
-        playing == nil ->
-          {:reply, {:error, :refused}, state}
+      if never? do
+        path = playing.path
+        {:ok, _} = Store.record_never(state.room.id, path)
 
-        last_playable_member?(state, playing) ->
-          {:reply, {:error, :refused}, state}
+        new_eligible = Enum.reject(eligible_members(state), fn m -> m.path == path end)
+        clean_deal = Enum.reject(state[:deal] || [], fn m -> m.path == path end)
 
-        playing[:kind] in ["repertoire", "holdover", "track"] ->
-          path = playing.path
-          {:ok, _} = Store.record_never(state.room.id, path)
+        case Thereish.Foley.Repertoire.advance_after_never(new_eligible, clean_deal, path) do
+          {:ok, next_member, remaining_deal} ->
+            state = %{
+              state
+              | wait_music: next_member,
+                deal: remaining_deal,
+                eligible_members: new_eligible
+            }
 
-          new_eligible =
-            Enum.reject(eligible_members(state), fn m -> m.path == path end)
+            state =
+              if playing.kind in ["holdover", "track"],
+                do: Map.update!(state, :occupancy, &Occupancy.drop_track/1),
+                else: state
 
-          clean_deal =
-            Enum.reject(state[:deal] || [], fn m -> m.path == path end)
+            broadcast(state.room.slug)
+            {:reply, :ok, state}
 
-          case Thereish.Foley.Repertoire.advance_after_never(new_eligible, clean_deal, path) do
-            {:ok, next_member, remaining_deal} ->
-              new_state =
-                %{
-                  state
-                  | wait_music: next_member,
-                    deal: remaining_deal,
-                    eligible_members: new_eligible
-                }
-                |> maybe_clear_track_on_never(playing)
-
-              broadcast(state.room.slug)
-              {:reply, :ok, new_state}
-
-            {:error, :no_members} ->
-              {:reply, {:error, :refused}, state}
-          end
-
-        true ->
-          {:reply, {:error, :refused}, state}
+          {:error, :no_members} ->
+            {:reply, {:error, :refused}, state}
+        end
+      else
+        {:reply, {:error, :refused}, state}
       end
     else
       {:reply, :ok, state}
@@ -568,26 +531,6 @@ defmodule Thereish.Rooms.Server do
         state.room.speaker == device_token
 
     speaker_claimed? = not is_nil(state.room.speaker)
-    wait_music = current_wait_music(state)
-    playing = resolve_playing(state, wait_music)
-    next? = next_offered?(state, playing)
-    never? = never_offered?(state, playing)
-
-    phase = Thereish.Game.phase(state.game)
-
-    current_vamp =
-      if state.room.music == "page" and not track_for_current_page?(state) and phase != :closed do
-        state[:current_vamp]
-      else
-        nil
-      end
-
-    current_track =
-      if state.room.music == "page" do
-        state[:current_track]
-      else
-        nil
-      end
 
     view =
       state.game
@@ -600,13 +543,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:full_table, state.room.full_table)
       |> Map.put(:music, state.room.music)
       |> Map.put(:quip, state.room.quip)
-      |> Map.put(:vamp, current_vamp)
-      |> Map.put(:track, current_track)
-      |> Map.put(:music_meta, state[:music_meta])
-      |> Map.put(:loop, if(state.room.music != "off", do: wait_music, else: nil))
-      |> Map.put(:playing, playing)
-      |> Map.put(:next?, next?)
-      |> Map.put(:never?, never?)
+      |> Map.merge(Occupancy.view(state.occupancy, table(state)))
       |> Map.put(:prologue_skipped, state.room.prologue_skipped)
       |> Map.put(:prologue, state[:prologue])
       |> Map.put(:prologue_script, Thereish.Foley.Prologue.script())
@@ -666,9 +603,14 @@ defmodule Thereish.Rooms.Server do
             "latency_ms" => latency
           }
 
-          state = %{state | voice_meta: Map.put(state.voice_meta, attempt, voice_meta)}
+          # The Chronicle is written before anyone hears the voice is ready, so
+          # a screen that reads the Page on voice_ready finds it.
+          state =
+            %{state | voice_meta: Map.put(state.voice_meta, attempt, voice_meta)}
+            |> flush_pending_chronicle()
+
           broadcast(state.room.slug, {:voice_ready, attempt})
-          flush_pending_chronicle(state)
+          state
         else
           if Game.phase(state.game) == :bridging do
             broadcast(state.room.slug, {:bookends_ready, attempt})
@@ -780,178 +722,12 @@ defmodule Thereish.Rooms.Server do
   # Stale, duplicate, or superseded author tasks change nothing
   def handle_info({:author_completed, _ref, _result}, state), do: {:noreply, state}
 
-  def handle_info({:titled, page_ref, result}, %{current_page_ref: page_ref} = state) do
-    state = Map.put(state, :title_task_running, false)
-
-    if Thereish.Game.phase(state.game) == :closed do
-      {:noreply, state}
-    else
-      case result do
-        {:ok, %{title: title} = res} ->
-          title_meta = res[:meta] || %{}
-
-          state =
-            state
-            |> Map.put(:current_title, title)
-            |> Map.put(:title_meta, title_meta)
-
-          if state[:current_track] != nil and state[:track_page_ref] == page_ref do
-            state = apply_track_and_title(state, state.current_track, title, title_meta, page_ref)
-            broadcast(state.room.slug)
-            {:noreply, state}
-          else
-            {:noreply, state}
-          end
-
-        {:error, reason} ->
-          Logger.warning("Scribe titling failed for room #{state.room.slug}: #{inspect(reason)}")
-          {:noreply, state}
-      end
-    end
+  # Every Foley result goes to the Occupancy, which decides whether it still
+  # belongs to the Page in play.
+  def handle_info({tag, page_ref, result}, state) when tag in [:vamped, :scored, :titled] do
+    kind = %{vamped: :vamp, scored: :track, titled: :title}[tag]
+    {:noreply, occupy(state, &Occupancy.arrived(&1, page_ref, {kind, result}, closed?(state)))}
   end
-
-  def handle_info({:titled, _page_ref, _result}, state), do: {:noreply, state}
-
-  def handle_info({:vamped, page_ref, {:ok, vamp}}, state) do
-    current_page? = state[:current_page_ref] == page_ref
-    closed? = Thereish.Game.phase(state.game) == :closed
-    scoring? = Map.get(state, :score_task_running, false)
-
-    state =
-      if current_page? do
-        Map.put(state, :vamp_task_running, false)
-      else
-        state
-      end
-
-    vamp_meta = build_vamp_meta(vamp)
-
-    page_id =
-      (state[:recorded_pages] || %{})[page_ref] ||
-        if current_page?, do: state[:current_page_id]
-
-    if not is_nil(page_id) do
-      Chronicle.replace_page_vamp(page_id, vamp_meta)
-    end
-
-    cond do
-      current_page? and not closed? and scoring? ->
-        log_music_event(state, page_ref, "vamp landed")
-
-        state =
-          state
-          |> Map.put(:current_vamp, vamp)
-          |> Map.put(:vamp_meta, vamp_meta)
-
-        broadcast(state.room.slug)
-        {:noreply, state}
-
-      current_page? ->
-        log_music_event(state, page_ref, "vamp landed")
-        state = Map.put(state, :vamp_meta, vamp_meta)
-        if not is_nil(page_id), do: broadcast(state.room.slug)
-        {:noreply, state}
-
-      true ->
-        if not is_nil(page_id), do: broadcast(state.room.slug)
-        {:noreply, state}
-    end
-  end
-
-  def handle_info({:vamped, page_ref, {:error, reason}}, %{current_page_ref: page_ref} = state) do
-    state = Map.put(state, :vamp_task_running, false)
-    log_music_event(state, page_ref, {:vamp_failure, reason})
-    {:noreply, state}
-  end
-
-  def handle_info({:vamped, _page_ref, _result}, state), do: {:noreply, state}
-
-  def handle_info({:scored, page_ref, {:ok, track}}, state) do
-    current_page? = state[:current_page_ref] == page_ref
-
-    title =
-      if current_page? do
-        track[:title] || state[:current_title]
-      else
-        track[:title]
-      end
-
-    title_meta = if current_page?, do: state[:title_meta] || %{}, else: %{}
-    title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
-    track = if title, do: Map.put(track, :title, title), else: track
-
-    attrs =
-      [path: track.path] ++
-        if(title, do: [title: title, title_cost_usd: title_cost], else: [])
-
-    base_meta =
-      if current_page? do
-        case state[:music_meta] do
-          %{} = m when not is_map_key(m, :failure) and not is_map_key(m, "failure") -> m
-          _ -> track[:meta] || %{}
-        end
-      else
-        track[:meta] || %{}
-      end
-
-    music_meta = put_meta(base_meta, attrs)
-
-    page_id =
-      (state[:recorded_pages] || %{})[page_ref] ||
-        if current_page?, do: state[:current_page_id]
-
-    if not is_nil(page_id) do
-      Chronicle.replace_page_music(page_id, music_meta)
-    end
-
-    if current_page? do
-      log_music_event(state, page_ref, "track landed")
-
-      state =
-        state
-        |> Map.put(:score_task_running, false)
-        |> Map.put(:current_vamp, nil)
-
-      state =
-        if Thereish.Game.phase(state.game) == :closed do
-          state
-        else
-          apply_track_and_title(state, track, title, title_meta, page_ref)
-        end
-
-      broadcast(state.room.slug)
-      {:noreply, state}
-    else
-      if not is_nil(page_id), do: broadcast(state.room.slug)
-      {:noreply, state}
-    end
-  end
-
-  def handle_info({:scored, page_ref, {:error, reason}}, %{current_page_ref: page_ref} = state) do
-    state =
-      state
-      |> Map.put(:score_task_running, false)
-      |> Map.put(:current_vamp, nil)
-
-    if Thereish.Game.phase(state.game) == :closed do
-      {:noreply, state}
-    else
-      log_music_event(state, page_ref, {:failure, reason})
-      failure_meta = Thereish.Steward.score_failure(reason)
-
-      state =
-        if state[:track_page_ref] == page_ref do
-          %{state | current_track: nil, track_page_ref: nil, music_meta: failure_meta}
-        else
-          %{state | music_meta: failure_meta}
-        end
-
-      broadcast(state.room.slug)
-      {:noreply, state}
-    end
-  end
-
-  def handle_info({:scored, _page_ref, _result}, state), do: {:noreply, state}
 
   def handle_info({:mask_landed, seat_id, giving_ref, page_ref, result}, state) do
     current_giving? = is_nil(giving_ref) or state[:giving_ref] == giving_ref
@@ -970,10 +746,7 @@ defmodule Thereish.Rooms.Server do
         {:ok, game, effects} ->
           state = advance(state, game, effects)
 
-          page_id =
-            (state[:recorded_pages] || %{})[page_ref] ||
-              (state[:recorded_pages] || %{})[state.current_page_ref] ||
-              state[:current_page_id]
+          page_id = page_id(state, page_ref) || page_id(state, state.current_page_ref)
 
           if not is_nil(page_id) do
             Chronicle.replace_page_masks(page_id, game.masks)
@@ -985,7 +758,7 @@ defmodule Thereish.Rooms.Server do
           {:noreply, state}
       end
     else
-      page_id = (state[:recorded_pages] || %{})[page_ref]
+      page_id = page_id(state, page_ref)
 
       if not is_nil(page_id) and is_map(mask) do
         Chronicle.update_page_mask(page_id, seat_id, mask)
@@ -1006,36 +779,6 @@ defmodule Thereish.Rooms.Server do
 
   def handle_info({:late_mask, seat_id, mask}, state) do
     handle_info({:mask_landed, seat_id, nil, nil, {:ok, mask}}, state)
-  end
-
-  defp apply_playable_track(state, track, title, title_meta, page_ref) do
-    title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
-    track = if title, do: Map.put(track, :title, title), else: track
-
-    attrs =
-      [path: track.path] ++
-        if(title, do: [title: title, title_cost_usd: title_cost], else: [])
-
-    base_meta =
-      case state[:music_meta] do
-        %{} = m when not is_map_key(m, :failure) and not is_map_key(m, "failure") -> m
-        _ -> track[:meta] || %{}
-      end
-
-    music_meta = put_meta(base_meta, attrs)
-
-    state = %{state | current_track: track, music_meta: music_meta}
-    if page_ref, do: Map.put(state, :track_page_ref, page_ref), else: state
-  end
-
-  defp apply_track_and_title(state, track, title, title_meta, page_ref) do
-    state = apply_playable_track(state, track, title, title_meta, page_ref)
-
-    if not is_nil(state[:current_gives]) do
-      Thereish.Steward.TrackCache.put(state.current_gives, state.current_track)
-    end
-
-    state
   end
 
   defp format_author_error({:max_tokens, _}), do: "too broad or complex"
@@ -1118,108 +861,15 @@ defmodule Thereish.Rooms.Server do
       hd(Thereish.Foley.Repertoire.shipped_loops())
   end
 
-  defp resolve_playing(state, wait_music) do
-    case state.room.music do
-      "off" ->
-        nil
-
-      "house" ->
-        repertoire_playing(wait_music)
-
-      "page" ->
-        cond do
-          (track_for_current_page?(state) and state[:current_track]) && state.current_track[:path] ->
-            kind =
-              if Thereish.Game.phase(state.game) == :closed do
-                "holdover"
-              else
-                "track"
-              end
-
-            %{
-              path: state.current_track.path,
-              title: state.current_track[:title] || state[:current_title] || "Track",
-              kind: kind
-            }
-
-          (Thereish.Game.phase(state.game) != :closed and state[:current_vamp]) &&
-              state.current_vamp[:path] ->
-            %{
-              path: state.current_vamp.path,
-              title: nil,
-              kind: "vamp"
-            }
-
-          state[:current_track] && state.current_track[:path] ->
-            %{
-              path: state.current_track.path,
-              title: state.current_track[:title] || state[:current_title] || "Track",
-              kind: "holdover"
-            }
-
-          true ->
-            repertoire_playing(wait_music)
-        end
-    end
-  end
-
-  defp track_for_current_page?(state) do
-    state[:track_page_ref] != nil and state[:current_page_ref] != nil and
-      state[:track_page_ref] == state[:current_page_ref] and
-      not is_nil(state[:current_track])
-  end
-
-  defp repertoire_playing(wait_music) do
-    title = wait_music[:title] || wait_music[:name] || "Track"
-    %{path: wait_music.path, title: title, kind: "repertoire"}
-  end
-
-  defp next_offered?(state, playing) do
-    playing != nil and
-      playing[:kind] in ["repertoire", "holdover"] and
-      length(eligible_members(state)) > 1
-  end
-
-  defp never_offered?(state, playing) do
-    playing != nil and
-      playing[:kind] in ["repertoire", "holdover", "track"] and
-      not last_playable_member?(state, playing)
-  end
-
-  defp last_playable_member?(state, playing) do
-    eligible = eligible_members(state)
-
-    cond do
-      length(eligible) == 0 ->
-        true
-
-      length(eligible) == 1 ->
-        Enum.any?(eligible, fn m -> m.path == playing.path end)
-
-      true ->
-        false
-    end
-  end
-
   defp eligible_members(state) do
     state[:eligible_members] ||
       Thereish.Foley.Repertoire.shipped_loops()
-  end
-
-  defp advance_deal_for_state(state, current_deal, current_path) do
-    Thereish.Foley.Repertoire.next_deal(eligible_members(state), current_deal, current_path)
   end
 
   defp speaking_device?(state, device_token) do
     not is_nil(state.room.speaker) and not is_nil(device_token) and
       state.room.speaker == device_token
   end
-
-  defp maybe_clear_track_on_never(state, %{kind: kind}) when kind in ["holdover", "track"] do
-    %{state | current_track: nil, track_page_ref: nil}
-  end
-
-  defp maybe_clear_track_on_never(state, _playing), do: state
 
   defp advance(state, game, effects) do
     old_game = state.game
@@ -1278,22 +928,9 @@ defmodule Thereish.Rooms.Server do
   # bad; taking the Room down in front of the couple, and losing the Page they
   # are looking at along with it, is worse.
   defp perform({:chronicle, entry}, state) do
-    music_meta =
-      cond do
-        state.room.music != "page" ->
-          nil
-
-        not is_nil(state[:music_meta]) ->
-          state.music_meta
-
-        true ->
-          Thereish.Steward.score_failure(:unfinished)
-      end
-
     entry =
       entry
-      |> Map.put(:music_meta, music_meta)
-      |> Map.put(:vamp_meta, state[:vamp_meta])
+      |> Map.merge(Occupancy.chronicle_meta(state.occupancy, state.room.music))
       |> attach_timing(state)
 
     if waiting_for_voice_meta?(state, entry) do
@@ -1361,28 +998,18 @@ defmodule Thereish.Rooms.Server do
 
     now = System.monotonic_time(:millisecond)
 
+    cached =
+      case Thereish.Steward.TrackCache.get(gives) do
+        {:ok, track} -> track
+        _ -> nil
+      end
+
     state =
       state
       |> Map.put(:current_arm, arm)
       |> Map.put(:current_page_ref, page_ref)
-      |> Map.put(:current_gives, gives)
-      |> Map.put(:gives_landed_at, now)
-      |> Map.put(:current_vamp, nil)
-      |> Map.put(:vamp_meta, nil)
-      |> Map.put(:current_title, nil)
-      |> Map.put(:title_meta, nil)
-      |> Map.put(:music_meta, nil)
       |> waiting_on_author(ref)
-
-    state =
-      if state.room.music == "page" do
-        start_music_tasks(state, page_ref, gives)
-      else
-        state
-        |> Map.put(:vamp_task_running, false)
-        |> Map.put(:score_task_running, false)
-        |> Map.put(:title_task_running, false)
-      end
+      |> perform_music(&Occupancy.page_opened(&1, page_ref, gives, cached, now, state.room.music))
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       try do
@@ -1418,106 +1045,109 @@ defmodule Thereish.Rooms.Server do
     waiting_on(state)
   end
 
-  defp reset_score_state(state, opts) do
-    state =
-      state
-      |> Map.put(:current_page_ref, nil)
-      |> Map.put(:current_title, nil)
-      |> Map.put(:title_meta, nil)
-      |> Map.put(:music_meta, nil)
-      |> Map.put(:current_gives, nil)
-      |> Map.put(:gives_landed_at, nil)
-      |> Map.put(:current_vamp, nil)
-      |> Map.put(:vamp_meta, nil)
-      |> Map.put(:vamp_task_running, false)
-      |> Map.put(:score_task_running, false)
-      |> Map.put(:title_task_running, false)
+  # Applies an Occupancy transition and performs the effects it returns,
+  # broadcasting when what the Room shows has changed.
+  defp occupy(state, transition) do
+    before = Occupancy.view(state.occupancy, table(state))
+    {state, wrote?} = perform_music_effects(state, transition)
 
-    if Keyword.get(opts, :keep_track, false) do
-      state
-    else
-      state
-      |> Map.put(:current_track, nil)
-      |> Map.put(:track_page_ref, nil)
+    if wrote? or Occupancy.view(state.occupancy, table(state)) != before do
+      broadcast(state.room.slug)
     end
+
+    state
   end
 
-  defp maybe_start_score_on_music_change(state) do
-    if state.room.music == "page" and not track_for_current_page?(state) and
-         not Map.get(state, :score_task_running, false) and
-         not is_nil(state[:current_page_ref]) and not is_nil(state[:current_gives]) do
-      start_music_tasks(state, state.current_page_ref, state.current_gives)
-    else
-      state
-    end
+  # As `occupy/2`, for callers that broadcast on their own.
+  defp perform_music(state, transition) do
+    {state, _wrote?} = perform_music_effects(state, transition)
+    state
   end
 
-  defp start_music_tasks(state, page_ref, gives) do
-    gives_landed_at = state[:gives_landed_at] || System.monotonic_time(:millisecond)
-    state = Map.put(state, :gives_landed_at, gives_landed_at)
-
-    case Thereish.Steward.TrackCache.get(gives) do
-      {:ok, cached_track} when not is_nil(cached_track.title) ->
-        log_music_event(state, page_ref, "cache hit")
-
-        music_meta =
-          put_meta(cached_track.meta,
-            title: cached_track.title,
-            path: cached_track.path,
-            title_cost_usd: 0.0
-          )
-
-        state
-        |> Map.put(:current_track, cached_track)
-        |> Map.put(:track_page_ref, page_ref)
-        |> Map.put(:current_title, cached_track.title)
-        |> Map.put(:music_meta, music_meta)
-        |> Map.put(:current_vamp, nil)
-        |> Map.put(:vamp_meta, nil)
-        |> Map.put(:vamp_task_running, false)
-        |> Map.put(:score_task_running, false)
-        |> Map.put(:title_task_running, false)
-
-      _ ->
-        log_music_event(state, page_ref, "cache miss")
-
-        state
-        |> start_vamp_task(page_ref, gives, gives_landed_at)
-        |> start_score_task(page_ref, gives, gives_landed_at)
-        |> start_title_task(page_ref, gives)
-    end
+  defp perform_music_effects(state, transition) do
+    {occupancy, effects} = transition.(state.occupancy)
+    state = %{state | occupancy: occupancy}
+    wrote? = Enum.reduce(effects, false, fn effect, wrote? -> music(effect, state) or wrote? end)
+    {state, wrote?}
   end
 
-  defp start_vamp_task(state, page_ref, gives, gives_landed_at) do
+  # Performs one Occupancy effect. Answers whether a Chronicle Page was written.
+  defp music({:start_vamp, page_ref, gives}, _state) do
+    start_music_task(page_ref, :vamped, fn -> Steward.vamp(gives) end)
+    false
+  end
+
+  defp music({:enqueue_track, page_ref, gives, gives_landed_at}, state) do
     code = state.room.slug
-    log_music_event(code, page_ref, "vamp started", gives_landed_at)
 
-    start_music_task(state, page_ref, :vamp_task_running, :vamped, fn ->
-      Steward.vamp(gives)
-    end)
-  end
-
-  defp start_score_task(state, page_ref, gives, gives_landed_at) do
-    code = state.room.slug
-    room_pid = self()
-    log_music_event(code, page_ref, "score queued", gives_landed_at)
-
-    Thereish.Foley.ScoreQueue.enqueue(room_pid, page_ref, gives,
+    Thereish.Foley.ScoreQueue.enqueue(self(), page_ref, gives,
       on_start: fn ->
         log_music_event(code, page_ref, "score started", gives_landed_at)
       end
     )
 
-    Map.put(state, :score_task_running, true)
+    false
   end
 
-  defp start_title_task(state, page_ref, gives) do
-    start_music_task(state, page_ref, :title_task_running, :titled, fn ->
-      Steward.title_track(gives)
-    end)
+  defp music({:start_title, page_ref, gives}, _state) do
+    start_music_task(page_ref, :titled, fn -> Steward.title_track(gives) end)
+    false
   end
 
-  defp start_music_task(state, page_ref, running_key, tag, fun) do
+  defp music({:persist_vamp_meta, page_ref, meta}, state) do
+    case page_id(state, page_ref) do
+      nil ->
+        false
+
+      page_id ->
+        Chronicle.replace_page_vamp(page_id, meta)
+        true
+    end
+  end
+
+  defp music({:persist_music_meta, page_ref, meta}, state) do
+    case page_id(state, page_ref) do
+      nil ->
+        false
+
+      page_id ->
+        Chronicle.replace_page_music(page_id, meta)
+        true
+    end
+  end
+
+  defp music({:cache_track, gives, track}, _state) do
+    Thereish.Steward.TrackCache.put(gives, track)
+    false
+  end
+
+  defp music({:log, page_ref, event, gives_landed_at}, state) do
+    log_music_event(state.room.slug, page_ref, event, gives_landed_at)
+    false
+  end
+
+  # The Room's facts Occupancy is told on each call rather than keeping a copy.
+  defp table(state) do
+    %{
+      music: state.room.music,
+      closed?: closed?(state),
+      draw: current_wait_music(state),
+      members: eligible_members(state)
+    }
+  end
+
+  defp closed?(state), do: Game.phase(state.game) == :closed
+
+  # The Chronicle Page a Page ref names: one recorded already, or the Page in
+  # play once its own write has landed.
+  defp page_id(_state, nil), do: nil
+
+  defp page_id(state, page_ref) do
+    Map.get(state.recorded_pages, page_ref) ||
+      if page_ref == state.current_page_ref, do: state.current_page_id
+  end
+
+  defp start_music_task(page_ref, tag, fun) do
     room_pid = self()
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
@@ -1537,8 +1167,6 @@ defmodule Thereish.Rooms.Server do
           send(room_pid, {tag, page_ref, {:error, {:exit, reason}}})
       end
     end)
-
-    Map.put(state, running_key, true)
   end
 
   defp start_mask_task(state, seat_id, give) do
@@ -1574,25 +1202,6 @@ defmodule Thereish.Rooms.Server do
     end)
 
     state
-  end
-
-  defp put_meta(base, pairs) do
-    Enum.reduce(pairs, base || %{}, fn {key, val}, acc ->
-      acc
-      |> Map.put(key, val)
-      |> Map.put(to_string(key), val)
-    end)
-  end
-
-  defp build_vamp_meta(vamp) when is_map(vamp) do
-    base = vamp[:meta] || vamp["meta"] || %{}
-
-    put_meta(base,
-      path: vamp[:path] || vamp["path"],
-      duration: vamp[:duration] || vamp["duration"],
-      format: vamp[:format] || vamp["format"],
-      loop: Map.get(vamp, :loop, Map.get(vamp, "loop", true))
-    )
   end
 
   defp extract_give_strings(request) do
@@ -2043,7 +1652,7 @@ defmodule Thereish.Rooms.Server do
 
     Scribe.write_about(state.room, page)
 
-    recorded_pages = Map.put(state[:recorded_pages] || %{}, state.current_page_ref, page.id)
+    recorded_pages = Map.put(state.recorded_pages, state.current_page_ref, page.id)
 
     state
     |> Map.put(:current_page_id, page.id)
@@ -2083,15 +1692,17 @@ defmodule Thereish.Rooms.Server do
   Logs a music event carrying the Room's Code, Page reference, event name,
   and milliseconds since Gives landed.
   """
-  def log_music_event(%{room: %{slug: code}} = state, page_ref, event) do
-    log_music_event(code, page_ref, event, state[:gives_landed_at])
-  end
-
   def log_music_event(code, page_ref, event, gives_landed_at \\ nil)
 
   def log_music_event(code, page_ref, {fail_tag, reason}, gives_landed_at)
-      when fail_tag in [:failure, :vamp_failure] do
-    prefix = if fail_tag == :vamp_failure, do: "vamp failure", else: "failure"
+      when fail_tag in [:failure, :vamp_failure, :title_failure] do
+    prefix =
+      case fail_tag do
+        :failure -> "failure"
+        :vamp_failure -> "vamp failure"
+        :title_failure -> "title failure"
+      end
+
     log_music_event(code, page_ref, "#{prefix} with reason: #{inspect(reason)}", gives_landed_at)
   end
 
