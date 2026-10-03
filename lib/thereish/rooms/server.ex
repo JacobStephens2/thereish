@@ -62,6 +62,7 @@ defmodule Thereish.Rooms.Server do
 
   alias Thereish.Chronicle
   alias Thereish.Foley.Occupancy
+  alias Thereish.Foley.Voice
   alias Thereish.Game
   alias Thereish.Rooms.Room
   alias Thereish.Rooms.Seat
@@ -107,11 +108,7 @@ defmodule Thereish.Rooms.Server do
         current_page_ref: nil,
         recorded_pages: %{},
         occupancy: Occupancy.new(Thereish.Foley.Repertoire.members(room.id)),
-        voice_audio: nil,
-        voice_meta: %{},
-        voice_pending_attempt: nil,
-        bookends_pending_attempt: nil,
-        pending_chronicle: nil,
+        voice: Voice.new(),
         giving_ref: make_ref(),
         prologue: nil
       }
@@ -238,9 +235,8 @@ defmodule Thereish.Rooms.Server do
       case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
         {:ok, game, effects} ->
           # A closed Page must not vanish if Foley is still speaking when the
-          # couple tap next. Flush whatever voice_meta we have (ADR-0003: the
-          # Verdict row is written once).
-          state = state |> clear_reveal_hold() |> flush_pending_chronicle()
+          # couple tap next: Voice releases whatever Page it is holding.
+          state = state |> clear_reveal_hold() |> voice(&Voice.page_turned/1)
 
           members = Thereish.Foley.Repertoire.members(state.room.id)
 
@@ -248,11 +244,7 @@ defmodule Thereish.Rooms.Server do
             %{
               state
               | opened_at: nil,
-                timing: %{gives: %{}, attempts: %{}},
-                voice_audio: nil,
-                voice_meta: %{},
-                voice_pending_attempt: nil,
-                bookends_pending_attempt: nil
+                timing: %{gives: %{}, attempts: %{}}
             }
             |> Map.put(:current_arm, nil)
             |> Map.put(:current_page_id, nil)
@@ -295,12 +287,7 @@ defmodule Thereish.Rooms.Server do
           state = %{state | room: room}
           broadcast(state.room.slug)
 
-          state =
-            state
-            |> maybe_offer_voice()
-            |> maybe_start_bookends_voice()
-
-          {:reply, :ok, state}
+          {:reply, :ok, voice(state, &Voice.speaker_claimed(&1, voice_table(state)))}
 
         {:error, reason} ->
           {:reply, {:error, reason}, state}
@@ -323,12 +310,7 @@ defmodule Thereish.Rooms.Server do
 
         broadcast(state.room.slug)
 
-        state =
-          state
-          |> maybe_offer_voice()
-          |> maybe_start_bookends_voice()
-
-        {:reply, :ok, state}
+        {:reply, :ok, voice(state, &Voice.speaker_claimed(&1, voice_table(state)))}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
@@ -425,22 +407,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_call({:voice_audio, attempt, kind}, _from, state) do
-    kind = voice_kind(kind)
-
-    case {kind, state[:voice_audio]} do
-      {kind, %{attempt: ^attempt} = clips}
-      when kind in [:bookends, :verdict] and attempt == state.game.attempt ->
-        case clips[kind] do
-          %{audio: audio, format: format} when is_binary(audio) ->
-            {:reply, {:ok, audio, format}, state}
-
-          _ ->
-            {:reply, {:error, :not_found}, state}
-        end
-
-      _ ->
-        {:reply, {:error, :not_found}, state}
-    end
+    {:reply, Voice.clip(state.voice, attempt, kind, voice_table(state)), state}
   end
 
   def handle_call(:in_play?, _from, state) do
@@ -492,7 +459,7 @@ defmodule Thereish.Rooms.Server do
     state =
       state
       |> answered()
-      |> maybe_start_verdict_voice(event)
+      |> verdict_heard(event)
 
     if state.beat do
       {:noreply, %{state | held: state.held ++ [event]}}
@@ -502,79 +469,14 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_info({:voice_spoken, attempt, kind, {:ok, result}}, state) do
-    kind = voice_kind(kind)
-
-    if attempt == state.game.attempt and kind in [:bookends, :verdict] do
-      format = Map.get(result, :format, :mp3)
-      state = put_voice_clip(state, attempt, kind, result.audio, format)
-      state = clear_voice_pending(state, attempt, kind)
-
-      state =
-        if kind == :verdict do
-          raw_meta = result[:meta] || %{}
-          provider = raw_meta[:provider] || raw_meta["provider"] || "hume"
-
-          voice =
-            raw_meta[:voice] || raw_meta["voice"] || raw_meta[:voice_id] || raw_meta["voice_id"] ||
-              "default"
-
-          cost =
-            raw_meta[:cost_usd] || raw_meta["cost_usd"] || raw_meta[:cost] || raw_meta["cost"]
-
-          latency =
-            raw_meta[:latency_ms] || raw_meta["latency_ms"] || raw_meta[:latency] ||
-              raw_meta["latency"]
-
-          voice_meta = %{
-            "provider" => to_string(provider),
-            "voice" => to_string(voice),
-            "model" => to_string(raw_meta[:model] || raw_meta["model"] || voice),
-            "cost_usd" => cost,
-            "latency_ms" => latency
-          }
-
-          # The Chronicle is written before anyone hears the voice is ready, so
-          # a screen that reads the Page on voice_ready finds it.
-          state =
-            %{state | voice_meta: Map.put(state.voice_meta, attempt, voice_meta)}
-            |> flush_pending_chronicle()
-
-          broadcast(state.room.slug, {:voice_ready, attempt})
-          state
-        else
-          if Game.phase(state.game) == :bridging do
-            broadcast(state.room.slug, {:bookends_ready, attempt})
-          end
-
-          state
-        end
-
-      {:noreply, state}
-    else
-      Logger.warning(
-        "Voice for attempt #{attempt} (#{kind}) arrived after next attempt started (current: #{state.game.attempt}), dropping"
-      )
-
-      {:noreply, state}
-    end
+    {:noreply, voice(state, &Voice.spoken(&1, attempt, kind, {:ok, result}, voice_table(state)))}
   end
 
+  # The failure metadata reads the Steward's adapter config, so it is made here
+  # and Voice decides where it goes.
   def handle_info({:voice_spoken, attempt, kind, {:error, reason}}, state) do
-    Logger.warning("Voice synthesis failed for attempt #{attempt} (#{kind}): #{inspect(reason)}")
-
-    state = clear_voice_pending(state, attempt, kind)
-
-    state =
-      if voice_kind(kind) == :verdict do
-        failure_meta = Thereish.Steward.voice_failure(reason)
-
-        %{state | voice_meta: Map.put(state.voice_meta, attempt, failure_meta)}
-        |> flush_pending_chronicle()
-      else
-        state
-      end
-
-    {:noreply, state}
+    failure = {:error, Steward.voice_failure(reason)}
+    {:noreply, voice(state, &Voice.spoken(&1, attempt, kind, failure, voice_table(state)))}
   end
 
   def handle_info(:beat_over, state) do
@@ -760,7 +662,6 @@ defmodule Thereish.Rooms.Server do
 
   defp apply_events(state, events) do
     old_phase = Game.phase(state.game)
-    old_attempt = state.game.attempt
 
     new_state =
       Enum.reduce(events, state, fn event, state ->
@@ -774,13 +675,6 @@ defmodule Thereish.Rooms.Server do
             state
         end
       end)
-
-    new_state =
-      if new_state.game.attempt != old_attempt do
-        %{new_state | voice_audio: nil}
-      else
-        new_state
-      end
 
     maybe_arm_reveal_hold(new_state, old_phase)
   end
@@ -812,20 +706,12 @@ defmodule Thereish.Rooms.Server do
     old_game = state.game
 
     state =
-      if game.attempt != old_game.attempt do
-        %{state | voice_audio: nil, bookends_pending_attempt: nil}
-      else
-        state
-      end
-
-    state =
       %{state | game: game}
       |> record_occurrence_times(old_game)
       |> opened()
 
-    state =
-      Enum.reduce(effects, state, &perform/2)
-      |> maybe_start_bookends_voice()
+    state = Enum.reduce(effects, state, &perform/2)
+    state = voice(state, &Voice.table_moved(&1, voice_table(state)))
 
     broadcast(state.room.slug)
 
@@ -855,11 +741,10 @@ defmodule Thereish.Rooms.Server do
   # and a Page that closed while the write was still in flight elsewhere would
   # be a Page that could go missing.
   #
-  # Foley for the closing Verdict is already in flight when this effect runs.
-  # ADR-0003 forbids updating the Verdict row, so the write waits for that
-  # result and lands voice_meta on the first insert. next_page flushes whatever
-  # is waiting so a closed Page cannot vanish if the couple tap through before
-  # the voice returns.
+  # Foley for the closing Verdict may still be in flight when this effect
+  # runs. ADR-0003 forbids updating the Verdict row, so Voice decides whether
+  # the write waits for that result; it comes back as a :commit_chronicle
+  # effect, now or later.
   #
   # A write that fails is logged and swallowed. Losing the record of a Page is
   # bad; taking the Room down in front of the couple, and losing the Page they
@@ -870,11 +755,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.merge(Occupancy.chronicle_meta(state.occupancy, state.room.music))
       |> attach_timing(state)
 
-    if waiting_for_voice_meta?(state, entry) do
-      %{state | pending_chronicle: entry}
-    else
-      commit_chronicle(entry, state)
-    end
+    voice(state, &Voice.page_closed(&1, entry))
   end
 
   defp perform({:overrule, overrule}, state) do
@@ -1439,82 +1320,49 @@ defmodule Thereish.Rooms.Server do
     Phoenix.PubSub.broadcast(Thereish.PubSub, Thereish.Rooms.topic(slug), message)
   end
 
-  defp maybe_start_verdict_voice(state, {:verdict_received, verdict}) do
-    if speaker?(state) do
-      closeness = verdict[:closeness] || verdict["closeness"]
-
-      band =
-        (verdict[:band] && to_string(verdict[:band])) ||
-          (closeness && Thereish.Ladder.read(closeness).band |> to_string()) ||
-          "miss"
-
-      band_word = band |> String.replace("_", " ")
-      quip = (verdict[:quip] || verdict["quip"] || "") |> to_string() |> String.trim()
-
-      line =
-        if state.room.quips && quip != "" do
-          "#{band_word}. #{quip}"
-        else
-          band_word
-        end
-
-      speak_line(state, :verdict, line)
-    else
-      state
-    end
+  defp verdict_heard(state, {:verdict_received, verdict}) do
+    voice(state, &Voice.verdict_received(&1, verdict, voice_table(state)))
   end
 
-  defp maybe_start_verdict_voice(state, _event), do: state
+  defp verdict_heard(state, _event), do: state
 
-  defp maybe_start_bookends_voice(state) do
-    bookends = state.game.bookends
-    attempt = state.game.attempt
-
-    cond do
-      not speaker?(state) ->
-        state
-
-      Game.phase(state.game) != :bridging ->
-        state
-
-      not is_list(bookends) or bookends == [] ->
-        state
-
-      has_voice_clip?(state, :bookends) ->
-        state
-
-      state[:bookends_pending_attempt] == attempt ->
-        state
-
-      true ->
-        speak_line(state, :bookends, Enum.join(bookends, ". "))
-    end
+  # Applies a Voice transition and carries out the effects it returns, in
+  # order: a held Chronicle write lands before the voice_ready that follows it.
+  defp voice(state, transition) do
+    {voice, effects} = transition.(state.voice)
+    Enum.reduce(effects, %{state | voice: voice}, &perform_voice_effect/2)
   end
 
-  defp maybe_offer_voice(state) do
-    attempt = state.game.attempt
-    phase = Game.phase(state.game)
-
-    case state.voice_audio do
-      %{attempt: ^attempt} = clips ->
-        if phase == :bridging and voice_clip?(clips[:bookends]) do
-          broadcast(state.room.slug, {:bookends_ready, attempt})
-        end
-
-        if phase == :reveal and voice_clip?(clips[:verdict]) do
-          broadcast(state.room.slug, {:voice_ready, attempt})
-        end
-
-        state
-
-      _ ->
-        state
-    end
+  defp perform_voice_effect({:speak, attempt, kind, line}, state) do
+    speak_line(attempt, kind, line)
+    state
   end
 
-  defp speak_line(state, kind, line) do
+  defp perform_voice_effect({:broadcast, message}, state) do
+    broadcast(state.room.slug, message)
+    state
+  end
+
+  defp perform_voice_effect({:commit_chronicle, entry}, state), do: commit_chronicle(entry, state)
+
+  defp perform_voice_effect({:log, level, message}, state) do
+    Logger.log(level, message)
+    state
+  end
+
+  # The Room's and the Game's facts Voice is told on each call.
+  defp voice_table(state) do
+    %{
+      attempt: state.game.attempt,
+      phase: Game.phase(state.game),
+      bookends: state.game.bookends,
+      speaker?: speaker?(state),
+      quips?: state.room.quips == true
+    }
+  end
+
+  defp speak_line(attempt, kind, line) do
     room = self()
-    attempt = state.game.attempt
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
       try do
@@ -1533,73 +1381,13 @@ defmodule Thereish.Rooms.Server do
           send(room, {:voice_spoken, attempt, kind, {:error, {:exit, reason}}})
       end
     end)
-
-    case kind do
-      :verdict -> %{state | voice_pending_attempt: attempt}
-      :bookends -> %{state | bookends_pending_attempt: attempt}
-    end
   end
 
   defp speaker?(state) do
     not is_nil(state.room.speaker) and state.room.speaker != ""
   end
 
-  defp voice_kind(kind) when kind in [:bookends, "bookends"], do: :bookends
-  defp voice_kind(kind) when kind in [:verdict, "verdict"], do: :verdict
-  defp voice_kind(_), do: nil
-
-  defp voice_clip?(%{audio: audio}) when is_binary(audio), do: true
-  defp voice_clip?(_), do: false
-
-  defp has_voice_clip?(state, kind) do
-    attempt = state.game.attempt
-
-    case state.voice_audio do
-      %{attempt: ^attempt} = clips -> voice_clip?(clips[kind])
-      _ -> false
-    end
-  end
-
-  defp put_voice_clip(state, attempt, kind, audio, format) do
-    clips =
-      case state.voice_audio do
-        %{attempt: ^attempt} = existing -> existing
-        _ -> %{attempt: attempt, bookends: nil, verdict: nil}
-      end
-
-    %{state | voice_audio: Map.put(clips, kind, %{audio: audio, format: format})}
-  end
-
-  defp waiting_for_voice_meta?(state, entry) do
-    pending = state.voice_pending_attempt
-
-    pending != nil and
-      is_nil(Map.get(state.voice_meta, pending)) and
-      Enum.any?(entry.attempts, fn attempt -> attempt.number == pending end)
-  end
-
-  defp clear_voice_pending(state, attempt, kind) do
-    cond do
-      kind == :verdict and state.voice_pending_attempt == attempt ->
-        %{state | voice_pending_attempt: nil}
-
-      kind == :bookends and state[:bookends_pending_attempt] == attempt ->
-        %{state | bookends_pending_attempt: nil}
-
-      true ->
-        state
-    end
-  end
-
-  defp flush_pending_chronicle(%{pending_chronicle: nil} = state), do: state
-
-  defp flush_pending_chronicle(%{pending_chronicle: entry} = state) do
-    commit_chronicle(entry, %{state | pending_chronicle: nil})
-  end
-
   defp commit_chronicle(entry, state) do
-    entry = attach_voice_meta(entry, state.voice_meta)
-
     {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
 
     arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
@@ -1617,28 +1405,6 @@ defmodule Thereish.Rooms.Server do
       Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
       state
   end
-
-  defp attach_voice_meta(entry, voice_meta) when is_map(voice_meta) do
-    attempts =
-      Enum.map(entry.attempts, fn attempt ->
-        case Map.get(voice_meta, attempt.number) do
-          nil ->
-            attempt
-
-          v_meta ->
-            verdicts =
-              Enum.map(attempt.verdicts, fn verdict ->
-                Map.put(verdict, :voice_meta, v_meta)
-              end)
-
-            %{attempt | verdicts: verdicts}
-        end
-      end)
-
-    %{entry | attempts: attempts}
-  end
-
-  defp attach_voice_meta(entry, _), do: entry
 
   # Device tokens are the browser's business and never leave this module.
   defp public(%Seat{} = seat), do: %{id: seat.id, name: seat.name}
