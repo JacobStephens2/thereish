@@ -21,6 +21,7 @@ defmodule Thereish.Foley.Occupancy do
     * `{:start_vamp, page_ref, gives}`
     * `{:enqueue_track, page_ref, gives, gives_landed_at}`
     * `{:start_title, page_ref, gives}`
+    * `{:look_up_track, page_ref, gives}` — answer with `track_looked_up/3`
     * `{:persist_vamp_meta, page_ref, meta}` — onto the Page this ref names,
       once it is in the Chronicle
     * `{:persist_music_meta, page_ref, meta}` — likewise
@@ -109,7 +110,7 @@ defmodule Thereish.Foley.Occupancy do
   or nil. Under "page" a titled cache hit plays at once; otherwise Vamp, Track
   and title work is asked for. A Track still playing holds over.
   """
-  @spec page_opened(t(), term(), [String.t()], map() | nil, integer(), String.t()) ::
+  @spec page_opened(t(), page_ref(), gives(), map() | nil, integer(), String.t()) ::
           {t(), [effect()]}
   def page_opened(%__MODULE__{} = occ, page_ref, gives, cached, now, mode) do
     occ = %{forget_page(occ) | page_ref: page_ref, gives: gives, gives_landed_at: now}
@@ -123,7 +124,7 @@ defmodule Thereish.Foley.Occupancy do
   """
   @spec arrived(
           t(),
-          term(),
+          page_ref(),
           {:vamp | :track | :title, {:ok, map()} | {:error, term()}},
           boolean()
         ) ::
@@ -278,14 +279,14 @@ defmodule Thereish.Foley.Occupancy do
 
   defp arrive(occ, :track, {:ok, track}, true, page_ref, closed?) do
     title = track[:title] || occ.title
-    {_track, music_meta} = merge_track_meta(occ.music_meta, track, title, occ.title_meta)
+    {track, music_meta} = merge_track_meta(occ.music_meta, track, title, occ.title_meta)
     effects = [{:persist_music_meta, page_ref, music_meta}, log(occ, page_ref, "track landed")]
     occ = %{occ | track_running?: false, vamp: nil}
 
     if closed? do
       {occ, effects}
     else
-      {occ, cache} = play_track(occ, track, title, occ.title_meta)
+      {occ, cache} = put_track(occ, track, music_meta)
       {occ, effects ++ cache}
     end
   end
@@ -374,6 +375,10 @@ defmodule Thereish.Foley.Occupancy do
   # This Page's Track is on the Speaker, titled, and kept for the same Gives.
   defp play_track(occ, track, title, title_meta) do
     {track, music_meta} = merge_track_meta(occ.music_meta, track, title, title_meta)
+    put_track(occ, track, music_meta)
+  end
+
+  defp put_track(occ, track, music_meta) do
     occ = %{occ | track: track, track_page_ref: occ.page_ref, music_meta: music_meta}
     {occ, [{:cache_track, occ.gives, track}]}
   end

@@ -3658,10 +3658,14 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       await_phase(ctx.slug, :giving)
 
-      wait_until(3_000, fn ->
-        page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
-        Chronicle.page_vamp(page) != nil
-      end)
+      eventually(
+        fn ->
+          page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
+          Chronicle.page_vamp(page) != nil
+        end,
+        "the held-back result never landed",
+        3_000
+      )
 
       page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
       assert Chronicle.page_vamp(page).path =~ "/media/vamps/"
@@ -4019,10 +4023,14 @@ defmodule Thereish.RoomsTest do
       assert page_before.music_meta["failure"] == "unfinished"
       assert Thereish.Chronicle.page_track(page_before) == nil
 
-      wait_until(3_000, fn ->
-        [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
-        page_after.music_meta["path"] != nil
-      end)
+      eventually(
+        fn ->
+          [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+          page_after.music_meta["path"] != nil
+        end,
+        "the held-back result never landed",
+        3_000
+      )
 
       [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
       assert is_nil(page_after.music_meta["failure"])
@@ -4043,22 +4051,6 @@ defmodule Thereish.RoomsTest do
       {:ok, jacob} = Rooms.join(slug, "Jacob", token_b)
 
       %{slug: slug, mara: mara, jacob: jacob}
-    end
-
-    # For a Fake result held back long enough to land after the Page has
-    # closed: longer than `eventually/1` waits.
-    defp wait_until(ms, check) do
-      cond do
-        check.() ->
-          :ok
-
-        ms <= 0 ->
-          flunk("the held-back result never landed")
-
-        true ->
-          Process.sleep(10)
-          wait_until(ms - 10, check)
-      end
     end
 
     defp set_fake(opts) do
