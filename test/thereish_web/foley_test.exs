@@ -519,7 +519,7 @@ defmodule ThereishWeb.FoleyTest do
       first = hd(Thereish.Foley.Loops.all())
       socket = test_socket(ThereishWeb.StageLive)
 
-      # Waiting snapshots have no Page loop yet; the Room falls back to the first shipped loop.
+      # Waiting snapshots have no Page loop yet; the Room plays a Repertoire draw, here the first shipped loop.
       new_room = %{
         phase: :waiting,
         speaker?: true,
