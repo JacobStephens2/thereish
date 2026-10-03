@@ -96,8 +96,12 @@ _Avoid_: intro clip, placeholder track, bed (the listen report's word), stopgap,
 The instrumentals Foley may play when this night has no Track of its own on the Speaker yet — the five loops shipped with the game, and every Track that has been kept. A Room whose Chronicle already holds a Track is drawn from that Room's Tracks and the five loops; a Room with none is drawn from the whole set. The pick is a shuffle, not a fixed starter. A Room may mark a member Never so it is not drawn there again; the last remaining member cannot be.
 _Avoid_: library, catalog, playlist, pool, house book, house loop (the loops are members; the set is the Repertoire)
 
+**Occupancy**:
+What the Speaker is playing for a Room right now: this Page's Track, its Vamp, a held-over Track, or a Repertoire draw.
+_Avoid_: now playing (that is the Stage's label for it), soundtrack, audio state, music state
+
 **House**:
-Speaker occupancy that plays a shuffle from the Repertoire rather than this Page's Track. Not a verdict on the Track.
+An Occupancy that plays a shuffle from the Repertoire rather than this Page's Track. Not a verdict on the Track.
 _Avoid_: house loop (the loops are Repertoire members), "house loop only" (the earlier switch)
 
 **Never**:
