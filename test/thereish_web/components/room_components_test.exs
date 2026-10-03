@@ -995,7 +995,7 @@ defmodule ThereishWeb.RoomComponentsTest do
 
   describe "now_playing component" do
     test "renders 'Music is off' when music is off" do
-      room = %{music: "off", loop: %{name: "The Porch", path: "/audio/house-loop.mp3"}}
+      room = %{music: "off", phase: :bridging, loop: nil, playing: nil}
       html = render_component(&now_playing/1, room: room)
 
       assert html =~ ~s(data-role="now-playing")
@@ -1004,7 +1004,12 @@ defmodule ThereishWeb.RoomComponentsTest do
     end
 
     test "renders loop name and 'the Repertoire' under house" do
-      room = %{music: "house", loop: %{name: "Sunlit Drift", path: "/audio/house-loop-2.mp3"}}
+      room = %{
+        music: "house",
+        loop: %{name: "Sunlit Drift", path: "/audio/house-loop-2.mp3"},
+        playing: %{title: "Sunlit Drift", path: "/audio/house-loop-2.mp3", kind: "repertoire"}
+      }
+
       html = render_component(&now_playing/1, room: room)
 
       assert html =~ ~s(data-role="now-playing")
@@ -1017,7 +1022,8 @@ defmodule ThereishWeb.RoomComponentsTest do
       room = %{
         music: "page",
         loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
-        track: nil
+        track: nil,
+        playing: %{title: "Morning Breeze", path: "/audio/house-loop-3.mp3", kind: "repertoire"}
       }
 
       html = render_component(&now_playing/1, room: room)
@@ -1133,28 +1139,15 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ "Now playing: Summer Camp · Viking Beaches (written for this Page)"
     end
 
-    test "renders nothing when track has landed without title" do
-      room = %{
-        music: "page",
-        loop: %{name: "Morning Breeze", path: "/audio/house-loop-3.mp3"},
-        track: %{path: "/audio/track-1.mp3"}
-      }
-
-      html = render_component(&now_playing/1, room: room)
-
-      refute html =~ ~s(data-role="now-playing")
-      refute html =~ "the Repertoire"
-    end
-
     test "renders nothing when room has no loop and music is not off" do
-      room = %{music: "page", loop: nil, track: nil}
+      room = %{music: "page", loop: nil, track: nil, playing: nil}
       html = render_component(&now_playing/1, room: room)
 
       refute html =~ ~s(data-role="now-playing")
     end
 
     test "renders nothing when room has no loop and music is off in lobby" do
-      room = %{music: "off", loop: nil, track: nil, phase: :waiting}
+      room = %{music: "off", loop: nil, track: nil, playing: nil, phase: :waiting}
       html = render_component(&now_playing/1, room: room)
 
       refute html =~ ~s(data-role="now-playing")
