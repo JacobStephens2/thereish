@@ -61,7 +61,7 @@ defmodule Thereish.Foley.Occupancy do
   @type gives :: [String.t()]
 
   @type t :: %__MODULE__{
-          draw: Repertoire.member(),
+          draw: Repertoire.member() | nil,
           deal: [Repertoire.member()],
           members: [Repertoire.member()],
           page_ref: page_ref() | nil,
