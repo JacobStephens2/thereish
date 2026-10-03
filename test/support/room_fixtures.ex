@@ -231,10 +231,11 @@ defmodule Thereish.RoomFixtures do
   happened.
 
   For the handful of things a test cannot be handed synchronously: a beat
-  running out, a verdict arriving, a view catching up.
+  running out, a verdict arriving, a view catching up. It waits `within_ms`,
+  two seconds unless a slower thing is being waited for.
   """
-  def eventually(check, what \\ "the thing being waited for never happened") do
-    deadline = System.monotonic_time(:millisecond) + 2_000
+  def eventually(check, what \\ "the thing being waited for never happened", within_ms \\ 2_000) do
+    deadline = System.monotonic_time(:millisecond) + within_ms
 
     keep_trying(check, what, deadline)
   end

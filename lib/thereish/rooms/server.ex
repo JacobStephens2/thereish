@@ -1040,25 +1040,11 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp perform_occupancy_effect({:persist_vamp_meta, page_ref, meta}, state) do
-    case page_id(state, page_ref) do
-      nil ->
-        {state, false}
-
-      page_id ->
-        Chronicle.replace_page_vamp(page_id, meta)
-        {state, true}
-    end
+    persist_to_page(state, page_ref, &Chronicle.replace_page_vamp(&1, meta))
   end
 
   defp perform_occupancy_effect({:persist_music_meta, page_ref, meta}, state) do
-    case page_id(state, page_ref) do
-      nil ->
-        {state, false}
-
-      page_id ->
-        Chronicle.replace_page_music(page_id, meta)
-        {state, true}
-    end
+    persist_to_page(state, page_ref, &Chronicle.replace_page_music(&1, meta))
   end
 
   defp perform_occupancy_effect({:cache_track, gives, track}, state) do
@@ -1079,6 +1065,18 @@ defmodule Thereish.Rooms.Server do
   defp perform_occupancy_effect({:log, page_ref, event, gives_landed_at}, state) do
     log_music_event(state.room.slug, page_ref, event, gives_landed_at)
     {state, false}
+  end
+
+  # Writes onto the Chronicle Page a Page ref names, once that Page is recorded.
+  defp persist_to_page(state, page_ref, write) do
+    case page_id(state, page_ref) do
+      nil ->
+        {state, false}
+
+      page_id ->
+        write.(page_id)
+        {state, true}
+    end
   end
 
   defp cached_track(gives) do
