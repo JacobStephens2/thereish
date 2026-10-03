@@ -22,10 +22,10 @@ defmodule Thereish.Foley.OccupancyTest do
   defp table(overrides \\ %{}), do: Map.merge(%{music: "page", closed?: false}, overrides)
 
   # An Occupancy whose one eligible member, and so its draw, is @draw.
-  defp new(members \\ [@draw]), do: Occupancy.new(members)
+  defp occupancy(members \\ [@draw]), do: Occupancy.new(members)
 
   # A Page opened under "page" on a cache miss, with the effects it asked for.
-  defp opened(ref, occ \\ new(), cached \\ nil, mode \\ "page") do
+  defp opened(ref, occ \\ occupancy(), cached \\ nil, mode \\ "page") do
     Occupancy.page_opened(occ, ref, @gives, cached, 1_000, mode)
   end
 
@@ -43,7 +43,7 @@ defmodule Thereish.Foley.OccupancyTest do
   describe "a Page opens" do
     test "a cache hit plays the cached Track at once and starts no Vamp, Track or title work" do
       ref = make_ref()
-      {occ, effects} = opened(ref, new(), @cached)
+      {occ, effects} = opened(ref, occupancy(), @cached)
 
       assert kinds(effects) == [:log]
       assert logged(effects) == ["cache hit"]
@@ -59,7 +59,7 @@ defmodule Thereish.Foley.OccupancyTest do
     end
 
     test "a cache row with no title is a miss" do
-      {_occ, effects} = opened(make_ref(), new(), Map.put(@cached, :title, nil))
+      {_occ, effects} = opened(make_ref(), occupancy(), Map.put(@cached, :title, nil))
       assert :enqueue_track in kinds(effects)
     end
 
@@ -80,7 +80,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
     test "under house or off, nothing is looked for and nothing is started" do
       for mode <- ["house", "off"] do
-        {_occ, effects} = opened(make_ref(), new(), @cached, mode)
+        {_occ, effects} = opened(make_ref(), occupancy(), @cached, mode)
         assert effects == []
       end
     end
@@ -354,7 +354,7 @@ defmodule Thereish.Foley.OccupancyTest do
   describe "the music setting changing mid-Page" do
     test "to page asks for the TrackCache, then starts Track work on a miss" do
       ref = make_ref()
-      {occ, effects} = opened(ref, new(), nil, "house")
+      {occ, effects} = opened(ref, occupancy(), nil, "house")
       assert effects == []
 
       {occ, effects} = Occupancy.music_changed(occ, "page")
@@ -369,7 +369,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
     test "to page plays a Track the TrackCache holds by then" do
       ref = make_ref()
-      {occ, _} = opened(ref, new(), nil, "off")
+      {occ, _} = opened(ref, occupancy(), nil, "off")
 
       {occ, [{:look_up_track, ^ref, @gives}]} = Occupancy.music_changed(occ, "page")
       {occ, effects} = Occupancy.track_looked_up(occ, ref, @cached)
@@ -391,12 +391,12 @@ defmodule Thereish.Foley.OccupancyTest do
     end
 
     test "to page starts nothing with no Page open" do
-      assert {_occ, []} = Occupancy.music_changed(new(), "page")
+      assert {_occ, []} = Occupancy.music_changed(occupancy(), "page")
     end
 
     test "a TrackCache answer for a Page no longer current starts nothing" do
       ref = make_ref()
-      {occ, _} = opened(ref, new(), nil, "house")
+      {occ, _} = opened(ref, occupancy(), nil, "house")
       {occ, _} = Occupancy.music_changed(occ, "page")
       occ = Occupancy.gives_reset(occ)
 
@@ -404,7 +404,7 @@ defmodule Thereish.Foley.OccupancyTest do
     end
 
     test "to house or off starts nothing" do
-      {occ, _} = opened(make_ref(), new(), nil, "house")
+      {occ, _} = opened(make_ref(), occupancy(), nil, "house")
       assert {_occ, []} = Occupancy.music_changed(occ, "off")
       assert {_occ, []} = Occupancy.music_changed(occ, "house")
     end
@@ -429,7 +429,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
     test "house plays the Repertoire draw whatever Track exists" do
       ref = make_ref()
-      {occ, _} = opened(ref, new(@members))
+      {occ, _} = opened(ref, occupancy(@members))
       occ = arrive(occ, ref, {:track, {:ok, @track}})
 
       view = Occupancy.view(occ, table(%{music: "house"}))
@@ -449,7 +449,7 @@ defmodule Thereish.Foley.OccupancyTest do
     end
 
     test "the last remaining member is neither skipped nor refused" do
-      view = Occupancy.view(new(), table())
+      view = Occupancy.view(occupancy(), table())
       assert view.playing.kind == "repertoire"
       refute view.next?
       refute view.never?
@@ -458,13 +458,13 @@ defmodule Thereish.Foley.OccupancyTest do
 
   describe "the Repertoire draw" do
     test "a new Occupancy plays a draw from the members it was given" do
-      view = Occupancy.view(new(@members), table())
+      view = Occupancy.view(occupancy(@members), table())
       assert view.playing.kind == "repertoire"
       assert view.loop in @members
     end
 
     test "page_turned draws afresh from the members passed in, not repeating the last draw" do
-      occ = new(@members)
+      occ = occupancy(@members)
       before = Occupancy.view(occ, table()).loop
 
       occ = Occupancy.page_turned(occ, @members)
@@ -478,7 +478,7 @@ defmodule Thereish.Foley.OccupancyTest do
   describe "Next" do
     test "is refused on this Page's Track" do
       ref = make_ref()
-      {occ, _} = opened(ref, new(@members))
+      {occ, _} = opened(ref, occupancy(@members))
       occ = arrive(occ, ref, {:track, {:ok, @track}})
 
       refute Occupancy.view(occ, table()).next?
@@ -486,16 +486,16 @@ defmodule Thereish.Foley.OccupancyTest do
     end
 
     test "is refused with only one member" do
-      refute Occupancy.view(new(), table()).next?
-      assert Occupancy.next(new(), table()) == {:error, :refused}
+      refute Occupancy.view(occupancy(), table()).next?
+      assert Occupancy.next(occupancy(), table()) == {:error, :refused}
     end
 
     test "is refused under off" do
-      assert Occupancy.next(new(@members), table(%{music: "off"})) == {:error, :refused}
+      assert Occupancy.next(occupancy(@members), table(%{music: "off"})) == {:error, :refused}
     end
 
     test "on a Repertoire draw moves to another member" do
-      occ = new(@members)
+      occ = occupancy(@members)
       before = Occupancy.view(occ, table()).playing
 
       assert {:ok, occ, []} = Occupancy.next(occ, table())
@@ -506,7 +506,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
     test "on a holdover drops the held-over Track for a Repertoire draw" do
       ref = make_ref()
-      {occ, _} = opened(ref, new(@members))
+      {occ, _} = opened(ref, occupancy(@members))
       occ = arrive(occ, ref, {:track, {:ok, @track}})
       occ = Occupancy.page_turned(occ, @members)
       assert Occupancy.view(occ, table()).next?
@@ -516,10 +516,16 @@ defmodule Thereish.Foley.OccupancyTest do
       assert view.playing.kind == "repertoire"
       assert view.track == nil
       assert Occupancy.view(occ, table(%{closed?: true})).playing.kind == "repertoire"
+
+      next_ref = make_ref()
+      {occ, _} = opened(next_ref, occ)
+      occ = arrive(occ, next_ref, {:track, {:ok, Map.put(@track, :path, "/media/next.mp3")}})
+      assert Occupancy.view(occ, table()).playing.path == "/media/next.mp3"
+      assert Occupancy.view(occ, table()).playing.kind == "track"
     end
 
     test "moves through the deal without repeating, then reshuffles when it runs out" do
-      occ = new([@draw, @other, @third])
+      occ = occupancy([@draw, @other, @third])
       first = Occupancy.view(occ, table()).playing.path
 
       {:ok, occ, []} = Occupancy.next(occ, table())
@@ -539,7 +545,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
   describe "Never" do
     test "removes the playing member, asks for the Never to be recorded, and moves on" do
-      occ = new([@draw, @other, @third])
+      occ = occupancy([@draw, @other, @third])
       nevered = Occupancy.view(occ, table()).playing.path
 
       assert {:ok, occ, [{:record_never, ^nevered}]} = Occupancy.never(occ, table())
@@ -553,10 +559,10 @@ defmodule Thereish.Foley.OccupancyTest do
     end
 
     test "is refused on the last remaining member" do
-      refute Occupancy.view(new(), table()).never?
-      assert Occupancy.never(new(), table()) == {:error, :refused}
+      refute Occupancy.view(occupancy(), table()).never?
+      assert Occupancy.never(occupancy(), table()) == {:error, :refused}
 
-      {:ok, occ, _} = Occupancy.never(new(@members), table())
+      {:ok, occ, _} = Occupancy.never(occupancy(@members), table())
       refute Occupancy.view(occ, table()).never?
       refute Occupancy.view(occ, table()).next?
       assert Occupancy.never(occ, table()) == {:error, :refused}
@@ -564,7 +570,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
     test "on this Page's Track clears it from the Speaker, so it does not hold over" do
       ref = make_ref()
-      {occ, _} = opened(ref, new(@members))
+      {occ, _} = opened(ref, occupancy(@members))
       occ = arrive(occ, ref, {:track, {:ok, @track}})
       assert Occupancy.view(occ, table()).never?
 
@@ -579,7 +585,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
     test "on a holdover clears it from the Speaker" do
       ref = make_ref()
-      {occ, _} = opened(ref, new(@members))
+      {occ, _} = opened(ref, occupancy(@members))
       occ = arrive(occ, ref, {:track, {:ok, @track}})
       occ = Occupancy.page_turned(occ, @members)
 
@@ -588,20 +594,26 @@ defmodule Thereish.Foley.OccupancyTest do
       view = Occupancy.view(occ, table())
       assert view.playing.kind == "repertoire"
       assert view.track == nil
+
+      next_ref = make_ref()
+      {occ, _} = opened(next_ref, occ)
+      occ = arrive(occ, next_ref, {:track, {:ok, Map.put(@track, :path, "/media/next.mp3")}})
+      assert Occupancy.view(occ, table()).playing.path == "/media/next.mp3"
+      assert Occupancy.view(occ, table()).playing.kind == "track"
     end
   end
 
   describe "next? and never?" do
     test "agree with what next and never would do" do
       ref = make_ref()
-      {opened_occ, _} = opened(ref, new(@members))
+      {opened_occ, _} = opened(ref, occupancy(@members))
       vamping = arrive(opened_occ, ref, {:vamp, {:ok, @vamp}})
       tracked = arrive(opened_occ, ref, {:track, {:ok, @track}})
       held_over = Occupancy.page_turned(tracked, @members)
-      {:ok, last_left, _} = Occupancy.never(new(@members), table())
+      {:ok, last_left, _} = Occupancy.never(occupancy(@members), table())
 
       cases =
-        for occ <- [new(), new(@members), vamping, tracked, held_over, last_left],
+        for occ <- [occupancy(), occupancy(@members), vamping, tracked, held_over, last_left],
             music <- ["page", "house", "off"],
             closed? <- [false, true],
             do: {occ, table(%{music: music, closed?: closed?})}
