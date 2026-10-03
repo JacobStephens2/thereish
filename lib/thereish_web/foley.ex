@@ -98,69 +98,29 @@ defmodule ThereishWeb.Foley do
       new_room.phase == :bridging and
         (is_nil(old_room) or old_room.phase not in [:bridging, :assaying, :reveal])
 
-    track_info = resolve_track(new_room)
-    old_track_info = resolve_track(old_room)
+    payload = page_payload(new_room)
+    old_payload = page_payload(old_room)
 
     track_changed =
       is_music_phase? and not is_nil(old_room) and
-        (track_info.path != old_track_info.path or track_info.title != old_track_info.title or
-           track_info.kind != old_track_info.kind)
+        (payload.path != old_payload.path or payload.title != old_payload.title or
+           payload.kind != old_payload.kind)
 
     if (is_music_phase? and entered_music_phase?) or (is_music_phase? and just_claimed) or
          entered_bridging? or track_changed do
-      push_event(socket, "foley:page", track_info)
+      push_event(socket, "foley:page", payload)
     else
       socket
     end
   end
 
-  defp resolve_track(nil), do: %{path: nil, title: nil, kind: nil}
-
-  defp resolve_track(room) do
-    case to_string(Map.get(room, :music, "page")) do
-      "off" ->
-        %{path: nil, title: nil, kind: nil}
-
-      "house" ->
-        repertoire_payload(room)
-
-      _ ->
-        cond do
-          room[:playing] && room.playing[:path] ->
-            build_track_payload(room.playing, room.playing[:kind] || "repertoire")
-
-          room[:track] && room.track[:path] ->
-            build_track_payload(room.track, "track")
-
-          true ->
-            repertoire_payload(room)
-        end
-    end
+  # The Room has already resolved the music setting into `playing`, which is
+  # nil when nothing plays.
+  defp page_payload(%{playing: %{path: path} = playing}) when not is_nil(path) do
+    %{path: path, title: playing[:title], kind: to_string(playing[:kind] || "repertoire")}
   end
 
-  defp build_track_payload(item, kind) do
-    %{path: item.path, title: item[:title], kind: to_string(kind)}
-  end
-
-  defp repertoire_payload(room) do
-    item =
-      cond do
-        room[:playing] && room.playing[:kind] in ["repertoire", :repertoire] &&
-            room.playing[:path] ->
-          room.playing
-
-        room[:loop] ->
-          room.loop
-
-        true ->
-          hd(Thereish.Foley.Repertoire.shipped_loops())
-      end
-
-    title = item[:title] || item[:name] || "Track"
-    path = item.path
-
-    %{path: path, title: title, kind: "repertoire"}
-  end
+  defp page_payload(_room), do: %{path: nil, title: nil, kind: nil}
 
   defp maybe_stop_stale_voice(socket, old_room, new_room) do
     if not is_nil(old_room) and attempt_number(old_room) != attempt_number(new_room) do
