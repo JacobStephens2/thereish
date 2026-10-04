@@ -33,7 +33,7 @@ An identity that has claimed one or more Seats' histories, so a person's play ac
 _Avoid_: user, login, profile
 
 **Page**:
-One self-contained unit of play — ends cleanly in one sitting (about 10–15 minutes) and chains into the next. Every Page played is written into the Chronicle.
+One self-contained unit of play — ends cleanly in one sitting (about 10–15 minutes) and chains into the next. Every Page played is written into the Chronicle. A Page is played by the Seats that gave for it when the Author was asked; a Seat that joins after that watches the Page and plays from the next one.
 _Avoid_: board, round, hand, session, match
 
 **Chapter**:
