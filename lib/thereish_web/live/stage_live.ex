@@ -21,7 +21,6 @@ defmodule ThereishWeb.StageLive do
 
   import ThereishWeb.RoomComponents
 
-  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Code
 
@@ -229,19 +228,14 @@ defmodule ThereishWeb.StageLive do
               Waiting for Gives: {@room.gives_in} of {length(@room.seats)}
             </p>
             <div data-role="stage-cards" class="flex items-center justify-center gap-4 mt-2">
-              <%= for seat <- @room[:seats] || [] do %>
-                <%= if seat[:mask] == :face_down do %>
-                  <div
-                    data-role="mask-face-down"
-                    data-seat={seat.id}
-                    class="size-14 rounded-xl border-2 flex items-center justify-center text-2xl opacity-80 shadow-sm"
-                    style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 15%, transparent); color: var(--seat-color);"}
-                    title={"#{seat.name}'s Give landed"}
-                  >
-                    <span class="sr-only">{seat.name}</span> 🂠
-                  </div>
-                <% end %>
-              <% end %>
+              <div
+                :for={seat <- @room[:seats] || []}
+                :if={seat[:mask] == :face_down}
+                title={"#{seat.name}'s Give landed"}
+              >
+                <span class="sr-only">{seat.name}</span>
+                <.seat_mask seat={seat} size={:md} />
+              </div>
             </div>
           </section>
 
@@ -352,37 +346,11 @@ defmodule ThereishWeb.StageLive do
         data-color={seat[:colour]}
         data-state={if seat.committed?, do: "lit", else: "dim"}
         class="bridge-marker relative flex items-center justify-center rounded-xl border-2 p-1.5 transition-all"
-        style={"--seat-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
+        style={"--seat-color: #{seat_colour(seat)}"}
         title={seat.name}
       >
         <span class="sr-only">{seat.name}</span>
-        <%= if Mask.url(seat[:mask]) do %>
-          <img
-            src={Mask.url(seat.mask)}
-            alt={seat.name}
-            data-role="seat-mask"
-            class="size-14 rounded-lg object-cover border border-base-300 shadow-sm"
-          />
-        <% else %>
-          <%= if seat[:mask] == :face_down do %>
-            <div
-              data-role="mask-face-down"
-              class="size-14 rounded-lg border border-primary/40 bg-base-300 flex items-center justify-center text-2xl opacity-75 shadow-sm"
-              title="Mask face down"
-            >
-              🂠
-            </div>
-          <% else %>
-            <div class="size-14 flex items-center justify-center">
-              <span
-                data-role="seat-colour-dot"
-                class="size-6 rounded-full shadow-sm"
-                style={"background-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
-                aria-hidden="true"
-              ></span>
-            </div>
-          <% end %>
-        <% end %>
+        <.seat_mask seat={seat} size={:md} />
       </div>
     </section>
     """

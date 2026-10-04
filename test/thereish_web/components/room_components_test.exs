@@ -7,6 +7,103 @@ defmodule ThereishWeb.RoomComponentsTest do
 
   alias Thereish.Mask
 
+  describe "seat_mask (a Seat's Mask on every Room screen)" do
+    defp seat(mask, overrides \\ %{}) do
+      Map.merge(%{id: "s1", name: "Melissa", colour: "#e11d48", mask: mask}, overrides)
+    end
+
+    test "a drawn Mask is the picture, named for its Seat" do
+      mask = %Mask{url: "/media/masks/mask-melissa.png", meta: %{}}
+      html = render_component(&seat_mask/1, seat: seat(mask), size: :lg)
+
+      assert html =~ ~s(data-role="seat-mask")
+      assert html =~ ~s(src="/media/masks/mask-melissa.png")
+      assert html =~ ~s(alt="Melissa")
+      refute html =~ "mask-face-down"
+      refute html =~ "seat-colour-dot"
+    end
+
+    test "face down is the card, marked with its Seat and wearing its colour" do
+      html = render_component(&seat_mask/1, seat: seat(:face_down), size: :md)
+
+      assert html =~ ~s(data-role="mask-face-down")
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ ~s(title="Mask face down")
+      assert html =~ "🂠"
+      assert html =~ "--seat-color: #e11d48"
+      refute html =~ "seat-mask"
+      refute html =~ "seat-colour-dot"
+    end
+
+    test ":dot is the colour dot, hidden from screen readers" do
+      html = render_component(&seat_mask/1, seat: seat(:dot), size: :sm)
+
+      assert html =~ ~s(data-role="seat-colour-dot")
+      assert html =~ ~s(aria-hidden="true")
+      assert html =~ "#e11d48"
+      refute html =~ "seat-mask"
+      refute html =~ "mask-face-down"
+    end
+
+    test "no Mask yet draws the same dot as :dot" do
+      assert render_component(&seat_mask/1, seat: seat(nil), size: :sm) ==
+               render_component(&seat_mask/1, seat: seat(:dot), size: :sm)
+    end
+
+    test "a Mask without a URL draws the dot" do
+      html =
+        render_component(&seat_mask/1, seat: seat(%Mask{url: nil, meta: %{}}), size: :sm)
+
+      assert html =~ ~s(data-role="seat-colour-dot")
+    end
+
+    test "a Seat with no colour falls back to the primary colour" do
+      for mask <- [:face_down, :dot] do
+        html = render_component(&seat_mask/1, seat: seat(mask, %{colour: nil}), size: :md)
+        assert html =~ "var(--color-primary, currentColor)"
+      end
+    end
+
+    test "at a badge size the dot is bare" do
+      html = render_component(&seat_mask/1, seat: seat(:dot), size: :xs)
+
+      assert html =~ ~r/\A\s*<span[^>]*data-role="seat-colour-dot"/
+    end
+
+    test "from :md up the dot sits in a tile the size of a picture" do
+      mask = %Mask{url: "/media/masks/mask-melissa.png", meta: %{}}
+
+      for size <- [:md, :lg] do
+        dot = render_component(&seat_mask/1, seat: seat(:dot), size: size)
+        picture = render_component(&seat_mask/1, seat: seat(mask), size: size)
+        face_down = render_component(&seat_mask/1, seat: seat(:face_down), size: size)
+
+        refute dot =~ ~r/\A\s*<span[^>]*data-role="seat-colour-dot"/
+        assert dot =~ ~s(data-role="seat-colour-dot")
+
+        square = square_class(picture)
+        assert square == square_class(dot)
+        assert square == square_class(face_down)
+      end
+    end
+
+    test "at :xl the picture fills the square and the dot stays bare" do
+      mask = %Mask{url: "/media/masks/mask-melissa.png", meta: %{}}
+
+      assert render_component(&seat_mask/1, seat: seat(mask), size: :xl) =~ "size-24"
+
+      assert render_component(&seat_mask/1, seat: seat(:dot), size: :xl) =~
+               ~r/\A\s*<span[^>]*data-role="seat-colour-dot"/
+    end
+
+    # The size class of the outermost element.
+    defp square_class(html) do
+      [_, class] = Regex.run(~r/\A\s*<\w+[^>]*class="([^"]*)"/, html)
+      [size] = Regex.run(~r/\bsize-\d+\b/, class)
+      size
+    end
+  end
+
   describe "assaying component (the beat)" do
     test "the 2.5s beat is visibly a beat, not a spinner" do
       room = %{
