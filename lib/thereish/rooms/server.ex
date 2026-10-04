@@ -611,7 +611,7 @@ defmodule Thereish.Rooms.Server do
   defp perform({:chronicle, entry}, state) do
     entry =
       entry
-      |> Map.merge(Occupancy.chronicle_meta(state.occupancy, state.room.music))
+      |> struct!(Occupancy.chronicle_meta(state.occupancy, state.room.music))
       |> then(&Pacing.stamp(state.pacing, &1))
 
     state
@@ -1075,7 +1075,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp commit_chronicle(entry, state) do
-    {:ok, page} = Chronicle.write(state.room.id, entry, entry.opened_at)
+    {:ok, page} = Chronicle.write(state.room.id, entry)
 
     arm = (entry.author_meta && entry.author_meta["arm"]) || Pages.arm(state.pages) || :flash
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
