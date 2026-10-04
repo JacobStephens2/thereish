@@ -4,6 +4,8 @@ defmodule Mix.Tasks.Foley.BakeoffTest do
   """
   use Thereish.DataCase, async: false
 
+  import Thereish.EntryFixtures
+
   alias Mix.Tasks.Foley.Bakeoff
 
   setup do
@@ -23,6 +25,18 @@ defmodule Mix.Tasks.Foley.BakeoffTest do
 
     assert output =~ dir
     assert output =~ "Baked off 5 quip(s)"
+
+    # DUST is not in the database, so its Quips are read from the exported
+    # Chronicle in priv/chronicles/dust.md: the last five, oldest first.
+    quips = dir |> Path.join("quips.txt") |> File.read!() |> String.split("\n", trim: true)
+
+    assert length(quips) == 5
+
+    assert List.first(quips) ==
+             "01: Both of you served up plate, proving great minds dish out the same thoughts."
+
+    assert List.last(quips) ==
+             "05: One brought the raw ingredient while the other rolled the meat into a tidy meatball."
 
     # Verify audio files exist
     for idx <- 1..5 do
@@ -62,6 +76,29 @@ defmodule Mix.Tasks.Foley.BakeoffTest do
     assert File.exists?(Path.join(dir, "02-a.mp3"))
     assert File.exists?(Path.join(dir, "02-b.mp3"))
     refute File.exists?(Path.join(dir, "03-a.mp3"))
+  end
+
+  test "reads a Room in the database from its Page views, last N oldest first", %{dir: dir} do
+    slug = "bakeoff-#{System.unique_integer([:positive])}"
+    {:ok, room} = Thereish.Rooms.Store.insert_room(slug, 2, nil)
+
+    for {quips, index} <- Enum.with_index([["first", ""], ["second", "third"]], 1) do
+      attempts =
+        quips
+        |> Enum.with_index(1)
+        |> Enum.map(fn {quip, number} -> %{number: number, verdicts: [%{quip: quip}]} end)
+
+      opened_at = DateTime.add(DateTime.utc_now(), index, :second)
+
+      {:ok, _page} =
+        Thereish.Chronicle.write(room.id, entry(opened_at: opened_at, attempts: attempts))
+    end
+
+    ExUnit.CaptureIO.capture_io(fn ->
+      Bakeoff.run(["--room", String.upcase(slug), "--count", "2", "--dir", dir])
+    end)
+
+    assert File.read!(Path.join(dir, "quips.txt")) == "01: second\n02: third\n"
   end
 
   test "raises when room has no chronicle or quips", %{dir: dir} do

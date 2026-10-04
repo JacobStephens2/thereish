@@ -8,14 +8,16 @@ defmodule Thereish.Steward.Digest do
   and how each one reads is decided here, behind the seam, so that no caller has
   to pick a flavour of digest and no adapter has to remember a rule.
 
-  There are two readers. The Author reads the Chronicle as it was played, grades
-  and all, and naming a Room reads it the same way. The Scribe reads it with
-  every recap and callback it has already written folded in, and with no grade
-  anywhere: the closeness never crosses to the Scribe (ADR-0006), whether it is
-  tonight's Page or one from last month.
+  There are three readers. The Author reads the Chronicle as it was played,
+  grades and all, and naming a Room reads it the same way. The Scribe reads it
+  with every recap and callback it has already written folded in, and with no
+  grade anywhere: the closeness never crosses to the Scribe (ADR-0006), whether
+  it is tonight's Page or one from last month. The Assayer reads only the
+  recent Quips, so that its comedy does not repeat a construction.
   """
 
   @empty "Nothing yet; this is the first Page."
+  @assayer_quips 5
 
   @doc """
   The Chronicle as the Author reads it before writing Bookends, and as the
@@ -39,6 +41,26 @@ defmodule Thereish.Steward.Digest do
   """
   @spec scribe([map()]) :: String.t()
   def scribe(views), do: compose(views, :scribe)
+
+  @doc """
+  The Quips the Assayer may see before it writes the next one: the last five,
+  oldest first.
+
+  The Chronicle's come first, in play order, then this Page's earlier Attempts
+  from the assay request. Blank Quips are dropped. An Attempt written before
+  ADR-0010, graded one pair at a time, gives each of its verdicts' Quips.
+
+  A list rather than prose, because the Assayer's prompt lists them itself.
+  """
+  @spec assayer([map()], map()) :: [String.t()]
+  def assayer(views, request) do
+    chronicle = for page <- views, attempt <- page.attempts, v <- attempt.verdicts, do: v[:quip]
+    this_page = for attempt <- Map.get(request, :earlier_attempts, []), do: attempt[:quip]
+
+    (chronicle ++ this_page)
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.take(-@assayer_quips)
+  end
 
   defp compose([], _reader), do: @empty
 

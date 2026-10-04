@@ -828,7 +828,7 @@ defmodule Thereish.Game do
   # names as furthest apart all read in the order they are on the screen.
   #
   # assay-4 carries Bookends of two or more, Bridges with player names in roster
-  # order, earlier Attempts, and Gives.
+  # order, earlier Attempts with their Quips, and Gives.
   defp assay(state), do: {:assay, assay_request_overall(state)}
 
   defp assay_request_overall(state) do
@@ -854,12 +854,19 @@ defmodule Thereish.Game do
             bridges:
               Enum.map(seats, fn seat ->
                 %{name: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
-              end)
+              end),
+            quip: attempt_quip(attempt)
           }
         end),
       gives: gives_for_assay(state)
     }
   end
+
+  # The Assayer reads this Page's earlier Quips beside the Chronicle's, so that
+  # its comedy does not repeat itself (`Thereish.Steward.Digest.assayer/2`).
+  # Neither the Precedent's key nor the prompt's earlier Attempts read it.
+  defp attempt_quip(%{verdict: %{quip: quip}}), do: quip
+  defp attempt_quip(_attempt), do: nil
 
   defp gives_for_assay(state) do
     cond do

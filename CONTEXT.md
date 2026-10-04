@@ -189,7 +189,7 @@ The persistent, player-visible record of one Room's play history — its Pages, 
 _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)
 
 **Digest**:
-The Chronicle as a Steward role reads it before writing: every earlier Page in words, cut to what that role may know. The Scribe's never carries a grade.
+The Chronicle as a Steward role reads it before writing: every earlier Page in words, cut to what that role may know. The Scribe's never carries a grade. The Assayer's is only the last few Quips, so its comedy does not repeat itself.
 _Avoid_: summary, history, context, memory
 
 **Spend**:

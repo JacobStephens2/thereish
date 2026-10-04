@@ -1163,6 +1163,41 @@ defmodule Thereish.GameTest do
       end
     end
 
+    test "each earlier Attempt in the assay request carries its Quip, or nil without one" do
+      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+      [{:assay, request}] = assays(effects)
+
+      assert request.earlier_attempts == []
+
+      verdict = %{
+        closeness: 10,
+        reasoning: "because",
+        quip: "A cairn walks into a lighthouse.",
+        furthest: request.bridges,
+        meta: %{}
+      }
+
+      {:ok, state, _effects} = Game.apply(state, {:verdict_received, verdict})
+
+      {state, effects} =
+        commit_all(again(state), [{"Mara", "stone"}, {"Jacob", "signal"}])
+
+      [{:assay, request}] = assays(effects)
+      assert [%{number: 1, quip: "A cairn walks into a lighthouse."}] = request.earlier_attempts
+
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
+
+      {_state, effects} =
+        commit_all(again(state), [{"Mara", "granite"}, {"Jacob", "flare"}])
+
+      [{:assay, request}] = assays(effects)
+
+      assert Enum.map(request.earlier_attempts, &{&1.number, &1.quip}) == [
+               {1, "A cairn walks into a lighthouse."},
+               {2, nil}
+             ]
+    end
+
     test "the Page keeps the Bookends it was authored with" do
       {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
 
