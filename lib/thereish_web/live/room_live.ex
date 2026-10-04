@@ -410,13 +410,7 @@ defmodule ThereishWeb.RoomLive do
         </p>
       </div>
 
-      <div
-        :if={
-          @seat && !@room[:late?] && @room.phase == :giving && @room.your_give != nil &&
-            @room.gives_in >= 2
-        }
-        class="flex justify-center"
-      >
+      <div :if={may?(@room, :start_page)} class="flex justify-center">
         <.button phx-click="start_page" data-role="start-page" variant="primary">
           Start Page
         </.button>
@@ -440,8 +434,17 @@ defmodule ThereishWeb.RoomLive do
           The Author couldn't write from these Gives: {@room.author_failure}
         </p>
         <div class="flex gap-2 mt-2">
-          <.button phx-click="retry_author" data-role="retry-author" variant="primary">Try again</.button>
-          <.button phx-click="reset_gives" data-role="reset-gives">New Gives</.button>
+          <.button
+            :if={may?(@room, :retry_author)}
+            phx-click="retry_author"
+            data-role="retry-author"
+            variant="primary"
+          >
+            Try again
+          </.button>
+          <.button :if={may?(@room, :reset_gives)} phx-click="reset_gives" data-role="reset-gives">
+            New Gives
+          </.button>
         </div>
       </div>
       <.attempt :if={@seat} room={@room} />
