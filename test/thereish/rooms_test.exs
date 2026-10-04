@@ -2613,6 +2613,7 @@ defmodule Thereish.RoomsTest do
       [page] = eventually(fn -> Chronicle.pages(room.id) |> then(&(&1 != [] and &1)) end)
 
       assert DateTime.compare(page.opened_at, refused_at) == :lt
+      assert length(page.gives) == 2
 
       for give <- page.gives do
         assert %DateTime{} = give.arrived_at

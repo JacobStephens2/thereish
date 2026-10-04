@@ -153,8 +153,8 @@ defmodule Thereish.Rooms.Pacing do
 
     pacing =
       pacing
-      |> opened(new_phase, now)
-      |> record_times(old_game, new_game, old_phase, new_phase, now)
+      |> open_page(new_phase, now)
+      |> record_times(old_game, new_game, {old_phase, new_phase}, now)
 
     cond do
       old_phase == :assaying and revealed?(new_phase) -> hold(pacing, now)
@@ -334,27 +334,30 @@ defmodule Thereish.Rooms.Pacing do
     %{pacing | author: nil, opened_at: nil, times: %{gives: %{}, attempts: %{}}}
   end
 
-  defp opened(%{opened_at: nil} = pacing, phase, now) when phase != :waiting do
+  defp open_page(%{opened_at: nil} = pacing, phase, now) when phase != :waiting do
     %{pacing | opened_at: now.at}
   end
 
-  defp opened(pacing, _phase, _now), do: pacing
+  defp open_page(pacing, _phase, _now), do: pacing
 
   # Each edge names the times it records. A Give is recorded when its Seat
   # first appears among the Gives; coming back to giving from elsewhere starts
   # the Gives' times over.
-  defp record_times(pacing, old_game, new_game, old_phase, new_phase, now) do
+  defp record_times(pacing, old_game, new_game, edge, now) do
     times = pacing.times
 
     gives =
-      if old_phase != :giving and new_phase == :giving, do: %{}, else: times.gives
+      case edge do
+        {old_phase, :giving} when old_phase != :giving -> %{}
+        _edge -> times.gives
+      end
 
     gives =
       (Map.keys(new_game.gives) -- Map.keys(old_game.gives))
       |> Enum.reduce(gives, &Map.put_new(&2, &1, now.at))
 
     attempts =
-      case {old_phase, new_phase} do
+      case edge do
         {:bridging, :assaying} ->
           put_attempt(times.attempts, new_game.attempt, :assaying_started_at, now)
 

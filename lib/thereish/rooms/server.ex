@@ -21,9 +21,9 @@ defmodule Thereish.Rooms.Server do
   ## Time is Pacing's
 
   The Beat, the reveal hold, both escalation ladders and when each part of a
-  Page happened are rules about time, and they live in `Thereish.Rooms.Pacing`. This process tells Pacing what
-  happened and when, and performs what it asks: a timer, some Game events, a
-  broadcast.
+  Page happened are rules about time, and they live in
+  `Thereish.Rooms.Pacing`. This process tells Pacing what happened and when,
+  and performs what it asks: a timer, some Game events, a broadcast.
   """
   use GenServer, restart: :permanent
 
