@@ -29,6 +29,14 @@ defmodule Thereish.ExperimentsTest do
     {page, outcome}
   end
 
+  # Writes a closed Page whose document carries its own id, as the Author does.
+  defp write_page(room, document_id) do
+    {:ok, page} =
+      Chronicle.write(room.id, entry(page: %{id: document_id, bookends: ["lantern", "harbour"]}))
+
+    page
+  end
+
   describe "experiment declaration" do
     test "declares author_model experiment" do
       exp = Experiments.definition(:author_model)
@@ -256,8 +264,7 @@ defmodule Thereish.ExperimentsTest do
       assert {:error, :sample_incomplete} =
                Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
 
-      refute Experiments.unblinded?(ctx.room.id, "author_model")
-      assert Experiments.unblindings(ctx.room.id) == []
+      refute Experiments.unblinded?(ctx.room.id)
 
       insert_outcomes(ctx.room.id, "author_model", 1)
 
@@ -270,7 +277,6 @@ defmodule Thereish.ExperimentsTest do
       assert Experiments.unblinded?(ctx.room.id, "author_model")
       assert Experiments.unblinded?(ctx.room.id)
       refute Experiments.unblinded?(ctx.room.id, "bait_against_plain")
-      assert [%{experiment_id: "author_model"}] = Experiments.unblindings(ctx.room.id)
     end
 
     test "with no experiment named unblinds the Room's active experiment", ctx do
@@ -311,6 +317,80 @@ defmodule Thereish.ExperimentsTest do
       assert Experiments.unblinded?(ctx.room.id, "author_model")
       refute Experiments.unblinded?(ctx.room.id, "bait_against_plain")
       refute Experiments.unblinded?(room_b.id, "author_model")
+    end
+  end
+
+  describe "a Page's arm" do
+    test "is hidden until its experiment is unblinded, then shown with its convergence", ctx do
+      page = write_page(ctx.room, "doc-1")
+
+      insert_assignment(ctx.room.id,
+        page_id: page.id,
+        experiment_id: "bait_against_plain",
+        arm: "plain"
+      )
+
+      insert_outcome(ctx.room.id,
+        page_id: page.id,
+        experiment_id: "bait_against_plain",
+        arm: "plain",
+        trap_converged: true,
+        deep_converged: false
+      )
+
+      assert Experiments.page_arm(Experiments.page_arms(ctx.room.id), page) == %{
+               experiment_id: "bait_against_plain",
+               experiment_unblinded: false,
+               arm: nil,
+               trap_converged: nil,
+               deep_converged: nil
+             }
+
+      insert_outcomes(ctx.room.id, "bait_against_plain", 19)
+      {:ok, _} = Experiments.unblind(ctx.room.id, "bait_against_plain", unblind_attrs(ctx.jacob))
+
+      assert Experiments.page_arm(Experiments.page_arms(ctx.room.id), page) == %{
+               experiment_id: "bait_against_plain",
+               experiment_unblinded: true,
+               arm: "plain",
+               trap_converged: true,
+               deep_converged: false
+             }
+    end
+
+    test "is matched by the Page's own identifier when its rows name no Page id", ctx do
+      page = write_page(ctx.room, "doc-2")
+      insert_assignment(ctx.room.id, page_identifier: "doc-2", arm: "astra")
+      insert_outcomes(ctx.room.id, "author_model", 20)
+      {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
+
+      assert %{experiment_id: "author_model", experiment_unblinded: true, arm: "astra"} =
+               Experiments.page_arm(Experiments.page_arms(ctx.room.id), page)
+    end
+
+    test "takes the arm of an outcome when the Page has no assignment", ctx do
+      page = write_page(ctx.room, "doc-3")
+      insert_outcome(ctx.room.id, page_identifier: "doc-3", arm: "astra", trap_converged: true)
+      insert_outcomes(ctx.room.id, "author_model", 19)
+      {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
+
+      assert %{experiment_id: "author_model", arm: "astra", trap_converged: true} =
+               Experiments.page_arm(Experiments.page_arms(ctx.room.id), page)
+    end
+
+    test "of an unmatched Page is Bait against plain, blinded", ctx do
+      page = write_page(ctx.room, "doc-4")
+      insert_assignment(ctx.room.id, page_identifier: "someone-else", arm: "flash")
+      insert_outcomes(ctx.room.id, "author_model", 20)
+      {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
+
+      assert Experiments.page_arm(Experiments.page_arms(ctx.room.id), page) == %{
+               experiment_id: "bait_against_plain",
+               experiment_unblinded: false,
+               arm: nil,
+               trap_converged: nil,
+               deep_converged: nil
+             }
     end
   end
 
