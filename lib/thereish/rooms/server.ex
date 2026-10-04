@@ -230,10 +230,10 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp perform({:ask_author, ref, request, arm}, state, _now) do
-    digest = Chronicle.digest(state.room.id)
+    chronicle = Chronicle.page_views(state.room.id, :asc)
 
     Steward.answer_later(
-      fn -> Steward.author(request, job: arm, digest: digest) end,
+      fn -> Steward.author(request, job: arm, chronicle: chronicle) end,
       &{:author_completed, ref, &1}
     )
 

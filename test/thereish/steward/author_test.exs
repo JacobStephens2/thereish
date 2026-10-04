@@ -255,6 +255,58 @@ defmodule Thereish.Steward.AuthorTest do
       assert is_float(result.meta.cost_usd) and result.meta.cost_usd > 0
     end
 
+    test "reads the Room's Page views as the Author's digest" do
+      gives = [
+        %{seat_id: "s1", name: "Alice", text: "walking along the beach"},
+        %{seat_id: "s2", name: "Bob", text: "deep inside the forest"}
+      ]
+
+      test = self()
+
+      recorded_author(fn conn, body ->
+        [%{"content" => user_prompt}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
+        send(test, {:asked, user_prompt})
+
+        legal = author_json(bookends: ["ocean", "woods"], from: ["Alice", "Bob"])
+        Req.Test.json(conn, author_response(legal))
+      end)
+
+      chronicle = [
+        %{
+          bookends: ["candy", "cane"],
+          gives: [],
+          give: nil,
+          melded: true,
+          closeness: 88,
+          attempts: [
+            %{
+              number: 1,
+              bridges: [%{seat_name: "Alice", bridge: "hook"}],
+              verdicts: [%{bridges: ["hook"], closeness: 88, band: "meld", reasoning: nil}]
+            }
+          ],
+          overrules: [],
+          corrections: [],
+          recap: %{recap: "Alice wrote hook.", callback: nil}
+        }
+      ]
+
+      assert {:ok, _result} = Steward.author(%{gives: gives}, chronicle: chronicle)
+      assert_received {:asked, prompt}
+      assert prompt =~ "Chronicle digest:\n" <> Thereish.Steward.Digest.author(chronicle)
+      refute prompt =~ "Alice wrote hook."
+
+      assert {:ok, _result} = Steward.author(%{gives: gives}, chronicle: [])
+      assert_received {:asked, prompt}
+      assert prompt =~ "Chronicle digest:\nNothing yet; this is the first Page."
+
+      # A digest the caller wrote itself never reaches the adapter.
+      assert {:ok, _result} = Steward.author(%{gives: gives}, digest: "Page 1 (closeness: 91)")
+      assert_received {:asked, prompt}
+      assert prompt =~ "Chronicle digest:\nNothing yet; this is the first Page."
+      refute prompt =~ "91"
+    end
+
     test "rejects if retries are spent without a valid response" do
       agent = counts()
       gives = [%{seat_id: "s1", name: "Alice", text: "walking along the beach"}]
