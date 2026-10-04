@@ -46,6 +46,31 @@ defmodule ThereishWeb.ChronicleLiveTest do
     )
   end
 
+  # A closed Page where both Seats wore a Mask and only `givers` gave.
+  defp write_masked_page(ctx, givers) do
+    room = Repo.get_by!(Room, slug: ctx.slug)
+
+    {:ok, _page} =
+      Chronicle.write(
+        room.id,
+        entry(%{
+          opened_at: DateTime.utc_now(),
+          page: %{bookends: ["desert", "oasis"]},
+          gives: Enum.map(givers, &%{seat_id: &1.id, text: "setting #{&1.name}"}),
+          masks: %{
+            ctx.melissa.id => %Mask{url: "/media/masks/mask-melissa.png", meta: %{}},
+            ctx.jacob.id => %Mask{url: "/media/masks/mask-jacob.png", meta: %{}}
+          },
+          closed_because: :meld,
+          melded?: true,
+          closeness: 90,
+          attempts: []
+        })
+      )
+  end
+
+  defp count_of(html, needle), do: length(String.split(html, needle)) - 1
+
   describe "what the Scribe wrote" do
     test "is on the Page it was written about", %{conn: conn, slug: slug} = ctx do
       play(ctx, "cairn", "cairns")
@@ -378,6 +403,43 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert has_element?(view, "[data-role=page-mask]")
     end
 
+    test "a Page whose Seats all gave shows each Mask once, on its Give, and no Masks row",
+         %{conn: conn, slug: slug} = ctx do
+      write_masked_page(ctx, [ctx.melissa, ctx.jacob])
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      refute has_element?(view, "[data-role=page-masks]")
+
+      for name <- ["melissa", "jacob"] do
+        src = "/media/masks/mask-#{name}.png"
+        assert has_element?(view, "[data-role=give-tag] [data-role=page-mask][src='#{src}']")
+        assert view |> render() |> count_of(~s(src="#{src}")) == 1
+      end
+    end
+
+    test "a Mask whose Seat gave nothing on the Page reads in the Masks row",
+         %{conn: conn, slug: slug} = ctx do
+      write_masked_page(ctx, [ctx.jacob])
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      assert has_element?(
+               view,
+               "[data-role=page-masks] [data-role=page-mask][src='/media/masks/mask-melissa.png']"
+             )
+
+      refute has_element?(
+               view,
+               "[data-role=page-masks] [data-role=page-mask][src='/media/masks/mask-jacob.png']"
+             )
+
+      assert has_element?(
+               view,
+               "[data-role=give-tag] [data-role=page-mask][src='/media/masks/mask-jacob.png']"
+             )
+    end
+
     test "a Chronicle Mask opens in an enlarged view and closes with a labelled control",
          %{conn: conn, slug: slug} = ctx do
       play(ctx, "cairn", "cairns")
@@ -687,8 +749,8 @@ defmodule ThereishWeb.ChronicleLiveTest do
       eventually(fn ->
         pages = Chronicle.page_views(ctx.slug)
 
-        pages != [] and Chronicle.page_vamp(hd(pages)) != nil and
-          Chronicle.page_track(hd(pages)) != nil
+        pages != [] and hd(pages).vamp != nil and
+          hd(pages).track != nil
       end)
 
       [page] = Chronicle.page_views(ctx.slug)

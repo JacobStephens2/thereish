@@ -377,40 +377,6 @@ defmodule Thereish.Chronicle do
   def from_markdown(markdown), do: Thereish.Chronicle.Markdown.parse(markdown)
 
   @doc """
-  Extracts track information (`%{path: path, title: title}`) from a Page or page view map
-  when it kept its Track and the Track has a title: the book shows only a titled Track.
-  Answers `nil` otherwise.
-  """
-  @spec page_track(map() | struct() | nil) :: %{path: String.t(), title: String.t()} | nil
-  def page_track(nil), do: nil
-
-  def page_track(page) when is_map(page) do
-    case Map.get(page, :music_meta) do
-      %Track{title: title} = track when is_binary(title) and title != "" ->
-        if Track.kept?(track), do: %{path: track.path, title: title}
-
-      _ ->
-        nil
-    end
-  end
-
-  @doc """
-  Extracts Vamp information (`%{path: path, duration: duration, loop: loop}`) from a Page
-  or page view map when it kept its Vamp. Answers `nil` otherwise.
-  """
-  @spec page_vamp(map() | struct() | nil) ::
-          %{path: String.t(), duration: integer() | nil, loop: boolean()} | nil
-  def page_vamp(nil), do: nil
-
-  def page_vamp(page) when is_map(page) do
-    vamp = Map.get(page, :vamp_meta)
-
-    if Vamp.kept?(vamp) do
-      %{path: vamp.path, duration: vamp.duration, loop: vamp.loop not in [nil, false]}
-    end
-  end
-
-  @doc """
   Replaces the Track on an existing Chronicle page.
   """
   @spec replace_page_music(Ecto.UUID.t() | Page.t(), Track.t()) ::

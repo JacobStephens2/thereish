@@ -2633,11 +2633,11 @@ defmodule Thereish.RoomsTest do
       await_reveal(ctx.slug)
 
       eventually(fn ->
-        pages = Thereish.Chronicle.page_views(ctx.slug)
+        pages = page_rows(ctx.slug)
         pages != [] and hd(pages).music_meta != nil
       end)
 
-      [page | _] = Thereish.Chronicle.page_views(ctx.slug)
+      [page | _] = page_rows(ctx.slug)
       assert %Track{failure: failure} = page.music_meta
       assert failure != nil
     end
@@ -2725,11 +2725,11 @@ defmodule Thereish.RoomsTest do
       await_reveal(ctx.slug)
 
       eventually(fn ->
-        pages = Thereish.Chronicle.page_views(ctx.slug)
+        pages = page_rows(ctx.slug)
         pages != [] and hd(pages).music_meta != nil
       end)
 
-      [page | _] = Thereish.Chronicle.page_views(ctx.slug)
+      [page | _] = page_rows(ctx.slug)
       assert %Track{meta: %{"provider" => "fake", "cost_usd" => cost}} = page.music_meta
       assert cost != nil
     end
@@ -3033,14 +3033,14 @@ defmodule Thereish.RoomsTest do
 
       eventually(fn ->
         pages = Chronicle.page_views(ctx.slug)
-        pages != [] and Chronicle.page_vamp(hd(pages)) != nil
+        pages != [] and hd(pages).vamp != nil
       end)
 
       stop_room(ctx.slug)
 
       [page] = Chronicle.page_views(ctx.slug)
-      assert Chronicle.page_vamp(page).path == vamp_path
-      assert Chronicle.page_track(page).path == track_path
+      assert page.vamp.path == vamp_path
+      assert page.track.path == track_path
       refute vamp_path == track_path
     end
 
@@ -3070,14 +3070,14 @@ defmodule Thereish.RoomsTest do
       eventually(
         fn ->
           page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
-          Chronicle.page_vamp(page) != nil
+          page.vamp != nil
         end,
         "the held-back result never landed",
         3_000
       )
 
       page = Enum.find(Chronicle.page_views(ctx.slug), &(&1.id == closed_page.id))
-      assert Chronicle.page_vamp(page).path =~ "/media/vamps/"
+      assert page.vamp.path =~ "/media/vamps/"
 
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert is_nil(view[:vamp])
@@ -3103,8 +3103,8 @@ defmodule Thereish.RoomsTest do
       eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
 
       [page] = Chronicle.page_views(ctx.slug)
-      assert Chronicle.page_vamp(page) == nil
-      assert Chronicle.page_track(page) != nil
+      assert page.vamp == nil
+      assert page.track != nil
     end
 
     test "House playback does not write a Vamp onto the Page, and does not replace a kept one",
@@ -3124,8 +3124,8 @@ defmodule Thereish.RoomsTest do
       eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
 
       [house_page] = Chronicle.page_views(ctx.slug)
-      assert Chronicle.page_vamp(house_page) == nil
-      assert Chronicle.page_track(house_page) == nil
+      assert house_page.vamp == nil
+      assert house_page.track == nil
 
       :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
       await_phase(ctx.slug, :giving)
@@ -3146,18 +3146,18 @@ defmodule Thereish.RoomsTest do
 
       eventually(fn ->
         pages = Chronicle.page_views(ctx.slug)
-        length(pages) == 2 and Chronicle.page_vamp(hd(pages)) != nil
+        length(pages) == 2 and hd(pages).vamp != nil
       end)
 
       [kept | _] = Chronicle.page_views(ctx.slug)
-      vamp_path = Chronicle.page_vamp(kept).path
-      track_path = Chronicle.page_track(kept).path
+      vamp_path = kept.vamp.path
+      track_path = kept.track.path
 
       :ok = Rooms.set_music(ctx.slug, "house")
 
       [after_house | _] = Chronicle.page_views(ctx.slug)
-      assert Chronicle.page_vamp(after_house).path == vamp_path
-      assert Chronicle.page_track(after_house).path == track_path
+      assert after_house.vamp.path == vamp_path
+      assert after_house.track.path == track_path
     end
 
     test "a cache hit writes no Vamp onto the closed Page", ctx do
@@ -3194,8 +3194,8 @@ defmodule Thereish.RoomsTest do
       eventually(fn -> Chronicle.page_views(ctx.slug) != [] end)
 
       [page] = Chronicle.page_views(ctx.slug)
-      assert Chronicle.page_vamp(page) == nil
-      assert Chronicle.page_track(page).path == cached_path
+      assert page.vamp == nil
+      assert page.track.path == cached_path
     end
 
     test "score job failing leaves Repertoire playing, records failure in music_meta, and room does not stall",
@@ -3240,11 +3240,11 @@ defmodule Thereish.RoomsTest do
       await_reveal(ctx.slug)
 
       eventually(fn ->
-        pages = Thereish.Chronicle.page_views(ctx.slug)
+        pages = page_rows(ctx.slug)
         pages != [] and hd(pages).music_meta != nil
       end)
 
-      [page | _] = Thereish.Chronicle.page_views(ctx.slug)
+      [page | _] = page_rows(ctx.slug)
       assert %Track{failure: failure} = page.music_meta
       assert failure != nil
     end
@@ -3429,22 +3429,23 @@ defmodule Thereish.RoomsTest do
 
       eventually(fn -> Thereish.Chronicle.page_views(ctx.slug) != [] end)
 
-      [page_before | _] = Thereish.Chronicle.page_views(ctx.slug)
+      [page_before | _] = page_rows(ctx.slug)
       assert page_before.music_meta.failure == "unfinished"
-      assert Thereish.Chronicle.page_track(page_before) == nil
+      assert [%{track: nil} | _] = Thereish.Chronicle.page_views(ctx.slug)
 
       eventually(
         fn ->
-          [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+          [page_after | _] = page_rows(ctx.slug)
           page_after.music_meta.path != nil
         end,
         "the held-back result never landed",
         3_000
       )
 
-      [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
+      [page_after | _] = page_rows(ctx.slug)
       assert is_nil(page_after.music_meta.failure)
-      assert track = Thereish.Chronicle.page_track(page_after)
+      assert [%{track: track} | _] = Thereish.Chronicle.page_views(ctx.slug)
+      assert track
       assert track.path =~ "/media/tracks/fake-"
 
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
@@ -3615,12 +3616,12 @@ defmodule Thereish.RoomsTest do
       await_reveal(ctx.slug)
 
       eventually(fn ->
-        pages = Thereish.Chronicle.page_views(ctx.slug)
+        pages = page_rows(ctx.slug)
 
         pages != [] and match?(%Track{title: title} when title != nil, hd(pages).music_meta)
       end)
 
-      [page | _] = Thereish.Chronicle.page_views(ctx.slug)
+      [page | _] = page_rows(ctx.slug)
       assert %Track{title: title, path: path, meta: meta} = page.music_meta
       assert title != nil
       assert path != nil
@@ -4009,6 +4010,14 @@ defmodule Thereish.RoomsTest do
 
       assert outcomes == %{first.id => "flash", second.id => "astra"}
     end
+  end
+
+  # The Room's closed Page rows, newest first, for what a PageView does not
+  # carry: a Track's failure and meta.
+  defp page_rows(slug) do
+    Store.get_room(slug).id
+    |> Chronicle.pages()
+    |> Enum.reverse()
   end
 
   defp received_assays(acc \\ []) do
