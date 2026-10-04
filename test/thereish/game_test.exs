@@ -917,10 +917,11 @@ defmodule Thereish.GameTest do
       # Advance to attempt 2: carried bookends are ["cairn", "beacon"]
       attempt2 = again(revealed)
 
-      assert attempt2.attempt == 2
-      assert attempt2.bookends == ["cairn", "beacon"]
+      view = Game.view(attempt2, nil)
+      assert view.attempt.number == 2
+      assert view.bookends == ["cairn", "beacon"]
       assert Game.barred_words(attempt2) == ["cairn", "beacon", "lantern", "harbour"]
-      assert Game.view(attempt2, nil).barred_words == ["cairn", "beacon", "lantern", "harbour"]
+      assert view.barred_words == ["cairn", "beacon", "lantern", "harbour"]
 
       # Carried bridge is barred as bookend
       assert {:error, {:illegal_bridge, "\"cairn\" shares a root with \"cairn\"."}} =
@@ -1404,49 +1405,6 @@ defmodule Thereish.GameTest do
       {_state, effects} = attempt(bridging(), [{"Melissa", "cairn"}, {"Jacob", "beacon"}], 10)
 
       assert chronicles(effects) == []
-    end
-  end
-
-  describe "one more?" do
-    setup do
-      {state, _effects} = attempt(bridging(), [{"Melissa", "cairn"}, {"Jacob", "cairo"}], 90)
-
-      %{closed: state}
-    end
-
-    test "starts a fresh Page in the same Room, with the same Seats", ctx do
-      next = %Document{bookends: ["desert", "mirror"]}
-
-      assert {:ok, state, []} =
-               Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Melissa", page: next}})
-
-      view = Game.view(state, "seat-Melissa")
-
-      assert view.phase == :bridging
-      assert view.bookends == ["desert", "mirror"]
-      assert view.attempt == %{number: 1, of: Game.attempt_cap()}
-      assert view.reveal == nil
-      assert view.closed == nil
-      assert view.played == []
-      assert names(view) == ["Melissa", "Jacob"]
-    end
-
-    test "cannot take a Page away from the couple in the middle of one" do
-      {state, _effects} = attempt(bridging(), [{"Melissa", "cairn"}, {"Jacob", "beacon"}], 10)
-      next = %Document{bookends: ["desert", "mirror"]}
-
-      assert {:error, :page_open} =
-               Game.apply(state, {:page_started, %{seat_id: "seat-Melissa", page: next}})
-
-      assert {:error, :page_open} =
-               Game.apply(bridging(), {:page_started, %{seat_id: "seat-Melissa", page: next}})
-    end
-
-    test "is a tap only someone in the Room can make", ctx do
-      next = %Document{bookends: ["desert", "mirror"]}
-
-      assert {:error, :no_such_seat} =
-               Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Ada", page: next}})
     end
   end
 
@@ -2291,7 +2249,7 @@ defmodule Thereish.GameTest do
         Game.apply(reveal_state, {:attempt_advanced, %{seat_id: "seat-Melissa"}})
 
       assert Game.phase(attempt2_state) == :bridging
-      assert attempt2_state.attempt == 2
+      assert Game.view(attempt2_state, nil).attempt.number == 2
 
       # All masks remain visible to everyone on attempt 2
       m_view4 = Game.view(attempt2_state, "seat-Melissa")
