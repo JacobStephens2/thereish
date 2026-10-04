@@ -176,6 +176,10 @@ _Avoid_: tier, bucket, rank, grade (that's the number itself)
 The cached verdict that future identical inputs inherit — the grade the players saw. Only a joint overrule rewrites it.
 _Avoid_: cache entry, ruling, second opinion
 
+**Overrule**:
+A table's joint ruling that replaces one Attempt's grade. One Seat proposes a Closeness, every Seat playing the Page agrees, and any one of them declining withdraws it. Once agreed, it is the Verdict the table sees, it rewrites the Precedent (ADR-0006), and the Chronicle keeps it beside what the Assayer said. An Opinion never does any of this.
+_Avoid_: correction (retired, ADR-0019), appeal, veto, override
+
 **Recap**:
 The Scribe's paragraph about one closed Page, written after play in the players' own words back to them. It carries no number because the grade is the Verdict's, and a Page the Scribe could not write about simply has none.
 _Avoid_: summary, narration, AI summary, blurb

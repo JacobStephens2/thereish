@@ -60,6 +60,7 @@ defmodule Thereish.Game do
   alias Thereish.Game.Attempt
   alias Thereish.Ladder
   alias Thereish.Mask
+  alias Thereish.Overrule
 
   @enforce_keys [:seat_limit, :seats]
   defstruct [
@@ -192,7 +193,7 @@ defmodule Thereish.Game do
           | {:author, %{gives: [map()], count: pos_integer()}}
           | {:assay, %{bookends: [String.t()], bridges: [String.t()]}}
           | {:chronicle, Entry.t()}
-          | {:overrule, map()}
+          | {:overrule, Overrule.ruling()}
           | {:fairness_tap, map()}
           | {:bookends_tap, map()}
 
@@ -460,22 +461,20 @@ defmodule Thereish.Game do
   end
 
   def apply(%__MODULE__{} = state, {:overrule_proposed, %{seat_id: seat_id} = attrs}) do
-    closeness = Map.get(attrs, :closeness, Ladder.meld_threshold())
-
     with :ok <- may_propose_overrule(state, seat_id) do
-      agreed = MapSet.new([seat_id])
-      proposal = %{proposer_id: seat_id, closeness: closeness, agreed: agreed}
+      proposal =
+        case Map.fetch(attrs, :closeness) do
+          {:ok, closeness} -> Overrule.propose(seat_id, closeness)
+          :error -> Overrule.propose(seat_id)
+        end
 
-      resolve_overrule_unanimity(put_attempt(state, :overrule, proposal), agreed)
+      resolve_overrule(state, proposal)
     end
   end
 
   def apply(%__MODULE__{} = state, {:overrule_agreed, %{seat_id: seat_id}}) do
     with :ok <- may_vote_overrule(state, seat_id) do
-      proposal = overrule(state)
-      agreed = MapSet.put(proposal.agreed, seat_id)
-      state = put_attempt(state, :overrule, %{proposal | agreed: agreed})
-      resolve_overrule_unanimity(state, agreed)
+      resolve_overrule(state, Overrule.agree(overrule(state), seat_id))
     end
   end
 
@@ -1026,93 +1025,40 @@ defmodule Thereish.Game do
     }
   end
 
-  defp overrule_view(state, viewer), do: overrule_view(state, overrule(state), viewer)
-
-  defp overrule_view(_state, nil, _viewer), do: nil
-
-  defp overrule_view(state, overrule, viewer) do
-    proposer = find_seat(state, overrule.proposer_id)
-
-    %{
-      pending?: true,
-      proposer_id: overrule.proposer_id,
-      proposer_name: proposer && proposer.name,
-      closeness: overrule.closeness,
-      agreed_seat_ids: MapSet.to_list(overrule.agreed),
-      you_proposed?: viewer == overrule.proposer_id,
-      you_agreed?: MapSet.member?(overrule.agreed, viewer)
-    }
-  end
-
-  defp already_overruled?(state, _seat_id) do
-    verdict(state) != nil and Map.get(verdict(state), :overruled?, false)
-  end
-
-  defp resolve_overrule_unanimity(state, agreed) do
-    if Enum.all?(page_seats(state), &MapSet.member?(agreed, &1.id)) do
-      agree_overrule(state)
-    else
-      {:ok, state, []}
+  defp overrule_view(state, viewer) do
+    with %{} = view <- Overrule.view(overrule(state), viewer) do
+      proposer = find_seat(state, view.proposer_id)
+      Map.put(view, :proposer_name, proposer && proposer.name)
     end
   end
 
-  defp agree_overrule(state) do
-    apply_agreed_overrule(
-      state,
-      verdict(state),
-      "Overruled jointly across all Seats. Recorded as precedent.",
-      written_bridges(state),
-      &put_attempt(&1, :verdict, &2)
-    )
+  # Holds the proposal while a Seat playing the Page has still to agree, and
+  # rules it once every one of them has.
+  defp resolve_overrule(state, proposal) do
+    if Overrule.unanimous?(proposal, Enum.map(page_seats(state), & &1.id)) do
+      rule_overrule(state, proposal)
+    else
+      {:ok, put_attempt(state, :overrule, proposal), []}
+    end
   end
 
-  defp apply_agreed_overrule(
-         state,
-         original_verdict,
-         couple_reasoning,
-         bridges,
-         update_verdict_fn
-       ) do
+  defp rule_overrule(state, proposal) do
     previously_closed? = phase(state) == :closed
 
-    %{proposer_id: proposer_id, closeness: couple_closeness} = overrule(state)
-    couple_quip = "House law."
-
-    new_verdict =
-      Map.merge(original_verdict, %{
-        graded?: true,
-        closeness: couple_closeness,
-        reasoning: couple_reasoning,
-        quip: couple_quip,
-        overruled?: true,
-        original_closeness: original_verdict.closeness,
-        original_reasoning: original_verdict.reasoning,
-        original_quip: original_verdict.quip
+    {ruled, ruling} =
+      Overrule.rule(proposal, verdict(state), %{
+        number: attempt_number(state),
+        bookends: attempt_bookends(state),
+        bridges: written_bridges(state)
       })
 
-    overrule_effect_data = %{
-      attempt_number: attempt_number(state),
-      proposer_seat_id: proposer_id,
-      bookends: attempt_bookends(state),
-      bridges: bridges,
-      machine_closeness: original_verdict.closeness,
-      machine_reasoning: original_verdict.reasoning,
-      machine_quip: original_verdict.quip,
-      couple_closeness: couple_closeness,
-      couple_reasoning: couple_reasoning,
-      couple_quip: couple_quip
-    }
-
-    state = update_verdict_fn.(state, new_verdict)
-    state = put_attempt(state, :overrule, nil)
-
-    effects = [{:overrule, overrule_effect_data}]
+    state = state |> put_attempt(:verdict, ruled) |> put_attempt(:overrule, nil)
 
     effects =
       if phase(state) == :closed and not previously_closed? do
-        effects ++ [{:chronicle, chronicle(state)}]
+        [{:overrule, ruling}, {:chronicle, chronicle(state)}]
       else
-        effects
+        [{:overrule, ruling}]
       end
 
     {:ok, state, effects}
@@ -1252,7 +1198,7 @@ defmodule Thereish.Game do
          :ok <- verdict_revealed(state) do
       cond do
         overrule(state) != nil -> {:error, :proposal_pending}
-        already_overruled?(state, seat_id) -> {:error, :already_overruled}
+        Overrule.overruled?(verdict(state)) -> {:error, :already_overruled}
         true -> :ok
       end
     end

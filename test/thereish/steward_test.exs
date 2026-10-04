@@ -32,11 +32,40 @@ defmodule Thereish.StewardTest do
 
   import Thereish.StewardFixtures
 
+  alias Thereish.Chronicle
+  alias Thereish.Rooms.Store
   alias Thereish.Steward
   alias Thereish.Steward.Live
   alias Thereish.Steward.Precedent
 
   @pair %{bookends: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
+
+  # The table's ruling on @pair, recorded the way the Room records one: in a
+  # Room of its own, proposed by one of its Seats. `table` overrides what the
+  # table said.
+  defp overrule(table) do
+    {:ok, room} = Store.insert_room("overrule-#{System.unique_integer([:positive])}", 2)
+    {:ok, seat} = Store.insert_seat(room.id, Ecto.UUID.generate(), "Mara", "device-mara")
+
+    ruling =
+      Map.merge(
+        %{
+          attempt_number: 1,
+          proposer_seat_id: seat.id,
+          bookends: @pair.bookends,
+          bridges: @pair.bridges,
+          machine_closeness: 41,
+          machine_reasoning: "Original grade.",
+          machine_quip: "Not quite.",
+          couple_closeness: 100,
+          couple_reasoning: "Overruled jointly across all Seats. Recorded as precedent.",
+          couple_quip: "House law."
+        },
+        table
+      )
+
+    {room.id, Steward.overrule(room.id, ruling)}
+  end
 
   # Which way round this request asked, named by the Bridge it put first.
   defp ordering(body), do: first_bridge(body, @pair.bridges)
@@ -667,18 +696,7 @@ defmodule Thereish.StewardTest do
       assert verdict1.closeness == 41
       assert Agent.get(counts, &Map.values/1) == [1, 1]
 
-      couple_ruling = %{
-        closeness: 100,
-        reasoning: "Overruled jointly across all Seats. Recorded as precedent.",
-        quip: "House law."
-      }
-
-      assert {:ok, _} =
-               Steward.overrule(
-                 @pair.bookends,
-                 @pair.bridges,
-                 couple_ruling
-               )
+      assert {_room_id, {:ok, _}} = overrule(%{})
 
       assert {:ok, verdict2} = Steward.assay(@pair)
       assert verdict2.closeness == 100
@@ -688,17 +706,35 @@ defmodule Thereish.StewardTest do
       assert Agent.get(counts, &Map.values/1) == [1, 1]
     end
 
-    test "Steward.overrule accepts a request map directly" do
-      couple_ruling = %{
-        closeness: 95,
-        reasoning: "Overruled with request map.",
-        quip: "Map ruling."
-      }
+    test "a recorded overrule is the Chronicle's row and the Precedent at once" do
+      assert {room_id, {:ok, row}} = overrule(%{couple_closeness: 95})
 
-      assert {:ok, _} = Steward.overrule(@pair, couple_ruling)
+      assert [recorded] = Chronicle.overrules(room_id)
+      assert recorded.id == row.id
+      assert recorded.couple_closeness == 95
+      assert recorded.machine_closeness == 41
+
       assert {:ok, verdict} = Steward.assay(@pair)
       assert verdict.closeness == 95
-      assert verdict.reasoning == "Overruled with request map."
+      assert verdict.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
+    end
+
+    test "a ruling whose Precedent write fails leaves no Chronicle overrule row" do
+      # The Chronicle row needs no Quip, and the Precedent does: the first write
+      # lands inside the transaction and the second refuses it.
+      assert {room_id, {:error, %Ecto.Changeset{}}} = overrule(%{couple_quip: nil})
+
+      assert Chronicle.overrules(room_id) == []
+      role = Steward.role(:assayer)
+      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
+    end
+
+    test "a ruling whose Chronicle row fails leaves the Precedent alone" do
+      assert {room_id, {:error, %Ecto.Changeset{}}} = overrule(%{couple_closeness: nil})
+
+      assert Chronicle.overrules(room_id) == []
+      role = Steward.role(:assayer)
+      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
     end
   end
 
@@ -768,11 +804,11 @@ defmodule Thereish.StewardTest do
     end
 
     defp cached_quip(quip) do
-      {:ok, _} =
-        Steward.overrule(@pair, %{
-          closeness: 64,
-          reasoning: "Ruled at the table.",
-          quip: quip
+      {_room_id, {:ok, _}} =
+        overrule(%{
+          couple_closeness: 64,
+          couple_reasoning: "Ruled at the table.",
+          couple_quip: quip
         })
     end
 
@@ -800,12 +836,7 @@ defmodule Thereish.StewardTest do
       assert {:ok, graded} = Steward.assay(@pair)
       refute graded.closeness == 100
 
-      assert {:ok, _} =
-               Steward.overrule(@pair, %{
-                 closeness: 100,
-                 reasoning: "Overruled jointly across all Seats. Recorded as precedent.",
-                 quip: "House law."
-               })
+      assert {_room_id, {:ok, _}} = overrule(%{})
 
       assert {:ok, verdict} = Steward.assay(@pair)
       assert verdict.closeness == 100
