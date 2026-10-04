@@ -49,8 +49,19 @@ defmodule Thereish.Steward do
   alias Thereish.Steward.Precedent
   alias Thereish.Steward.Title
 
-  @typedoc "The Bookends, and every Bridge written between them, in roster order."
-  @type request :: %{bookends: [String.t()], bridges: [String.t()]}
+  @typedoc """
+  The Bookends, and every Bridge written between them, in roster order.
+
+  The Game also sends this Page's earlier Attempts, each with its Quip.
+  `prior_quips` is composed by `assay/2` and replaces any the caller passed.
+  """
+  @type request :: %{
+          optional(:earlier_attempts) => [map()],
+          optional(:prior_quips) => [String.t()],
+          optional(atom()) => term(),
+          bookends: [String.t()],
+          bridges: [String.t()]
+        }
 
   @typedoc """
   Which model answered, at what prompt version, how long it took and what it
