@@ -224,6 +224,8 @@ defmodule Thereish.Game do
           | :bridge_required
           | :no_verdict_expected
           | :not_revealed
+          | :not_assayed
+          | :not_closed
           | :page_closed
           | :page_open
           | :proposal_pending
@@ -356,35 +358,28 @@ defmodule Thereish.Game do
     give = attrs[:give] || attrs[:text] || ""
     trimmed = String.trim(give)
 
-    cond do
-      phase(state) != :giving ->
-        {:error, :not_giving}
+    with :ok <- may_give(state, seat_id) do
+      cond do
+        trimmed == "" ->
+          {:error, :give_required}
 
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
+        String.length(trimmed) > 120 ->
+          {:error, :give_too_long}
 
-      Map.has_key?(state.gives, seat_id) ->
-        {:error, :already_committed}
+        true ->
+          gives = Map.put(state.gives, seat_id, trimmed)
+          last_gives = Map.put(state.last_gives, seat_id, trimmed)
+          state = %{state | gives: gives, last_gives: last_gives}
 
-      trimmed == "" ->
-        {:error, :give_required}
-
-      String.length(trimmed) > 120 ->
-        {:error, :give_too_long}
-
-      true ->
-        gives = Map.put(state.gives, seat_id, trimmed)
-        last_gives = Map.put(state.last_gives, seat_id, trimmed)
-        state = %{state | gives: gives, last_gives: last_gives}
-
-        if (state.seat_limit && map_size(gives) >= state.seat_limit) and
-             length(state.seats) >= state.seat_limit do
-          participating_seat_ids = Enum.map(state.seats, & &1.id)
-          state = %{state | page_seat_ids: participating_seat_ids}
-          {:ok, state, [{:author, author_request(state)}]}
-        else
-          {:ok, state, []}
-        end
+          if (state.seat_limit && map_size(gives) >= state.seat_limit) and
+               length(state.seats) >= state.seat_limit do
+            participating_seat_ids = Enum.map(state.seats, & &1.id)
+            state = %{state | page_seat_ids: participating_seat_ids}
+            {:ok, state, [{:author, author_request(state)}]}
+          else
+            {:ok, state, []}
+          end
+      end
     end
   end
 
@@ -505,27 +500,15 @@ defmodule Thereish.Game do
   def apply(%__MODULE__{} = state, {:bridge_committed, %{seat_id: seat_id, bridge: bridge}}) do
     bridge = Thereish.Steward.Legality.normalize_bridge(bridge)
 
-    cond do
-      phase(state) != :bridging ->
-        {:error, :not_bridging}
-
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      playing_page_seat(state, seat_id) != :ok ->
-        {:error, :not_playing_page}
-
-      committed?(state, seat_id) ->
-        {:error, :already_committed}
-
-      bridge == "" ->
+    with :ok <- may_bridge(state, seat_id) do
+      if bridge == "" do
         {:error, :bridge_required}
-
-      true ->
+      else
         case Thereish.Steward.Legality.check_bridge(bridge, barred_words(state)) do
           :ok -> committed(%{state | bridges: Map.put(state.bridges, seat_id, bridge)})
           {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
         end
+      end
     end
   end
 
@@ -554,67 +537,31 @@ defmodule Thereish.Game do
   def apply(%__MODULE__{} = state, {:overrule_proposed, %{seat_id: seat_id} = attrs}) do
     closeness = Map.get(attrs, :closeness, Ladder.meld_threshold())
 
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
+    with :ok <- may_propose_overrule(state, seat_id) do
+      proposed_state = %{
+        state
+        | overrule: %{
+            proposer_id: seat_id,
+            closeness: closeness,
+            agreed: MapSet.new([seat_id])
+          }
+      }
 
-      playing_page_seat(state, seat_id) != :ok ->
-        {:error, :not_playing_page}
-
-      phase(state) not in [:reveal, :closed] or is_nil(state.verdict) ->
-        {:error, :not_revealed}
-
-      state.overrule != nil ->
-        {:error, :proposal_pending}
-
-      already_overruled?(state, seat_id) ->
-        {:error, :already_overruled}
-
-      true ->
-        proposed_state = %{
-          state
-          | overrule: %{
-              proposer_id: seat_id,
-              closeness: closeness,
-              agreed: MapSet.new([seat_id])
-            }
-        }
-
-        resolve_overrule_unanimity(proposed_state, proposed_state.overrule.agreed)
+      resolve_overrule_unanimity(proposed_state, proposed_state.overrule.agreed)
     end
   end
 
   def apply(%__MODULE__{} = state, {:overrule_agreed, %{seat_id: seat_id}}) do
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      playing_page_seat(state, seat_id) != :ok ->
-        {:error, :not_playing_page}
-
-      state.overrule == nil ->
-        {:error, :no_proposal_pending}
-
-      true ->
-        agreed = MapSet.put(state.overrule.agreed, seat_id)
-        state = %{state | overrule: %{state.overrule | agreed: agreed}}
-        resolve_overrule_unanimity(state, agreed)
+    with :ok <- may_vote_overrule(state, seat_id) do
+      agreed = MapSet.put(state.overrule.agreed, seat_id)
+      state = %{state | overrule: %{state.overrule | agreed: agreed}}
+      resolve_overrule_unanimity(state, agreed)
     end
   end
 
   def apply(%__MODULE__{} = state, {:overrule_declined, %{seat_id: seat_id}}) do
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      playing_page_seat(state, seat_id) != :ok ->
-        {:error, :not_playing_page}
-
-      state.overrule == nil ->
-        {:error, :no_proposal_pending}
-
-      true ->
-        {:ok, %{state | overrule: nil}, []}
+    with :ok <- may_vote_overrule(state, seat_id) do
+      {:ok, %{state | overrule: nil}, []}
     end
   end
 
@@ -622,23 +569,10 @@ defmodule Thereish.Game do
     verdict = state.verdict
     label_str = normalize_label(label)
 
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      playing_page_seat(state, seat_id) != :ok ->
-        {:error, :not_playing_page}
-
-      phase(state) not in [:reveal, :closed] or is_nil(verdict) ->
-        {:error, :not_revealed}
-
-      is_nil(verdict.closeness) and is_nil(Map.get(verdict, :original_closeness)) ->
-        {:error, :not_assayed}
-
-      label_str not in ["fair", "too_kind", "too_harsh"] ->
+    with :ok <- may_tap_fairness(state, seat_id) do
+      if label_str not in ["fair", "too_kind", "too_harsh"] do
         {:error, :invalid_label}
-
-      true ->
+      else
         grade = Map.get(verdict, :original_closeness) || verdict.closeness
         band = Map.get(verdict, :original_band) || (grade && Ladder.read(grade).band)
         meta = verdict.meta || %{}
@@ -661,13 +595,12 @@ defmodule Thereish.Game do
         next_state = %{state | fairness_taps: Map.put(current_taps, seat_id, label_str)}
 
         {:ok, next_state, [{:fairness_tap, tap_effect_data}]}
+      end
     end
   end
 
   def apply(%__MODULE__{} = state, {:attempt_advanced, %{seat_id: seat_id}}) do
-    with :ok <- taken_by_a_seat(state, seat_id),
-         :ok <- playing_page_seat(state, seat_id),
-         :ok <- open_reveal(state) do
+    with :ok <- may_advance(state, seat_id) do
       carried = carried(state)
 
       {:ok,
@@ -710,17 +643,10 @@ defmodule Thereish.Game do
   def apply(%__MODULE__{} = state, {:bookends_tapped, %{seat_id: seat_id, label: label}}) do
     label_str = normalize_label(label)
 
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      phase(state) != :closed ->
-        {:error, :not_closed}
-
-      label_str not in ["flat", "fine", "great"] ->
+    with :ok <- may_tap_bookends(state, seat_id) do
+      if label_str not in ["flat", "fine", "great"] do
         {:error, :invalid_label}
-
-      true ->
+      else
         meta = (state.page && state.page[:meta]) || %{}
         arm = meta[:arm] || meta["arm"]
         bookends = (state.page && state.page[:bookends]) || state.bookends
@@ -739,12 +665,12 @@ defmodule Thereish.Game do
         next_state = %{state | bookends_taps: Map.put(current_taps, seat_id, label_str)}
 
         {:ok, next_state, [{:bookends_tap, tap_effect_data}]}
+      end
     end
   end
 
   def apply(%__MODULE__{} = state, {:next_page, %{seat_id: seat_id}}) do
-    with :ok <- taken_by_a_seat(state, seat_id),
-         :ok <- closed_page(state) do
+    with :ok <- may_next_page(state, seat_id) do
       last_gives = Map.merge(state.last_gives || %{}, state.gives || %{})
 
       {:ok,
@@ -780,6 +706,15 @@ defmodule Thereish.Game do
   only things that differ are which Seat is the viewer's own and which Bridge it
   wrote, and an uncommitted Bridge is in nobody's view but its author's until
   every Seat has committed.
+
+  `may` says which actions this viewer may take right now, one boolean per Seat
+  action. Each is the same check `apply/2` makes before it reads the event's
+  input, so a control a screen shows is an event the Game accepts — as long as
+  the input is good. It leaves out the hold after a reveal: the Game keeps no
+  clock, and the Room's Pacing says when the hold is over.
+
+  `first_revealed?` says whether this Page's first reveal has happened, the
+  moment the Gives and the Masks go public.
   """
   @spec view(t(), viewer()) :: map()
   def view(%__MODULE__{} = state, viewer) do
@@ -792,6 +727,8 @@ defmodule Thereish.Game do
     %{
       phase: phase,
       late?: viewer_late?,
+      may: may(state, viewer),
+      first_revealed?: first_revealed?(state),
       seats: Enum.map(state.seats, &seat_view(state, &1, viewer)),
       you: find_seat(state, viewer),
       seat_limit: state.seat_limit,
@@ -826,7 +763,7 @@ defmodule Thereish.Game do
       your_bookends_tap: Map.get(state.bookends_taps || %{}, viewer),
       bookends_taps: state.bookends_taps || %{},
       barred_words: if(phase != :waiting, do: barred_words(state)),
-      gives: if(phase in [:reveal, :closed] or state.played != [], do: gives_view(state)),
+      gives: if(first_revealed?(state), do: gives_view(state)),
       full_table: page_full_table(state.page, state.full_table)
     }
   end
@@ -1446,10 +1383,9 @@ defmodule Thereish.Game do
 
   defp mask_for_viewer(state, seat, viewer) do
     raw_mask = Map.get(state.masks || %{}, seat.id)
-    first_reveal? = phase(state) in [:reveal, :closed] or state.played != []
 
     cond do
-      first_reveal? ->
+      first_revealed?(state) ->
         raw_mask
 
       seat.id == viewer ->
@@ -1468,6 +1404,109 @@ defmodule Thereish.Game do
        not is_nil(state.gives[seat_id])) or
       (is_map(state.masks) and Map.has_key?(state.masks, seat_id) and
          not is_nil(state.masks[seat_id]))
+  end
+
+  # Which Seat actions this viewer may take, by the checks `apply/2` makes.
+  defp may(state, viewer) do
+    %{
+      give: may_give(state, viewer) == :ok,
+      bridge: may_bridge(state, viewer) == :ok,
+      propose_overrule: may_propose_overrule(state, viewer) == :ok,
+      vote_overrule: may_vote_overrule(state, viewer) == :ok,
+      tap_fairness: may_tap_fairness(state, viewer) == :ok,
+      advance: may_advance(state, viewer) == :ok,
+      tap_bookends: may_tap_bookends(state, viewer) == :ok,
+      next_page: may_next_page(state, viewer) == :ok
+    }
+  end
+
+  # One check per Seat action: whether this Seat stands where the action can be
+  # taken. What the event carries — the Give's text, the Bridge's word, the
+  # tap's label — is checked after, by `apply/2` alone. A Give and a Bridge ask
+  # about the Phase before the Seat, so their errors read as they always have.
+  defp may_give(state, seat_id) do
+    cond do
+      phase(state) != :giving -> {:error, :not_giving}
+      not seated?(state, seat_id) -> {:error, :no_such_seat}
+      Map.has_key?(state.gives, seat_id) -> {:error, :already_committed}
+      true -> :ok
+    end
+  end
+
+  defp may_bridge(state, seat_id) do
+    cond do
+      phase(state) != :bridging -> {:error, :not_bridging}
+      not seated?(state, seat_id) -> {:error, :no_such_seat}
+      playing_page_seat(state, seat_id) != :ok -> {:error, :not_playing_page}
+      committed?(state, seat_id) -> {:error, :already_committed}
+      true -> :ok
+    end
+  end
+
+  defp may_propose_overrule(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id),
+         :ok <- playing_page_seat(state, seat_id),
+         :ok <- verdict_revealed(state) do
+      cond do
+        state.overrule != nil -> {:error, :proposal_pending}
+        already_overruled?(state, seat_id) -> {:error, :already_overruled}
+        true -> :ok
+      end
+    end
+  end
+
+  defp may_vote_overrule(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id),
+         :ok <- playing_page_seat(state, seat_id) do
+      if state.overrule == nil, do: {:error, :no_proposal_pending}, else: :ok
+    end
+  end
+
+  # A Verdict the Assayer could not grade has nothing to rate, unless the table
+  # overruled it into a number.
+  defp may_tap_fairness(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id),
+         :ok <- playing_page_seat(state, seat_id),
+         :ok <- verdict_revealed(state) do
+      verdict = state.verdict
+
+      if is_nil(verdict.closeness) and is_nil(Map.get(verdict, :original_closeness)) do
+        {:error, :not_assayed}
+      else
+        :ok
+      end
+    end
+  end
+
+  defp may_advance(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id),
+         :ok <- playing_page_seat(state, seat_id) do
+      open_reveal(state)
+    end
+  end
+
+  # A Seat that watched the Page may still say how its Bookends were, and may
+  # start the next one, which it will play.
+  defp may_tap_bookends(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id) do
+      if phase(state) == :closed, do: :ok, else: {:error, :not_closed}
+    end
+  end
+
+  defp may_next_page(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id) do
+      closed_page(state)
+    end
+  end
+
+  # Whether this Page's first reveal has happened: the reveal is on screen now,
+  # or an earlier Attempt of this Page already had one.
+  defp first_revealed?(state), do: phase(state) in [:reveal, :closed] or state.played != []
+
+  defp verdict_revealed(state) do
+    if phase(state) in [:reveal, :closed] and state.verdict != nil,
+      do: :ok,
+      else: {:error, :not_revealed}
   end
 
   defp taken_by_a_seat(state, seat_id) do
