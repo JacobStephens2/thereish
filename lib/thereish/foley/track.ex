@@ -16,6 +16,8 @@ defmodule Thereish.Foley.Track do
   """
   use Ecto.Type
 
+  alias Thereish.Foley.Row
+
   alias Thereish.Steward
 
   defstruct [:path, :title, :failure, meta: %{}]
@@ -35,7 +37,7 @@ defmodule Thereish.Foley.Track do
   """
   @spec landed(map(), String.t() | nil, map() | nil) :: t()
   def landed(%{path: path} = result, title, title_meta) do
-    meta = result |> Map.get(:meta) |> provenance() |> Map.drop(@fields)
+    meta = result |> Map.get(:meta) |> Row.string_keys() |> Map.drop(@fields)
     titled(%__MODULE__{path: path, meta: meta}, title, title_meta)
   end
 
@@ -44,7 +46,7 @@ defmodule Thereish.Foley.Track do
   def titled(%__MODULE__{} = track, nil, _title_meta), do: track
 
   def titled(%__MODULE__{meta: meta} = track, title, title_meta) do
-    cost = provenance(title_meta)["cost_usd"] || 0.0
+    cost = Row.string_keys(title_meta)["cost_usd"] || 0.0
     %{track | title: title, meta: Map.put(meta, "title_cost_usd", cost)}
   end
 
@@ -54,7 +56,7 @@ defmodule Thereish.Foley.Track do
   """
   @spec failed(term()) :: t()
   def failed(reason) do
-    {failure, meta} = reason |> Steward.score_failure() |> provenance() |> Map.pop("failure")
+    {failure, meta} = reason |> Steward.score_failure() |> Row.string_keys() |> Map.pop("failure")
     %__MODULE__{failure: failure, meta: meta}
   end
 
@@ -72,40 +74,21 @@ defmodule Thereish.Foley.Track do
 
   @impl Ecto.Type
   def dump(%__MODULE__{path: path, title: title, failure: failure, meta: meta}) do
-    own =
-      for {key, value} <- [{"path", path}, {"title", title}, {"failure", failure}],
-          not is_nil(value),
-          into: %{},
-          do: {key, value}
-
-    {:ok, meta |> Map.drop(@fields) |> Map.merge(own)}
+    {:ok, Row.dump(%{"path" => path, "title" => title, "failure" => failure}, meta)}
   end
 
   def dump(_other), do: :error
 
+  # An empty row holds no record.
   @impl Ecto.Type
+  def load(row) when row == %{}, do: {:ok, nil}
+
   def load(row) when is_map(row) do
-    {own, meta} = row |> provenance() |> Map.split(@fields)
+    {own, meta} = Row.load(row, @fields)
 
     {:ok,
      %__MODULE__{path: own["path"], title: own["title"], failure: own["failure"], meta: meta}}
   end
 
   def load(_other), do: :error
-
-  # A map with string keys. Where a row has a key both ways, the string wins.
-  defp provenance(nil), do: %{}
-
-  defp provenance(map) when is_map(map) do
-    {strings, atoms} = Enum.split_with(map, fn {key, _value} -> is_binary(key) end)
-    Map.merge(Map.new(atoms, fn {key, value} -> {to_string(key), value} end), Map.new(strings))
-  end
-end
-
-# A Room's snapshot carries the Track as JSON in the same flat shape it is stored in.
-defimpl Jason.Encoder, for: Thereish.Foley.Track do
-  def encode(track, opts) do
-    {:ok, row} = Thereish.Foley.Track.dump(track)
-    Jason.Encode.map(row, opts)
-  end
 end

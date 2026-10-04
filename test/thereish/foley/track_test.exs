@@ -159,6 +159,10 @@ defmodule Thereish.Foley.TrackTest do
                 }}
     end
 
+    test "an empty row holds no Track" do
+      assert Ecto.Type.load(Track, %{}) == {:ok, nil}
+    end
+
     test "casts only a Track" do
       track = Track.failed(:unfinished)
 

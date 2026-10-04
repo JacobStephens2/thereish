@@ -14,6 +14,8 @@ defmodule Thereish.Foley.Vamp do
   """
   use Ecto.Type
 
+  alias Thereish.Foley.Row
+
   defstruct [:path, :duration, :format, :loop, meta: %{}]
 
   @type t :: %__MODULE__{
@@ -36,7 +38,7 @@ defmodule Thereish.Foley.Vamp do
       duration: Map.get(result, :duration),
       format: if(is_nil(format), do: nil, else: to_string(format)),
       loop: Map.get(result, :loop, true),
-      meta: result |> Map.get(:meta) |> provenance() |> Map.drop(@fields)
+      meta: result |> Map.get(:meta) |> Row.string_keys() |> Map.drop(@fields)
     }
   end
 
@@ -54,25 +56,24 @@ defmodule Thereish.Foley.Vamp do
 
   @impl Ecto.Type
   def dump(%__MODULE__{} = vamp) do
-    own =
-      for {key, value} <- [
-            {"path", vamp.path},
-            {"duration", vamp.duration},
-            {"format", vamp.format},
-            {"loop", vamp.loop}
-          ],
-          not is_nil(value),
-          into: %{},
-          do: {key, value}
+    own = %{
+      "path" => vamp.path,
+      "duration" => vamp.duration,
+      "format" => vamp.format,
+      "loop" => vamp.loop
+    }
 
-    {:ok, vamp.meta |> Map.drop(@fields) |> Map.merge(own)}
+    {:ok, Row.dump(own, vamp.meta)}
   end
 
   def dump(_other), do: :error
 
+  # An empty row holds no record.
   @impl Ecto.Type
+  def load(row) when row == %{}, do: {:ok, nil}
+
   def load(row) when is_map(row) do
-    {own, meta} = row |> provenance() |> Map.split(@fields)
+    {own, meta} = Row.load(row, @fields)
 
     {:ok,
      %__MODULE__{
@@ -85,20 +86,4 @@ defmodule Thereish.Foley.Vamp do
   end
 
   def load(_other), do: :error
-
-  # A map with string keys. Where a row has a key both ways, the string wins.
-  defp provenance(nil), do: %{}
-
-  defp provenance(map) when is_map(map) do
-    {strings, atoms} = Enum.split_with(map, fn {key, _value} -> is_binary(key) end)
-    Map.merge(Map.new(atoms, fn {key, value} -> {to_string(key), value} end), Map.new(strings))
-  end
-end
-
-# A Room's snapshot carries the Vamp as JSON in the same flat shape it is stored in.
-defimpl Jason.Encoder, for: Thereish.Foley.Vamp do
-  def encode(vamp, opts) do
-    {:ok, row} = Thereish.Foley.Vamp.dump(vamp)
-    Jason.Encode.map(row, opts)
-  end
 end
