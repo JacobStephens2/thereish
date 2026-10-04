@@ -15,7 +15,7 @@ defmodule ThereishWeb.Foley do
   (nil on the screen's first render) to `new_room`, each as the event the
   browser's Foley hook listens for.
   """
-  def push_cues(socket, old_room, new_room, screen) do
+  def play_cues(socket, old_room, new_room, screen) do
     old_room
     |> Cues.between(new_room, screen)
     |> Enum.reduce(socket, fn cue, socket ->

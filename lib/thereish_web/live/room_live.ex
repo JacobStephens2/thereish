@@ -269,7 +269,7 @@ defmodule ThereishWeb.RoomLive do
     |> assign(:room, new_room)
     |> assign(:seat, seat)
     |> assign(:stage_present?, ThereishWeb.Presence.stage_present?(socket.assigns.slug))
-    |> ThereishWeb.Foley.push_cues(old_room, new_room, :phone)
+    |> ThereishWeb.Foley.play_cues(old_room, new_room, :phone)
   end
 
   defp message(:give_required), do: "Type a Give first."
