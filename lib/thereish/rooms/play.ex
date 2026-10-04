@@ -27,7 +27,7 @@ defmodule Thereish.Rooms.Play do
       accepts it, so a late tap after the Author has written the Page leaves
       that Page's music and times alone.
     * The Entry closing a Page carries Occupancy's music for the Room's music
-      setting, the Page's experiment arm and Pacing's times. Pages then holds
+      setting, the Page's Assignment and Pacing's times. Pages then holds
       results for it, and Voice decides whether it is written now or once the
       Verdict has been spoken.
 
@@ -46,9 +46,9 @@ defmodule Thereish.Rooms.Play do
   Room's process performs each, then at once runs the follow-up command it
   names and performs that command's effects, before the rest of the list:
 
-    * `{:open_page, request, arm_or_nil}`: the Room assigns an arm when this
-      is nil, reads the Track cache for the request's Gives, and runs
-      `{:page_opened, request, arm, cached_track}`
+    * `{:open_page, request, assignment_or_nil}`: the Room makes an
+      Assignment when this is nil, reads the Track cache for the request's
+      Gives, and runs `{:page_opened, request, assignment, cached_track}`
     * `{:look_up_track, page_ref, gives}`: runs
       `{:track_looked_up, page_ref, cached_track}`
     * `{:write_chronicle, entry}`: runs `{:chronicle_written, page_id}`, or
@@ -65,8 +65,9 @@ defmodule Thereish.Rooms.Play do
     * `:broadcast` and `{:broadcast, message}`
     * `{:insert_seat, id, name}` and `{:persist_room, attrs}`
     * `{:timer, name, token, ms}`: answer with `{:pacing, name, token}`
-    * `{:open_page, request, arm_or_nil}`
-    * `{:ask_author, ref, request, arm}`: answer with
+    * `{:open_page, request, assignment_or_nil}`
+    * `{:ask_author, ref, request, arm}`, the Arm being the Author's job:
+      answer with
       `{:author_completed, ref, result}`
     * `{:ask_assayer, request}`: answer with `{:assayed, event}`
     * `{:draw_mask, seat_id, giving_ref, give, colour}`: answer with
@@ -84,7 +85,6 @@ defmodule Thereish.Rooms.Play do
   import Kernel, except: [apply: 3]
 
   alias Thereish.Chronicle.Entry
-  alias Thereish.Experiments
   alias Thereish.Foley.Occupancy
   alias Thereish.Foley.Repertoire
   alias Thereish.Foley.Voice
@@ -386,19 +386,19 @@ defmodule Thereish.Rooms.Play do
 
   # The Author is asked under a fresh ref, and Occupancy's Foley under a fresh
   # Page ref, so a retry's answers never land on the request it replaced.
-  def apply(%__MODULE__{} = play, {:page_opened, request, arm, cached}, now) do
+  def apply(%__MODULE__{} = play, {:page_opened, request, assignment, cached}, now) do
     ref = make_ref()
     page_ref = make_ref()
     gives = Enum.map(request.gives, & &1.text)
     music = play.facts.music
 
-    play = %{play | pages: Pages.page_opened(play.pages, page_ref, arm)}
+    play = %{play | pages: Pages.page_opened(play.pages, page_ref, assignment)}
     {play, paced} = pace(play, &Pacing.author_asked(&1, ref, now), now)
 
     {play, occupied} =
       occupy_quietly(play, &Occupancy.page_opened(&1, page_ref, gives, cached, now.ms, music))
 
-    {:ok, play, paced ++ [{:ask_author, ref, request, arm}] ++ occupied}
+    {:ok, play, paced ++ [{:ask_author, ref, request, assignment.arm}] ++ occupied}
   end
 
   def apply(%__MODULE__{} = play, {:track_looked_up, page_ref, cached}, _now) do
@@ -496,15 +496,15 @@ defmodule Thereish.Rooms.Play do
 
   defp game_effect(play, :beat, now), do: pace(play, &Pacing.beat_owed(&1, now), now)
 
-  # The Entry takes the Page's experiment arm here, at the close, so a held
-  # write still records the arm the Page was played under. Voice decides
+  # The Entry takes the Page's Assignment here, at the close, so a held write
+  # still records the Assignment the Page was played under. Voice decides
   # whether the write waits for the closing Verdict's speech: ADR-0003 forbids
   # updating the Verdict row afterwards.
   defp game_effect(play, {:chronicle, %Entry{} = entry}, _now) do
     entry =
       entry
       |> struct!(Occupancy.chronicle_meta(play.occupancy, play.facts.music))
-      |> struct!(arm: Pages.arm(play.pages) || Experiments.default_arm())
+      |> struct!(assignment: Pages.assignment(play.pages))
       |> then(&Pacing.stamp(play.pacing, &1))
 
     play = %{play | pages: Pages.page_closed(play.pages), pages_before_turn: nil}
@@ -517,12 +517,15 @@ defmodule Thereish.Rooms.Play do
     do: {play, [{:record_fairness_tap, data}]}
 
   # A tap is made on a closed Page, so it belongs to the Page in play, which
-  # Voice may not have let into the Chronicle yet.
-  defp game_effect(play, {:bookends_tap, data}, _now),
-    do: write_page(play, Pages.giving(play.pages), {:bookends_tap, data})
+  # Voice may not have let into the Chronicle yet, and is recorded under that
+  # Page's Assignment.
+  defp game_effect(play, {:bookends_tap, data}, _now) do
+    data = Map.put(data, :assignment, Pages.assignment(play.pages))
+    write_page(play, Pages.giving(play.pages), {:bookends_tap, data})
+  end
 
   defp game_effect(play, {:author, request}, _now),
-    do: {play, [{:open_page, request, Pages.arm(play.pages)}]}
+    do: {play, [{:open_page, request, Pages.assignment(play.pages)}]}
 
   defp game_effect(play, {:assay, request}, now) do
     {play, paced} = pace(play, &Pacing.assayer_asked(&1, now), now)
