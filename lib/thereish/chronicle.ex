@@ -30,11 +30,13 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.FairnessTap
   alias Thereish.Chronicle.Give
+  alias Thereish.Chronicle.Markdown
   alias Thereish.Chronicle.Opinion
   alias Thereish.Chronicle.Overrule
   alias Thereish.Chronicle.Page
   alias Thereish.Chronicle.PageView
   alias Thereish.Chronicle.Recap
+  alias Thereish.Chronicle.Spend
   alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
   alias Thereish.Experiments
@@ -42,6 +44,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Foley.Vamp
   alias Thereish.Mask
   alias Thereish.Repo
+  alias Thereish.Rooms.Room
   alias Thereish.Steward.TrackCache
 
   @doc """
@@ -269,7 +272,7 @@ defmodule Thereish.Chronicle do
   """
   @spec admin_rooms() :: [map()]
   def admin_rooms do
-    from(r in Thereish.Rooms.Room,
+    from(r in Room,
       left_join: p in Page,
       on: p.room_id == r.id,
       group_by: [r.id, r.slug, r.inserted_at],
@@ -366,15 +369,20 @@ defmodule Thereish.Chronicle do
 
   @doc """
   Renders the Chronicle for a Room as a Markdown document on demand.
+
+  The Chronicle does the reads; `Markdown` owns the format.
   """
   @spec to_markdown(Ecto.UUID.t() | String.t()) :: String.t()
-  def to_markdown(room_id_or_slug), do: Thereish.Chronicle.Markdown.render(room_id_or_slug)
+  def to_markdown(room_id_or_code) do
+    room = resolve_room(room_id_or_code)
+    Markdown.render(room.slug, page_views(room.id, :asc), Spend.room(room.id))
+  end
 
   @doc """
   Parses an exported Chronicle Markdown document back into structured data.
   """
-  @spec from_markdown(String.t()) :: {:ok, [map()]} | {:error, term()}
-  def from_markdown(markdown), do: Thereish.Chronicle.Markdown.parse(markdown)
+  @spec from_markdown(String.t()) :: {:ok, [Markdown.parsed_page()]} | {:error, term()}
+  def from_markdown(markdown), do: Markdown.parse(markdown)
 
   @doc """
   Replaces the Track on an existing Chronicle page.
@@ -576,13 +584,23 @@ defmodule Thereish.Chronicle do
 
   defp uuid?(_), do: false
 
+  defp resolve_room(room_id_or_code) do
+    if uuid?(room_id_or_code) do
+      Repo.get!(Room, room_id_or_code)
+    else
+      room_by_code!(room_id_or_code)
+    end
+  end
+
   defp resolve_room_id(room_id_or_slug) do
     if uuid?(room_id_or_slug) do
       room_id_or_slug
     else
-      Repo.get_by!(Thereish.Rooms.Room, slug: room_id_or_slug).id
+      room_by_code!(room_id_or_slug).id
     end
   end
+
+  defp room_by_code!(code), do: Repo.get_by!(Room, slug: code)
 
   defp timing_pages do
     from(p in Page,
