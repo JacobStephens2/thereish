@@ -4,9 +4,9 @@ defmodule Thereish.Rooms.Pages do
 
   It is a pure reducer in the shape of Pacing, Occupancy and Voice. The Room
   tells it that a Page was opened, that it closed, that its Chronicle Page
-  was written, that the Gives were reset or the Page turned, and hands it each write that should
-  land on a Page. It answers with a new Pages and the writes to perform now.
-  It does no I/O, and it never looks inside a write.
+  was written, that the Gives were reset or the Page turned, and hands it
+  each write that should land on a Page. It answers with a new Pages and the
+  writes to perform now. It does no I/O, and it never looks inside a write.
 
   ## Two kinds of ref
 

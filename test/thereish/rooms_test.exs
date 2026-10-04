@@ -4229,25 +4229,32 @@ defmodule Thereish.RoomsTest do
     end
 
     test "a Bookends tap made while Voice holds the Page is recorded on that Page", ctx do
+      # A Page before it, so a misfiled tap would have somewhere to go.
+      meld(ctx)
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      [earlier] = Chronicle.pages(ctx.room.id)
+
       steward(voice_delay_ms: 5_000)
       :ok = Rooms.claim_speaker(ctx.slug, ctx.token)
       meld(ctx)
 
-      assert Chronicle.pages(ctx.room.id) == []
+      assert [earlier] == Chronicle.pages(ctx.room.id)
       assert :ok = Rooms.tap_bookends(ctx.slug, ctx.melissa.id, "great")
 
       # Turning the Page releases the held write, and the tap after it.
       :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
 
-      [page] = Chronicle.pages(ctx.room.id)
+      [^earlier, page] = Chronicle.pages(ctx.room.id)
       [tap] = Chronicle.bookends_taps(ctx.room.id)
       assert tap.page_id == page.id
       assert tap.page_identifier == page.id
       assert tap.label == "great"
 
-      [outcome] = Chronicle.experiment_outcomes(ctx.room.id, "author_model")
-      assert outcome.page_id == page.id
-      assert outcome.taps == %{to_string(ctx.melissa.id) => "great"}
+      outcomes =
+        Map.new(Chronicle.experiment_outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1})
+
+      assert outcomes[page.id].taps == %{to_string(ctx.melissa.id) => "great"}
+      assert outcomes[earlier.id].taps == %{}
     end
 
     test "a Mask for an earlier Give that lands after the Page turned is written onto its Page",
