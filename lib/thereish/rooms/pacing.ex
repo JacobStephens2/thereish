@@ -56,7 +56,7 @@ defmodule Thereish.Rooms.Pacing do
   Verdict. Pacing runs that ladder, because it is made of time. Each step moves
   what every screen says; the last one is not a step but the end of the wait —
   the Verdict still outstanding is recorded as absent and the call goes to the
-  couple, which is design law 3's joint authority arriving by the back door
+  players, which is design law 3's joint authority arriving by the back door
   rather than an invented number. A Verdict that turns up after that is
   dropped: an Attempt is graded once (ADR-0010).
 
@@ -265,7 +265,7 @@ defmodule Thereish.Rooms.Pacing do
 
   # Ten seconds is where the game stops waiting and says so. The Verdict is
   # recorded as absent, which the rules already answer by revealing without a
-  # number and handing the ruling to the couple.
+  # number and handing the ruling to the players.
   def elapsed(%__MODULE__{assayer: %{token: token, step: :slow}} = pacing, :assayer, token, _now) do
     {%{pacing | assayer: nil}, [{:apply, [{:verdict_unavailable, %{}}]}]}
   end

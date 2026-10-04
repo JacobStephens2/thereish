@@ -741,6 +741,30 @@ defmodule Thereish.RoomsTest do
       assert {:error, :page_closed} = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
     end
 
+    test "a closed Page's Chronicle row carries when each part of it happened", ctx do
+      play(ctx, "cairn", "beacon")
+      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
+      play(ctx, "wharf", "wharf")
+
+      room = Store.get_room(ctx.slug)
+      [page] = eventually(fn -> Chronicle.pages(room.id) |> then(&(&1 != [] and &1)) end)
+
+      assert %DateTime{} = page.opened_at
+      assert %DateTime{} = page.revealed_at
+      assert Enum.all?(page.gives, &match?(%DateTime{}, &1.arrived_at))
+
+      [first, last] = Enum.sort_by(page.attempts, & &1.number)
+
+      for attempt <- [first, last] do
+        assert %DateTime{} = attempt.started_at
+        assert %DateTime{} = attempt.assaying_started_at
+        assert %DateTime{} = attempt.revealed_at
+      end
+
+      assert %DateTime{} = first.advanced_at
+      assert is_nil(last.advanced_at)
+    end
+
     test "the last attempt closes the Page unmelded", ctx do
       attempt_cap(2)
 

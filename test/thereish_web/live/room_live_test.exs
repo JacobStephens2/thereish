@@ -775,9 +775,13 @@ defmodule ThereishWeb.RoomLiveTest do
       miss(ctx)
 
       # The Room read its hold when it opened, so the first one is waited out
-      # on its clock rather than shortened.
+      # on its clock rather than shortened. Nothing broadcasts when a frozen
+      # clock moves, so the phone reconnects to read the unlocked button.
       travel(clock, 60_000)
-      render_click(ctx.melissa, "next_attempt", %{})
+      {:ok, melissa, _} = live(ctx.melissa_conn)
+      ctx = %{ctx | melissa: melissa}
+      assert has_element?(ctx.melissa, "[data-role=again]:not([disabled])")
+      press(ctx.melissa, "again")
       await_phase(ctx.slug, :bridging)
 
       miss(ctx, "wharf", "gantry")
@@ -2284,7 +2288,9 @@ defmodule ThereishWeb.RoomLiveTest do
   end
 
   describe "Foley speaker and audio pushes" do
-    setup do
+    setup ctx do
+      if ms = ctx[:beat], do: beat(ms)
+
       slug = open_room()
       {:ok, melissa, _} = live(phone(slug))
       {:ok, jacob, _} = live(phone(slug))
@@ -2453,6 +2459,9 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=music-off][data-active=true]")
     end
 
+    # The Stage hears the Beat from an assaying snapshot, so the Beat must
+    # outlast the broadcast that carries it.
+    @tag beat: 200
     test "foley events push to the speaking view alone across a Page arc", ctx do
       give_setting(ctx.melissa, "setting one")
       give_setting(ctx.jacob, "setting two")
@@ -2605,6 +2614,9 @@ defmodule ThereishWeb.RoomLiveTest do
       end)
     end
 
+    # The Stage hears the Beat from an assaying snapshot, so the Beat must
+    # outlast the broadcast that carries it.
+    @tag beat: 200
     test "foley:beat, foley:sting, and foley:voice push in order to speaking view alone", ctx do
       give_setting(ctx.melissa, "setting one")
       give_setting(ctx.jacob, "setting two")
