@@ -26,8 +26,11 @@ defmodule Thereish.Rooms.PlayTest do
   @speaker "speaker-token"
   @track %{path: "/media/track.mp3", meta: %{provider: "fake"}}
 
-  defp new(room \\ %{}, durations \\ @durations, seats \\ @seats) do
-    room = struct!(%Room{slug: "test", seat_limit: length(seats)}, room)
+  # A Room as full as its Seats, unless `room` says otherwise.
+  defp new(opts \\ []) do
+    seats = Keyword.get(opts, :seats, @seats)
+    room = struct!(%Room{slug: "test", seat_limit: length(seats)}, Keyword.get(opts, :room, %{}))
+    durations = Keyword.get(opts, :durations, @durations)
     Play.new(%{room: room, seats: seats}, %{members: @members, durations: durations, now: @now})
   end
 
@@ -110,12 +113,7 @@ defmodule Thereish.Rooms.PlayTest do
 
   describe "joining" do
     test "a Seat the rules take is inserted before anything else is performed" do
-      play =
-        Play.new(%{room: %Room{slug: "test", seat_limit: 2}, seats: []}, %{
-          members: @members,
-          durations: @durations,
-          now: @now
-        })
+      play = new(seats: [], room: %{seat_limit: 2})
 
       assert {:ok, play, [{:insert_seat, "mara", "Mara"} | rest]} =
                Play.apply(play, {:seat_joined, "mara", "Mara"}, @now)
@@ -151,6 +149,16 @@ defmodule Thereish.Rooms.PlayTest do
       assert %{reading: _, text: _} = view(play).prologue
     end
 
+    test "skipping the Prologue ends the take playing and is written" do
+      {play, _} = run(new(), {:room_fact, :play_prologue})
+
+      assert {:ok, play, [{:persist_room, %{prologue_skipped: true}}, :broadcast]} =
+               Play.apply(play, {:room_fact, :skip_prologue}, @now)
+
+      assert view(play).prologue == nil
+      assert view(play).prologue_skipped
+    end
+
     test "a music setting the Room does not have is refused" do
       assert Play.apply(new(), {:room_fact, {:set_music, "loud"}}, @now) ==
                {:error, :bad_music_setting}
@@ -167,7 +175,7 @@ defmodule Thereish.Rooms.PlayTest do
 
     test "Full table reaches the Game: the next Page opens on two Bookends" do
       seats = @seats ++ [%{id: "ada", name: "Ada"}]
-      play = new(%{}, @durations, seats)
+      play = new(seats: seats)
 
       {play, effects} = run(play, {:room_fact, {:set, :full_table, false}})
       assert [{:persist_room, %{full_table: false}}, :broadcast] = effects
@@ -223,7 +231,7 @@ defmodule Thereish.Rooms.PlayTest do
 
   describe "the view" do
     test "merges the Game's view, Pacing's waits, the Room facts and what is playing" do
-      {play, _page_ref, _giving} = written(new(%{quips: false}))
+      {play, _page_ref, _giving} = written(new(room: %{quips: false}))
 
       view = view(play, "mara", "a-token", true)
 
@@ -244,7 +252,12 @@ defmodule Thereish.Rooms.PlayTest do
       assert view(play, nil, nil).speaker_claimed?
 
       for token <- [@speaker, "another-token", nil] do
-        refute play |> view(nil, token) |> inspect() =~ @speaker
+        view = view(play, nil, token)
+
+        for key <- [:speaker, :device_token, :voice, :house_loop_only],
+            do: refute(Map.has_key?(view, key))
+
+        refute Jason.encode!(view) =~ @speaker
       end
     end
   end
@@ -487,7 +500,7 @@ defmodule Thereish.Rooms.PlayTest do
 
   describe "the reveal hold" do
     test "holds Next Attempt and Next Page alike until it is over" do
-      play = new(%{}, %{@durations | hold: 5_000})
+      play = new(durations: %{@durations | hold: 5_000})
 
       {play, _page_ref, _giving} = written(play)
       {play, bridged} = bridges(play, "cairn", "cairo")
