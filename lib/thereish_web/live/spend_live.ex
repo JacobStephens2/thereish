@@ -2,17 +2,17 @@ defmodule ThereishWeb.SpendLive do
   @moduledoc """
   Operator spend page across all Rooms by role and model (ticket 09).
 
-  Totals every Room by role (Author, Assayer, Scribe) and by model with call counts,
-  computed dynamically from rows (never stored).
+  Totals every Room by role and by model with call counts, read from the
+  Chronicle's rows by `Thereish.Chronicle.Spend` (never stored).
   """
   use ThereishWeb, :live_view
 
-  alias Thereish.Chronicle
+  alias Thereish.Chronicle.Spend
   alias Thereish.Rooms
 
   @impl true
   def mount(_params, _session, socket) do
-    spend = Chronicle.spend()
+    spend = Spend.all()
     in_play_count = Rooms.in_play_count()
 
     {:ok,
@@ -50,7 +50,7 @@ defmodule ThereishWeb.SpendLive do
         <div class="flex flex-col gap-1">
           <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Total Spend</span>
           <span class="text-2xl font-bold font-mono text-primary">
-            {Chronicle.format_usd(@spend.total_usd)}
+            {Spend.format_usd(@spend.total_usd)}
           </span>
         </div>
         <div class="flex flex-col gap-1">
@@ -89,18 +89,10 @@ defmodule ThereishWeb.SpendLive do
               </tr>
             </thead>
             <tbody class="divide-y divide-base-200 font-mono text-xs">
-              <tr :for={
-                {role_name, role_key} <- [
-                  {"Author", :author},
-                  {"Assayer", :assayer},
-                  {"Scribe", :scribe},
-                  {"Foley", :foley},
-                  {"Limner", :limner}
-                ]
-              }>
+              <tr :for={{role_name, role_key} <- Spend.roles()}>
                 <% role_data = @spend.by_role[role_key] %>
                 <td class="py-2.5 px-4 font-sans font-medium text-sm">{role_name}</td>
-                <td class="py-2.5 px-4">{Chronicle.format_usd(role_data.total_usd)}</td>
+                <td class="py-2.5 px-4">{Spend.format_usd(role_data.total_usd)}</td>
                 <td class="py-2.5 px-4">{role_data.calls_count}</td>
                 <td class="py-2.5 px-4">{role_data.unpriced_count}</td>
               </tr>
@@ -129,13 +121,13 @@ defmodule ThereishWeb.SpendLive do
                   No model calls recorded yet.
                 </td>
               </tr>
-              <%= for {role_name, role_key} <- [{"Author", :author}, {"Assayer", :assayer}, {"Scribe", :scribe}, {"Foley", :foley}, {"Limner", :limner}] do %>
+              <%= for {role_name, role_key} <- Spend.roles() do %>
                 <% role_data = @spend.by_role[role_key] %>
-                <%= for {model, stats} <- Enum.sort_by(role_data[:by_model] || %{}, &elem(&1, 0)) do %>
+                <%= for {model, stats} <- Enum.sort_by(role_data.by_model, &elem(&1, 0)) do %>
                   <tr>
                     <td class="py-2.5 px-4 font-sans font-medium text-sm">{role_name}</td>
                     <td class="py-2.5 px-4 font-sans font-medium text-sm">{model}</td>
-                    <td class="py-2.5 px-4">{Chronicle.format_usd(stats.total_usd)}</td>
+                    <td class="py-2.5 px-4">{Spend.format_usd(stats.total_usd)}</td>
                     <td class="py-2.5 px-4">{stats.calls_count}</td>
                     <td class="py-2.5 px-4">{stats.unpriced_count}</td>
                   </tr>
@@ -167,7 +159,7 @@ defmodule ThereishWeb.SpendLive do
               </tr>
               <tr :for={{model, stats} <- Enum.sort_by(@spend.by_model, &elem(&1, 0))}>
                 <td class="py-2.5 px-4 font-sans font-medium text-sm">{model}</td>
-                <td class="py-2.5 px-4">{Chronicle.format_usd(stats.total_usd)}</td>
+                <td class="py-2.5 px-4">{Spend.format_usd(stats.total_usd)}</td>
                 <td class="py-2.5 px-4">{stats.calls_count}</td>
                 <td class="py-2.5 px-4">{stats.unpriced_count}</td>
               </tr>
@@ -196,11 +188,7 @@ defmodule ThereishWeb.SpendLive do
                 <th class="py-3 px-4">Opened</th>
                 <th class="py-3 px-4">Total</th>
                 <th class="py-3 px-4">Calls</th>
-                <th class="py-3 px-4">Author</th>
-                <th class="py-3 px-4">Assayer</th>
-                <th class="py-3 px-4">Scribe</th>
-                <th class="py-3 px-4">Foley</th>
-                <th class="py-3 px-4">Limner</th>
+                <th :for={{name, _key} <- Spend.roles()} class="py-3 px-4">{name}</th>
                 <th class="py-3 px-4">Unpriced</th>
               </tr>
             </thead>
@@ -232,23 +220,14 @@ defmodule ThereishWeb.SpendLive do
                   {r.opened_at && Calendar.strftime(r.opened_at, "%b %d, %Y")}
                 </td>
                 <td class="py-2.5 px-4 font-mono font-semibold">
-                  {Chronicle.format_usd(r.total_usd)}
+                  {Spend.format_usd(r.total_usd)}
                 </td>
                 <td class="py-2.5 px-4 font-mono">{r.calls_count}</td>
-                <td class="py-2.5 px-4 font-mono text-opacity-80">
-                  {Chronicle.format_usd(r.by_role.author.total_usd)}
-                </td>
-                <td class="py-2.5 px-4 font-mono text-opacity-80">
-                  {Chronicle.format_usd(r.by_role.assayer.total_usd)}
-                </td>
-                <td class="py-2.5 px-4 font-mono text-opacity-80">
-                  {Chronicle.format_usd(r.by_role.scribe.total_usd)}
-                </td>
-                <td class="py-2.5 px-4 font-mono text-opacity-80">
-                  {Chronicle.format_usd(r.by_role.foley.total_usd)}
-                </td>
-                <td class="py-2.5 px-4 font-mono text-opacity-80">
-                  {Chronicle.format_usd(r.by_role.limner.total_usd)}
+                <td
+                  :for={{_role_name, role_key} <- Spend.roles()}
+                  class="py-2.5 px-4 font-mono text-opacity-80"
+                >
+                  {Spend.format_usd(r.by_role[role_key].total_usd)}
                 </td>
                 <td class="py-2.5 px-4 font-mono">{r.unpriced_count}</td>
               </tr>
