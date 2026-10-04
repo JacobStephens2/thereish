@@ -82,6 +82,10 @@ defmodule Thereish.Foley.VampTest do
       assert Ecto.Type.load(Vamp, row) == {:ok, %Vamp{path: "/v.mp3", loop: true, meta: %{}}}
     end
 
+    test "an empty row holds no Vamp" do
+      assert Ecto.Type.load(Vamp, %{}) == {:ok, nil}
+    end
+
     test "casts only a Vamp" do
       vamp = Vamp.landed(@vamp)
 
