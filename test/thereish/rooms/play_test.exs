@@ -286,7 +286,7 @@ defmodule Thereish.Rooms.PlayTest do
       assert view(play).bookends == ["lighthouse", "picnic"]
 
       {play, bridged} = bridges(play, "cairn", "cairn")
-      assert {:ask_assayer, %{bridges: _}, []} = find(bridged, :ask_assayer)
+      assert {:ask_assayer, %{bridges: _}} = find(bridged, :ask_assayer)
       assert phase(play) == :assaying
 
       # The Verdict is held for the Beat, then applied.
@@ -494,10 +494,10 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   describe "the Assayer's prior Quips" do
-    test "the in-play half is this Page's graded Quips, oldest first" do
+    test "this Page's ride on the request's earlier Attempts" do
       {play, _page_ref, _giving} = written(new())
       {play, bridged} = bridges(play, "cairn", "cairo")
-      {:ask_assayer, _request, []} = find(bridged, :ask_assayer)
+      {:ask_assayer, %{earlier_attempts: []}} = find(bridged, :ask_assayer)
 
       {:timer, :beat, token, _ms} = find(bridged, :timer)
       {play, _} = run(play, {:assayed, verdict(10, "a first quip")})
@@ -507,7 +507,9 @@ defmodule Thereish.Rooms.PlayTest do
       {play, _} = run(play, {:next_attempt, "melissa"})
       {_play, bridged} = bridges(play, "harbour", "lantern")
 
-      assert {:ask_assayer, _request, ["a first quip"]} = find(bridged, :ask_assayer)
+      assert {:ask_assayer, request} = find(bridged, :ask_assayer)
+      assert [%{number: 1, quip: "a first quip"}] = request.earlier_attempts
+      refute Map.has_key?(request, :prior_quips)
     end
   end
 

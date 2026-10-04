@@ -199,4 +199,69 @@ defmodule Thereish.Steward.DigestTest do
       assert digest =~ "[Give (Melissa): nurse]"
     end
   end
+
+  describe "the Assayer's digest" do
+    defp quipped(quips) do
+      view(
+        attempts:
+          Enum.with_index(quips, 1)
+          |> Enum.map(fn {quip, number} ->
+            %{number: number, bridges: [], verdicts: [verdict(quip: quip)]}
+          end)
+      )
+    end
+
+    defp request(quips) do
+      %{
+        bookends: ["lantern", "harbour"],
+        bridges: ["cairn", "cairo"],
+        earlier_attempts:
+          Enum.with_index(quips, 1)
+          |> Enum.map(fn {quip, number} ->
+            %{number: number, bookends: ["lantern", "harbour"], bridges: [], quip: quip}
+          end)
+      }
+    end
+
+    test "is no Quips for a Room with no Pages and a first Attempt" do
+      assert Digest.assayer([], request([])) == []
+    end
+
+    test "reads the Chronicle's Quips in play order, then this Page's" do
+      views = [quipped(["first", "second"]), quipped(["third"])]
+
+      assert Digest.assayer(views, request(["fourth"])) == ["first", "second", "third", "fourth"]
+    end
+
+    test "keeps only the last five" do
+      views = [quipped(["one", "two", "three"]), quipped(["four", "five"])]
+
+      assert Digest.assayer(views, request(["six"])) == ["two", "three", "four", "five", "six"]
+    end
+
+    test "drops blank and missing Quips" do
+      views = [quipped(["kept", "", nil])]
+
+      assert Digest.assayer(views, request([nil, "", "also kept"])) == ["kept", "also kept"]
+    end
+
+    test "reads every verdict's Quip on an Attempt written before ADR-0010" do
+      legacy =
+        view(
+          attempts: [
+            %{
+              number: 1,
+              bridges: [],
+              verdicts: [verdict(quip: "first pair"), verdict(quip: "second pair")]
+            }
+          ]
+        )
+
+      assert Digest.assayer([legacy], request([])) == ["first pair", "second pair"]
+    end
+
+    test "reads a request without earlier Attempts as a first Attempt" do
+      assert Digest.assayer([quipped(["only"])], %{bookends: [], bridges: []}) == ["only"]
+    end
+  end
 end

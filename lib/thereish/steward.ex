@@ -33,7 +33,7 @@ defmodule Thereish.Steward do
   front of the seam, and the adapters answer only the provider act: a grade, a
   Quip, a title.
 
-  - **The Precedent.** The grade shown is the precedent (ADR-0006). `assay/1`
+  - **The Precedent.** The grade shown is the precedent (ADR-0006). `assay/2`
     reads `Thereish.Steward.Precedent` before asking the adapter, and writes the
     adapter's grade down on a miss. A hit is the cached grade with a fresh Quip
     from the adapter's `quip/1`, or the cached Quip if the fresh one fails or is
@@ -49,8 +49,19 @@ defmodule Thereish.Steward do
   alias Thereish.Steward.Precedent
   alias Thereish.Steward.Title
 
-  @typedoc "The Bookends, and every Bridge written between them, in roster order."
-  @type request :: %{bookends: [String.t()], bridges: [String.t()]}
+  @typedoc """
+  The Bookends, and every Bridge written between them, in roster order.
+
+  The Game also sends this Page's earlier Attempts, each with its Quip.
+  `prior_quips` is composed by `assay/2` and replaces any the caller passed.
+  """
+  @type request :: %{
+          optional(:earlier_attempts) => [map()],
+          optional(:prior_quips) => [String.t()],
+          optional(atom()) => term(),
+          bookends: [String.t()],
+          bridges: [String.t()]
+        }
 
   @typedoc """
   Which model answered, at what prompt version, how long it took and what it
@@ -527,10 +538,21 @@ defmodule Thereish.Steward do
   An error is not a crash and not a zero: the Room turns it into
   `:verdict_unavailable` and the game admits it has no verdict rather than
   inventing one.
+
+  The Room's Page views, oldest first, ride in as the `chronicle:` option, as
+  they do for `author/2`. The adapter is handed the Assayer's reading of them
+  and of the request's earlier Attempts as `prior_quips`
+  (`Thereish.Steward.Digest.assayer/2`), so a request with no `chronicle:`
+  reads as a Room with no Pages. A `prior_quips` the caller passes is replaced.
+  They are set before the Precedent is read, because a hit still asks the
+  adapter for a fresh Quip, and that Quip needs them too.
   """
-  @spec assay(request()) :: {:ok, verdict()} | {:error, term()}
-  def assay(request) do
+  @spec assay(request(), keyword()) :: {:ok, verdict()} | {:error, term()}
+  def assay(request, opts \\ []) do
     started = System.monotonic_time(:millisecond)
+
+    chronicle = Keyword.get(opts, :chronicle, [])
+    request = Map.put(request, :prior_quips, Digest.assayer(chronicle, request))
 
     case precedent_or_graded(request) do
       {:ok, verdict} -> {:ok, timed(verdict, System.monotonic_time(:millisecond) - started)}

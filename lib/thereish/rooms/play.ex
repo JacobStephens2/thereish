@@ -68,7 +68,7 @@ defmodule Thereish.Rooms.Play do
     * `{:open_page, request, arm_or_nil}`
     * `{:ask_author, ref, request, arm}`: answer with
       `{:author_completed, ref, result}`
-    * `{:ask_assayer, request, in_play_quips}`: answer with `{:assayed, event}`
+    * `{:ask_assayer, request}`: answer with `{:assayed, event}`
     * `{:draw_mask, seat_id, giving_ref, give, colour}`: answer with
       `{:mask_landed, seat_id, giving_ref, mask_or_dot}`
     * `{:speak, attempt, kind, line}`: answer with
@@ -148,7 +148,7 @@ defmodule Thereish.Rooms.Play do
           | {:timer, Pacing.name(), Pacing.token(), non_neg_integer()}
           | {:open_page, map(), atom() | nil}
           | {:ask_author, reference(), map(), atom()}
-          | {:ask_assayer, map(), [String.t()]}
+          | {:ask_assayer, map()}
           | {:draw_mask, seat_id(), reference(), String.t(), String.t()}
           | {:speak, integer(), Voice.kind(), String.t()}
           | {:start_vamp, reference(), [String.t()]}
@@ -526,7 +526,7 @@ defmodule Thereish.Rooms.Play do
 
   defp game_effect(play, {:assay, request}, now) do
     {play, paced} = pace(play, &Pacing.assayer_asked(&1, now), now)
-    {play, [{:ask_assayer, request, in_play_quips(play.game)} | paced]}
+    {play, [{:ask_assayer, request} | paced]}
   end
 
   defp author_event(play, {:ok, result}) do
@@ -540,12 +540,6 @@ defmodule Thereish.Rooms.Play do
   end
 
   defp author_event(_play, {:error, reason}), do: {:author_failed, %{reason: reason}}
-
-  # The Quips of this Page's Attempts already graded, oldest first. The Room
-  # puts the Chronicle's recent Quips before them.
-  defp in_play_quips(%Game{played: played}) do
-    for %{verdict: %{quip: quip}} <- played, is_binary(quip) and quip != "", do: quip
-  end
 
   # -- Pacing -----------------------------------------------------------------
 
