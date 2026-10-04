@@ -46,10 +46,10 @@ defmodule Thereish.Chronicle.Markdown do
 
     give_lines =
       cond do
-        page[:gives] && page[:gives] != [] ->
+        page.gives != [] ->
           Enum.map(page.gives, fn g -> "- Give (#{g.seat_name}): #{g.text}" end)
 
-        page[:give] ->
+        page.give ->
           ["- Give: #{page.give}"]
 
         true ->
@@ -58,13 +58,13 @@ defmodule Thereish.Chronicle.Markdown do
 
     experiment_lines =
       cond do
-        page[:experiment_unblinded] && page[:arm] ->
+        page.experiment_unblinded && page.arm ->
           [
             "- Experiment: #{Experiments.definition(page.experiment_id).name}",
             "- Arm: #{page.arm}"
           ]
 
-        page[:experiment_id] ->
+        page.experiment_id ->
           ["- Experiment: Blinded (#{page.experiment_id})"]
 
         true ->
@@ -91,10 +91,10 @@ defmodule Thereish.Chronicle.Markdown do
 
     mask_lines =
       cond do
-        page[:gives] && page[:gives] != [] ->
-          for g <- page.gives, url = Mask.url(g[:mask]), do: "- Mask (#{g.seat_name}): #{url}"
+        page.gives != [] ->
+          for g <- page.gives, url = Mask.url(g.mask), do: "- Mask (#{g.seat_name}): #{url}"
 
-        is_map(page[:masks]) and map_size(page.masks) > 0 ->
+        is_map(page.masks) and map_size(page.masks) > 0 ->
           for {seat_id, mask} <- page.masks,
               url = Mask.url(mask),
               do: "- Mask (#{seat_id}): #{url}"
@@ -104,16 +104,16 @@ defmodule Thereish.Chronicle.Markdown do
       end
 
     rule_lines =
-      case page[:full_table] do
+      case page.full_table do
         true -> ["- Rule: Full table"]
         false -> ["- Rule: Two Bookends"]
         _ -> []
       end
 
     bookend_give_lines =
-      Enum.flat_map(page[:bookend_origins] || [], fn origin ->
-        if origin[:give] && origin[:word] do
-          who = origin[:seat_name] || "Seat"
+      Enum.flat_map(page.bookend_origins, fn origin ->
+        if origin.give && origin.word do
+          who = origin.seat_name || "Seat"
           ["- Bookend (#{origin.word}): from #{who}'s #{origin.give}"]
         else
           []
@@ -166,7 +166,7 @@ defmodule Thereish.Chronicle.Markdown do
       end
 
     sections =
-      [Enum.join(meta_lines, "\n"), render_recap(page[:recap]), attempts_md, page_corrections_md]
+      [Enum.join(meta_lines, "\n"), render_recap(page.recap), attempts_md, page_corrections_md]
       |> Enum.reject(&(&1 in [nil, ""]))
 
     Enum.join(sections, "\n\n")
@@ -179,7 +179,7 @@ defmodule Thereish.Chronicle.Markdown do
   defp render_recap(nil), do: nil
 
   defp render_recap(recap) do
-    [recap.recap, recap[:callback]]
+    [recap.recap, recap.callback]
     |> Enum.reject(&is_nil/1)
     |> Enum.map_join("\n>\n", &quote_paragraph/1)
   end
@@ -214,7 +214,7 @@ defmodule Thereish.Chronicle.Markdown do
           lines = if single.quip, do: lines ++ ["- Quip: #{single.quip}"], else: lines
 
           lines =
-            if attempt[:carried] && attempt.carried != [] do
+            if attempt.carried && attempt.carried != [] do
               lines ++ ["- Carried: #{Thereish.Game.join_and(attempt.carried)}"]
             else
               lines
@@ -284,7 +284,7 @@ defmodule Thereish.Chronicle.Markdown do
       end
 
     fairness_md =
-      case Map.get(attempt, :fairness_taps, []) do
+      case attempt.fairness_taps do
         [] ->
           nil
 
@@ -292,7 +292,7 @@ defmodule Thereish.Chronicle.Markdown do
           items =
             Enum.map(taps, fn t ->
               display_label = Thereish.Chronicle.FairnessTap.label_human(t.label)
-              "#{t[:reviewer_name] || t.seat_name}: #{display_label}"
+              "#{t.reviewer_name}: #{display_label}"
             end)
             |> Enum.join(", ")
 

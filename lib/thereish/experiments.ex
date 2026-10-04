@@ -530,7 +530,7 @@ defmodule Thereish.Experiments do
           outcomes: [ExperimentOutcome.t()],
           fairness_taps: [map()],
           overrules: [map()],
-          views: [map()]
+          views: [Thereish.Chronicle.PageView.t()]
         }) :: map()
   def summarize(@author_model_id, %{outcomes: outcomes}) do
     flash = summarize_author_arm(of_arm(outcomes, "flash"))

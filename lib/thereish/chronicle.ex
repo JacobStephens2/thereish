@@ -13,6 +13,10 @@ defmodule Thereish.Chronicle do
   a history written against one comes with it whenever an Account claims it
   (ADR-0007).
 
+  How a closed Page reads is projected by `Thereish.Chronicle.PageView`, which
+  is pure over the rows loaded here: this module keeps the reads and hands each
+  Page to `PageView.project/2`.
+
   There is no repository seam under this. Tests run against real Postgres
   through the Ecto sandbox, because a Chronicle that only ever wrote to a fake
   would prove nothing about the thing the couple are going to read.
@@ -28,6 +32,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Give
   alias Thereish.Chronicle.Overrule
   alias Thereish.Chronicle.Page
+  alias Thereish.Chronicle.PageView
   alias Thereish.Chronicle.Recap
   alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
@@ -258,12 +263,25 @@ defmodule Thereish.Chronicle do
   end
 
   defp format_calibration_entry(t) do
-    format_fairness_tap(t)
-    |> Map.drop([:source, :admin_id, :reviewer_name])
-    |> Map.merge(%{
+    closeness = t.closeness || t.grade
+
+    %{
+      id: t.id,
       room_id: t.room_id,
-      page_id: t.page_id
-    })
+      page_id: t.page_id,
+      attempt_number: t.attempt_number,
+      seat_id: t.seat_id,
+      seat_name: t.seat && t.seat.name,
+      bookends: t.bookends,
+      bridges: t.bridges,
+      grade: closeness,
+      closeness: closeness,
+      band: t.band,
+      model: t.model,
+      prompt_version: t.prompt_version,
+      label: t.label,
+      inserted_at: t.inserted_at
+    }
   end
 
   @doc """
@@ -347,14 +365,14 @@ defmodule Thereish.Chronicle do
   projected directly from the append-only rows: Pages, attempts, bridges, verdicts,
   overrules, and corrections.
   """
-  @spec book(Ecto.UUID.t() | String.t()) :: [map()]
+  @spec book(Ecto.UUID.t() | String.t()) :: [PageView.t()]
   def book(room_id_or_slug), do: page_views(room_id_or_slug, :desc)
 
   @doc """
   Computes views of all Pages in one Room directly from the event log, in the
   given order (:asc or :desc).
   """
-  @spec page_views(Ecto.UUID.t() | String.t(), :asc | :desc) :: [map()]
+  @spec page_views(Ecto.UUID.t() | String.t(), :asc | :desc) :: [PageView.t()]
   def page_views(room_id_or_slug, order \\ :desc) do
     room_id = resolve_room_id(room_id_or_slug)
 
@@ -371,16 +389,15 @@ defmodule Thereish.Chronicle do
         corrections: :seat
       )
 
-    all_overrules = overrules(room_id)
-    all_corrections = corrections(room_id)
-    all_recaps = recaps(room_id)
-    all_taps = fairness_taps(room_id)
-    page_arms = Experiments.page_arms(room_id)
+    rows = %{
+      overrules: overrules(room_id),
+      corrections: corrections(room_id),
+      fairness_taps: fairness_taps(room_id),
+      recaps: recaps(room_id),
+      page_arms: Experiments.page_arms(room_id)
+    }
 
-    Enum.map(
-      pages,
-      &compute_page_view(&1, all_overrules, all_corrections, all_taps, all_recaps, page_arms)
-    )
+    Enum.map(pages, &PageView.project(&1, rows))
   end
 
   @doc """
@@ -1217,15 +1234,11 @@ defmodule Thereish.Chronicle do
 
     give_str =
       cond do
-        page[:gives] && page[:gives] != [] ->
+        page.gives != [] ->
           " [" <>
-            Enum.map_join(
-              page.gives,
-              ", ",
-              &"Give (#{Map.get(&1, :seat_name, "Player")}): #{Map.get(&1, :text, "")}"
-            ) <> "]"
+            Enum.map_join(page.gives, ", ", &"Give (#{&1.seat_name}): #{&1.text}") <> "]"
 
-        page[:give] ->
+        page.give ->
           " [Give: #{page.give}]"
 
         true ->
@@ -1285,9 +1298,9 @@ defmodule Thereish.Chronicle do
       end)
 
     recap_lines =
-      case {with_recaps?, page[:recap]} do
+      case {with_recaps?, page.recap} do
         {true, %{recap: recap} = written} when is_binary(recap) ->
-          callback = written[:callback]
+          callback = written.callback
 
           ["  Recap: #{recap}"] ++
             if(is_binary(callback), do: ["  Callback: #{callback}"], else: [])
@@ -1300,277 +1313,6 @@ defmodule Thereish.Chronicle do
       lines ++ attempt_lines ++ overrule_lines ++ correction_lines ++ recap_lines,
       "\n"
     )
-  end
-
-  defp compute_page_view(
-         %Page{} = page,
-         all_overrules,
-         all_corrections,
-         all_taps,
-         all_recaps,
-         page_arms
-       ) do
-    page_overrules =
-      Enum.filter(all_overrules, fn o ->
-        o.page_id == page.id or
-          (o.room_id == page.room_id and
-             Enum.any?(
-               page.attempts,
-               &(&1.number == o.attempt_number and &1.bookends == o.bookends)
-             ))
-      end)
-
-    page_corrections =
-      Enum.filter(all_corrections, fn c ->
-        c.page_id == page.id
-      end)
-
-    page_recap = latest_recap(all_recaps, page, page_corrections)
-
-    page_taps =
-      Enum.filter(all_taps, fn t ->
-        t.page_id == page.id or
-          (t.room_id == page.room_id and
-             Enum.any?(
-               page.attempts,
-               &(&1.number == t.attempt_number and &1.bookends == t.bookends)
-             ))
-      end)
-
-    attempts =
-      page.attempts
-      |> Enum.with_index()
-      |> Enum.map(fn {attempt, index} ->
-        attempt_overrules =
-          Enum.filter(page_overrules, fn o ->
-            o.attempt_number == attempt.number and
-              (o.bookends == attempt.bookends or o.page_id == page.id)
-          end)
-
-        attempt_corrections =
-          Enum.filter(page_corrections, fn c ->
-            c.attempt_number == attempt.number
-          end)
-
-        attempt_taps =
-          Enum.filter(page_taps, fn t ->
-            t.attempt_number == attempt.number and
-              (t.bookends == attempt.bookends or t.page_id == page.id)
-          end)
-
-        bridges =
-          Enum.map(attempt.bridges, fn b ->
-            matching_corrs =
-              Enum.filter(page_corrections, fn c ->
-                c.target == "bridge" and
-                  (c.attempt_number == attempt.number or is_nil(c.attempt_number)) and
-                  ((c.original_value && c.original_value == b.bridge) or
-                     ((c.attempt_number == attempt.number and c.seat_id) && c.seat_id == b.seat_id))
-              end)
-
-            matching_corr = List.last(matching_corrs)
-
-            if matching_corr do
-              %{
-                id: b.id,
-                seat_id: b.seat_id,
-                seat_name: (b.seat && b.seat.name) || "Player",
-                bridge: matching_corr.corrected_value,
-                original_bridge: b.bridge,
-                corrected?: true,
-                position: b.position
-              }
-            else
-              %{
-                id: b.id,
-                seat_id: b.seat_id,
-                seat_name: (b.seat && b.seat.name) || "Player",
-                bridge: b.bridge,
-                original_bridge: nil,
-                corrected?: false,
-                position: b.position
-              }
-            end
-          end)
-
-        verdicts =
-          Enum.map(attempt.verdicts, fn v ->
-            %{
-              id: v.id,
-              seat_ids: v.seat_ids,
-              bridges: v.bridges,
-              graded: v.graded,
-              closeness: v.closeness,
-              band: v.band,
-              reasoning: v.reasoning,
-              quip: v.quip,
-              overruled: v.overruled || attempt_overrules != [],
-              model: v.model,
-              prompt_version: v.prompt_version,
-              latency_ms: v.latency_ms,
-              cost_usd: v.cost_usd,
-              forward: v.forward,
-              reverse: v.reverse,
-              reasoning_reverse: v.reasoning_reverse,
-              furthest: v.furthest,
-              position: v.position
-            }
-          end)
-
-        %{
-          id: attempt.id,
-          number: attempt.number,
-          bookends: attempt.bookends,
-          closeness: attempt.closeness,
-          melded: attempt.melded,
-          bridges: bridges,
-          verdicts: verdicts,
-          carried:
-            extract_carried(
-              page,
-              page.attempts,
-              index,
-              attempt,
-              verdicts,
-              bridges
-            ),
-          bookend_chips: bookend_chips_for(page, attempt, index),
-          overrules: Enum.map(attempt_overrules, &format_overrule/1),
-          corrections: Enum.map(attempt_corrections, &format_correction/1),
-          fairness_taps: Enum.map(attempt_taps, &format_fairness_tap/1)
-        }
-      end)
-
-    formatted_gives =
-      case page.gives do
-        %Ecto.Association.NotLoaded{} ->
-          []
-
-        nil ->
-          []
-
-        list when is_list(list) ->
-          masks = page.masks_meta || %{}
-
-          Enum.map(list, fn g ->
-            %{
-              id: g.id,
-              seat_id: g.seat_id,
-              seat_name: (g.seat && g.seat.name) || "Seat",
-              text: g.text,
-              order: g.order,
-              mask: Map.get(masks, g.seat_id)
-            }
-          end)
-      end
-
-    opening_bookends =
-      page.document["bookends"] ||
-        page.document[:bookends] ||
-        case page.attempts do
-          [first | _] -> first.bookends
-          [] -> []
-        end
-
-    %{
-      id: page.id,
-      room_id: page.room_id,
-      document: page.document,
-      gives: formatted_gives,
-      author_meta: page.author_meta,
-      music_meta: page.music_meta,
-      vamp_meta: page.vamp_meta,
-      masks: page.masks_meta,
-      give: page.document["give"] || page.document[:give],
-      theme: page.document["theme"] || page.document[:theme],
-      chapter: page.document["chapter"] || page.document[:chapter],
-      bookends: opening_bookends,
-      bookend_origins: page_bookend_origins(page.document),
-      full_table: page_full_table(page.document),
-      closed_because: page.closed_because,
-      melded: page.melded,
-      closeness: page.closeness,
-      opened_at: page.opened_at,
-      closed_at: page.closed_at,
-      attempts: attempts,
-      recap: page_recap,
-      overrules: Enum.map(page_overrules, &format_overrule/1),
-      corrections: Enum.map(page_corrections, &format_correction/1),
-      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1)
-    }
-    |> Map.merge(Experiments.page_arm(page_arms, page))
-  end
-
-  # The Scribe's last word on a Page, read over by the players'. Two rows can
-  # exist for one Page — the Scribe run again after a prompt changed — and the
-  # book reads the later one; a correction against the recap reads over the top
-  # of that, the same way a corrected Bridge does (design law 5).
-  defp latest_recap(all_recaps, page, page_corrections) do
-    written =
-      all_recaps
-      |> Enum.filter(&(&1.page_id == page.id))
-      |> List.last()
-
-    correction =
-      page_corrections
-      |> Enum.filter(&(&1.target == "recap"))
-      |> List.last()
-
-    cond do
-      # A Page the Scribe has not got to yet, or could not write, and that
-      # nobody wrote for it either. The book says so rather than showing a
-      # paragraph nobody wrote.
-      is_nil(written) and is_nil(correction) ->
-        nil
-
-      true ->
-        written |> recap_view() |> corrected_by(correction)
-    end
-  end
-
-  defp recap_view(nil), do: %{}
-
-  defp recap_view(written) do
-    %{
-      id: written.id,
-      recap: written.recap,
-      original_recap: nil,
-      corrected?: false,
-      callback: written.callback,
-      model: written.model,
-      prompt_version: written.prompt_version,
-      cost_usd: written.cost_usd,
-      latency_ms: written.latency_ms,
-      attempts: written.attempts,
-      inserted_at: written.inserted_at
-    }
-  end
-
-  defp corrected_by(view, nil), do: view
-
-  # The players' words over the Scribe's, with the Scribe's kept underneath so
-  # the book can show what was changed. A correction against a Page the Scribe
-  # never wrote about is itself the paragraph: the Chronicle is theirs (design
-  # law 5), and a recap they wrote from nothing is still a recap.
-  defp corrected_by(view, correction) do
-    Map.merge(
-      %{
-        id: correction.id,
-        callback: nil,
-        model: nil,
-        prompt_version: nil,
-        cost_usd: nil,
-        latency_ms: nil,
-        attempts: nil,
-        inserted_at: correction.inserted_at
-      },
-      view
-    )
-    |> Map.merge(%{
-      recap: correction.corrected_value,
-      original_recap: view[:recap],
-      corrected?: true
-    })
   end
 
   defp opinion_target(room_id, attrs) do
@@ -1592,10 +1334,7 @@ defmodule Thereish.Chronicle do
 
       true ->
         overrule =
-          Enum.find(overrules(room_id), fn o ->
-            o.attempt_number == attempt.number and
-              (o.page_id == page.id or o.bookends == attempt.bookends)
-          end)
+          Enum.find(overrules(room_id), &PageView.about_attempt?(&1, page, attempt))
 
         verdict = List.first(attempt.verdicts)
         grade = (overrule && overrule.machine_closeness) || (verdict && verdict.closeness)
@@ -1650,65 +1389,6 @@ defmodule Thereish.Chronicle do
     do: {:ok, "too_harsh"}
 
   defp opinion_label(_), do: {:error, :invalid_label}
-
-  defp format_fairness_tap(t) do
-    closeness = t.closeness || Map.get(t, :grade)
-    source = Map.get(t, :source) || "participant"
-
-    %{
-      id: t.id,
-      attempt_number: t.attempt_number,
-      seat_id: t.seat_id,
-      admin_id: Map.get(t, :admin_id),
-      source: source,
-      seat_name: t.seat && t.seat.name,
-      reviewer_name: opinion_reviewer_name(t, source),
-      bookends: t.bookends,
-      bridges: t.bridges,
-      grade: closeness,
-      closeness: closeness,
-      band: t.band,
-      model: t.model,
-      prompt_version: t.prompt_version,
-      label: t.label,
-      inserted_at: t.inserted_at
-    }
-  end
-
-  defp opinion_reviewer_name(_t, "admin"), do: "Admin"
-  defp opinion_reviewer_name(t, _), do: (t.seat && t.seat.name) || "Player"
-
-  defp format_overrule(o) do
-    %{
-      id: o.id,
-      attempt_number: o.attempt_number,
-      proposer_seat_id: o.proposer_seat_id,
-      proposer_name: (o.proposer && o.proposer.name) || "Player",
-      bookends: o.bookends,
-      bridges: o.bridges,
-      machine_closeness: o.machine_closeness,
-      machine_reasoning: o.machine_reasoning,
-      machine_quip: o.machine_quip,
-      couple_closeness: o.couple_closeness,
-      couple_reasoning: o.couple_reasoning,
-      inserted_at: o.inserted_at
-    }
-  end
-
-  defp format_correction(c) do
-    %{
-      id: c.id,
-      page_id: c.page_id,
-      seat_id: c.seat_id,
-      author_name: (c.seat && c.seat.name) || "Player",
-      attempt_number: c.attempt_number,
-      target: c.target,
-      original_value: c.original_value,
-      corrected_value: c.corrected_value,
-      note: c.note,
-      inserted_at: c.inserted_at
-    }
-  end
 
   defp uuid?(val) when is_binary(val) do
     Regex.match?(
@@ -1833,105 +1513,5 @@ defmodule Thereish.Chronicle do
       voice_meta: verdict.voice_meta
     })
     |> Repo.insert!()
-  end
-
-  defp extract_carried(page, attempts, index, attempt, verdicts, bridges) do
-    next = Enum.at(attempts, index + 1)
-
-    cond do
-      attempt.melded == true ->
-        nil
-
-      is_map(next) ->
-        next.bookends
-
-      page_full_table(page.document) == true ->
-        Enum.map(bridges, & &1.bridge)
-
-      true ->
-        extract_carried_pair(verdicts, bridges)
-    end
-  end
-
-  defp extract_carried_pair(verdicts, bridges) do
-    case List.first(verdicts) do
-      %{furthest: [_, _] = furthest} ->
-        furthest
-
-      %{graded: false} ->
-        bridges |> Enum.map(& &1.bridge) |> Enum.take(2)
-
-      _ ->
-        nil
-    end
-  end
-
-  defp page_full_table(doc) when is_map(doc) do
-    case Map.get(doc, "full_table", Map.get(doc, :full_table)) do
-      true -> true
-      false -> false
-      _ -> nil
-    end
-  end
-
-  defp page_full_table(_), do: nil
-
-  defp page_bookend_origins(doc) when is_map(doc) do
-    raw =
-      Map.get(doc, "bookend_origins") || Map.get(doc, :bookend_origins) ||
-        Map.get(doc, "bookend_gives") || Map.get(doc, :bookend_gives) || []
-
-    Enum.map(raw, fn origin ->
-      %{
-        word: origin[:word] || origin["word"],
-        give: origin[:give] || origin["give"],
-        seat_id: origin[:seat_id] || origin["seat_id"],
-        seat_name: origin[:seat_name] || origin["seat_name"]
-      }
-    end)
-  end
-
-  defp page_bookend_origins(_), do: []
-
-  defp bookend_chips_for(page, attempt, index) do
-    origins = page_bookend_origins(page.document)
-    masks = page.masks_meta || %{}
-
-    cond do
-      attempt.number == 1 and origins != [] ->
-        Enum.map(origins, fn origin ->
-          %{
-            word: origin.word,
-            give: origin.give,
-            seat_id: origin.seat_id,
-            seat_name: origin.seat_name,
-            mask: nil
-          }
-        end)
-
-      attempt.number == 1 ->
-        Enum.map(attempt.bookends || [], &%{word: &1, mask: nil})
-
-      true ->
-        prev = Enum.at(page.attempts, index - 1)
-        unclaimed = (prev && prev.bridges) || []
-
-        {chips, _rest} =
-          Enum.map_reduce(attempt.bookends || [], unclaimed, fn word, remaining ->
-            case Enum.split_while(remaining, &(&1.bridge != word)) do
-              {passed, [claimed | rest]} ->
-                seat_id = claimed.seat_id
-
-                mask = seat_id && Map.get(masks, seat_id)
-
-                {%{word: word, seat_id: seat_id, mask: mask}, passed ++ rest}
-
-              {_all, []} ->
-                {%{word: word, mask: nil}, remaining}
-            end
-          end)
-
-        chips
-    end
   end
 end
