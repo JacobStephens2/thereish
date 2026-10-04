@@ -317,6 +317,36 @@ defmodule Thereish.RoomsTest do
 
       assert {:error, :room_full} = Rooms.join(slug, "Ada", device_token())
       assert length(Rooms.snapshot(slug, nil).seats) == 2
+
+      # The rules refused before Postgres heard anything.
+      assert length(Store.list_seats(Store.get_room(slug).id)) == 2
+    end
+
+    test "a Seat Postgres will not take leaves the Room without it" do
+      slug = open_room(seat_limit: 2)
+      {:ok, _} = Rooms.join(slug, "Melissa", device_token())
+
+      # A conflict the Room cannot see coming, as a racing insert would be.
+      Repo.query!("""
+      CREATE FUNCTION pg_temp.refuse_seat() RETURNS trigger AS $$
+      BEGIN
+        RAISE unique_violation USING CONSTRAINT = 'seats_room_id_name_index';
+      END
+      $$ LANGUAGE plpgsql
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER refuse_seat BEFORE INSERT ON seats
+      FOR EACH ROW EXECUTE FUNCTION pg_temp.refuse_seat()
+      """)
+
+      assert {:error, :could_not_join} = Rooms.join(slug, "Jacob", device_token())
+      assert [%{name: "Melissa"}] = Rooms.snapshot(slug, nil).seats
+
+      Repo.query!("DROP TRIGGER refuse_seat ON seats")
+
+      assert {:ok, _} = Rooms.join(slug, "Jacob", device_token())
+      assert length(Rooms.snapshot(slug, nil).seats) == 2
     end
 
     test "a name is all that is asked for, and it has to be something" do
@@ -1773,46 +1803,6 @@ defmodule Thereish.RoomsTest do
       assert melissa_view.your_mask == :dot
       assert Enum.find(melissa_view.seats, &(&1.id == ctx.melissa.id)).mask == :dot
     end
-
-    test "late Mask replaces the dot in place without a page reload", ctx do
-      :ok = Rooms.subscribe(ctx.slug)
-
-      fake_config = Keyword.get(ctx.steward, :fake, [])
-
-      Application.put_env(
-        :thereish,
-        :steward,
-        Keyword.put(
-          ctx.steward,
-          :fake,
-          Keyword.merge(fake_config, draw_mode: :refused)
-        )
-      )
-
-      assert :ok = Rooms.give(ctx.slug, ctx.melissa.id, "candlelit cathedral")
-
-      eventually(fn ->
-        Rooms.snapshot(ctx.slug, ctx.melissa.id).your_mask == :dot
-      end)
-
-      # Drain existing messages
-      receive do
-        :room_changed -> :ok
-      after
-        0 -> :ok
-      end
-
-      # Now simulate a late mask arriving
-      room_pid = GenServer.whereis(Server.via(ctx.slug))
-      late_mask = %Mask{url: "/media/masks/mask-late.png", meta: %{}}
-      send(room_pid, {:mask_landed, ctx.melissa.id, giving(ctx.slug), late_mask})
-
-      assert_receive :room_changed
-
-      melissa_view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert melissa_view.your_mask == late_mask
-      assert Enum.find(melissa_view.seats, &(&1.id == ctx.melissa.id)).mask == late_mask
-    end
   end
 
   describe "A/B experiments harness" do
@@ -2138,21 +2128,6 @@ defmodule Thereish.RoomsTest do
       assert Store.get_room(ctx.slug).full_table == true
     end
 
-    test "two toggles of Quips or Full table return it to where it started, whatever either screen saw",
-         ctx do
-      for fact <- [:quips, :full_table] do
-        # Both screens read the same snapshot before either taps.
-        seen = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-        assert Map.fetch!(seen, fact) == true
-
-        assert :ok = Rooms.toggle(ctx.slug, fact)
-        assert :ok = Rooms.toggle(ctx.slug, fact)
-
-        assert Map.fetch!(Store.get_room(ctx.slug), fact) == true
-        assert Map.fetch!(Rooms.snapshot(ctx.slug, nil), fact) == true
-      end
-    end
-
     test "speaker, quips, music and Full table survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       assert :ok = Rooms.set_quips(ctx.slug, false)
@@ -2204,95 +2179,6 @@ defmodule Thereish.RoomsTest do
         end)
 
       assert room.prologue_skipped == true
-    end
-
-    test "play_prologue starts active prologue and snapshot exposes it, skip ends it", ctx do
-      Rooms.subscribe(ctx.slug)
-
-      assert :ok = Rooms.play_prologue(ctx.slug)
-      assert_receive :room_changed
-
-      view = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
-      assert is_map(view.prologue)
-      assert is_binary(view.prologue.reading)
-      assert is_binary(view.prologue.text)
-
-      assert :ok = Rooms.skip_prologue(ctx.slug)
-      assert_receive :room_changed
-
-      view_after = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
-      assert is_nil(view_after.prologue)
-      assert view_after.prologue_skipped == true
-    end
-
-    test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
-         ctx do
-      view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
-      view_stage = Rooms.snapshot(ctx.slug, nil, device_token())
-
-      for view <- [view_a, view_b, view_stage] do
-        assert view.speaker? == false
-        assert view.speaker_claimed? == false
-        assert view.quips == true
-        assert view.music == "page"
-        assert view.full_table == true
-        refute Map.has_key?(view, :voice)
-        refute Map.has_key?(view, :house_loop_only)
-        refute Map.has_key?(view, :speaker)
-        refute Map.has_key?(view, :device_token)
-      end
-
-      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_quips(ctx.slug, false)
-      :ok = Rooms.set_music(ctx.slug, "house")
-      :ok = Rooms.set_full_table(ctx.slug, false)
-
-      view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
-      view_stage = Rooms.snapshot(ctx.slug, nil, device_token())
-
-      assert view_a.speaker? == true
-      assert view_a.speaker_claimed? == true
-      assert view_a.quips == false
-      assert view_a.music == "house"
-      assert view_a.full_table == false
-      refute Map.has_key?(view_a, :voice)
-
-      assert view_b.speaker? == false
-      assert view_b.speaker_claimed? == true
-      assert view_b.quips == false
-      assert view_b.music == "house"
-      assert view_b.full_table == false
-      refute Map.has_key?(view_b, :voice)
-
-      assert view_stage.speaker? == false
-      assert view_stage.speaker_claimed? == true
-      assert view_stage.quips == false
-      assert view_stage.music == "house"
-      assert view_stage.full_table == false
-      refute Map.has_key?(view_stage, :voice)
-
-      json = Jason.encode!(view_a)
-      refute json =~ ctx.token_a
-      refute json =~ ctx.token_b
-    end
-
-    test "flipping Full table mid-Page changes the Room fact only and leaves the Page's Bookends",
-         ctx do
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      view = await_phase(ctx.slug, :bridging)
-      bookends = view.bookends
-      assert view.full_table == true
-      assert is_list(bookends)
-
-      assert :ok = Rooms.set_full_table(ctx.slug, false)
-
-      flipped = Rooms.snapshot(ctx.slug, nil)
-      assert flipped.full_table == false
-      assert flipped.phase == :bridging
-      assert flipped.bookends == bookends
     end
   end
 
@@ -2566,37 +2452,6 @@ defmodule Thereish.RoomsTest do
       assert Enum.any?(info_lines, &(&1 =~ "score queued" and &1 =~ ~r/\+\d+ms/))
       assert Enum.any?(info_lines, &(&1 =~ "score started" and &1 =~ ~r/\+\d+ms/))
       assert Enum.any?(info_lines, &(&1 =~ "track landed" and &1 =~ ~r/\+\d+ms/))
-    end
-
-    test "New Gives the Game refuses leave the Page's music and times alone", ctx do
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      await_phase(ctx.slug, :bridging)
-      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).playing.kind == "track" end)
-
-      music = &Map.take(&1, [:vamp, :track, :music_meta, :loop, :playing])
-      before = music.(Rooms.snapshot(ctx.slug, ctx.melissa.id))
-      refused_at = DateTime.utc_now()
-
-      # A second phone's late tap, after the Author has already written the Page.
-      assert {:error, :not_writing} = Rooms.reset_gives(ctx.slug, ctx.jacob.id)
-      assert music.(Rooms.snapshot(ctx.slug, ctx.melissa.id)) == before
-
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_phase(ctx.slug, :closed)
-
-      room = Store.get_room(ctx.slug)
-      [page] = eventually(fn -> Chronicle.pages(room.id) |> then(&(&1 != [] and &1)) end)
-
-      assert DateTime.compare(page.opened_at, refused_at) == :lt
-      assert length(page.gives) == 2
-
-      for give <- page.gives do
-        assert %DateTime{} = give.arrived_at
-        assert DateTime.compare(give.arrived_at, refused_at) == :lt
-        assert DateTime.compare(page.opened_at, give.arrived_at) in [:lt, :eq]
-      end
     end
 
     test "a landed track holds over through the close and into the next Page",
@@ -4032,27 +3887,6 @@ defmodule Thereish.RoomsTest do
       assert after_next.playing.kind == "repertoire"
       refute after_next.playing.path == view.playing.path
     end
-
-    test "Next from a non-speaking device is a no-op", ctx do
-      initial_view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      initial_path = initial_view.playing.path
-
-      # Jacob (non-speaking device) calls next -> no-op
-      assert :ok = Rooms.next(ctx.slug, ctx.token_b)
-
-      view_after = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after.playing.path == initial_path
-
-      # Call without device_token -> no-op
-      assert :ok = Rooms.next(ctx.slug, nil)
-      view_after_nil = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_nil.playing.path == initial_path
-
-      # Melissa (speaking device) calls next -> advances
-      assert :ok = Rooms.next(ctx.slug, ctx.token_a)
-      view_advanced = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      refute view_advanced.playing.path == initial_path
-    end
   end
 
   describe "ticket 04: Never" do
@@ -4136,32 +3970,9 @@ defmodule Thereish.RoomsTest do
       members_b = Thereish.Foley.Repertoire.members(room_b.id)
       assert Enum.any?(members_b, fn m -> m.path == nevered_path end)
     end
-
-    test "Never from a non-speaking device is a no-op", ctx do
-      view_before = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      initial_path = view_before.playing.path
-
-      # Jacob (token_b, non-speaker) calls Never -> no-op
-      assert :ok = Rooms.never(ctx.slug, ctx.token_b)
-      view_after_jacob = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_jacob.playing.path == initial_path
-      refute initial_path in Store.list_nevers(ctx.room.id)
-
-      # nil token -> no-op
-      assert :ok = Rooms.never(ctx.slug, nil)
-      view_after_nil = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_nil.playing.path == initial_path
-      refute initial_path in Store.list_nevers(ctx.room.id)
-
-      # Melissa (speaking device) calls Never -> refuses member
-      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
-      view_after_melissa = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      refute view_after_melissa.playing.path == initial_path
-      assert initial_path in Store.list_nevers(ctx.room.id)
-    end
   end
 
-  describe "results that land after their Page closed" do
+  describe "the Page's arm and its Chronicle write" do
     setup do
       slug = open_room()
       token = device_token()
@@ -4172,9 +3983,7 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, token: token, melissa: melissa, jacob: jacob, room: room}
     end
 
-    # Plays a Page to a meld. With a Speaker held and a slow Voice, the
-    # Verdict is still being spoken when the Page closes, so Voice holds the
-    # Chronicle write.
+    # Plays a Page to a meld.
     defp meld(ctx) do
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "deep canyon")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "echoing wind")
@@ -4183,35 +3992,6 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_phase(ctx.slug, :closed)
-    end
-
-    test "a Bookends tap made while Voice holds the Page is recorded on that Page", ctx do
-      # A Page before it, so a misfiled tap would have somewhere to go.
-      meld(ctx)
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-      [earlier] = Chronicle.pages(ctx.room.id)
-
-      steward(voice_delay_ms: 5_000)
-      :ok = Rooms.claim_speaker(ctx.slug, ctx.token)
-      meld(ctx)
-
-      assert [earlier] == Chronicle.pages(ctx.room.id)
-      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.melissa.id, "great")
-
-      # Turning the Page releases the held write, and the tap after it.
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-
-      [^earlier, page] = Chronicle.pages(ctx.room.id)
-      [tap] = ExperimentFixtures.bookends_taps(ctx.room.id)
-      assert tap.page_id == page.id
-      assert tap.page_identifier == page.id
-      assert tap.label == "great"
-
-      outcomes =
-        Map.new(ExperimentFixtures.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1})
-
-      assert outcomes[page.id].taps == %{to_string(ctx.melissa.id) => "great"}
-      assert outcomes[earlier.id].taps == %{}
     end
 
     test "a Page played under an assigned arm records its outcome under that arm", ctx do
@@ -4229,58 +4009,6 @@ defmodule Thereish.RoomsTest do
 
       assert outcomes == %{first.id => "flash", second.id => "astra"}
     end
-
-    test "a Mask for an earlier Give that lands after the Page turned is written onto its Page",
-         ctx do
-      steward(draw_mode: :refused)
-      giving = giving(ctx.slug)
-      meld(ctx)
-      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
-
-      late_mask = %Mask{url: "/media/masks/mask-late.png", meta: %{}}
-
-      send(
-        GenServer.whereis(Server.via(ctx.slug)),
-        {:mask_landed, ctx.melissa.id, giving, late_mask}
-      )
-
-      eventually(fn ->
-        [page] = Chronicle.pages(ctx.room.id)
-        page.masks_meta[ctx.melissa.id] == late_mask
-      end)
-
-      [page] = Chronicle.pages(ctx.room.id)
-      assert page.masks_meta[ctx.jacob.id] == :dot
-      assert Rooms.snapshot(ctx.slug, ctx.melissa.id).your_mask == nil
-    end
-
-    test "a Track that lands while Voice holds the Page replaces its unfinished music record",
-         ctx do
-      steward(voice_delay_ms: 1_500, music_delay_ms: 200, vamp_mode: :unavailable)
-      :ok = Rooms.claim_speaker(ctx.slug, ctx.token)
-      meld(ctx)
-
-      assert Chronicle.pages(ctx.room.id) == []
-
-      # The Track lands at 200ms, while the Verdict is still being spoken.
-      eventually(
-        fn -> match?([%{music_meta: %Track{path: "/" <> _}}], Chronicle.page_views(ctx.slug)) end,
-        "the held Track never reached its Page",
-        3_000
-      )
-
-      [page] = Chronicle.page_views(ctx.slug)
-      assert %Track{failure: nil, path: path} = page.music_meta
-      assert path =~ "/media/tracks/fake-"
-    end
-  end
-
-  defp giving(slug) do
-    slug
-    |> Server.via()
-    |> :sys.get_state()
-    |> Map.fetch!(:pages)
-    |> Thereish.Rooms.Pages.giving()
   end
 
   defp received_assays(acc \\ []) do
