@@ -996,4 +996,54 @@ defmodule Thereish.StewardTest do
       assert Enum.map(ranking, & &1.index) == [2, 1]
     end
   end
+
+  describe "answering later" do
+    defp answer_later(call) do
+      Thereish.Steward.answer_later(call, &{:answered, &1})
+      assert_receive {:answered, answer}
+      refute_receive {:answered, _}, 50
+      answer
+    end
+
+    test "an ok answer comes back as it was" do
+      assert answer_later(fn -> {:ok, :grade} end) == {:ok, :grade}
+    end
+
+    test "an error answer comes back as it was" do
+      assert answer_later(fn -> {:error, :refused} end) == {:error, :refused}
+    end
+
+    test "a call that raises comes back as an error carrying the exception" do
+      assert {:error, %RuntimeError{message: "boom"}} = answer_later(fn -> raise "boom" end)
+    end
+
+    test "a call that exits comes back as an exit error" do
+      assert answer_later(fn -> exit(:gone) end) == {:error, {:exit, :gone}}
+    end
+
+    test "a call that throws comes back as a throw error" do
+      assert answer_later(fn -> throw(:ball) end) == {:error, {:throw, :ball}}
+    end
+  end
+
+  describe "the words for an Author failure" do
+    test "each reason reads as the Game shows it" do
+      for {reason, words} <- [
+            {{:max_tokens, 4096}, "too broad or complex"},
+            {:refused, "content declined"},
+            {{:refusal, "not that"}, "declined: not that"},
+            {%Req.TransportError{reason: :timeout}, "timed out"},
+            {%{reason: :timeout}, "timed out"},
+            {:timeout, "timed out"},
+            {:unavailable, "unavailable"},
+            {{:exit, :killed}, "process exited"},
+            {%RuntimeError{message: "boom"}, "boom"},
+            {"no Gives", "no Gives"},
+            {:no_gives, "no_gives"},
+            {{:http, 503}, "{:http, 503}"}
+          ] do
+        assert Thereish.Steward.author_failure(reason) == words
+      end
+    end
+  end
 end

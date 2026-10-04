@@ -290,6 +290,23 @@ defmodule Thereish.Steward do
   defp format_voice_error(reason), do: inspect(reason)
 
   @doc """
+  Says why the Author could not write, in the words the Game shows the table.
+  """
+  @spec author_failure(term()) :: String.t()
+  def author_failure({:max_tokens, _}), do: "too broad or complex"
+  def author_failure(:refused), do: "content declined"
+  def author_failure({:refusal, msg}), do: "declined: #{msg}"
+  def author_failure(%Req.TransportError{reason: :timeout}), do: "timed out"
+  def author_failure(%{reason: :timeout}), do: "timed out"
+  def author_failure(:timeout), do: "timed out"
+  def author_failure(:unavailable), do: "unavailable"
+  def author_failure({:exit, _}), do: "process exited"
+  def author_failure(%RuntimeError{message: msg}), do: msg
+  def author_failure(reason) when is_binary(reason), do: reason
+  def author_failure(reason) when is_atom(reason), do: to_string(reason)
+  def author_failure(reason), do: inspect(reason)
+
+  @doc """
   Generates N candidate sound effects or music tracks for a brief.
 
   Used only by the forge task.
@@ -360,6 +377,32 @@ defmodule Thereish.Steward do
     await_task(role, fn -> adapter().quip_code(code) end)
   end
 
+  @doc """
+  Runs `call` under the Steward's task supervisor and sends the caller
+  `reply.(answer)` exactly once, for the calls nobody waits on.
+
+  The answer is whatever `call` returned. A call that raises answers
+  `{:error, exception}`, and one that exits or throws answers
+  `{:error, {kind, reason}}`, so a crash reaches the caller as a failure it has
+  a rule for rather than as silence.
+  """
+  @spec answer_later((-> term()), (term() -> term())) :: DynamicSupervisor.on_start_child()
+  def answer_later(call, reply) do
+    caller = self()
+
+    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
+      send(caller, reply.(answer(call)))
+    end)
+  end
+
+  defp answer(call) do
+    call.()
+  rescue
+    error -> {:error, error}
+  catch
+    kind, reason -> {:error, {kind, reason}}
+  end
+
   defp await_task(role, fun) do
     task = Task.Supervisor.async_nolink(Thereish.Steward.Tasks, fun)
 
@@ -422,15 +465,6 @@ defmodule Thereish.Steward do
       {:ok, verdict} -> {:ok, timed(verdict, System.monotonic_time(:millisecond) - started)}
       {:error, reason} -> {:error, reason}
     end
-  end
-
-  @doc """
-  Grades an Attempt's Bridges.
-  """
-  @spec assay(request(), map() | nil, atom() | String.t() | nil) ::
-          {:ok, verdict()} | {:error, term()}
-  def assay(request, _page, _arm) do
-    assay(request)
   end
 
   @doc """
