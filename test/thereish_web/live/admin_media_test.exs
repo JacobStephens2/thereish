@@ -5,6 +5,7 @@ defmodule ThereishWeb.AdminMediaTest do
   use ThereishWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Thereish.EntryFixtures
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
@@ -57,10 +58,13 @@ defmodule ThereishWeb.AdminMediaTest do
       track_path = write_media("tracks/harbour-lights.mp3")
       vamp_path = write_media("vamps/harbour-vamp.mp3")
 
-      write_closed_page(ctx,
-        page: %{"bookends" => ["lantern", "harbour"]},
-        music_meta: %{path: track_path, title: "Harbour Lights"},
-        vamp_meta: %{path: vamp_path, duration: 30, loop: true}
+      Chronicle.write(
+        room_id(ctx),
+        entry(
+          page: %{bookends: ["lantern", "harbour"]},
+          music_meta: %{path: track_path, title: "Harbour Lights"},
+          vamp_meta: %{path: vamp_path, duration: 30, loop: true}
+        )
       )
 
       {:ok, view, html} = live(conn, ~p"/admin/media")
@@ -102,10 +106,13 @@ defmodule ThereishWeb.AdminMediaTest do
       vamp_path = "/media/vamps/harbour-vamp.mp3"
 
       {:ok, page} =
-        write_closed_page(ctx,
-          page: %{"bookends" => ["lantern", "harbour"]},
-          music_meta: %{path: track_path, title: "Harbour Lights"},
-          vamp_meta: %{path: vamp_path, loop: true}
+        Chronicle.write(
+          room_id(ctx),
+          entry(
+            page: %{bookends: ["lantern", "harbour"]},
+            music_meta: %{path: track_path, title: "Harbour Lights"},
+            vamp_meta: %{path: vamp_path, loop: true}
+          )
         )
 
       {:ok, _gallery, _} = live(conn, ~p"/admin/media")
@@ -144,12 +151,15 @@ defmodule ThereishWeb.AdminMediaTest do
       historical = write_media("masks/mask-historical.png")
       current = write_media("masks/mask-melissa.png")
 
-      write_closed_page(ctx,
-        page: %{"bookends" => ["desert", "oasis"]},
-        masks: %{
-          ctx.melissa.id => %{url: historical},
-          ctx.jacob.id => %{url: current}
-        }
+      Chronicle.write(
+        room_id(ctx),
+        entry(
+          page: %{bookends: ["desert", "oasis"]},
+          masks: %{
+            ctx.melissa.id => %{url: historical},
+            ctx.jacob.id => %{url: current}
+          }
+        )
       )
 
       {:ok, view, _html} = live(conn, ~p"/admin/media")
@@ -229,11 +239,14 @@ defmodule ThereishWeb.AdminMediaTest do
 
     test "a missing file is shown honestly and the record is kept",
          %{conn: conn, slug: slug} = ctx do
-      write_closed_page(ctx,
-        page: %{"bookends" => ["lantern", "harbour"]},
-        music_meta: %{path: "/media/tracks/gone-harbour.mp3", title: "Gone Harbour"},
-        vamp_meta: %{path: "/media/vamps/gone-vamp.mp3", loop: true},
-        masks: %{ctx.melissa.id => %{url: "/media/masks/gone-mask.png"}}
+      Chronicle.write(
+        room_id(ctx),
+        entry(
+          page: %{bookends: ["lantern", "harbour"]},
+          music_meta: %{path: "/media/tracks/gone-harbour.mp3", title: "Gone Harbour"},
+          vamp_meta: %{path: "/media/vamps/gone-vamp.mp3", loop: true},
+          masks: %{ctx.melissa.id => %{url: "/media/masks/gone-mask.png"}}
+        )
       )
 
       {:ok, view, _html} = live(conn, ~p"/admin/media")
@@ -288,35 +301,5 @@ defmodule ThereishWeb.AdminMediaTest do
     path
   end
 
-  defp write_closed_page(ctx, attrs) do
-    attrs = Map.new(attrs)
-    room = Repo.get_by!(Room, slug: ctx.slug)
-    bookends = attrs[:bookends] || ["lantern", "harbour"]
-
-    entry =
-      Map.merge(
-        %{
-          page: %{"bookends" => bookends},
-          closed_because: :meld,
-          melded?: true,
-          closeness: 95,
-          attempts: [
-            %{
-              number: 1,
-              bookends: bookends,
-              closeness: 95,
-              melded?: true,
-              bridges: [
-                %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
-                %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
-              ],
-              verdicts: []
-            }
-          ]
-        },
-        Map.drop(attrs, [:bookends])
-      )
-
-    Chronicle.write(room.id, entry, DateTime.utc_now())
-  end
+  defp room_id(ctx), do: Repo.get_by!(Room, slug: ctx.slug).id
 end

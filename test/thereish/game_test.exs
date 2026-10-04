@@ -10,6 +10,7 @@ defmodule Thereish.GameTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Chronicle.Entry
   alias Thereish.Game
   alias Thereish.Ladder
 
@@ -1297,7 +1298,7 @@ defmodule Thereish.GameTest do
       {_state, effects} =
         attempt(again(state), [{"Melissa", "wharf"}, {"Jacob", "wharfinger"}], 92)
 
-      assert [{:chronicle, entry}] = chronicles(effects)
+      assert [{:chronicle, %Entry{} = entry}] = chronicles(effects)
       assert entry.page == @page
       assert entry.closed_because == :meld
       assert entry.melded? == true
@@ -1307,9 +1308,9 @@ defmodule Thereish.GameTest do
       assert first.number == 1
       assert first.bookends == ["lantern", "harbour"]
 
-      assert Enum.map(first.bridges, &{&1.name, &1.bridge}) == [
-               {"Melissa", "cairn"},
-               {"Jacob", "beacon"}
+      assert first.bridges == [
+               %{seat_id: "seat-Melissa", bridge: "cairn"},
+               %{seat_id: "seat-Jacob", bridge: "beacon"}
              ]
 
       assert first.closeness == 10
@@ -1319,7 +1320,6 @@ defmodule Thereish.GameTest do
       assert second.melded? == true
 
       assert [verdict] = second.verdicts
-      assert verdict.names == ["Melissa", "Jacob"]
       assert verdict.bridges == ["wharf", "wharfinger"]
       assert verdict.furthest == ["wharf", "wharfinger"]
       assert verdict.seat_ids == ["seat-Melissa", "seat-Jacob"]
@@ -2051,7 +2051,7 @@ defmodule Thereish.GameTest do
       assert next_state.masks == %{}
     end
 
-    test "chronicle entry includes masks map and gives with mask", %{state: state} do
+    test "chronicle entry includes the masks map and a Give per Seat", %{state: state} do
       {:ok, state, _} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Melissa", give: "lighthouse"}})
 
@@ -2088,10 +2088,10 @@ defmodule Thereish.GameTest do
       assert entry.masks["seat-Melissa"] == mask_m
       assert entry.masks["seat-Jacob"] == mask_j
 
-      melissa_give = Enum.find(entry.gives, &(&1.seat_id == "seat-Melissa"))
-      jacob_give = Enum.find(entry.gives, &(&1.seat_id == "seat-Jacob"))
-      assert melissa_give.mask == mask_m
-      assert jacob_give.mask == mask_j
+      assert entry.gives == [
+               %Entry.Give{seat_id: "seat-Melissa", text: "lighthouse"},
+               %Entry.Give{seat_id: "seat-Jacob", text: "candle"}
+             ]
     end
 
     test "dot visibility matches mask visibility rules before and after reveal", %{state: state} do

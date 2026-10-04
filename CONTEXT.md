@@ -179,3 +179,7 @@ _Avoid_: reference, easter egg, throwback, memory
 **Chronicle**:
 The persistent, player-visible record of one Room's play history — its Pages, Verdicts, overrules, retained media, and player feedback. Feedback evaluates the Assayer without rewriting recorded play; earlier corrections remain part of the record.
 _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)
+
+**Entry**:
+One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the experiment arm. Built when the Page closes and written once (ADR-0003).
+_Avoid_: record, row, payload, closed-page map

@@ -9,10 +9,15 @@ defmodule Thereish.ChronicleTest do
   """
   use Thereish.DataCase, async: false
 
+  import Thereish.EntryFixtures
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Entry
+  alias Thereish.Game
+  alias Thereish.Ladder
   alias Thereish.Rooms
+  alias Thereish.Rooms.Pacing
   alias Thereish.Rooms.Room
   alias Thereish.Steward
 
@@ -75,44 +80,6 @@ defmodule Thereish.ChronicleTest do
       seat_id: seat_id,
       unblinded_at: DateTime.utc_now(),
       notes: "Couch night review"
-    }
-  end
-
-  defp handwritten_page(id, ctx) do
-    %{
-      page: %{
-        id: id,
-        chapter: "harbour",
-        bookends: ["lantern", "harbour"],
-        why_these: "A couch night."
-      },
-      closed_because: :meld,
-      melded?: true,
-      closeness: 80,
-      attempts: [
-        %{
-          number: 1,
-          bookends: ["lantern", "harbour"],
-          closeness: 80,
-          melded?: true,
-          bridges: [
-            %{seat_id: ctx.melissa.id, bridge: "cairn"},
-            %{seat_id: ctx.jacob.id, bridge: "cairns"}
-          ],
-          verdicts: [
-            %{
-              seat_ids: [ctx.melissa.id, ctx.jacob.id],
-              bridges: ["cairn", "cairns"],
-              graded?: true,
-              closeness: 80,
-              band: :meld,
-              reasoning: "Close enough.",
-              quip: nil,
-              meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 10, cost_usd: 0.0}
-            }
-          ]
-        }
-      ]
     }
   end
 
@@ -257,6 +224,107 @@ defmodule Thereish.ChronicleTest do
       assert length(verdict.seat_ids) == 3
       assert verdict.bridges == ["cairn", "cairns", "beacon"]
       assert length(verdict.furthest) == 2
+    end
+  end
+
+  describe "the Entry the Game hands over" do
+    # The contract between the Game and the Chronicle, without a Room between
+    # them: what the pure Game describes at the close, stamped by Pacing, is
+    # what the book reads back.
+    test "is written as played, and the book reads it back", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+      melissa = ctx.melissa.id
+      jacob = ctx.jacob.id
+      t0 = ~U[2026-10-03 20:00:00.000000Z]
+      at = &DateTime.add(t0, &1, :second)
+
+      verdict = fn closeness ->
+        {:verdict_received,
+         %{
+           closeness: closeness,
+           reasoning: "because",
+           quip: "A quip.",
+           furthest: nil,
+           meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
+         }}
+      end
+
+      steps = [
+        {{:seat_joined, %{id: jacob, name: "Jacob"}}, 1},
+        {{:give_committed, %{seat_id: melissa, give: "a harbour at night"}}, 2},
+        {{:give_committed, %{seat_id: jacob, give: "a lantern"}}, 3},
+        {{:page_written, %{bookends: ["lantern", "harbour"], meta: %{model: "fake-author"}}}, 4},
+        {{:bridge_committed, %{seat_id: melissa, bridge: "cairn"}}, 5},
+        {{:bridge_committed, %{seat_id: jacob, bridge: "beacon"}}, 6},
+        {verdict.(10), 9},
+        {{:attempt_advanced, %{seat_id: melissa}}, 20},
+        {{:bridge_committed, %{seat_id: melissa, bridge: "stone"}}, 21},
+        {{:bridge_committed, %{seat_id: jacob, bridge: "stone"}}, 22},
+        {verdict.(Ladder.meld_threshold() + 5), 29}
+      ]
+
+      game = Game.init(seat_limit: 2, seats: [%{id: melissa, name: "Melissa"}])
+
+      pacing =
+        Pacing.new(%{
+          beat: 2_500,
+          hold: 5_000,
+          assayer: [slow: 4_000, unavailable: 10_000],
+          author: [still_writing: 5_000, deadline: 8_000]
+        })
+
+      {pacing, _game, effects} =
+        Enum.reduce(steps, {pacing, game, []}, fn {event, s}, {pacing, game, _effects} ->
+          {:ok, moved, effects} = Game.apply(game, event)
+
+          {pacing, _pacing_effects} =
+            Pacing.moved(pacing, game, moved, %{ms: s * 1_000, at: at.(s)})
+
+          {pacing, moved, effects}
+        end)
+
+      assert [%Entry{} = entry] = for({:chronicle, entry} <- effects, do: entry)
+      assert {:ok, page} = Chronicle.write(room.id, Pacing.stamp(pacing, entry))
+
+      assert [view] = Chronicle.page_views(room.id)
+      assert view.id == page.id
+      assert view.bookends == ["lantern", "harbour"]
+      assert view.author_meta["model"] == "fake-author"
+      assert view.closed_because == "meld"
+      assert view.melded == true
+      assert view.closeness == Ladder.meld_threshold() + 5
+      assert view.opened_at == at.(1)
+
+      assert Enum.map(view.gives, &{&1.seat_id, &1.text}) == [
+               {melissa, "a harbour at night"},
+               {jacob, "a lantern"}
+             ]
+
+      assert [first, second] = view.attempts
+      assert first.bookends == ["lantern", "harbour"]
+      assert first.closeness == 10
+      assert first.melded == false
+
+      assert Enum.map(first.bridges, &{&1.seat_id, &1.bridge}) == [
+               {melissa, "cairn"},
+               {jacob, "beacon"}
+             ]
+
+      assert second.bookends == ["cairn", "beacon"]
+      assert second.melded == true
+
+      assert [written] = second.verdicts
+      assert written.seat_ids == [melissa, jacob]
+      assert written.bridges == ["stone", "stone"]
+      assert written.graded == true
+      assert written.band == "meld"
+      assert written.reasoning == "because"
+      assert written.quip == "A quip."
+      assert written.model == "test"
+
+      assert [timing] = Chronicle.page_timings(ctx.slug)
+      assert timing.revealed_at == at.(29)
+      assert timing.kind == :exact
     end
   end
 
@@ -698,11 +766,9 @@ defmodule Thereish.ChronicleTest do
       give1 = "the language of Children's Hospital"
       give2 = "cyberpunk nightclub"
 
-      now = DateTime.utc_now()
-
-      entry = %{
-        page: %{
-          bookends: ["nurse", "clinic"],
+      entry =
+        entry(
+          page: %{bookends: ["nurse", "clinic"]},
           gives: [
             %{seat_id: ctx.melissa.id, text: give1},
             %{seat_id: ctx.jacob.id, text: give2}
@@ -714,38 +780,30 @@ defmodule Thereish.ChronicleTest do
             cost_usd: 0.0001,
             latency_ms: 150,
             why: "Medical care stands far from late night revelry."
-          }
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 85,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["nurse", "clinic"],
-            closeness: 85,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "hospital"},
-              %{seat_id: ctx.jacob.id, bridge: "hospital"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [ctx.melissa.id, ctx.jacob.id],
-                bridges: ["hospital", "hospital"],
-                graded?: true,
-                closeness: 85,
-                band: :meld,
-                reasoning: "Both named hospital.",
-                quip: "Hospital shift.",
-                meta: %{model: "fake", prompt_version: "v1", latency_ms: 100, cost_usd: 0.0}
-              }
-            ]
-          }
-        ]
-      }
+          },
+          closeness: 85,
+          attempts: [
+            %{
+              bookends: ["nurse", "clinic"],
+              closeness: 85,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "hospital"},
+                %{seat_id: ctx.jacob.id, bridge: "hospital"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                  bridges: ["hospital", "hospital"],
+                  closeness: 85,
+                  reasoning: "Both named hospital.",
+                  quip: "Hospital shift."
+                }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       # In book view:
       [view] = Chronicle.book(room.id)
@@ -798,83 +856,39 @@ defmodule Thereish.ChronicleTest do
       now = DateTime.utc_now()
 
       # Page 1: Has a track with path and title
-      entry1 = %{
-        document: %{"bookends" => ["lantern", "harbour"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: %{
-          provider: "mureka",
-          path: "/media/tracks/harbour-lights.mp3",
-          title: "Harbour Lights"
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 95,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["lantern", "harbour"],
-            closeness: 95,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
-              %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry1 =
+        entry(
+          music_meta: %{
+            provider: "mureka",
+            path: "/media/tracks/harbour-lights.mp3",
+            title: "Harbour Lights"
+          },
+          opened_at: now
+        )
 
-      assert {:ok, _p1} = Chronicle.write(room.id, entry1, now)
+      assert {:ok, _p1} = Chronicle.write(room.id, entry1)
 
       # Page 2: Has failed score (music_meta has failure, no path)
-      entry2 = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry2 =
+        entry(
+          page: %{bookends: ["desert", "oasis"]},
+          music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
+          attempts: [%{bookends: ["desert", "oasis"]}],
+          opened_at: DateTime.add(now, 60, :second)
+        )
 
-      assert {:ok, _p2} = Chronicle.write(room.id, entry2, DateTime.add(now, 60, :second))
+      assert {:ok, _p2} = Chronicle.write(room.id, entry2)
 
       # Page 3: Music off (music_meta is nil)
-      entry3 = %{
-        document: %{"bookends" => ["mountain", "valley"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: nil,
-        closed_because: :meld,
-        melded?: true,
-        closeness: 88,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["mountain", "valley"],
-            closeness: 88,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "ridge"},
-              %{seat_id: ctx.jacob.id, bridge: "ridge"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry3 =
+        entry(
+          page: %{bookends: ["mountain", "valley"]},
+          music_meta: nil,
+          attempts: [%{bookends: ["mountain", "valley"]}],
+          opened_at: DateTime.add(now, 120, :second)
+        )
 
-      assert {:ok, _p3} = Chronicle.write(room.id, entry3, DateTime.add(now, 120, :second))
+      assert {:ok, _p3} = Chronicle.write(room.id, entry3)
 
       markdown = Chronicle.to_markdown(room.id)
 
@@ -1226,13 +1240,31 @@ defmodule Thereish.ChronicleTest do
       now = DateTime.utc_now()
 
       {:ok, author_page} =
-        Chronicle.write(room.id, handwritten_page("author-page", ctx), now)
+        Chronicle.write(
+          room.id,
+          entry(
+            page: %{
+              id: "author-page",
+              chapter: "harbour",
+              bookends: ["lantern", "harbour"],
+              why_these: "A couch night."
+            },
+            opened_at: now
+          )
+        )
 
       {:ok, bait_page} =
         Chronicle.write(
           room.id,
-          handwritten_page("bait-page", ctx),
-          DateTime.add(now, 60, :second)
+          entry(
+            page: %{
+              id: "bait-page",
+              chapter: "harbour",
+              bookends: ["lantern", "harbour"],
+              why_these: "A couch night."
+            },
+            opened_at: DateTime.add(now, 60, :second)
+          )
         )
 
       {:ok, _} =
@@ -1315,44 +1347,41 @@ defmodule Thereish.ChronicleTest do
 
       bridges = ["beacon", "cairn", "lamp", "seagull"]
 
-      entry = %{
-        page: %{
-          id: "hand-written-4",
-          chapter: "harbour",
-          bookends: ["lantern", "harbour"],
-          why_these: "A table of four at the shore."
-        },
-        closed_because: :attempts,
-        melded?: false,
-        closeness: 27,
-        attempts: [
-          %{
-            number: 1,
+      entry =
+        entry(
+          page: %{
+            id: "hand-written-4",
+            chapter: "harbour",
             bookends: ["lantern", "harbour"],
-            closeness: 27,
-            melded?: false,
-            bridges:
-              Enum.zip_with(seats, bridges, fn seat, bridge ->
-                %{seat_id: seat.id, bridge: bridge}
-              end),
-            verdicts: [
-              %{
-                seat_ids: Enum.map(seats, & &1.id),
-                bridges: bridges,
-                graded?: true,
-                closeness: 27,
-                band: :miss,
-                reasoning: "Three of you were at the shore and one of you was not.",
-                quip: "The seagull is having its own evening.",
-                furthest: ["beacon", "seagull"],
-                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 90, cost_usd: 0.0}
-              }
-            ]
-          }
-        ]
-      }
+            why_these: "A table of four at the shore."
+          },
+          closed_because: :attempts_spent,
+          melded?: false,
+          closeness: 27,
+          attempts: [
+            %{
+              closeness: 27,
+              melded?: false,
+              bridges:
+                Enum.zip_with(seats, bridges, fn seat, bridge ->
+                  %{seat_id: seat.id, bridge: bridge}
+                end),
+              verdicts: [
+                %{
+                  seat_ids: Enum.map(seats, & &1.id),
+                  bridges: bridges,
+                  closeness: 27,
+                  band: :miss,
+                  reasoning: "Three of you were at the shore and one of you was not.",
+                  quip: "The seagull is having its own evening.",
+                  furthest: ["beacon", "seagull"]
+                }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       [view] = Chronicle.book(room.id)
       [attempt] = view.attempts
@@ -1372,43 +1401,42 @@ defmodule Thereish.ChronicleTest do
     test "are absent from a Verdict that never arrived, and that is not an error", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
 
-      entry = %{
-        page: %{
-          id: "hand-written-2",
-          chapter: "harbour",
-          bookends: ["lantern", "harbour"],
-          why_these: "A couch evening."
-        },
-        closed_because: :attempts,
-        melded?: false,
-        closeness: nil,
-        attempts: [
-          %{
-            number: 1,
+      entry =
+        entry(
+          page: %{
+            id: "hand-written-2",
+            chapter: "harbour",
             bookends: ["lantern", "harbour"],
-            closeness: nil,
-            melded?: false,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "beacon"},
-              %{seat_id: ctx.jacob.id, bridge: "cairn"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [ctx.melissa.id, ctx.jacob.id],
-                bridges: ["beacon", "cairn"],
-                graded?: false,
-                closeness: nil,
-                band: nil,
-                reasoning: nil,
-                quip: "No verdict tonight.",
-                meta: %{}
-              }
-            ]
-          }
-        ]
-      }
+            why_these: "A couch evening."
+          },
+          closed_because: :attempts_spent,
+          melded?: false,
+          closeness: nil,
+          attempts: [
+            %{
+              closeness: nil,
+              melded?: false,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "beacon"},
+                %{seat_id: ctx.jacob.id, bridge: "cairn"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                  bridges: ["beacon", "cairn"],
+                  graded?: false,
+                  closeness: nil,
+                  band: nil,
+                  reasoning: nil,
+                  quip: "No verdict tonight.",
+                  meta: %{}
+                }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       [view] = Chronicle.book(room.id)
       [attempt] = view.attempts
@@ -1537,57 +1565,52 @@ defmodule Thereish.ChronicleTest do
 
       [melissa, jacob, ada, sam] = seats
 
-      entry = %{
-        page: %{
-          id: "two-verdicts-on-one-attempt",
-          chapter: "harbour",
-          bookends: ["lantern", "harbour"],
-          why_these: "An earlier night graded the table as two pairs."
-        },
-        closed_because: :attempts,
-        melded?: false,
-        closeness: 85,
-        attempts: [
-          %{
-            number: 1,
+      entry =
+        entry(
+          page: %{
+            id: "two-verdicts-on-one-attempt",
+            chapter: "harbour",
             bookends: ["lantern", "harbour"],
-            closeness: 85,
-            melded?: false,
-            bridges: [
-              %{seat_id: melissa.id, bridge: "beacon"},
-              %{seat_id: jacob.id, bridge: "cairn"},
-              %{seat_id: ada.id, bridge: "lamp"},
-              %{seat_id: sam.id, bridge: "seagull"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [melissa.id, jacob.id],
-                bridges: ["beacon", "cairn"],
-                graded?: true,
-                closeness: 85,
-                band: :almost,
-                reasoning: "Close on the shore.",
-                quip: "A cairn for the beacon.",
-                furthest: ["beacon", "cairn"],
-                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
-              },
-              %{
-                seat_ids: [ada.id, sam.id],
-                bridges: ["lamp", "seagull"],
-                graded?: true,
-                closeness: 27,
-                band: :miss,
-                reasoning: "The seagull is having its own evening.",
-                quip: "One of you brought a bird.",
-                furthest: ["lamp", "seagull"],
-                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
-              }
-            ]
-          }
-        ]
-      }
+            why_these: "An earlier night graded the table as two pairs."
+          },
+          closed_because: :attempts_spent,
+          melded?: false,
+          closeness: 85,
+          attempts: [
+            %{
+              closeness: 85,
+              melded?: false,
+              bridges: [
+                %{seat_id: melissa.id, bridge: "beacon"},
+                %{seat_id: jacob.id, bridge: "cairn"},
+                %{seat_id: ada.id, bridge: "lamp"},
+                %{seat_id: sam.id, bridge: "seagull"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [melissa.id, jacob.id],
+                  bridges: ["beacon", "cairn"],
+                  closeness: 85,
+                  band: :almost,
+                  reasoning: "Close on the shore.",
+                  quip: "A cairn for the beacon.",
+                  furthest: ["beacon", "cairn"]
+                },
+                %{
+                  seat_ids: [ada.id, sam.id],
+                  bridges: ["lamp", "seagull"],
+                  closeness: 27,
+                  band: :miss,
+                  reasoning: "The seagull is having its own evening.",
+                  quip: "One of you brought a bird.",
+                  furthest: ["lamp", "seagull"]
+                }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       [view] = Chronicle.book(room.id)
       [attempt] = view.attempts
@@ -1665,44 +1688,42 @@ defmodule Thereish.ChronicleTest do
       bookends = ["lantern", "harbour", "wharf", "dusk"]
       bridges = ["beacon", "cairn", "lamp", "seagull"]
 
-      entry = %{
-        page: %{
-          id: "hand-written-n-bookends",
-          chapter: "harbour",
-          bookends: bookends,
-          why_these: "A Full table at the shore."
-        },
-        closed_because: :attempts,
-        melded?: false,
-        closeness: 27,
-        attempts: [
-          %{
-            number: 1,
+      entry =
+        entry(
+          page: %{
+            id: "hand-written-n-bookends",
+            chapter: "harbour",
             bookends: bookends,
-            closeness: 27,
-            melded?: false,
-            bridges:
-              Enum.zip_with(seats, bridges, fn seat, bridge ->
-                %{seat_id: seat.id, bridge: bridge}
-              end),
-            verdicts: [
-              %{
-                seat_ids: Enum.map(seats, & &1.id),
-                bridges: bridges,
-                graded?: true,
-                closeness: 27,
-                band: :miss,
-                reasoning: "Three of you were at the shore and one of you was not.",
-                quip: "The seagull is having its own evening.",
-                furthest: ["beacon", "seagull"],
-                meta: %{model: "fake", prompt_version: "assay-4", latency_ms: 90, cost_usd: 0.0}
-              }
-            ]
-          }
-        ]
-      }
+            why_these: "A Full table at the shore."
+          },
+          closed_because: :attempts_spent,
+          melded?: false,
+          closeness: 27,
+          attempts: [
+            %{
+              bookends: bookends,
+              closeness: 27,
+              melded?: false,
+              bridges:
+                Enum.zip_with(seats, bridges, fn seat, bridge ->
+                  %{seat_id: seat.id, bridge: bridge}
+                end),
+              verdicts: [
+                %{
+                  seat_ids: Enum.map(seats, & &1.id),
+                  bridges: bridges,
+                  closeness: 27,
+                  band: :miss,
+                  reasoning: "Three of you were at the shore and one of you was not.",
+                  quip: "The seagull is having its own evening.",
+                  furthest: ["beacon", "seagull"]
+                }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       [view] = Chronicle.book(room.id)
       [attempt] = view.attempts
@@ -1786,70 +1807,58 @@ defmodule Thereish.ChronicleTest do
     test "spend/1 computes totals, by role, and by model from fixture rows including unpriced calls",
          ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
-      entry = %{
-        document: %{
-          "bookends" => ["desert", "oasis"],
+      entry =
+        entry(
+          page: %{bookends: ["desert", "oasis"]},
           author_meta: %{
             model: "gemini-3.8-flash",
             cost_usd: 0.0002
-          }
-        },
-        author_meta: %{
-          model: "gemini-3.8-flash",
-          cost_usd: 0.0002
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [ctx.melissa.id, ctx.jacob.id],
-                bridges: ["water", "water"],
-                graded?: true,
-                closeness: 90,
-                band: :meld,
-                reasoning: "Both said water.",
-                quip: "Water in the sand.",
-                meta: %{
-                  model: "gemini-3.8-flash",
-                  cost_usd: 0.0015,
-                  prompt_version: "assay-3",
-                  latency_ms: 120
+          },
+          closeness: 90,
+          attempts: [
+            %{
+              bookends: ["desert", "oasis"],
+              closeness: 90,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "water"},
+                %{seat_id: ctx.jacob.id, bridge: "water"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                  bridges: ["water", "water"],
+                  closeness: 90,
+                  reasoning: "Both said water.",
+                  quip: "Water in the sand.",
+                  meta: %{
+                    model: "gemini-3.8-flash",
+                    cost_usd: 0.0015,
+                    prompt_version: "assay-3",
+                    latency_ms: 120
+                  }
+                },
+                %{
+                  seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                  bridges: ["water", "water"],
+                  graded?: false,
+                  closeness: nil,
+                  band: nil,
+                  reasoning: nil,
+                  quip: nil,
+                  meta: %{
+                    model: "gemini-3.8-flash",
+                    cost_usd: nil,
+                    prompt_version: "assay-3",
+                    latency_ms: nil
+                  }
                 }
-              },
-              %{
-                seat_ids: [ctx.melissa.id, ctx.jacob.id],
-                bridges: ["water", "water"],
-                graded?: false,
-                closeness: nil,
-                band: nil,
-                reasoning: nil,
-                quip: nil,
-                meta: %{
-                  model: "gemini-3.8-flash",
-                  cost_usd: nil,
-                  prompt_version: "assay-3",
-                  latency_ms: nil
-                }
-              }
-            ]
-          }
-        ]
-      }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, page} = Chronicle.write(room.id, entry)
 
       # Add a recap for this page
       {:ok, _recap} =
@@ -1909,31 +1918,14 @@ defmodule Thereish.ChronicleTest do
 
     test "spend includes Foley from page music_meta", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
-      entry = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry =
+        entry(
+          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400}
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       spend = Chronicle.spend(room.id)
       assert spend.by_role.foley.calls_count == 1
@@ -1946,37 +1938,20 @@ defmodule Thereish.ChronicleTest do
 
     test "spend includes Foley from page vamp_meta beside the Track", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
-      entry = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
-        vamp_meta: %{
-          path: "/media/vamps/oasis-vamp.mp3",
-          provider: "eleven_labs",
-          model: "eleven_text_to_sound_v2",
-          cost_usd: 0.0120
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: []
+      entry =
+        entry(
+          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
+          vamp_meta: %{
+            path: "/media/vamps/oasis-vamp.mp3",
+            provider: "eleven_labs",
+            model: "eleven_text_to_sound_v2",
+            cost_usd: 0.0120
           }
-        ]
-      }
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       spend = Chronicle.spend(room.id)
       assert spend.by_role.foley.calls_count == 2
@@ -1990,47 +1965,34 @@ defmodule Thereish.ChronicleTest do
 
     test "spend counts a zero-cost voice failure as a Foley call", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
-      entry = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [ctx.melissa.id, ctx.jacob.id],
-                bridges: ["water", "water"],
-                graded?: true,
-                closeness: 90,
-                band: :meld,
-                reasoning: "Both said water.",
-                quip: "Water in the sand.",
-                meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010},
-                voice_meta: %{
-                  "provider" => "fake",
-                  "voice" => "fake-voice",
-                  "cost_usd" => 0.0,
-                  "failure" => "voice_unavailable"
+      entry =
+        entry(
+          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+          attempts: [
+            %{
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "water"},
+                %{seat_id: ctx.jacob.id, bridge: "water"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                  bridges: ["water", "water"],
+                  meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010},
+                  voice_meta: %{
+                    "provider" => "fake",
+                    "voice" => "fake-voice",
+                    "cost_usd" => 0.0,
+                    "failure" => "voice_unavailable"
+                  }
                 }
-              }
-            ]
-          }
-        ]
-      }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       spend = Chronicle.spend(room.id)
       assert spend.by_role.foley.calls_count == 1
@@ -2049,41 +2011,28 @@ defmodule Thereish.ChronicleTest do
 
     test "spend/0 computes all-Rooms answer with per-Room breakdown across multiple rooms", ctx do
       room1 = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
-      entry1 = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [ctx.melissa.id, ctx.jacob.id],
-                bridges: ["water", "water"],
-                graded?: true,
-                closeness: 90,
-                band: :meld,
-                reasoning: "Both said water.",
-                quip: "Water in the sand.",
-                meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010}
-              }
-            ]
-          }
-        ]
-      }
+      entry1 =
+        entry(
+          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+          attempts: [
+            %{
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "water"},
+                %{seat_id: ctx.jacob.id, bridge: "water"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [ctx.melissa.id, ctx.jacob.id],
+                  bridges: ["water", "water"],
+                  meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010}
+                }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, page1} = Chronicle.write(room1.id, entry1, now)
+      assert {:ok, page1} = Chronicle.write(room1.id, entry1)
 
       {:ok, _recap1} =
         Chronicle.record_recap(room1.id, %{
@@ -2099,39 +2048,27 @@ defmodule Thereish.ChronicleTest do
       {:ok, seat_a} = Rooms.join(slug2, "Alice", device_token())
       {:ok, seat_b} = Rooms.join(slug2, "Bob", device_token())
 
-      entry2 = %{
-        document: %{"bookends" => ["sun", "moon"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: nil},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["sun", "moon"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: seat_a.id, bridge: "sky"},
-              %{seat_id: seat_b.id, bridge: "sky"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [seat_a.id, seat_b.id],
-                bridges: ["sky", "sky"],
-                graded?: true,
-                closeness: 90,
-                band: :meld,
-                reasoning: "Both said sky.",
-                quip: "The sky.",
-                meta: %{model: "gemini-3.8-flash", cost_usd: 0.0005}
-              }
-            ]
-          }
-        ]
-      }
+      entry2 =
+        entry(
+          author_meta: %{model: "gemini-3.8-flash", cost_usd: nil},
+          attempts: [
+            %{
+              bridges: [
+                %{seat_id: seat_a.id, bridge: "sky"},
+                %{seat_id: seat_b.id, bridge: "sky"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [seat_a.id, seat_b.id],
+                  bridges: ["sky", "sky"],
+                  meta: %{model: "gemini-3.8-flash", cost_usd: 0.0005}
+                }
+              ]
+            }
+          ]
+        )
 
-      assert {:ok, _page2} = Chronicle.write(room2.id, entry2, now)
+      assert {:ok, _page2} = Chronicle.write(room2.id, entry2)
 
       # Call spend() for all rooms
       all_spend = Chronicle.spend()
@@ -2171,18 +2108,10 @@ defmodule Thereish.ChronicleTest do
 
     test "pages without author_meta do not count as Author calls or unpriced calls", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
-
       # Write a page with no author_meta (e.g. pre-written seed or human page)
-      entry = %{
-        document: %{"bookends" => ["left", "right"]},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 85,
-        attempts: []
-      }
+      entry = entry(page: %{bookends: ["left", "right"]}, closeness: 85, attempts: [])
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       spend = Chronicle.spend(room.id)
       assert spend.calls_count == 0
@@ -2196,32 +2125,26 @@ defmodule Thereish.ChronicleTest do
     test "Chronicle.write persists masks_meta and page_views includes masks and give masks",
          ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
-      entry = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        gives: [
-          %{seat_id: ctx.melissa.id, text: "cactus"},
-          %{seat_id: ctx.jacob.id, text: "dune"}
-        ],
-        masks: %{
-          ctx.melissa.id => %{
-            url: "/media/masks/mask-melissa.png",
-            meta: %{model: "imagen-3", cost_usd: 0.04}
-          },
-          ctx.jacob.id => %{
-            url: "/media/masks/mask-jacob.png",
-            meta: %{model: "imagen-3", cost_usd: 0.04}
+      entry =
+        entry(
+          gives: [
+            %{seat_id: ctx.melissa.id, text: "cactus"},
+            %{seat_id: ctx.jacob.id, text: "dune"}
+          ],
+          masks: %{
+            ctx.melissa.id => %{
+              url: "/media/masks/mask-melissa.png",
+              meta: %{model: "imagen-3", cost_usd: 0.04}
+            },
+            ctx.jacob.id => %{
+              url: "/media/masks/mask-jacob.png",
+              meta: %{model: "imagen-3", cost_usd: 0.04}
+            }
           }
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: []
-      }
+        )
 
-      assert {:ok, page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, page} = Chronicle.write(room.id, entry)
       assert is_map(page.masks_meta)
       melissa_mask = page.masks_meta[to_string(ctx.melissa.id)] || page.masks_meta[ctx.melissa.id]
       assert (melissa_mask[:url] || melissa_mask["url"]) == "/media/masks/mask-melissa.png"
@@ -2236,21 +2159,9 @@ defmodule Thereish.ChronicleTest do
 
     test "replace_page_masks/2 updates masks_meta on a Page and spend reflects it", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
+      entry = entry(masks: %{ctx.melissa.id => :dot})
 
-      entry = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        masks: %{
-          ctx.melissa.id => :dot
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: []
-      }
-
-      assert {:ok, page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, page} = Chronicle.write(room.id, entry)
       assert Chronicle.spend(room.id).by_role.limner.calls_count == 0
 
       updated_masks = %{
@@ -2276,24 +2187,14 @@ defmodule Thereish.ChronicleTest do
 
     test "Markdown.render includes masks when present", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
-      entry = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        gives: [
-          %{seat_id: ctx.melissa.id, text: "cactus"}
-        ],
-        masks: %{
-          ctx.melissa.id => %{url: "/media/masks/mask-melissa.png"}
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: []
-      }
+      entry =
+        entry(
+          gives: [%{seat_id: ctx.melissa.id, text: "cactus"}],
+          masks: %{ctx.melissa.id => %{url: "/media/masks/mask-melissa.png"}}
+        )
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, now)
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       markdown = Thereish.Chronicle.Markdown.render(room.id)
       assert markdown =~ "/media/masks/mask-melissa.png"
@@ -2567,32 +2468,6 @@ defmodule Thereish.ChronicleTest do
   end
 
   describe "vamps in Chronicle (ticket 08, #139)" do
-    defp closed_page(ctx, attrs) do
-      Map.merge(
-        %{
-          document: %{"bookends" => ["lantern", "harbour"]},
-          author_meta: %{model: "gemini-3.8-flash"},
-          closed_because: :meld,
-          melded?: true,
-          closeness: 95,
-          attempts: [
-            %{
-              number: 1,
-              bookends: ["lantern", "harbour"],
-              closeness: 95,
-              melded?: true,
-              bridges: [
-                %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
-                %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
-              ],
-              verdicts: []
-            }
-          ]
-        },
-        attrs
-      )
-    end
-
     test "a written Page keeps its Vamp beside its Track, and a Page with none invents no audio",
          ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
@@ -2601,7 +2476,7 @@ defmodule Thereish.ChronicleTest do
       assert {:ok, with_both} =
                Chronicle.write(
                  room.id,
-                 closed_page(ctx, %{
+                 entry(
                    music_meta: %{
                      path: "/media/tracks/harbour-lights.mp3",
                      title: "Harbour Lights"
@@ -2612,20 +2487,21 @@ defmodule Thereish.ChronicleTest do
                      format: "mp3",
                      loop: true,
                      provider: "fake"
-                   }
-                 }),
-                 now
+                   },
+                   opened_at: now
+                 )
                )
 
       assert {:ok, without} =
                Chronicle.write(
                  room.id,
-                 closed_page(ctx, %{
-                   document: %{"bookends" => ["desert", "oasis"]},
+                 entry(
+                   page: %{bookends: ["desert", "oasis"]},
                    music_meta: nil,
-                   vamp_meta: nil
-                 }),
-                 DateTime.add(now, 60, :second)
+                   vamp_meta: nil,
+                   attempts: [%{bookends: ["desert", "oasis"]}],
+                   opened_at: DateTime.add(now, 60, :second)
+                 )
                )
 
       views = Chronicle.page_views(room.id)
@@ -2647,18 +2523,16 @@ defmodule Thereish.ChronicleTest do
 
     test "replace_page_vamp attaches a late Vamp to the Page without touching its Track", ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
-      now = DateTime.utc_now()
 
       assert {:ok, page} =
                Chronicle.write(
                  room.id,
-                 closed_page(ctx, %{
+                 entry(
                    music_meta: %{
                      path: "/media/tracks/harbour-lights.mp3",
                      title: "Harbour Lights"
                    }
-                 }),
-                 now
+                 )
                )
 
       assert Chronicle.page_vamp(page) == nil
@@ -2685,7 +2559,7 @@ defmodule Thereish.ChronicleTest do
       assert {:ok, _} =
                Chronicle.write(
                  room.id,
-                 closed_page(ctx, %{
+                 entry(
                    music_meta: %{
                      path: "/media/tracks/harbour-lights.mp3",
                      title: "Harbour Lights"
@@ -2693,22 +2567,23 @@ defmodule Thereish.ChronicleTest do
                    vamp_meta: %{
                      path: "/media/vamps/harbour-vamp.mp3",
                      loop: true
-                   }
-                 }),
-                 now
+                   },
+                   opened_at: now
+                 )
                )
 
       assert {:ok, _} =
                Chronicle.write(
                  room.id,
-                 closed_page(ctx, %{
-                   document: %{"bookends" => ["desert", "oasis"]},
+                 entry(
+                   page: %{bookends: ["desert", "oasis"]},
                    music_meta: %{
                      path: "/media/tracks/oasis.mp3",
                      title: "Oasis"
-                   }
-                 }),
-                 DateTime.add(now, 60, :second)
+                   },
+                   attempts: [%{bookends: ["desert", "oasis"]}],
+                   opened_at: DateTime.add(now, 60, :second)
+                 )
                )
 
       markdown = Chronicle.to_markdown(room.id)
