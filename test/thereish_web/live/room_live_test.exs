@@ -321,7 +321,9 @@ defmodule ThereishWeb.RoomLiveTest do
   end
 
   describe "playing a Page" do
-    setup do
+    setup ctx do
+      if rungs = ctx[:escalation], do: escalation(rungs)
+
       slug = open_room()
       mara_conn = get(build_conn(), ~p"/r/#{slug}")
       {:ok, mara, _} = live(mara_conn)
@@ -440,9 +442,9 @@ defmodule ThereishWeb.RoomLiveTest do
       end
     end
 
+    @tag escalation: [slow: 50, unavailable: 700]
     test "a slow Assayer is narrated on every screen rather than left as a hang", ctx do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
-      escalation(slow: 50, unavailable: 700)
       steward(delay_ms: 5_000)
 
       commit(ctx.mara, "cairn")
@@ -769,14 +771,15 @@ defmodule ThereishWeb.RoomLiveTest do
 
     test "exhausted Attempts hold One more? after the last reveal", ctx do
       attempt_cap(2)
-      reveal_hold(30)
+      clock = freeze_clock(0)
       miss(ctx)
 
-      eventually(fn -> has_element?(ctx.mara, "[data-role=again]:not([disabled])") end)
-      press(ctx.mara, "again")
+      # The Room read its hold when it opened, so the first one is waited out
+      # on its clock rather than shortened.
+      travel(clock, 60_000)
+      render_click(ctx.mara, "next_attempt", %{})
       await_phase(ctx.slug, :bridging)
 
-      reveal_hold(60_000)
       miss(ctx, "wharf", "gantry")
 
       assert has_element?(ctx.mara, "[data-role=one-more][disabled]")
@@ -1150,7 +1153,9 @@ defmodule ThereishWeb.RoomLiveTest do
   end
 
   describe "the reveal performance (Ticket 10)" do
-    setup do
+    setup ctx do
+      if ms = ctx[:beat], do: beat(ms)
+
       slug = open_room()
       mara_conn = get(build_conn(), ~p"/r/#{slug}")
       {:ok, mara, _} = live(mara_conn)
@@ -1168,9 +1173,9 @@ defmodule ThereishWeb.RoomLiveTest do
       }
     end
 
+    @tag beat: 500
     test "the 2.5s beat is visibly a beat, not a spinner, on both phones and the stage", ctx do
       {:ok, stage, _} = live(build_conn(), ~p"/r/#{ctx.slug}/stage")
-      beat(500)
 
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
@@ -1431,7 +1436,9 @@ defmodule ThereishWeb.RoomLiveTest do
   end
 
   describe "giving settings and writing the page (ticket 02)" do
-    setup do
+    setup ctx do
+      if rungs = ctx[:author_escalation], do: author_escalation(rungs)
+
       slug = open_room()
 
       {:ok, mara, _} = live(phone(slug))
@@ -1677,10 +1684,9 @@ defmodule ThereishWeb.RoomLiveTest do
       assert render(ctx.jacob) =~ "value=\"misty harbor\""
     end
 
+    @tag author_escalation: [still_writing: 30, deadline: 100]
     test "stage shows waiting count with no give text, then writing animation, then still writing, then failure state",
          ctx do
-      author_escalation(still_writing: 30, deadline: 100)
-
       fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
