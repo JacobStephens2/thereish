@@ -49,7 +49,7 @@ defmodule Thereish.Scribe do
   def recap(room, page) do
     # Both of these are read back out of the log rather than passed down from
     # the Room, so that the Page the Scribe writes about and the Chronicle it
-    # reaches into cannot disagree. The digest holds every Page before this one,
+    # reaches into cannot disagree. The Steward reads every Page before this one,
     # because this one is in the question already and what a callback reaches
     # back for is everything before tonight.
     views = Chronicle.page_views(room.id, :asc)
@@ -59,9 +59,8 @@ defmodule Thereish.Scribe do
     # catch-up sync, later Pages already exist in the log; taking only the views
     # before this Page ensures later play never leaks into this Page's callback.
     prior_views = Enum.take_while(views, &(&1.id != page.id))
-    digest = Chronicle.scribe_digest(prior_views, nil)
 
-    case Steward.recap(view, digest) do
+    case Steward.recap(view, prior_views) do
       {:ok, recap} ->
         {:ok, _row} = Chronicle.record_recap(room.id, Map.put(recap, :page_id, page.id))
 

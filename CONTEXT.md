@@ -184,6 +184,10 @@ _Avoid_: reference, easter egg, throwback, memory
 The persistent, player-visible record of one Room's play history — its Pages, Verdicts, overrules, retained media, and Opinions. Opinions evaluate the Assayer without rewriting recorded play; earlier corrections remain part of the record.
 _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)
 
+**Digest**:
+The Chronicle as a Steward role reads it before writing: every earlier Page in words, cut to what that role may know. The Scribe's never carries a grade.
+_Avoid_: summary, history, context, memory
+
 **Spend**:
 What the Steward's calls cost, read from the Chronicle's rows by role and model, and never stored as a total.
 _Avoid_: cost report, billing, ledger (the Spend page's subtitle aside)
