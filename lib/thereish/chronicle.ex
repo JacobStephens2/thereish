@@ -24,6 +24,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.BookendsTap
   alias Thereish.Chronicle.Bridge
   alias Thereish.Chronicle.Correction
+  alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.ExperimentAssignment
   alias Thereish.Chronicle.ExperimentOutcome
   alias Thereish.Chronicle.ExperimentUnblinding
@@ -40,18 +41,18 @@ defmodule Thereish.Chronicle do
   @doc """
   Writes one closed Page, with its attempts, its Bridges and its verdicts.
 
-  `entry` is what `Thereish.Game` describes when a Page closes, and
-  `opened_at` is when the Room dealt it — the Game keeps no clock, so the time a
-  Page began is the Room's to remember.
+  `entry` is the `Thereish.Chronicle.Entry` the Game built when the Page
+  closed, stamped with the times Pacing recorded, including `opened_at`, when
+  the Room dealt the Page.
 
   One transaction, and every insert is a bang: a Page half in the Chronicle is
   worse than a Page that is not in it, so a row that will not go in takes the
   whole write down rather than leaving a torn record behind.
   """
-  @spec write(Ecto.UUID.t(), map(), DateTime.t()) :: {:ok, Page.t()}
-  def write(room_id, entry, opened_at) do
+  @spec write(Ecto.UUID.t(), Entry.t()) :: {:ok, Page.t()}
+  def write(room_id, %Entry{} = entry) do
     Repo.transaction(fn ->
-      page = insert_page(room_id, entry, opened_at)
+      page = insert_page(room_id, entry)
 
       Enum.each(entry.attempts, &insert_attempt(page, &1))
 
@@ -379,8 +380,8 @@ defmodule Thereish.Chronicle do
   """
   @spec record_page_outcome(
           Ecto.UUID.t() | String.t(),
-          map(),
-          map(),
+          Page.t(),
+          Entry.t(),
           atom() | String.t(),
           String.t() | nil
         ) ::
@@ -398,7 +399,7 @@ defmodule Thereish.Chronicle do
     trap_converged =
       Enum.any?(entry.attempts, fn att ->
         Enum.any?(att.verdicts, fn v ->
-          meta = (is_map(v) && (v[:meta] || Map.get(v, :meta))) || %{}
+          meta = v.meta || %{}
           meta[:trap_sprung] == true or meta["trap_sprung"] == true
         end)
       end)
@@ -406,7 +407,7 @@ defmodule Thereish.Chronicle do
     deep_converged =
       Enum.any?(entry.attempts, fn att ->
         Enum.any?(att.verdicts, fn v ->
-          meta = (is_map(v) && (v[:meta] || Map.get(v, :meta))) || %{}
+          meta = v.meta || %{}
           meta[:deep_convergence] == true or meta["deep_convergence"] == true
         end)
       end)
@@ -417,12 +418,7 @@ defmodule Thereish.Chronicle do
         true -> page.id
       end
 
-    closing_band =
-      cond do
-        entry[:closing_band] -> to_string(entry[:closing_band])
-        entry.closeness -> to_string(Thereish.Ladder.read(entry.closeness).band)
-        true -> nil
-      end
+    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
 
     result =
       record_experiment_outcome(room_id, %{
@@ -437,7 +433,7 @@ defmodule Thereish.Chronicle do
         closed_because: to_string(entry.closed_because),
         trap_converged: trap_converged,
         deep_converged: deep_converged,
-        taps: entry[:taps] || %{}
+        taps: %{}
       })
 
     # Link page_id to the oldest unlinked assignment for this room and experiment
@@ -2397,100 +2393,45 @@ defmodule Thereish.Chronicle do
     )
   end
 
-  defp insert_page(room_id, entry, opened_at) do
-    page_data = entry[:page] || %{}
-
-    author_meta =
-      Map.get(page_data, :author_meta) ||
-        Map.get(page_data, "author_meta") ||
-        Map.get(entry, :author_meta) ||
-        Map.get(entry, "author_meta")
-
-    music_meta =
-      Map.get(page_data, :music_meta) ||
-        Map.get(page_data, "music_meta") ||
-        Map.get(entry, :music_meta) ||
-        Map.get(entry, "music_meta")
-
-    vamp_meta =
-      Map.get(page_data, :vamp_meta) ||
-        Map.get(page_data, "vamp_meta") ||
-        Map.get(entry, :vamp_meta) ||
-        Map.get(entry, "vamp_meta")
-
-    masks_meta =
-      (Map.get(page_data, :masks_meta) ||
-         Map.get(page_data, "masks_meta") ||
-         Map.get(page_data, :masks) ||
-         Map.get(page_data, "masks") ||
-         Map.get(entry, :masks_meta) ||
-         Map.get(entry, "masks_meta") ||
-         Map.get(entry, :masks) ||
-         Map.get(entry, "masks"))
-      |> sanitize_masks()
-
+  defp insert_page(room_id, %Entry{} = entry) do
     page =
       %Page{}
       |> Page.changeset(%{
         room_id: room_id,
-        document: page_data,
-        author_meta: author_meta,
-        music_meta: music_meta,
-        vamp_meta: vamp_meta,
-        masks_meta: masks_meta,
+        document: entry.page,
+        author_meta: entry.author_meta,
+        music_meta: entry.music_meta,
+        vamp_meta: entry.vamp_meta,
+        masks_meta: sanitize_masks(entry.masks),
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,
         closeness: entry.closeness,
-        opened_at: opened_at,
+        opened_at: entry.opened_at,
         closed_at: DateTime.utc_now(),
-        revealed_at:
-          Map.get(entry, :revealed_at) ||
-            Map.get(entry, "revealed_at") ||
-            Timing.last_revealed(entry[:attempts] || [])
+        revealed_at: entry.revealed_at
       })
       |> Repo.insert!()
 
-    raw_gives =
-      entry[:gives] || entry["gives"] ||
-        page_data[:gives] || page_data["gives"]
-
-    gives =
-      cond do
-        is_list(raw_gives) ->
-          raw_gives
-
-        is_map(raw_gives) ->
-          Enum.map(raw_gives, fn {s_id, txt} -> %{seat_id: s_id, text: txt} end)
-
-        true ->
-          []
-      end
-
-    gives
+    entry.gives
     |> Enum.with_index(1)
     |> Enum.each(fn {give, idx} -> insert_give(page, give, idx) end)
 
     page
   end
 
-  defp insert_give(page, give, position) do
-    seat_id = give[:seat_id] || give["seat_id"]
-    text = give[:text] || give[:give] || give["text"] || give["give"] || ""
-
-    if seat_id do
-      %Give{}
-      |> Give.changeset(%{
-        page_id: page.id,
-        seat_id: seat_id,
-        text: text,
-        order: position,
-        arrived_at: give[:arrived_at] || give["arrived_at"]
-      })
-      |> Repo.insert!()
-    end
+  defp insert_give(page, %Entry.Give{} = give, position) do
+    %Give{}
+    |> Give.changeset(%{
+      page_id: page.id,
+      seat_id: give.seat_id,
+      text: give.text,
+      order: position,
+      arrived_at: give.arrived_at
+    })
+    |> Repo.insert!()
   end
 
-  defp insert_attempt(page, attempt) do
+  defp insert_attempt(page, %Entry.Attempt{} = attempt) do
     row =
       %Attempt{}
       |> Attempt.changeset(%{
@@ -2499,10 +2440,10 @@ defmodule Thereish.Chronicle do
         bookends: attempt.bookends,
         closeness: attempt.closeness,
         melded: attempt.melded?,
-        started_at: attempt[:started_at] || attempt["started_at"],
-        assaying_started_at: attempt[:assaying_started_at] || attempt["assaying_started_at"],
-        revealed_at: attempt[:revealed_at] || attempt["revealed_at"],
-        advanced_at: attempt[:advanced_at] || attempt["advanced_at"]
+        started_at: attempt.started_at,
+        assaying_started_at: attempt.assaying_started_at,
+        revealed_at: attempt.revealed_at,
+        advanced_at: attempt.advanced_at
       })
       |> Repo.insert!()
 
@@ -2524,7 +2465,7 @@ defmodule Thereish.Chronicle do
     |> Repo.insert!()
   end
 
-  defp insert_verdict(attempt, {verdict, position}) do
+  defp insert_verdict(attempt, {%Entry.Verdict{} = verdict, position}) do
     meta = verdict.meta
 
     %Verdict{}
@@ -2544,10 +2485,10 @@ defmodule Thereish.Chronicle do
       forward: meta[:forward],
       reverse: meta[:reverse],
       reasoning_reverse: meta[:reasoning_reverse],
-      furthest: Map.get(verdict, :furthest),
-      overruled: Map.get(verdict, :overruled?, false),
+      furthest: verdict.furthest,
+      overruled: verdict.overruled?,
       position: position,
-      voice_meta: Map.get(verdict, :voice_meta) || (is_map(meta) && meta[:voice_meta])
+      voice_meta: verdict.voice_meta
     })
     |> Repo.insert!()
   end

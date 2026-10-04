@@ -1,6 +1,7 @@
 defmodule ThereishWeb.SpendLiveTest do
   use ThereishWeb.ConnCase, async: false
 
+  import Thereish.EntryFixtures
   import Thereish.RoomFixtures
   import Phoenix.LiveViewTest
 
@@ -31,47 +32,48 @@ defmodule ThereishWeb.SpendLiveTest do
 
       now = DateTime.utc_now()
 
-      entry1 = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: mara.id, bridge: "water"},
-              %{seat_id: jacob.id, bridge: "water"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [mara.id, jacob.id],
-                bridges: ["water", "water"],
-                graded?: true,
-                closeness: 90,
-                band: :meld,
-                reasoning: "Both said water.",
-                quip: "Water in the sand.",
-                meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010},
-                voice_meta: %{
-                  model: "octave-2",
-                  cost_usd: 0.0005,
-                  provider: "hume",
-                  voice: "dungeon-master",
-                  latency_ms: 450
+      entry1 =
+        entry(%{
+          page: %{"bookends" => ["desert", "oasis"]},
+          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
+          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
+          closed_because: :meld,
+          melded?: true,
+          closeness: 90,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["desert", "oasis"],
+              closeness: 90,
+              melded?: true,
+              bridges: [
+                %{seat_id: mara.id, bridge: "water"},
+                %{seat_id: jacob.id, bridge: "water"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [mara.id, jacob.id],
+                  bridges: ["water", "water"],
+                  graded?: true,
+                  closeness: 90,
+                  band: :meld,
+                  reasoning: "Both said water.",
+                  quip: "Water in the sand.",
+                  meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010},
+                  voice_meta: %{
+                    model: "octave-2",
+                    cost_usd: 0.0005,
+                    provider: "hume",
+                    voice: "dungeon-master",
+                    latency_ms: 450
+                  }
                 }
-              }
-            ]
-          }
-        ]
-      }
+              ]
+            }
+          ]
+        })
 
-      {:ok, page1} = Chronicle.write(room1.id, entry1, now)
+      {:ok, page1} = Chronicle.write(room1.id, entry1)
 
       {:ok, _recap1} =
         Chronicle.record_recap(room1.id, %{
@@ -87,39 +89,40 @@ defmodule ThereishWeb.SpendLiveTest do
       {:ok, alice} = Rooms.join(slug2, "Alice", device_token())
       {:ok, bob} = Rooms.join(slug2, "Bob", device_token())
 
-      entry2 = %{
-        document: %{"bookends" => ["sun", "moon"]},
-        author_meta: %{model: "gemini-3.8-flash", cost_usd: nil},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["sun", "moon"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: alice.id, bridge: "sky"},
-              %{seat_id: bob.id, bridge: "sky"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [alice.id, bob.id],
-                bridges: ["sky", "sky"],
-                graded?: false,
-                closeness: nil,
-                band: nil,
-                reasoning: nil,
-                quip: nil,
-                meta: %{model: "gemini-3.8-flash", cost_usd: nil}
-              }
-            ]
-          }
-        ]
-      }
+      entry2 =
+        entry(%{
+          page: %{"bookends" => ["sun", "moon"]},
+          author_meta: %{model: "gemini-3.8-flash", cost_usd: nil},
+          closed_because: :meld,
+          melded?: true,
+          closeness: 90,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["sun", "moon"],
+              closeness: 90,
+              melded?: true,
+              bridges: [
+                %{seat_id: alice.id, bridge: "sky"},
+                %{seat_id: bob.id, bridge: "sky"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [alice.id, bob.id],
+                  bridges: ["sky", "sky"],
+                  graded?: false,
+                  closeness: nil,
+                  band: nil,
+                  reasoning: nil,
+                  quip: nil,
+                  meta: %{model: "gemini-3.8-flash", cost_usd: nil}
+                }
+              ]
+            }
+          ]
+        })
 
-      {:ok, _page2} = Chronicle.write(room2.id, entry2, now)
+      {:ok, _page2} = Chronicle.write(room2.id, entry2)
 
       {:ok, view, _html} = live(conn, ~p"/spend")
 

@@ -48,6 +48,7 @@ defmodule Thereish.Game do
   # worth more than the Kernel import it displaces.
   import Kernel, except: [apply: 2]
 
+  alias Thereish.Chronicle.Entry
   alias Thereish.Ladder
 
   @enforce_keys [:seat_limit, :seats]
@@ -205,7 +206,7 @@ defmodule Thereish.Game do
           :beat
           | {:author, %{gives: [map()], count: pos_integer()}}
           | {:assay, %{bookends: [String.t()], bridges: [String.t()]}}
-          | {:chronicle, map()}
+          | {:chronicle, Entry.t()}
           | {:overrule, map()}
           | {:fairness_tap, map()}
           | {:bookends_tap, map()}
@@ -1276,29 +1277,24 @@ defmodule Thereish.Game do
 
   # The whole Page as it was played, for the Room to write down. Everything the
   # Chronicle keeps about a Page is here, including the attempts that were
-  # already over when this one closed.
+  # already over when this one closed. It is built from the Game's state and
+  # not from what any screen shows, so a change to a view cannot change what
+  # the Chronicle stores.
   defp chronicle(state) do
     attempts = state.played ++ [this_attempt(state)]
 
-    %{
+    %Entry{
       page: state.page,
-      bookends: state.bookends,
       gives:
         Enum.map(page_seats(state), fn seat ->
-          %{
-            seat_id: seat.id,
-            seat_name: seat.name,
-            text: state.gives[seat.id] || "",
-            mask: Map.get(state.masks || %{}, seat.id)
-          }
+          %Entry.Give{seat_id: seat.id, text: state.gives[seat.id] || ""}
         end),
       masks: state.masks || %{},
       author_meta: state.page && (state.page[:meta] || state.page["meta"]),
       closed_because: closed_because(state),
       melded?: melded?(state),
       closeness: headline(state),
-      attempts: Enum.map(attempts, &chronicle_attempt(state, &1)),
-      overrules: state.overrules
+      attempts: Enum.map(attempts, &chronicle_attempt(state, &1))
     }
   end
 
@@ -1399,34 +1395,42 @@ defmodule Thereish.Game do
   # keeps a list because an attempt has held more than one row before and the
   # rows are what a reader counts; today that list is one long (ADR-0010).
   defp chronicle_attempt(state, attempt) do
-    verdicts =
-      if attempt.verdict do
-        [chronicle_verdict(state, attempt)]
-      else
-        []
-      end
+    %{closeness: closeness, melded?: melded?} = Ladder.read(attempt_closeness(attempt))
 
-    state
-    |> attempt_view(attempt)
-    |> Map.put(:verdicts, verdicts)
+    %Entry.Attempt{
+      number: attempt.number,
+      bookends: attempt.bookends,
+      closeness: closeness,
+      melded?: melded?,
+      bridges:
+        for seat <- state.seats, Map.has_key?(attempt.bridges, seat.id) do
+          %{seat_id: seat.id, bridge: attempt.bridges[seat.id]}
+        end,
+      verdicts: if(attempt.verdict, do: [chronicle_verdict(state, attempt)], else: [])
+    }
   end
 
   # A verdict row says which word every Seat had in it, in the same order as the
   # Seats it names, so the row can be read without joining anything back to it —
-  # and which two of those words the Assayer sent the couple to next.
+  # and which two of those words the Assayer sent the couple to next. The number
+  # goes through the Ladder, as it does on screen.
   defp chronicle_verdict(state, attempt) do
     verdict = attempt.verdict
     seats = page_seats(state)
+    %{closeness: closeness, band: band} = Ladder.read(verdict.closeness)
 
-    verdict
-    |> verdict_view()
-    |> Map.merge(%{
+    %Entry.Verdict{
       seat_ids: Enum.map(seats, & &1.id),
-      names: Enum.map(seats, & &1.name),
       bridges: Enum.map(seats, &attempt.bridges[&1.id]),
+      graded?: verdict.graded?,
+      closeness: closeness,
+      band: band,
+      reasoning: verdict.reasoning,
+      quip: verdict.quip,
       furthest: Map.get(verdict, :furthest),
+      overruled?: Map.get(verdict, :overruled?, false),
       meta: verdict.meta
-    })
+    }
   end
 
   @doc "A Seat's house colour from the Limner palette by roster position."

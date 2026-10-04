@@ -17,7 +17,7 @@ defmodule Thereish.Foley.Voice do
     * `{:speak, attempt, kind, line}`: answer with `spoken/5`
     * `{:broadcast, {:bookends_ready, attempt}}`
     * `{:broadcast, {:voice_ready, attempt}}`
-    * `{:commit_chronicle, entry}`: the entry already carries its voice
+    * `{:commit_chronicle, entry}`: the Entry already carries its voice
       metadata
     * `{:log, level, message}`
 
@@ -37,6 +37,7 @@ defmodule Thereish.Foley.Voice do
   is held, so a Page cannot vanish.
   """
 
+  alias Thereish.Chronicle.Entry
   alias Thereish.Ladder
 
   defstruct attempt: nil,
@@ -53,7 +54,7 @@ defmodule Thereish.Foley.Voice do
           clips: %{optional(kind()) => clip()},
           speaking: %{bookends: integer() | nil, verdict: integer() | nil},
           voice_meta: %{optional(integer()) => map()},
-          held_page: map() | nil
+          held_page: Entry.t() | nil
         }
 
   @typedoc """
@@ -63,7 +64,7 @@ defmodule Thereish.Foley.Voice do
   @type effect ::
           {:speak, integer(), kind(), String.t()}
           | {:broadcast, {:bookends_ready | :voice_ready, integer()}}
-          | {:commit_chronicle, map()}
+          | {:commit_chronicle, Entry.t()}
           | {:log, Logger.level(), String.t()}
 
   @typedoc "The Room's and the Game's facts for this call."
@@ -165,11 +166,11 @@ defmodule Thereish.Foley.Voice do
   end
 
   @doc """
-  A Page closed with this Chronicle entry. It is committed now, or held while
+  A Page closed with this Chronicle Entry. It is committed now, or held while
   one of its Attempts' Verdict is still being spoken.
   """
-  @spec page_closed(t(), map()) :: {t(), [effect()]}
-  def page_closed(%__MODULE__{} = voice, entry) do
+  @spec page_closed(t(), Entry.t()) :: {t(), [effect()]}
+  def page_closed(%__MODULE__{} = voice, %Entry{} = entry) do
     if waiting?(voice, entry) do
       {%{voice | held_page: entry}, []}
     else
@@ -311,15 +312,15 @@ defmodule Thereish.Foley.Voice do
 
   defp commit(voice, entry), do: {:commit_chronicle, attach_meta(entry, voice.voice_meta)}
 
-  defp attach_meta(entry, meta) do
+  defp attach_meta(%Entry{} = entry, meta) do
     attempts =
-      Enum.map(entry.attempts, fn attempt ->
+      Enum.map(entry.attempts, fn %Entry.Attempt{} = attempt ->
         case Map.get(meta, attempt.number) do
           nil ->
             attempt
 
           v_meta ->
-            %{attempt | verdicts: Enum.map(attempt.verdicts, &Map.put(&1, :voice_meta, v_meta))}
+            %{attempt | verdicts: Enum.map(attempt.verdicts, &%{&1 | voice_meta: v_meta})}
         end
       end)
 

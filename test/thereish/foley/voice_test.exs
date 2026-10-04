@@ -9,6 +9,8 @@ defmodule Thereish.Foley.VoiceTest do
 
   alias Thereish.Foley.Voice
 
+  import Thereish.EntryFixtures
+
   @bookends ["harbour", "lantern"]
   @clip %{audio: "audio-bytes", format: :mp3, meta: %{provider: "fake", voice: "v1"}}
   @failure %{
@@ -25,10 +27,8 @@ defmodule Thereish.Foley.VoiceTest do
     )
   end
 
-  defp entry(numbers) do
-    %{
-      attempts: Enum.map(numbers, fn n -> %{number: n, verdicts: [%{band: :miss}]} end)
-    }
+  defp closed_entry(numbers) do
+    entry(attempts: Enum.map(numbers, &%{number: &1, verdicts: [%{band: :miss}]}))
   end
 
   defp line(voice, verdict, table) do
@@ -233,11 +233,11 @@ defmodule Thereish.Foley.VoiceTest do
   describe "the Chronicle hold" do
     test "a Page with no Verdict being spoken is committed at once" do
       assert {_voice, [{:commit_chronicle, %{attempts: [%{number: 1}]}}]} =
-               Voice.page_closed(Voice.new(), entry([1]))
+               Voice.page_closed(Voice.new(), closed_entry([1]))
     end
 
     test "a Page whose Verdict is being spoken waits, and is committed before voice_ready" do
-      {voice, effects} = Voice.page_closed(verdict_in_flight(), entry([1]))
+      {voice, effects} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
       assert effects == []
 
       assert {_voice, [{:commit_chronicle, committed}, {:broadcast, {:voice_ready, 1}}]} =
@@ -250,7 +250,7 @@ defmodule Thereish.Foley.VoiceTest do
     end
 
     test "a failed synthesis records its failure metadata on the held Page" do
-      {voice, []} = Voice.page_closed(verdict_in_flight(), entry([1]))
+      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
 
       assert {_voice, [{:log, :warning, _message}, {:commit_chronicle, committed}]} =
                Voice.spoken(voice, 1, :verdict, {:error, @failure}, table(phase: :closed))
@@ -262,17 +262,19 @@ defmodule Thereish.Foley.VoiceTest do
     test "a Page closing after its Verdict metadata landed is committed with it" do
       {voice, _} = Voice.spoken(verdict_in_flight(), 1, :verdict, {:ok, @clip}, table())
 
-      assert {_voice, [{:commit_chronicle, committed}]} = Voice.page_closed(voice, entry([1]))
+      assert {_voice, [{:commit_chronicle, committed}]} =
+               Voice.page_closed(voice, closed_entry([1]))
+
       [%{verdicts: [verdict]}] = committed.attempts
       assert verdict.voice_meta["provider"] == "fake"
     end
 
     test "turning the Page flushes a held Page with what has landed" do
-      {voice, []} = Voice.page_closed(verdict_in_flight(), entry([1]))
+      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
 
       assert {voice, [{:commit_chronicle, committed}]} = Voice.page_turned(voice)
       [%{verdicts: [verdict]}] = committed.attempts
-      refute Map.has_key?(verdict, :voice_meta)
+      assert verdict.voice_meta == nil
 
       assert {_voice, []} = Voice.page_turned(voice)
     end
@@ -281,7 +283,7 @@ defmodule Thereish.Foley.VoiceTest do
       voice = verdict_in_flight()
       {voice, []} = Voice.page_turned(voice)
 
-      assert {_voice, [{:commit_chronicle, _entry}]} = Voice.page_closed(voice, entry([1]))
+      assert {_voice, [{:commit_chronicle, _entry}]} = Voice.page_closed(voice, closed_entry([1]))
     end
   end
 
@@ -294,7 +296,7 @@ defmodule Thereish.Foley.VoiceTest do
         latency: 120
       }
 
-      {voice, []} = Voice.page_closed(verdict_in_flight(), entry([1]))
+      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
 
       {_voice, [{:commit_chronicle, committed}, _ready]} =
         Voice.spoken(voice, 1, :verdict, {:ok, %{@clip | meta: raw}}, table())
@@ -311,7 +313,7 @@ defmodule Thereish.Foley.VoiceTest do
     end
 
     test "defaults with none" do
-      {voice, []} = Voice.page_closed(verdict_in_flight(), entry([1]))
+      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
       clip = Map.delete(@clip, :meta)
 
       {_voice, [{:commit_chronicle, committed}, _ready]} =

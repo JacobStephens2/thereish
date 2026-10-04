@@ -7,6 +7,7 @@ defmodule Thereish.RoomsTest do
   """
   use Thereish.DataCase, async: false
 
+  import Thereish.EntryFixtures
   import Thereish.RoomFixtures
   import ExUnit.CaptureLog
 
@@ -870,10 +871,23 @@ defmodule Thereish.RoomsTest do
       now = DateTime.utc_now()
 
       for {quip, index} <- Enum.with_index(quips, 1) do
-        entry = remembered_page(mara.id, jacob.id, quip)
+        entry =
+          entry(
+            opened_at: DateTime.add(now, index, :second),
+            attempts: [
+              %{
+                bridges: [
+                  %{seat_id: mara.id, bridge: "cairn"},
+                  %{seat_id: jacob.id, bridge: "cairns"}
+                ],
+                verdicts: [
+                  %{seat_ids: [mara.id, jacob.id], bridges: ["cairn", "cairns"], quip: quip}
+                ]
+              }
+            ]
+          )
 
-        assert {:ok, _page} =
-                 Chronicle.write(room.id, entry, DateTime.add(now, index, :second))
+        assert {:ok, _page} = Chronicle.write(room.id, entry)
       end
 
       steward(assay_capture: self())
@@ -887,39 +901,6 @@ defmodule Thereish.RoomsTest do
       assert_receive {:assay, request}, 2_000
       assert request.prior_quips == tl(quips)
       refute "Oldest quip, the one that should drop." in request.prior_quips
-    end
-
-    defp remembered_page(mara_id, jacob_id, quip) do
-      %{
-        page: %{bookends: ["lantern", "harbour"]},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 91,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["lantern", "harbour"],
-            closeness: 91,
-            melded?: true,
-            bridges: [
-              %{seat_id: mara_id, bridge: "cairn"},
-              %{seat_id: jacob_id, bridge: "cairns"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [mara_id, jacob_id],
-                bridges: ["cairn", "cairns"],
-                graded?: true,
-                closeness: 91,
-                band: :meld,
-                reasoning: "Same root.",
-                quip: quip,
-                meta: %{model: "fake", prompt_version: "assay-3", latency_ms: 10, cost_usd: 0.0}
-              }
-            ]
-          }
-        ]
-      }
     end
   end
 
