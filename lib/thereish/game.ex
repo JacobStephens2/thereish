@@ -434,7 +434,7 @@ defmodule Thereish.Game do
           full_table: Map.get(attrs, :full_table, state.full_table) != false
         }
 
-        {:ok, turn_to(state, page), []}
+        {:ok, reset_page(state, page), []}
     end
   end
 
@@ -585,7 +585,7 @@ defmodule Thereish.Game do
   def apply(%__MODULE__{} = state, {:next_page, %{seat_id: seat_id}}) do
     with :ok <- may_next_page(state, seat_id) do
       last_gives = Map.merge(state.last_gives || %{}, state.gives || %{})
-      state = turn_to(state, nil)
+      state = reset_page(state, nil)
 
       {:ok, %{state | gives: %{}, last_gives: last_gives, page_seat_ids: nil, masks: %{}}, []}
     end
@@ -593,7 +593,7 @@ defmodule Thereish.Game do
 
   # What every Page starts over, whether it is being written or the last one
   # is being put away: its Attempts, its Bookends taps and the Author's failure.
-  defp turn_to(state, page) do
+  defp reset_page(state, page) do
     %{
       state
       | page: page,
@@ -973,7 +973,7 @@ defmodule Thereish.Game do
   defp bookend_chips(state, _phase) do
     Bookends.chips(
       attempt_bookends(state) || [],
-      state.attempt.origins || [],
+      state.attempt.origins,
       attempt_number(state),
       state.masks || %{}
     )

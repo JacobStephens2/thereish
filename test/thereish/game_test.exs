@@ -921,7 +921,7 @@ defmodule Thereish.GameTest do
       assert view.attempt.number == 2
       assert view.bookends == ["cairn", "beacon"]
       assert Game.barred_words(attempt2) == ["cairn", "beacon", "lantern", "harbour"]
-      assert Game.view(attempt2, nil).barred_words == ["cairn", "beacon", "lantern", "harbour"]
+      assert view.barred_words == ["cairn", "beacon", "lantern", "harbour"]
 
       # Carried bridge is barred as bookend
       assert {:error, {:illegal_bridge, "\"cairn\" shares a root with \"cairn\"."}} =
