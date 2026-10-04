@@ -6,6 +6,7 @@ defmodule Thereish.Experiments.SummarizeTest do
   use ExUnit.Case, async: true
 
   alias Thereish.Chronicle.ExperimentOutcome
+  alias Thereish.Chronicle.PageView
   alias Thereish.Experiments
 
   @no_rows %{outcomes: [], fairness_taps: [], overrules: [], views: []}
@@ -135,7 +136,7 @@ defmodule Thereish.Experiments.SummarizeTest do
         outcomes: outcomes,
         fairness_taps: [%{page_id: "P001", label: "fair"}],
         overrules: [%{page_id: "P001"}],
-        views: [%{id: "P001", document: %{}, fairness_taps: [], overrules: []}]
+        views: [%PageView{id: "P001", document: %{}, fairness_taps: [], overrules: []}]
       }
 
       assert summarize("author_model", with_feedback) == summarize("author_model", rows)

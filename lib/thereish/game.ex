@@ -823,8 +823,6 @@ defmodule Thereish.Game do
   # A Page keeps the rule it was written under. Omitted or missing (Pages from
   # before the rule, or a Room that has not written one yet) reads as the
   # Room's current rule, default on.
-  defp page_full_table(attrs, default \\ true)
-
   defp page_full_table(attrs, default) when is_map(attrs) do
     case Map.get(attrs, :full_table, Map.get(attrs, "full_table", default)) do
       false -> false

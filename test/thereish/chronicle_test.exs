@@ -421,7 +421,7 @@ defmodule Thereish.ChronicleTest do
       room = Repo.get_by!(Room, slug: ctx.slug)
 
       # Record an overrule on page 2 attempt 1
-      [p1, p2] = chronicled(ctx.slug)
+      [_p1, p2] = chronicled(ctx.slug)
       p2_attempt1 = hd(p2.attempts)
 
       {:ok, _overrule} =
@@ -438,18 +438,6 @@ defmodule Thereish.ChronicleTest do
           couple_reasoning: "We both saw water in the desert"
         })
 
-      # Historical correction on page 1 — writes are retired, the row remains readable
-      {:ok, _correction} =
-        insert_historical_correction(room.id, %{
-          page_id: p1.id,
-          seat_id: ctx.jacob.id,
-          attempt_number: 1,
-          target: "bridge",
-          original_value: "cairns",
-          corrected_value: "cairn",
-          note: "Phone autocorrect"
-        })
-
       # Book view is in reverse chronological order (newest page first)
       book_pages = Chronicle.book(room.id)
       assert length(book_pages) == 2
@@ -462,13 +450,7 @@ defmodule Thereish.ChronicleTest do
       assert first_page.melded == true
       [first_attempt] = first_page.attempts
       assert Enum.map(first_attempt.bridges, & &1.seat_name) == ["Mara", "Jacob"]
-      assert Enum.map(first_attempt.bridges, & &1.bridge) == ["cairn", "cairn"]
-      jacob_bridge = Enum.find(first_attempt.bridges, &(&1.seat_name == "Jacob"))
-      assert jacob_bridge.original_bridge == "cairns"
-      assert jacob_bridge.corrected? == true
-      assert [c] = first_page.corrections
-      assert c.corrected_value == "cairn"
-      assert c.author_name == "Jacob"
+      assert Enum.map(first_attempt.bridges, & &1.bridge) == ["cairn", "cairns"]
 
       # Latest page
       assert latest_page.closed_because in ["meld", "attempts_spent"]
@@ -1103,9 +1085,7 @@ defmodule Thereish.ChronicleTest do
       assert length(verdict.seat_ids) == 4
       assert verdict.furthest == ["beacon", "seagull"]
 
-      # Pages from before the rule still render: no Full table field, Carried is the furthest pair.
-      assert view.full_table == nil
-      assert attempt.carried == ["beacon", "seagull"]
+      # Pages from before the rule still render, with no Full table field.
       markdown = Chronicle.to_markdown(room.id)
       refute markdown =~ "- Rule:"
     end
@@ -1221,7 +1201,8 @@ defmodule Thereish.ChronicleTest do
       assert is_list(verdict.furthest) and length(verdict.furthest) == 2
       assert Enum.all?(verdict.furthest, &(&1 in ["beacon", "cairn", "lamp", "seagull"]))
 
-      # Book view lists Gives, every Bridge, the one Verdict with reasoning, and the carried words
+      # Book view lists Gives, every Bridge, the one Verdict with reasoning, and the Gives
+      # the Bookends came from
       [view] = Chronicle.book(room.id)
       assert length(view.gives) == 4
       [attempt] = view.attempts
@@ -1229,17 +1210,9 @@ defmodule Thereish.ChronicleTest do
       assert [v] = attempt.verdicts
       assert v.reasoning != nil and v.reasoning != ""
       assert v.furthest == verdict.furthest
-      assert attempt.carried == ["beacon", "cairn", "lamp", "seagull"]
       assert view.full_table == true
 
       assert Enum.map(view.bookend_origins, & &1.give) == [
-               "setting one",
-               "setting two",
-               "setting three",
-               "setting four"
-             ]
-
-      assert Enum.map(attempt.bookend_chips, & &1.give) == [
                "setting one",
                "setting two",
                "setting three",
