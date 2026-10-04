@@ -6,11 +6,16 @@ defmodule Thereish.Steward.Ideogram do
   the vendor will not draw comes back as `{:error, :refused}`.
   """
 
+  @behaviour Thereish.Steward.Provider
+
   alias Thereish.Steward.Provider
 
   @url "https://api.ideogram.ai/v1/ideogram-v3/generate"
   @default_model "ideogram-v3-turbo"
   @default_timeout_ms 30_000
+
+  @impl Provider
+  def credentials, do: [api_key: "IDEOGRAM_API_KEY"]
 
   @spec generate(map() | keyword()) :: {:ok, map()} | {:error, term()}
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
@@ -125,18 +130,9 @@ defmodule Thereish.Steward.Ideogram do
   end
 
   defp api_key(request) do
-    cond do
-      present?(get(request, :ideogram_api_key, nil)) ->
-        {:ok, get(request, :ideogram_api_key, nil)}
-
-      present?(get(request, :api_key, nil)) ->
-        {:ok, get(request, :api_key, nil)}
-
-      true ->
-        {:error, :no_api_key}
+    case get(request, :api_key, nil) do
+      key when is_binary(key) and key != "" -> {:ok, key}
+      _ -> {:error, :no_api_key}
     end
   end
-
-  defp present?(key) when is_binary(key) and key != "", do: true
-  defp present?(_), do: false
 end

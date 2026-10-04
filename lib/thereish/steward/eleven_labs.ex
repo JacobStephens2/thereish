@@ -7,6 +7,8 @@ defmodule Thereish.Steward.ElevenLabs do
   - Sound Generation: Generates sound effects from text prompts using the
     `eleven_text_to_sound_v2` model.
   """
+  @behaviour Thereish.Steward.Provider
+
   require Logger
 
   alias Thereish.Steward.Provider
@@ -15,16 +17,20 @@ defmodule Thereish.Steward.ElevenLabs do
   @default_tts_model "eleven_v3_conversational"
   @default_timeout_ms 3_000
 
+  @impl Provider
+  def credentials, do: [api_key: "ELEVENLABS_API_KEY"]
+
   # ---------------------------------------------------------------------------
   # Text-to-Speech (`speak/2`)
   # ---------------------------------------------------------------------------
 
   @doc """
-  Synthesizes speech for one line of text via ElevenLabs TTS API.
+  Synthesizes speech for one line of text via ElevenLabs TTS API, with the
+  `api_key` it is handed.
   """
   @spec speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def speak(line, opts \\ []) do
-    with {:ok, key} <- api_key(opts, :voice),
+    with {:ok, key} <- api_key(Map.new(opts)),
          {:ok, voice_id} <- fetch_voice_id(opts) do
       model = Keyword.get(opts, :model, @default_tts_model)
       timeout = Keyword.get(opts, :timeout_ms, @default_timeout_ms)
@@ -61,7 +67,6 @@ defmodule Thereish.Steward.ElevenLabs do
              audio: audio,
              format: :mp3,
              meta: %{
-               provider: __MODULE__,
                voice_id: voice_id,
                model: model,
                characters: characters,
@@ -103,15 +108,14 @@ defmodule Thereish.Steward.ElevenLabs do
         }
 
   @doc """
-  Generates sound effects from text prompts using the `eleven_text_to_sound_v2` model.
+  Generates sound effects from text prompts using the `eleven_text_to_sound_v2`
+  model, with the `api_key` it is handed.
   """
   @spec generate(request() | keyword() | map()) :: {:ok, response()} | {:error, term()}
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
 
   def generate(request) when is_map(request) do
-    job_kind = Map.get(request, :job_kind) || Map.get(request, :job) || :effects
-
-    with {:ok, key} <- api_key(request, job_kind) do
+    with {:ok, key} <- api_key(request) do
       model = Map.get(request, :model) || Map.get(request, "model", "eleven_text_to_sound_v2")
 
       output_format =
@@ -135,6 +139,10 @@ defmodule Thereish.Steward.ElevenLabs do
       |> Keyword.merge(Provider.http_options(__MODULE__))
       |> Req.post()
       |> answer_generate(model)
+    else
+      {:error, :no_api_key} = error ->
+        Logger.error("ELEVENLABS_API_KEY is not set; Foley cannot proceed")
+        error
     end
   end
 
@@ -215,63 +223,13 @@ defmodule Thereish.Steward.ElevenLabs do
 
   defp parse_error(status, body), do: {:http, status, body}
 
-  defp api_key(opts, job_kind) when is_list(opts) do
-    cond do
-      Keyword.has_key?(opts, :api_key) ->
-        case Keyword.get(opts, :api_key) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
+  defp api_key(request) do
+    case Map.get(request, :api_key) || Map.get(request, "api_key") do
+      key when is_binary(key) and key != "" ->
+        {:ok, key}
 
-      Keyword.has_key?(opts, :elevenlabs_api_key) ->
-        case Keyword.get(opts, :elevenlabs_api_key) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-
-      true ->
-        case config_key(job_kind) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-    end
-  end
-
-  defp api_key(request, job_kind) when is_map(request) do
-    cond do
-      Map.has_key?(request, :api_key) ->
-        case Map.get(request, :api_key) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-
-      Map.has_key?(request, "api_key") ->
-        case Map.get(request, "api_key") do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-
-      Map.has_key?(request, :elevenlabs_api_key) ->
-        case Map.get(request, :elevenlabs_api_key) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-
-      Map.has_key?(request, "elevenlabs_api_key") ->
-        case Map.get(request, "elevenlabs_api_key") do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-
-      true ->
-        case config_key(job_kind) do
-          key when is_binary(key) and key != "" ->
-            {:ok, key}
-
-          _ ->
-            Logger.error("ELEVENLABS_API_KEY is not set; Foley cannot proceed")
-            {:error, :no_api_key}
-        end
+      _ ->
+        {:error, :no_api_key}
     end
   end
 
@@ -279,20 +237,6 @@ defmodule Thereish.Steward.ElevenLabs do
     case Keyword.get(opts, :voice_id) do
       id when is_binary(id) and id != "" -> {:ok, id}
       _ -> {:ok, "JBFqnCBsd6RMkjVDRZzb"}
-    end
-  end
-
-  defp config_key(job_kind) do
-    try do
-      role = Thereish.Steward.role(:foley)
-      job_role = Thereish.Steward.role(:foley, job_kind)
-
-      job_role[:api_key] ||
-        job_role[:elevenlabs_api_key] ||
-        role[:elevenlabs_api_key] ||
-        role[:api_key]
-    rescue
-      _ -> nil
     end
   end
 

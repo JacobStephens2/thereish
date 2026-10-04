@@ -38,7 +38,19 @@ defmodule Thereish.Steward.Provider do
           cost_usd: float()
         }
 
+  @doc "Answers one question. Every language provider implements it."
   @callback complete(request()) :: {:ok, response()} | {:error, term()}
+
+  @doc """
+  The credentials a media provider is called with, each field paired with the
+  environment variable that supplies it: `[api_key: "RECRAFT_AI_API_KEY"]`.
+
+  Every media provider declares it, and `Thereish.Steward.provider/3` resolves
+  them, so the provider itself reads no configuration.
+  """
+  @callback credentials() :: [{atom(), String.t()}]
+
+  @optional_callbacks complete: 1, credentials: 0
 
   @doc """
   What a call cost, in dollars, from the tokens the provider reported.

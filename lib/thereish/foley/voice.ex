@@ -281,9 +281,10 @@ defmodule Thereish.Foley.Voice do
 
   defp provider_meta(raw) do
     voice = pick(raw, [:voice, :voice_id]) || "default"
+    provider = pick(raw, [:provider])
 
     %{
-      "provider" => to_string(pick(raw, [:provider]) || "hume"),
+      "provider" => provider && to_string(provider),
       "voice" => to_string(voice),
       "model" => to_string(pick(raw, [:model]) || voice),
       "cost_usd" => pick(raw, [:cost_usd, :cost]),

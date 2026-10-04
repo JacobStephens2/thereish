@@ -168,12 +168,7 @@ defmodule Mix.Tasks.Limner.Bakeoff do
     started = System.monotonic_time(:millisecond)
     prompt = Limner.prompt(give, colour)
 
-    role =
-      try do
-        Steward.role(:limner)
-      rescue
-        _ -> %{}
-      end
+    role = Steward.provider(:limner, nil, vendor.module).settings
 
     params =
       role

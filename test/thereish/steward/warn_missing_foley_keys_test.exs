@@ -52,7 +52,7 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
 
     test "voice warning follows configured voice provider (ElevenLabs)" do
       configure_foley(
-        [elevenlabs_api_key: nil, hume_api_key: nil, hume_secret_key: nil],
+        [eleven_labs_api_key: nil, hume_api_key: nil, hume_secret_key: nil],
         voice: [provider: Thereish.Steward.ElevenLabs]
       )
 
@@ -138,6 +138,50 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
 
       refute log =~ "RECRAFT_AI_API_KEY"
       refute log =~ "colour dot"
+    end
+
+    test "Limner warning follows the configured provider" do
+      for {provider, env} <- [
+            {Thereish.Steward.Fal, "FAL_AI_API_KEY"},
+            {Thereish.Steward.Ideogram, "IDEOGRAM_API_KEY"},
+            {Thereish.Steward.Bfl, "BFL_API_KEY"}
+          ] do
+        configure_limner(provider: provider, api_key: nil)
+
+        log =
+          capture_log(fn ->
+            assert :ok = Thereish.Steward.warn_missing_limner_keys()
+          end)
+
+        assert log =~ "no #{env} — every Seat will wear a colour dot"
+        refute log =~ "RECRAFT_AI_API_KEY"
+      end
+    end
+
+    test "Limner warning is silent when the vendor-scoped key is present" do
+      configure_limner(
+        provider: Thereish.Steward.Fal,
+        api_key: nil,
+        fal_api_key: "recorded-responses-need-no-key"
+      )
+
+      log =
+        capture_log(fn ->
+          assert :ok = Thereish.Steward.warn_missing_limner_keys()
+        end)
+
+      assert log == ""
+    end
+
+    test "Limner warning treats an empty key as missing" do
+      configure_limner(provider: Thereish.Steward.Recraft, api_key: "", recraft_api_key: "")
+
+      log =
+        capture_log(fn ->
+          assert :ok = Thereish.Steward.warn_missing_limner_keys()
+        end)
+
+      assert log =~ "no RECRAFT_AI_API_KEY — every Seat will wear a colour dot"
     end
 
     test "application boot is silent when all keys are present" do
