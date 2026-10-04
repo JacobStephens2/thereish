@@ -652,19 +652,27 @@ defmodule Thereish.StewardTest do
 
       refute Map.has_key?(again.meta, :precedent_hit)
       assert Agent.get(counts, &Map.values/1) == [2, 2]
-      assert :miss = Precedent.get("gemini-3.8-flash", Thereish.Steward.Assay.version(), @pair)
+      role = Steward.role(:assayer)
+      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
     end
 
     test "its quip is one request that answers the Quip and what it cost" do
+      test_pid = self()
+      prior = "Jacob brought the lighthouse, Mara brought the dock."
+
       recorded(fn conn, body ->
-        assert body["response_format"]["json_schema"]["name"] == "quip"
+        [%{"content" => user}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
+        send(test_pid, {:quip, body["response_format"]["json_schema"]["name"], user})
         Req.Test.json(conn, quip_response("A fresh joke about tonight."))
       end)
 
       assert {:ok, %{quip: "A fresh joke about tonight.", meta: %{cost_usd: cost}}} =
-               Live.quip(@pair)
+               Live.quip(Map.put(@pair, :prior_quips, [prior]))
 
       assert cost > 0
+      assert_received {:quip, "quip", user}
+      assert user =~ prior
+      assert user =~ ~r/constructions already used/i
     end
 
     test "its quip is not asked again when it fails, whatever the role's retries" do
@@ -684,18 +692,12 @@ defmodule Thereish.StewardTest do
     # The Fake answers every test that is not about the provider, so the rule
     # that the grade shown is the precedent (ADR-0006) is tested here through
     # the Steward and nothing that knows a provider exists.
-    defp fake(opts) do
-      steward = Application.fetch_env!(:thereish, :steward)
-      on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
-
-      Application.put_env(
-        :thereish,
-        :steward,
-        Keyword.update!(steward, :fake, &Keyword.merge(&1, opts))
-      )
+    # Whatever the Fake writes, so these tests are about whose Quip is shown
+    # rather than how the Fake words it.
+    defp the_fake_quip do
+      {:ok, %{quip: quip}} = Thereish.Steward.Fake.quip(@pair)
+      quip
     end
-
-    defp the_fake_quip, do: ~s("beacon" and "cairn" walk into a bar. The bar has no opinion.)
 
     defp cached_quip(quip) do
       {:ok, _} =
