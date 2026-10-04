@@ -102,6 +102,56 @@ defmodule Thereish.Chronicle.PageView do
           position: integer()
         }
 
+  @typedoc "One overrule, with what the machine said and what the couple said."
+  @type overrule_view :: %{
+          id: Ecto.UUID.t(),
+          attempt_number: integer(),
+          proposer_seat_id: Ecto.UUID.t(),
+          proposer_name: String.t(),
+          bookends: [String.t()],
+          bridges: [String.t()],
+          machine_closeness: integer() | nil,
+          machine_reasoning: String.t() | nil,
+          machine_quip: String.t() | nil,
+          couple_closeness: integer(),
+          couple_reasoning: String.t(),
+          inserted_at: DateTime.t()
+        }
+
+  @typedoc "One historical correction, and who wrote it."
+  @type correction_view :: %{
+          id: Ecto.UUID.t(),
+          page_id: Ecto.UUID.t() | nil,
+          seat_id: Ecto.UUID.t() | nil,
+          author_name: String.t(),
+          attempt_number: integer() | nil,
+          target: String.t(),
+          original_value: String.t() | nil,
+          corrected_value: String.t(),
+          note: String.t() | nil,
+          inserted_at: DateTime.t()
+        }
+
+  @typedoc "One opinion about an Assayer grade, from a participant or the admin."
+  @type tap_view :: %{
+          id: Ecto.UUID.t(),
+          attempt_number: integer(),
+          seat_id: Ecto.UUID.t() | nil,
+          admin_id: Ecto.UUID.t() | nil,
+          source: String.t(),
+          seat_name: String.t() | nil,
+          reviewer_name: String.t(),
+          bookends: [String.t()],
+          bridges: [String.t()],
+          grade: integer() | nil,
+          closeness: integer() | nil,
+          band: String.t() | nil,
+          model: String.t() | nil,
+          prompt_version: String.t() | nil,
+          label: String.t(),
+          inserted_at: DateTime.t()
+        }
+
   @typedoc "One Attempt, with the rows about it."
   @type attempt_view :: %{
           id: Ecto.UUID.t(),
@@ -113,9 +163,9 @@ defmodule Thereish.Chronicle.PageView do
           verdicts: [verdict_view()],
           carried: [String.t()] | nil,
           bookend_chips: [bookend_chip()],
-          overrules: [map()],
-          corrections: [map()],
-          fairness_taps: [map()]
+          overrules: [overrule_view()],
+          corrections: [correction_view()],
+          fairness_taps: [tap_view()]
         }
 
   @typedoc "The Scribe's recap, or the players' correction read over it."
@@ -155,9 +205,9 @@ defmodule Thereish.Chronicle.PageView do
           closed_at: DateTime.t(),
           attempts: [attempt_view()],
           recap: recap_view() | nil,
-          overrules: [map()],
-          corrections: [map()],
-          fairness_taps: [map()],
+          overrules: [overrule_view()],
+          corrections: [correction_view()],
+          fairness_taps: [tap_view()],
           experiment_id: String.t(),
           experiment_unblinded: boolean(),
           arm: String.t() | nil,
@@ -210,16 +260,16 @@ defmodule Thereish.Chronicle.PageView do
       row.page_id == page.id or Enum.any?(page.attempts, &about_attempt?(row, page, &1))
     end
 
-    page_overrules = Enum.filter(rows.overrules, of_page?)
-    page_corrections = Enum.filter(rows.corrections, &(&1.page_id == page.id))
-    page_taps = Enum.filter(rows.fairness_taps, of_page?)
+    own = %{
+      overrules: Enum.filter(rows.overrules, of_page?),
+      corrections: Enum.filter(rows.corrections, &(&1.page_id == page.id)),
+      fairness_taps: Enum.filter(rows.fairness_taps, of_page?)
+    }
 
     attempts =
       page.attempts
       |> Enum.with_index()
-      |> Enum.map(fn {attempt, index} ->
-        attempt_view(page, attempt, index, page_overrules, page_corrections, page_taps)
-      end)
+      |> Enum.map(fn {attempt, index} -> attempt_view(page, attempt, index, own) end)
 
     %__MODULE__{
       id: page.id,
@@ -242,10 +292,10 @@ defmodule Thereish.Chronicle.PageView do
       opened_at: page.opened_at,
       closed_at: page.closed_at,
       attempts: attempts,
-      recap: latest_recap(rows.recaps, page, page_corrections),
-      overrules: Enum.map(page_overrules, &format_overrule/1),
-      corrections: Enum.map(page_corrections, &format_correction/1),
-      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1)
+      recap: latest_recap(rows.recaps, page, own.corrections),
+      overrules: Enum.map(own.overrules, &overrule_view/1),
+      corrections: Enum.map(own.corrections, &correction_view/1),
+      fairness_taps: Enum.map(own.fairness_taps, &tap_view/1)
     }
     |> struct!(Experiments.page_arm(rows.page_arms, page))
   end
@@ -264,12 +314,13 @@ defmodule Thereish.Chronicle.PageView do
          (row.room_id == page.room_id and row.bookends == attempt.bookends))
   end
 
-  defp attempt_view(page, attempt, index, page_overrules, page_corrections, page_taps) do
-    attempt_overrules = Enum.filter(page_overrules, &about_attempt?(&1, page, attempt))
-    attempt_corrections = Enum.filter(page_corrections, &(&1.attempt_number == attempt.number))
-    attempt_taps = Enum.filter(page_taps, &about_attempt?(&1, page, attempt))
+  # `own` holds the Page's own overrules, corrections and fairness taps.
+  defp attempt_view(page, attempt, index, own) do
+    attempt_overrules = Enum.filter(own.overrules, &about_attempt?(&1, page, attempt))
+    attempt_corrections = Enum.filter(own.corrections, &(&1.attempt_number == attempt.number))
+    attempt_taps = Enum.filter(own.fairness_taps, &about_attempt?(&1, page, attempt))
 
-    bridges = Enum.map(attempt.bridges, &bridge_view(&1, attempt, page_corrections))
+    bridges = Enum.map(attempt.bridges, &bridge_view(&1, attempt, own.corrections))
     verdicts = Enum.map(attempt.verdicts, &verdict_view(&1, attempt_overrules != []))
 
     %{
@@ -282,9 +333,9 @@ defmodule Thereish.Chronicle.PageView do
       verdicts: verdicts,
       carried: carried(page, index, attempt, verdicts, bridges),
       bookend_chips: bookend_chips(page, attempt, index),
-      overrules: Enum.map(attempt_overrules, &format_overrule/1),
-      corrections: Enum.map(attempt_corrections, &format_correction/1),
-      fairness_taps: Enum.map(attempt_taps, &format_fairness_tap/1)
+      overrules: Enum.map(attempt_overrules, &overrule_view/1),
+      corrections: Enum.map(attempt_corrections, &correction_view/1),
+      fairness_taps: Enum.map(attempt_taps, &tap_view/1)
     }
   end
 
@@ -302,7 +353,7 @@ defmodule Thereish.Chronicle.PageView do
     view = %{
       id: b.id,
       seat_id: b.seat_id,
-      seat_name: (b.seat && b.seat.name) || "Player",
+      seat_name: seat_name(b.seat, "Player"),
       bridge: b.bridge,
       original_bridge: nil,
       corrected?: false,
@@ -343,7 +394,7 @@ defmodule Thereish.Chronicle.PageView do
     %{
       id: g.id,
       seat_id: g.seat_id,
-      seat_name: (g.seat && g.seat.name) || "Seat",
+      seat_name: seat_name(g.seat, "Seat"),
       text: g.text,
       order: g.order,
       mask: Map.get(masks, g.seat_id)
@@ -521,7 +572,7 @@ defmodule Thereish.Chronicle.PageView do
     }
   end
 
-  defp format_fairness_tap(t) do
+  defp tap_view(t) do
     closeness = t.closeness || Map.get(t, :grade)
     source = Map.get(t, :source) || "participant"
 
@@ -546,14 +597,14 @@ defmodule Thereish.Chronicle.PageView do
   end
 
   defp opinion_reviewer_name(_t, "admin"), do: "Admin"
-  defp opinion_reviewer_name(t, _), do: (t.seat && t.seat.name) || "Player"
+  defp opinion_reviewer_name(t, _), do: seat_name(t.seat, "Player")
 
-  defp format_overrule(o) do
+  defp overrule_view(o) do
     %{
       id: o.id,
       attempt_number: o.attempt_number,
       proposer_seat_id: o.proposer_seat_id,
-      proposer_name: (o.proposer && o.proposer.name) || "Player",
+      proposer_name: seat_name(o.proposer, "Player"),
       bookends: o.bookends,
       bridges: o.bridges,
       machine_closeness: o.machine_closeness,
@@ -565,12 +616,12 @@ defmodule Thereish.Chronicle.PageView do
     }
   end
 
-  defp format_correction(c) do
+  defp correction_view(c) do
     %{
       id: c.id,
       page_id: c.page_id,
       seat_id: c.seat_id,
-      author_name: (c.seat && c.seat.name) || "Player",
+      author_name: seat_name(c.seat, "Player"),
       attempt_number: c.attempt_number,
       target: c.target,
       original_value: c.original_value,
@@ -579,4 +630,7 @@ defmodule Thereish.Chronicle.PageView do
       inserted_at: c.inserted_at
     }
   end
+
+  # The name a row's Seat goes by, or what the book calls a Seat it cannot name.
+  defp seat_name(seat, unnamed), do: (seat && seat.name) || unnamed
 end
