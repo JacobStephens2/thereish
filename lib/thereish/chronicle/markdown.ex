@@ -8,6 +8,7 @@ defmodule Thereish.Chronicle.Markdown do
 
   alias Thereish.Chronicle
   alias Thereish.Chronicle.Opinion
+  alias Thereish.Chronicle.Spend
   alias Thereish.Experiments
   alias Thereish.Mask
   alias Thereish.Repo
@@ -23,8 +24,7 @@ defmodule Thereish.Chronicle.Markdown do
 
     header = "# The Chronicle\n\n## Room: #{room.slug}\n\n"
 
-    spend = Chronicle.spend(room.id)
-    spend_line = Chronicle.spend_line(spend)
+    spend_line = room.id |> Spend.room() |> Spend.line()
 
     if page_views == [] do
       header <> "No pages played yet.\n\n---\n\n" <> spend_line <> "\n"
