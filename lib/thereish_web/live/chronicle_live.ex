@@ -14,6 +14,7 @@ defmodule ThereishWeb.ChronicleLive do
 
   alias Thereish.Admin
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Opinion
   alias Thereish.Mask
   alias Thereish.Repo
   alias Thereish.Rooms
@@ -382,7 +383,7 @@ defmodule ThereishWeb.ChronicleLive do
               </div>
 
               <div
-                :if={participant_of?(attempt, @seat)}
+                :if={@seat && Opinion.may_give?(attempt, {:participant, @seat.id})}
                 data-role="opinion-controls"
                 class="mt-2 flex flex-col gap-1"
               >
@@ -393,12 +394,12 @@ defmodule ThereishWeb.ChronicleLive do
                   event="record_opinion"
                   page_id={page.id}
                   attempt={attempt.number}
-                  current={current_opinion(attempt, {:participant, @seat.id})}
+                  current={Opinion.of(attempt.fairness_taps, {:participant, @seat.id})}
                 />
               </div>
 
               <div
-                :if={@current_admin}
+                :if={@current_admin && Opinion.may_give?(attempt, {:admin, @current_admin.id})}
                 data-role="admin-review-controls"
                 class="mt-2 flex flex-col gap-1"
               >
@@ -409,7 +410,7 @@ defmodule ThereishWeb.ChronicleLive do
                   event="admin_review"
                   page_id={page.id}
                   attempt={attempt.number}
-                  current={current_opinion(attempt, :admin)}
+                  current={Opinion.of(attempt.fairness_taps, {:admin, @current_admin.id})}
                 />
               </div>
 
@@ -523,27 +524,7 @@ defmodule ThereishWeb.ChronicleLive do
 
   defp room_path(slug), do: ~p"/r/#{slug}"
 
-  defp human_label(label), do: Thereish.Chronicle.FairnessTap.label_human(label)
-
-  defp participant_of?(_attempt, nil), do: false
-
-  defp participant_of?(attempt, seat) do
-    Enum.any?(attempt.bridges, &(&1.seat_id == seat.id))
-  end
-
-  defp current_opinion(attempt, {:participant, seat_id}) do
-    attempt.fairness_taps
-    |> Enum.filter(&(&1.source != "admin" and &1.seat_id == seat_id))
-    |> List.last()
-    |> then(&(&1 && &1.label))
-  end
-
-  defp current_opinion(attempt, :admin) do
-    attempt.fairness_taps
-    |> Enum.filter(&(&1.source == "admin"))
-    |> List.last()
-    |> then(&(&1 && &1.label))
-  end
+  defp human_label(label), do: Opinion.human(label)
 
   attr :event, :string, required: true
   attr :page_id, :string, required: true
@@ -554,31 +535,14 @@ defmodule ThereishWeb.ChronicleLive do
     ~H"""
     <div class="flex flex-wrap items-center gap-1.5">
       <.opinion_button
+        :for={label <- Opinion.labels()}
         event={@event}
         page_id={@page_id}
         attempt={@attempt}
-        label="too_harsh"
+        label={label}
         current={@current}
       >
-        Too harsh
-      </.opinion_button>
-      <.opinion_button
-        event={@event}
-        page_id={@page_id}
-        attempt={@attempt}
-        label="fair"
-        current={@current}
-      >
-        Fair
-      </.opinion_button>
-      <.opinion_button
-        event={@event}
-        page_id={@page_id}
-        attempt={@attempt}
-        label="too_kind"
-        current={@current}
-      >
-        Too kind
+        {String.capitalize(Opinion.human(label))}
       </.opinion_button>
     </div>
     """

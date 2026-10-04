@@ -30,6 +30,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.FairnessTap
   alias Thereish.Chronicle.Give
+  alias Thereish.Chronicle.Opinion
   alias Thereish.Chronicle.Overrule
   alias Thereish.Chronicle.Page
   alias Thereish.Chronicle.PageView
@@ -166,26 +167,13 @@ defmodule Thereish.Chronicle do
           {:ok, FairnessTap.t()} | {:error, atom() | Ecto.Changeset.t()}
   def record_opinion(room_id, attrs) do
     room_id = resolve_room_id(room_id)
+    reviewer = Map.get(attrs, :as) || Map.get(attrs, "as")
 
-    with {:ok, snapshot} <- opinion_target(room_id, attrs),
-         {:ok, reviewer} <-
-           authorize_opinion(snapshot, Map.get(attrs, :as) || Map.get(attrs, "as")),
-         {:ok, label} <- opinion_label(Map.get(attrs, :label) || Map.get(attrs, "label")) do
-      record_fairness_tap(room_id, %{
-        page_id: snapshot.page_id,
-        attempt_number: snapshot.attempt_number,
-        bookends: snapshot.bookends,
-        bridges: snapshot.bridges,
-        closeness: snapshot.grade,
-        grade: snapshot.grade,
-        band: snapshot.band,
-        model: snapshot.model,
-        prompt_version: snapshot.prompt_version,
-        label: label,
-        source: reviewer.source,
-        seat_id: reviewer.seat_id,
-        admin_id: reviewer.admin_id
-      })
+    with {:ok, graded} <- opinion_target(room_id, attrs),
+         :ok <- admin_exists(reviewer),
+         {:ok, opinion} <-
+           Opinion.new(graded, reviewer, Map.get(attrs, :label) || Map.get(attrs, "label")) do
+      record_fairness_tap(room_id, opinion)
     end
   end
 
@@ -239,9 +227,7 @@ defmodule Thereish.Chronicle do
         all_fairness_taps()
       end
 
-    taps
-    |> Enum.reject(&(&1.source == "admin"))
-    |> Enum.map(&format_calibration_entry/1)
+    Opinion.calibration(taps)
   end
 
   @doc """
@@ -260,28 +246,6 @@ defmodule Thereish.Chronicle do
         |> Enum.map(&Jason.encode!/1)
         |> Enum.join("\n")
     end
-  end
-
-  defp format_calibration_entry(t) do
-    closeness = t.closeness || t.grade
-
-    %{
-      id: t.id,
-      room_id: t.room_id,
-      page_id: t.page_id,
-      attempt_number: t.attempt_number,
-      seat_id: t.seat_id,
-      seat_name: t.seat && t.seat.name,
-      bookends: t.bookends,
-      bridges: t.bridges,
-      grade: closeness,
-      closeness: closeness,
-      band: t.band,
-      model: t.model,
-      prompt_version: t.prompt_version,
-      label: t.label,
-      inserted_at: t.inserted_at
-    }
   end
 
   @doc """
@@ -1337,13 +1301,6 @@ defmodule Thereish.Chronicle do
           Enum.find(overrules(room_id), &PageView.about_attempt?(&1, page, attempt))
 
         verdict = List.first(attempt.verdicts)
-        grade = (overrule && overrule.machine_closeness) || (verdict && verdict.closeness)
-
-        band =
-          case grade do
-            nil -> verdict && verdict.band
-            closeness -> to_string(Thereish.Ladder.read(closeness).band)
-          end
 
         {:ok,
          %{
@@ -1352,43 +1309,24 @@ defmodule Thereish.Chronicle do
            bookends: attempt.bookends,
            bridges: Enum.map(attempt.bridges, & &1.bridge),
            participant_ids: Enum.map(attempt.bridges, & &1.seat_id),
-           grade: grade,
-           band: band,
+           closeness: verdict && verdict.closeness,
+           machine_closeness: overrule && overrule.machine_closeness,
+           band: verdict && verdict.band,
            model: verdict && verdict.model,
            prompt_version: verdict && verdict.prompt_version
          }}
     end
   end
 
-  defp authorize_opinion(snapshot, {:participant, seat_id}) when is_binary(seat_id) do
-    if seat_id in snapshot.participant_ids do
-      {:ok, %{source: "participant", seat_id: seat_id, admin_id: nil}}
-    else
-      {:error, :not_a_participant}
-    end
-  end
-
-  defp authorize_opinion(_snapshot, {:admin, admin_id}) when is_binary(admin_id) do
+  # The admin may review any Attempt, but only an admin identity that exists.
+  defp admin_exists({:admin, admin_id}) when is_binary(admin_id) do
     case Repo.get(Thereish.Admin.Identity, admin_id) do
-      %Thereish.Admin.Identity{} ->
-        {:ok, %{source: "admin", seat_id: nil, admin_id: admin_id}}
-
-      nil ->
-        {:error, :not_admin}
+      %Thereish.Admin.Identity{} -> :ok
+      nil -> {:error, :not_admin}
     end
   end
 
-  defp authorize_opinion(_snapshot, _as), do: {:error, :not_a_participant}
-
-  defp opinion_label(label) when label in [:fair, "fair"], do: {:ok, "fair"}
-
-  defp opinion_label(label) when label in [:too_kind, "too_kind", "too kind"],
-    do: {:ok, "too_kind"}
-
-  defp opinion_label(label) when label in [:too_harsh, "too_harsh", "too harsh"],
-    do: {:ok, "too_harsh"}
-
-  defp opinion_label(_), do: {:error, :invalid_label}
+  defp admin_exists(_reviewer), do: :ok
 
   defp uuid?(val) when is_binary(val) do
     Regex.match?(

@@ -462,6 +462,41 @@ defmodule Thereish.ExperimentsTest do
       assert readout.summary_narrative =~ "Bait-scored"
     end
 
+    test "counts each Seat's current opinion of a Page, leaving out the admin's", ctx do
+      {:ok, page} = Chronicle.write(ctx.room.id, entry(arm: :bait))
+
+      insert_outcome(ctx.room.id,
+        page_id: page.id,
+        page_identifier: page.id,
+        experiment_id: "bait_against_plain",
+        arm: "bait"
+      )
+
+      for attrs <- [
+            %{seat_id: ctx.mara.id, label: "fair"},
+            %{seat_id: ctx.mara.id, label: "too_harsh"},
+            %{source: "admin", admin_id: Thereish.AdminFixtures.identity().id, label: "too_kind"}
+          ] do
+        {:ok, _} =
+          Chronicle.record_fairness_tap(
+            ctx.room.id,
+            Map.merge(
+              %{
+                page_id: page.id,
+                attempt_number: 1,
+                bookends: ["lantern", "harbour"],
+                bridges: ["cairn", "cairn"]
+              },
+              attrs
+            )
+          )
+      end
+
+      readout = Experiments.readout(ctx.room.id, "bait_against_plain")
+
+      assert readout.bait.fairness_summary == "0 fair, 0 too kind, 1 too harsh"
+    end
+
     test "falls back to Bait against plain when the Author-model experiment has no outcomes",
          %{room: room} do
       insert_outcome(room.id, experiment_id: "bait_against_plain", arm: "plain")

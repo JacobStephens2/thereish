@@ -1936,7 +1936,7 @@ defmodule Thereish.ChronicleTest do
       assert Chronicle.fairness_taps(room.id) == []
     end
 
-    test "updating an opinion appends history rather than replacing it", ctx do
+    test "updating an opinion appends history, and the book shows only the latest", ctx do
       play(ctx, "cairn", "cairns")
       room = Repo.get_by!(Room, slug: ctx.slug)
       [page] = Chronicle.book(room.id)
@@ -1964,7 +1964,7 @@ defmodule Thereish.ChronicleTest do
 
       [page_view] = Chronicle.book(room.id)
       [attempt_view] = page_view.attempts
-      assert Enum.map(attempt_view.fairness_taps, & &1.label) == ["fair", "too_kind"]
+      assert Enum.map(attempt_view.fairness_taps, & &1.label) == ["too_kind"]
     end
 
     test "the authenticated admin's review is attributed separately from participant opinions",

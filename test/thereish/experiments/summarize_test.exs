@@ -26,6 +26,19 @@ defmodule Thereish.Experiments.SummarizeTest do
     )
   end
 
+  # A participant's Opinion of the first Attempt of a Page.
+  defp opinion(page_id, seat_id, label) do
+    %{
+      page_id: page_id,
+      room_id: "room",
+      attempt_number: 1,
+      bookends: [page_id],
+      source: "participant",
+      seat_id: seat_id,
+      label: label
+    }
+  end
+
   defp history(arm, melded_history) do
     Enum.map(melded_history, &outcome(arm, melded: &1))
   end
@@ -156,25 +169,28 @@ defmodule Thereish.Experiments.SummarizeTest do
         %{
           id: "page-1",
           document: %{"id" => "doc-1"},
-          fairness_taps: [%{label: "fair"}, %{label: "too_harsh"}],
+          fairness_taps: [
+            opinion("page-1", "mara", "fair"),
+            opinion("page-1", "jacob", "too_harsh")
+          ],
           overrules: []
         },
         %{
           id: "page-2",
           document: %{"id" => "doc-2"},
-          fairness_taps: [%{label: "fair"}],
+          fairness_taps: [opinion("page-2", "mara", "fair")],
           overrules: []
         },
         %{
           id: "page-3",
           document: %{"id" => "doc-3"},
-          fairness_taps: [%{label: "too_kind"}],
+          fairness_taps: [opinion("page-3", "mara", "too_kind")],
           overrules: [%{id: 1}, %{id: 2}]
         },
         %{
           id: "page-4",
           document: %{"id" => "doc-4"},
-          fairness_taps: [%{label: "fair"}],
+          fairness_taps: [opinion("page-4", "mara", "fair")],
           overrules: [%{id: 3}]
         }
       ]
@@ -208,10 +224,10 @@ defmodule Thereish.Experiments.SummarizeTest do
       outcomes = [outcome("bait", page_id: "page-1"), outcome("plain", page_id: "page-2")]
 
       fairness_taps = [
-        %{page_id: "page-1", label: "fair"},
-        %{page_id: "page-2", label: "too_kind"},
-        %{page_id: "page-2", label: "too_kind"},
-        %{page_id: "elsewhere", label: "too_harsh"}
+        opinion("page-1", "mara", "fair"),
+        opinion("page-2", "mara", "too_kind"),
+        opinion("page-2", "jacob", "too_kind"),
+        opinion("elsewhere", "mara", "too_harsh")
       ]
 
       overrules = [%{page_id: "page-2"}, %{page_id: "elsewhere"}]
