@@ -361,18 +361,18 @@ defmodule Thereish.Rooms.Pacing do
     attempts =
       case edge do
         {:bridging, :assaying} ->
-          put_attempt(times.attempts, new_game.attempt, :assaying_started_at, now)
+          put_attempt(times.attempts, Game.attempt_number(new_game), :assaying_started_at, now)
 
         {:assaying, phase} when phase in [:reveal, :closed] ->
-          put_attempt(times.attempts, new_game.attempt, :revealed_at, now)
+          put_attempt(times.attempts, Game.attempt_number(new_game), :revealed_at, now)
 
         {:reveal, :bridging} ->
           times.attempts
-          |> put_attempt(old_game.attempt, :advanced_at, now)
-          |> put_attempt(new_game.attempt, :started_at, now)
+          |> put_attempt(Game.attempt_number(old_game), :advanced_at, now)
+          |> put_attempt(Game.attempt_number(new_game), :started_at, now)
 
         {:writing, :bridging} ->
-          put_attempt(times.attempts, new_game.attempt, :started_at, now)
+          put_attempt(times.attempts, Game.attempt_number(new_game), :started_at, now)
 
         _edge ->
           times.attempts
