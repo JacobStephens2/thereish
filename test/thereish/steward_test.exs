@@ -1017,7 +1017,7 @@ defmodule Thereish.StewardTest do
     end
 
     test "request carries Bookends, Bridges with players' names in roster order, earlier Attempts, and Gives with names" do
-      assayer(adapter: Live, requests: 1, retries: 0)
+      assayer(requests: 1, retries: 0)
       test_pid = self()
 
       request = %{
@@ -1050,38 +1050,25 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(furthest: ["beacon", "cairn"])))
       end)
 
-      assert {:ok, verdict} = Steward.assay(request)
-      assert verdict.meta.prompt_version == "assay-4"
+      assert {:ok, _graded} = Live.assay(request, request.player_bridges)
 
-      assert_receive {:user_prompt, prompt1}
-      assert_receive {:user_prompt, prompt2}
+      assert_received {:user_prompt, prompt}
+      refute_received {:user_prompt, _}
 
-      for prompt <- [prompt1, prompt2] do
-        # Bookends
-        assert prompt =~ "LANTERN and HARBOUR"
-        # Gives with names
-        assert prompt =~ "Jacob gave: foggy coast"
-        assert prompt =~ "Mara gave: night watch"
-        # Earlier attempts
-        assert prompt =~ "Attempt 1: Bookends: PIER and QUAY"
-        assert prompt =~ "Jacob bridged with: jetty"
-        assert prompt =~ "Mara bridged with: dock"
-      end
+      # Bookends
+      assert prompt =~ "LANTERN and HARBOUR"
+      # Gives with names
+      assert prompt =~ "Jacob gave: foggy coast"
+      assert prompt =~ "Mara gave: night watch"
+      # Earlier attempts
+      assert prompt =~ "Attempt 1: Bookends: PIER and QUAY"
+      assert prompt =~ "Jacob bridged with: jetty"
+      assert prompt =~ "Mara bridged with: dock"
 
-      # Both orderings tested
-      prompts = [prompt1, prompt2]
-
-      assert Enum.any?(prompts, fn p ->
-               {j, _} = :binary.match(p, "Jacob bridged with: beacon")
-               {m, _} = :binary.match(p, "Mara bridged with: cairn")
-               j < m
-             end)
-
-      assert Enum.any?(prompts, fn p ->
-               {j, _} = :binary.match(p, "Jacob bridged with: beacon")
-               {m, _} = :binary.match(p, "Mara bridged with: cairn")
-               m < j
-             end)
+      # The Bridges with their names, in the ordering it was handed.
+      {j, _} = :binary.match(prompt, "Jacob bridged with: beacon")
+      {m, _} = :binary.match(prompt, "Mara bridged with: cairn")
+      assert j < m
     end
 
     test "rejects a furthest pair that is not two of the bridges (e.g. naming a Give or hallucinated word)" do

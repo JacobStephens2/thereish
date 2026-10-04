@@ -105,12 +105,19 @@ defmodule Thereish.Steward do
         }
 
   @typedoc """
+  An Attempt's Bridges in the order they are shown to the model: roster order
+  (`Thereish.Steward.Assay.ordering/1`) or its reverse. Each is a Bridge, bare
+  or with the name of the Seat that wrote it.
+  """
+  @type ordering :: [String.t() | map()]
+
+  @typedoc """
   What an adapter answers for one ordering of an Attempt's Bridges: that
-  ordering's grade, its words, the two Bridges it names furthest apart, and
+  ordering's Closeness, its words, the two Bridges it names furthest apart, and
   which model answered at what cost. `assay/2` asks for two of these and
   reconciles them into one `t:verdict/0`.
   """
-  @type grade :: %{
+  @type graded_ordering :: %{
           closeness: integer(),
           reasoning: String.t(),
           quip: String.t(),
@@ -141,7 +148,7 @@ defmodule Thereish.Steward do
           }
         }
 
-  @callback assay(request(), ordering :: list()) :: {:ok, grade()} | {:error, term()}
+  @callback assay(request(), ordering()) :: {:ok, graded_ordering()} | {:error, term()}
   @callback quip(request()) :: {:ok, quip()} | {:error, term()}
   @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}

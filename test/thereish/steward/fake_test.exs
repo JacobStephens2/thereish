@@ -19,9 +19,9 @@ defmodule Thereish.Steward.FakeTest do
   @bookends ["lantern", "harbour"]
 
   defp graded(bridges) do
-    {:ok, grade} = Fake.assay(%{bookends: @bookends, bridges: bridges}, bridges)
+    {:ok, answer} = Fake.assay(%{bookends: @bookends, bridges: bridges}, bridges)
 
-    grade
+    answer
   end
 
   describe "two words, which must be the grade they have always been" do
@@ -106,11 +106,11 @@ defmodule Thereish.Steward.FakeTest do
     end
 
     test "names the model and what it cost, and no two-ordering provenance of its own" do
-      grade = graded(@table)
+      answer = graded(@table)
 
-      assert grade.model == "fake"
-      assert grade.cost_usd == 0.0
-      refute Map.has_key?(grade, :meta)
+      assert answer.model == "fake"
+      assert answer.cost_usd == 0.0
+      refute Map.has_key?(answer, :meta)
     end
 
     test "writes its reasoning and its quip about the two furthest words" do

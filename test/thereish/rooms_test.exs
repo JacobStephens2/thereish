@@ -15,7 +15,6 @@ defmodule Thereish.RoomsTest do
   alias Thereish.Chronicle.Document
   alias Thereish.ExperimentFixtures
   alias Thereish.Foley.Track
-  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Server
   alias Thereish.Rooms.Store

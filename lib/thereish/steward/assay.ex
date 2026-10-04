@@ -83,7 +83,7 @@ defmodule Thereish.Steward.Assay do
   what. This is the forward ordering; its reverse is the other one the Steward
   asks for.
   """
-  @spec ordering(map()) :: list()
+  @spec ordering(map()) :: Thereish.Steward.ordering()
   def ordering(%{seat_bridges: seat_bridges})
       when is_list(seat_bridges) and length(seat_bridges) >= 2,
       do: seat_bridges
