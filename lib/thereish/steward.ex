@@ -38,6 +38,14 @@ defmodule Thereish.Steward do
     adapter's grade down on a miss. A hit is the cached grade with a fresh Quip
     from the adapter's `quip/1`, or the cached Quip if the fresh one fails or is
     late. `overrule/3` writes the players' ruling under the same key.
+  - **Both orderings.** Which Bridge is listed first changes a model's answer,
+    and how much tracks the model's tier (design law 12): the Steward prototype
+    caught an 85-point swing on one pair from reversing the players. So on a
+    miss `assay/2` asks the adapter to grade the Bridges in roster order and in
+    its reverse, at once, and the grade is the mean of the two. The Assayer's
+    `deadline_ms` bounds the pair together. Two orderings and not more: four
+    Bridges have twenty-four orderings, and roster order against its reverse is
+    the same correction at four that it is at two (ADR-0010).
   - **The title fallback.** A Track always gets a title. When the adapter's
     `title_track/2` answers an error, `title_track/2` answers the title made
     from the Gives.
@@ -45,6 +53,7 @@ defmodule Thereish.Steward do
 
   require Logger
 
+  alias Thereish.Steward.Assay
   alias Thereish.Steward.Digest
   alias Thereish.Steward.Precedent
   alias Thereish.Steward.Title
@@ -96,6 +105,21 @@ defmodule Thereish.Steward do
         }
 
   @typedoc """
+  What an adapter answers for one ordering of an Attempt's Bridges: that
+  ordering's grade, its words, the two Bridges it names furthest apart, and
+  which model answered at what cost. `assay/2` asks for two of these and
+  reconciles them into one `t:verdict/0`.
+  """
+  @type grade :: %{
+          closeness: integer(),
+          reasoning: String.t(),
+          quip: String.t(),
+          furthest: [String.t()],
+          model: String.t(),
+          cost_usd: number()
+        }
+
+  @typedoc """
   A fresh Quip for a Precedent hit, and what writing it cost.
   """
   @type quip :: %{quip: String.t(), meta: %{cost_usd: number() | nil}}
@@ -117,7 +141,7 @@ defmodule Thereish.Steward do
           }
         }
 
-  @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
+  @callback assay(request(), ordering :: list()) :: {:ok, grade()} | {:error, term()}
   @callback quip(request()) :: {:ok, quip()} | {:error, term()}
   @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
@@ -535,7 +559,10 @@ defmodule Thereish.Steward do
   provenance of a model call is the seam's business and nothing on the other
   side of it should have to remember to hold a stopwatch.
 
-  An error is not a crash and not a zero: the Room turns it into
+  On a Precedent miss both orderings are graded and reconciled here. Either
+  ordering that errors, crashes, or is still running at the Assayer's
+  `deadline_ms` makes the assay `{:error, _}` (`{:error, :timeout}` for the
+  deadline). An error is not a crash and not a zero: the Room turns it into
   `:verdict_unavailable` and the game admits it has no verdict rather than
   inventing one.
 
@@ -572,11 +599,68 @@ defmodule Thereish.Steward do
         {:ok, fresh_quip_or_cached(request, cached)}
 
       :miss ->
-        with {:ok, verdict} <- adapter().assay(request) do
+        with {:ok, verdict} <- graded(request, prompt_version) do
           Precedent.put(model, prompt_version, request, verdict)
           {:ok, verdict}
         end
     end
+  end
+
+  # Both orderings at once, under the Steward's task supervisor so that an
+  # adapter that crashes is a grade that failed rather than an exit in the Room.
+  # The deadline is the whole grading's budget, both orderings, retries and all,
+  # and an ordering still running when it passes is taken down rather than left
+  # running, because a request nobody is waiting for is still a request somebody
+  # is being billed for.
+  defp graded(request, prompt_version) do
+    forward = Assay.ordering(request)
+
+    [forward, reverse] =
+      [forward, Enum.reverse(forward)]
+      |> Enum.map(fn ordering ->
+        Task.Supervisor.async_nolink(Thereish.Steward.Tasks, fn ->
+          adapter().assay(request, ordering)
+        end)
+      end)
+      |> Task.yield_many(timeout: role(:assayer).deadline_ms, on_timeout: :kill_task)
+      |> Enum.map(fn
+        {_task, {:ok, answer}} -> answer
+        {_task, {:exit, reason}} -> {:error, {:exit, reason}}
+        {_task, nil} -> {:error, :timeout}
+      end)
+
+    # A missing ordering is no Verdict, never half of one. When both fail, the
+    # forward ordering's reason is the one reported.
+    with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
+      {:ok, reconciled(forward, reverse, prompt_version)}
+    end
+  end
+
+  # The grade is the mean of the two orderings and the words are the forward
+  # one's, because one reveal shows one sentence, one joke and one carry-forward.
+  # The furthest pair is the forward ordering's for the same reason the reasoning
+  # is: the two orderings can name different pairs, and the next Attempt's Bookends
+  # have to be one pair rather than an average of two. The reverse ordering's own
+  # grade and reasoning are kept beside them rather than thrown away: when the
+  # players argue with a grade, the two arguments the model made are the evidence.
+  #
+  # The cost is both orderings' answers, retries included — and not the hedged
+  # requests that lost, whose usage nobody waited around to hear.
+  defp reconciled(forward, reverse, prompt_version) do
+    %{
+      closeness: round((forward.closeness + reverse.closeness) / 2),
+      reasoning: forward.reasoning,
+      quip: forward.quip,
+      furthest: forward.furthest,
+      meta: %{
+        model: forward.model,
+        prompt_version: prompt_version,
+        cost_usd: forward.cost_usd + reverse.cost_usd,
+        forward: forward.closeness,
+        reverse: reverse.closeness,
+        reasoning_reverse: reverse.reasoning
+      }
+    }
   end
 
   # The fresh Quip is a provider act, so the adapter writes it; whether the
@@ -605,7 +689,7 @@ defmodule Thereish.Steward do
   # under a key the assay never reads would be a ruling nobody is shown.
   defp precedent_key do
     role = role(:assayer)
-    {role.model, Map.get(role, :prompt_version, Thereish.Steward.Assay.version())}
+    {role.model, Map.get(role, :prompt_version, Assay.version())}
   end
 
   @doc """

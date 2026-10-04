@@ -19,12 +19,20 @@ defmodule Thereish.Steward.Fake do
   (ADR-0010). Bookends of two or more are accepted and ignored: this Assayer
   grades the Bridges, not the table they were written against.
 
+  Like any adapter, it grades the one ordering of the Bridges it is handed.
+  The Steward asks it for both orderings and reconciles them into the Verdict,
+  so a Room played on this Assayer is graded by the same rule as one played on
+  a model. The two orderings grade the same here, because shared prefixes do
+  not care which word came first; only the furthest pair's tie-break and the
+  order the reasoning names the two words in follow the ordering.
+
   Two knobs, both configuration, both for the tests that need the Room to be
   waiting on something:
 
       config :thereish, :steward, fake: [delay_ms: 0, mode: :grade]
 
-  `delay_ms` is how long a verdict takes. `mode: :unavailable` is an Assayer
+  `delay_ms` is how long grading one ordering takes; the Steward asks for both
+  at once, so it is how long a verdict takes too. `mode: :unavailable` is an Assayer
   that says it cannot answer, and `mode: :raise` is one that falls over without
   saying anything — the two shapes a failed grade comes in, both of which the
   game answers the same way.
@@ -47,17 +55,17 @@ defmodule Thereish.Steward.Fake do
   @behaviour Thereish.Steward
 
   @impl true
-  def assay(%{bookends: bookends, bridges: bridges} = request)
-      when is_list(bookends) and length(bookends) >= 2 and length(bridges) >= 2 do
+  def assay(%{bookends: bookends} = request, ordering)
+      when is_list(bookends) and length(bookends) >= 2 and length(ordering) >= 2 do
     case config_get(:assay_capture, nil) do
-      pid when is_pid(pid) -> send(pid, {:assay, request})
+      pid when is_pid(pid) -> send(pid, {:assay, request, ordering})
       _ -> :ok
     end
 
     delay_ms() |> Process.sleep()
 
     case mode() do
-      :grade -> {:ok, grade(bridges)}
+      :grade -> {:ok, grade(ordering)}
       :unavailable -> {:error, :no_verdict}
       :raise -> raise "this Assayer is having a moment"
     end
@@ -556,9 +564,9 @@ defmodule Thereish.Steward.Fake do
 
     %{
       closeness: closeness,
-      # The reasoning, the quip and the reverse reading all name the furthest
-      # two, which at two Bridges is both of them: every sentence this Assayer
-      # has ever written about a pair is the sentence it still writes.
+      # The reasoning and the quip both name the furthest two, which at two
+      # Bridges is both of them: every sentence this Assayer has ever written
+      # about a pair is the sentence it still writes.
       reasoning:
         "\"#{left}\" and \"#{right}\" share #{shared} letters from the front. " <>
           "That is all this Assayer knows how to look at.",
@@ -567,19 +575,10 @@ defmodule Thereish.Steward.Fake do
       # calls anybody (ADR-0005).
       quip: "\"#{left}\" and \"#{right}\" walk into a bar. The bar has no opinion.",
       furthest: [left, right],
-      # Provenance the Chronicle wants from every Assayer, answered honestly by
-      # the one that has no model behind it and costs nothing to run. Both
-      # orderings agree because this Assayer is a symmetric function of a set of
-      # words: grading it twice is the same arithmetic twice.
-      meta: %{
-        model: "fake",
-        prompt_version: "fake-1",
-        cost_usd: 0.0,
-        forward: closeness,
-        reverse: closeness,
-        reasoning_reverse:
-          "\"#{right}\" and \"#{left}\" share the same #{shared} letters the other way round."
-      }
+      # Which model answered and what it cost, answered honestly by the one that
+      # has no model behind it and costs nothing to run.
+      model: "fake",
+      cost_usd: 0.0
     }
   end
 

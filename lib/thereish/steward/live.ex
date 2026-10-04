@@ -3,26 +3,12 @@ defmodule Thereish.Steward.Live do
   The Assayer with a real model behind it.
 
   It is one of the two adapters that satisfy `Thereish.Steward`, and the game
-  cannot tell it from the other one: the Room asks for an Attempt's Bridges to be
-  graded and gets back a closeness, a sentence, the two words furthest apart, and
-  a joke. Everything that makes a live grade different from a fake one — a
-  provider, two orderings, two identical requests, a validator, a price — is
-  spent here and mentioned nowhere else.
-
-  ## Both orderings, because the model has a favourite side
-
-  Which Bridge is listed first changes the answer, and how much it changes it
-  tracks the model's tier (design law 12) — the Steward prototype caught an
-  85-point swing on one pair from reversing the players. So every Attempt is
-  graded twice, in parallel, in roster order and in its reverse, and the number
-  the players see is the mean of the two. Both orderings are kept on the verdict,
-  along with the reverse ordering's reasoning: a wide gap between them is the
-  single most useful thing to know about a grade that looks wrong.
-
-  Two orderings and not more. Four Bridges have twenty-four orderings, and
-  grading all of them would be a different experiment with a different budget;
-  roster order against its reverse is the same correction at four that it is at
-  two (ADR-0010).
+  cannot tell it from the other one: the Steward hands it an Attempt's Bridges in
+  one ordering and gets back a closeness, a sentence, the two words furthest
+  apart, and a joke. Everything that makes a live grade different from a fake
+  one — a provider, identical requests, a validator, a price — is spent here and
+  mentioned nowhere else. Asking for both orderings, the deadline on the pair,
+  and reconciling them into one Verdict are the Steward's, in front of the seam.
 
   ## Hedging, because the tail is the network
 
@@ -35,7 +21,7 @@ defmodule Thereish.Steward.Live do
   falling from 1.52 s to 1.17 s.
 
   The loser is billed for whatever it produced before it was abandoned, and the
-  verdict's `cost_usd` does not include it: nothing waits for a request whose
+  ordering's `cost_usd` does not include it: nothing waits for a request whose
   answer is not being used, so its usage never comes back to be counted. At
   fast-tier prices that is noise, and the number on the verdict is the cost of
   the grade the players were shown.
@@ -44,7 +30,7 @@ defmodule Thereish.Steward.Live do
   `:verdict_unavailable` in the Room, and the couple are asked to make the call
   themselves. It is never a number this module made up.
 
-  Every `assay/1` here is a grade asked now. Whether the players are shown it or
+  Every `assay/2` here is a grade asked now. Whether the players are shown it or
   the Precedent is `Thereish.Steward`'s call, made before this module is asked.
   """
   @behaviour Thereish.Steward
@@ -60,22 +46,18 @@ defmodule Thereish.Steward.Live do
   alias Thereish.Steward.Vale
 
   @impl true
-  def assay(%{bookends: _bookends} = request) do
+  def assay(%{bookends: _bookends} = request, ordering) do
     role = Steward.role(:assayer)
-    items = ordering_items(request)
+    prompt = Assay.prompt(request, ordering)
+    check = &Assay.check(&1, ordering)
 
-    [forward, reverse] =
-      [items, Enum.reverse(items)]
-      |> Enum.map(fn ordering ->
-        Task.async(fn -> graded(role, request, ordering) end)
-      end)
-      # The grading's whole budget: one request's timeout is `timeout_ms`, and
-      # this is what all of them together, retries included, may spend before
-      # the game is told there is no verdict.
-      |> await(role.deadline_ms)
+    case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
+      {:ok, answer} ->
+        {:ok,
+         Map.merge(Assay.verdict(answer.json, ordering), Map.take(answer, [:model, :cost_usd]))}
 
-    with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
-      {:ok, reconciled(forward, reverse, Map.get(role, :prompt_version, Assay.version()))}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -84,7 +66,7 @@ defmodule Thereish.Steward.Live do
   @impl true
   def quip(request) do
     role = Steward.role(:assayer) |> Map.merge(%{requests: 1, retries: 0})
-    prompt = Assay.quip_prompt(request, ordering_items(request))
+    prompt = Assay.quip_prompt(request, Assay.ordering(request))
 
     case Gate.answer(role, prompt, &Assay.check_quip/1) do
       {:ok, answer} -> {:ok, %{quip: Assay.quip(answer.json), meta: %{cost_usd: answer.cost_usd}}}
@@ -474,46 +456,6 @@ defmodule Thereish.Steward.Live do
     end
   end
 
-  defp ordering_items(%{seat_bridges: seat_bridges})
-       when is_list(seat_bridges) and length(seat_bridges) >= 2 do
-    seat_bridges
-  end
-
-  defp ordering_items(%{player_bridges: player_bridges})
-       when is_list(player_bridges) and length(player_bridges) >= 2 do
-    player_bridges
-  end
-
-  defp ordering_items(%{bridges: bridges}) when is_list(bridges) do
-    bridges
-  end
-
-  # An ordering that never came back at all is a verdict the game does not have.
-  # The tasks are taken down rather than left running, because a request nobody
-  # is waiting for is still a request somebody is being billed for.
-  defp await(tasks, timeout) do
-    Task.await_many(tasks, timeout)
-  catch
-    :exit, _reason ->
-      Enum.each(tasks, &Task.shutdown(&1, :brutal_kill))
-
-      [{:error, :timeout}, {:error, :timeout}]
-  end
-
-  defp graded(role, request, ordering) do
-    prompt = Assay.prompt(request, ordering)
-    check = &Assay.check(&1, ordering)
-
-    case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
-      {:ok, answer} ->
-        {:ok,
-         Map.merge(Assay.verdict(answer.json, ordering), Map.take(answer, [:model, :cost_usd]))}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
   # One request is not a race, and asking for a race of one should not cost a
   # process.
   defp first_answer(requests, ask) when requests <= 1, do: ask.()
@@ -551,32 +493,5 @@ defmodule Thereish.Steward.Live do
 
         race(rest, first_error || {:error, {:exit, reason}})
     end
-  end
-
-  # The grade is the mean of the two orderings and the words are the forward
-  # one's, because one reveal shows one sentence, one joke and one carry-forward.
-  # The furthest pair is the forward ordering's for the same reason the reasoning
-  # is: the two orderings can name different pairs, and the next Attempt's Bookends
-  # have to be one pair rather than an average of two. The reverse ordering's own
-  # reasoning is kept beside them rather than thrown away: when the players argue
-  # with a grade, the two arguments the model made are the evidence.
-  #
-  # The cost is both orderings' answers, retries included — and not the hedged
-  # requests that lost, whose usage nobody waited around to hear.
-  defp reconciled(forward, reverse, prompt_version) do
-    %{
-      closeness: round((forward.closeness + reverse.closeness) / 2),
-      reasoning: forward.reasoning,
-      quip: forward.quip,
-      furthest: forward.furthest,
-      meta: %{
-        model: forward.model,
-        prompt_version: prompt_version,
-        cost_usd: forward.cost_usd + reverse.cost_usd,
-        forward: forward.closeness,
-        reverse: reverse.closeness,
-        reasoning_reverse: reverse.reasoning
-      }
-    }
   end
 end

@@ -278,10 +278,10 @@ defmodule Thereish.RoomsTest do
                &(&1.bridge in ~w(cairn beacon wharf signal torch lamp stone flare))
              )
 
-      assays = received_assays()
-      assert length(assays) == 1
-      [request] = assays
+      # One grading, asked in roster order and its reverse.
+      assert [{request, forward}, {request, reverse}] = received_assays()
       assert length(request.bridges) == 8
+      assert reverse == Enum.reverse(forward)
     end
 
     test "an eight-Seat Attempt still reveals when the Assayer cannot grade" do
@@ -932,7 +932,7 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.commit_bridge(slug, mara.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
 
-      assert_receive {:assay, request}, 2_000
+      assert_receive {:assay, request, _ordering}, 2_000
       assert request.prior_quips == tl(quips)
       refute "Oldest quip, the one that should drop." in request.prior_quips
     end
@@ -4023,7 +4023,7 @@ defmodule Thereish.RoomsTest do
 
   defp received_assays(acc \\ []) do
     receive do
-      {:assay, request} -> received_assays([request | acc])
+      {:assay, request, ordering} -> received_assays([{request, ordering} | acc])
     after
       50 -> Enum.reverse(acc)
     end
