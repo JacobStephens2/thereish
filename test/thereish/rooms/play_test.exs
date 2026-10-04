@@ -23,9 +23,9 @@ defmodule Thereish.Rooms.PlayTest do
   @speaker "speaker-token"
   @track %{path: "/media/track.mp3", meta: %{provider: "fake"}}
 
-  defp new(room \\ %{}) do
+  defp new(room \\ %{}, durations \\ @durations) do
     room = struct!(%Room{slug: "test", seat_limit: 2}, room)
-    Play.new(%{room: room, seats: @seats}, %{members: @members, durations: @durations, now: @now})
+    Play.new(%{room: room, seats: @seats}, %{members: @members, durations: durations, now: @now})
   end
 
   # Applies a command the Room's process would run, answering the asks that
@@ -343,15 +343,7 @@ defmodule Thereish.Rooms.PlayTest do
 
   describe "the reveal hold" do
     test "holds Next Attempt and Next Page alike until it is over" do
-      room = struct!(%Room{slug: "test", seat_limit: 2}, %{})
-      durations = %{@durations | hold: 5_000}
-
-      play =
-        Play.new(%{room: room, seats: @seats}, %{
-          members: @members,
-          durations: durations,
-          now: @now
-        })
+      play = new(%{}, %{@durations | hold: 5_000})
 
       {play, _page_ref, _giving} = written(play)
       {play, bridged} = bridges(play, "cairn", "cairo")

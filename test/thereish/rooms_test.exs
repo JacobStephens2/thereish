@@ -4121,7 +4121,7 @@ defmodule Thereish.RoomsTest do
     end
   end
 
-  describe "the Page's arm" do
+  describe "the Page's arm and its Chronicle write" do
     setup do
       slug = open_room()
       token = device_token()
@@ -4132,7 +4132,9 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, token: token, melissa: melissa, jacob: jacob, room: room}
     end
 
-    # Plays a Page to a meld.
+    # Plays a Page to a meld. With a Speaker held and a slow Voice, the
+    # Verdict is still being spoken when the Page closes, so Voice holds the
+    # Chronicle write.
     defp meld(ctx) do
       :ok = Rooms.give(ctx.slug, ctx.melissa.id, "deep canyon")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "echoing wind")
@@ -4141,6 +4143,36 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_phase(ctx.slug, :closed)
+    end
+
+    test "a Bookends tap made while Voice holds the Page is recorded on that Page", ctx do
+      # A Page before it, so a misfiled tap would have somewhere to go.
+      meld(ctx)
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      [earlier] = Chronicle.pages(ctx.room.id)
+
+      steward(voice_delay_ms: 5_000)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token)
+      meld(ctx)
+
+      assert [earlier] == Chronicle.pages(ctx.room.id)
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.melissa.id, "great")
+
+      # Turning the Page releases the held write, and the tap after it once
+      # the Page's outcome is recorded.
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+
+      [^earlier, page] = Chronicle.pages(ctx.room.id)
+      [tap] = ExperimentFixtures.bookends_taps(ctx.room.id)
+      assert tap.page_id == page.id
+      assert tap.page_identifier == page.id
+      assert tap.label == "great"
+
+      outcomes =
+        Map.new(ExperimentFixtures.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1})
+
+      assert outcomes[page.id].taps == %{to_string(ctx.melissa.id) => "great"}
+      assert outcomes[earlier.id].taps == %{}
     end
 
     test "a Page played under an assigned arm records its outcome under that arm", ctx do
