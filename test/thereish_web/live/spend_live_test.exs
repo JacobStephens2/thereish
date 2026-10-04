@@ -6,6 +6,7 @@ defmodule ThereishWeb.SpendLiveTest do
   import Phoenix.LiveViewTest
 
   alias Thereish.Chronicle
+  alias Thereish.Foley.Track
   alias Thereish.Repo
   alias Thereish.Rooms
   alias Thereish.Rooms.Room
@@ -36,7 +37,10 @@ defmodule ThereishWeb.SpendLiveTest do
         entry(%{
           page: %{"bookends" => ["desert", "oasis"]},
           author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
+          music_meta: %Track{
+            path: "/media/tracks/a.mp3",
+            meta: %{"provider" => "mureka", "model" => "mureka-v1", "cost_usd" => 0.0400}
+          },
           closed_because: :meld,
           melded?: true,
           closeness: 90,

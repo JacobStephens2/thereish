@@ -18,8 +18,8 @@ defmodule Thereish.Chronicle.Page do
   schema "chronicle_pages" do
     field :document, :map
     field :author_meta, :map
-    field :music_meta, :map
-    field :vamp_meta, :map
+    field :music_meta, Thereish.Foley.Track
+    field :vamp_meta, Thereish.Foley.Vamp
     field :masks_meta, {:map, Thereish.Mask}
     field :closed_because, :string
     field :melded, :boolean

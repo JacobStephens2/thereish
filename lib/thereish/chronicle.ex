@@ -32,6 +32,8 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
   alias Thereish.Experiments
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
   alias Thereish.Mask
   alias Thereish.Repo
   alias Thereish.Steward.TrackCache
@@ -395,22 +397,16 @@ defmodule Thereish.Chronicle do
 
   @doc """
   Extracts track information (`%{path: path, title: title}`) from a Page or page view map
-  when its music record carries a path and title. Answers `nil` otherwise.
+  when it kept its Track and the Track has a title: the book shows only a titled Track.
+  Answers `nil` otherwise.
   """
   @spec page_track(map() | struct() | nil) :: %{path: String.t(), title: String.t()} | nil
   def page_track(nil), do: nil
 
   def page_track(page) when is_map(page) do
-    case field_meta(page, :music_meta) do
-      %{} = meta ->
-        path = meta_get(meta, :path)
-        title = meta_get(meta, :title)
-
-        if is_binary(path) and path != "" and is_binary(title) and title != "" do
-          %{path: path, title: title}
-        else
-          nil
-        end
+    case Map.get(page, :music_meta) do
+      %Track{title: title} = track when is_binary(title) and title != "" ->
+        if Track.kept?(track), do: %{path: track.path, title: title}
 
       _ ->
         nil
@@ -419,42 +415,32 @@ defmodule Thereish.Chronicle do
 
   @doc """
   Extracts Vamp information (`%{path: path, duration: duration, loop: loop}`) from a Page
-  or page view map when its vamp record carries a playable path. Answers `nil` otherwise.
+  or page view map when it kept its Vamp. Answers `nil` otherwise.
   """
   @spec page_vamp(map() | struct() | nil) ::
           %{path: String.t(), duration: integer() | nil, loop: boolean()} | nil
   def page_vamp(nil), do: nil
 
   def page_vamp(page) when is_map(page) do
-    case field_meta(page, :vamp_meta) do
-      %{} = meta ->
-        path = meta_get(meta, :path)
+    vamp = Map.get(page, :vamp_meta)
 
-        if is_binary(path) and path != "" do
-          %{
-            path: path,
-            duration: meta_get(meta, :duration),
-            loop: meta_get(meta, :loop) not in [nil, false]
-          }
-        else
-          nil
-        end
-
-      _ ->
-        nil
+    if Vamp.kept?(vamp) do
+      %{path: vamp.path, duration: vamp.duration, loop: vamp.loop not in [nil, false]}
     end
   end
 
   @doc """
-  Replaces the music_meta on an existing Chronicle page with a successful track record.
+  Replaces the Track on an existing Chronicle page.
   """
-  @spec replace_page_music(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
+  @spec replace_page_music(Ecto.UUID.t() | Page.t(), Track.t()) ::
+          {:ok, Page.t()} | {:error, term()}
   def replace_page_music(page, music_meta), do: replace_page_field(page, :music_meta, music_meta)
 
   @doc """
-  Replaces the vamp_meta on an existing Chronicle page with a playable Vamp record.
+  Replaces the Vamp on an existing Chronicle page.
   """
-  @spec replace_page_vamp(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
+  @spec replace_page_vamp(Ecto.UUID.t() | Page.t(), Vamp.t()) ::
+          {:ok, Page.t()} | {:error, term()}
   def replace_page_vamp(page, vamp_meta), do: replace_page_field(page, :vamp_meta, vamp_meta)
 
   @doc """
@@ -493,14 +479,6 @@ defmodule Thereish.Chronicle do
     end
   end
 
-  defp field_meta(page, field) when is_map(page) and is_atom(field) do
-    Map.get(page, field) || Map.get(page, Atom.to_string(field))
-  end
-
-  defp meta_get(meta, key) when is_map(meta) and is_atom(key) do
-    Map.get(meta, key) || Map.get(meta, Atom.to_string(key))
-  end
-
   @doc """
   Retained generated media across Rooms, for the operator gallery.
 
@@ -517,23 +495,25 @@ defmodule Thereish.Chronicle do
 
     cache_rows = Repo.all(from(t in TrackCache, order_by: [desc: t.inserted_at]))
 
+    track_hits =
+      for %Page{music_meta: track} = page <- pages, Track.kept?(track) do
+        {track.path, page, %{title: track.title, loop: false}}
+      end
+
+    vamp_hits =
+      for %Page{vamp_meta: vamp} = page <- pages, Vamp.kept?(vamp) do
+        {vamp.path, page, %{title: nil, loop: vamp.loop not in [nil, false]}}
+      end
+
     %{
-      tracks: gallery_audio(pages, cache_rows, :music_meta),
-      vamps: gallery_audio(pages, [], :vamp_meta),
+      tracks: gallery_audio(track_hits, cache_rows),
+      vamps: gallery_audio(vamp_hits, []),
       masks: gallery_masks(pages)
     }
   end
 
-  defp gallery_audio(pages, cache_rows, field) do
-    page_hits =
-      for page <- pages,
-          meta = field_meta(page, field),
-          is_map(meta),
-          path = meta_get(meta, :path),
-          is_binary(path) and path != "" do
-        {path, page, meta}
-      end
-
+  # Each hit is a kept record's `{path, page, %{title, loop}}`.
+  defp gallery_audio(page_hits, cache_rows) do
     by_path = Enum.group_by(page_hits, &elem(&1, 0))
     cache_by_path = Map.new(cache_rows, &{&1.path, &1})
 
@@ -546,16 +526,16 @@ defmodule Thereish.Chronicle do
       hits = Map.get(by_path, path, [])
       cache = cache_by_path[path]
 
-      first_meta =
+      first =
         case hits do
-          [{_path, _page, meta} | _] -> meta
-          _ -> %{}
+          [{_path, _page, record} | _] -> record
+          _ -> %{title: nil, loop: false}
         end
 
       %{
         path: path,
-        title: (cache && cache.title) || meta_get(first_meta, :title),
-        loop: meta_get(first_meta, :loop) not in [nil, false],
+        title: (cache && cache.title) || first.title,
+        loop: first.loop,
         present?: TrackCache.file_exists?(path),
         associations: Enum.map(hits, fn {_path, page, _meta} -> gallery_association(page) end)
       }
@@ -997,17 +977,13 @@ defmodule Thereish.Chronicle do
     }
   end
 
-  defp record_foley_meta(acc, meta) do
-    if is_map(meta) and map_size(meta) > 0 do
-      model =
-        meta["model"] || meta[:model] ||
-          meta["provider"] || meta[:provider] || "unknown"
+  # A Track, failed or kept, or a Vamp is one Foley call; a failure costs $0.
+  defp record_foley_meta(acc, nil), do: acc
 
-      cost = to_decimal(meta["cost_usd"] || meta[:cost_usd])
-      record_call(acc, :foley, model, cost)
-    else
-      acc
-    end
+  defp record_foley_meta(acc, %{meta: meta} = record)
+       when is_struct(record, Track) or is_struct(record, Vamp) do
+    model = meta["model"] || meta["provider"] || "unknown"
+    record_call(acc, :foley, model, to_decimal(meta["cost_usd"]))
   end
 
   defp record_call(acc, role, model, cost) do
