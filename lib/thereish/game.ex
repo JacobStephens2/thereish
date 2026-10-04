@@ -50,6 +50,7 @@ defmodule Thereish.Game do
 
   alias Thereish.Chronicle.Entry
   alias Thereish.Ladder
+  alias Thereish.Mask
 
   @enforce_keys [:seat_limit, :seats]
   defstruct [
@@ -133,7 +134,7 @@ defmodule Thereish.Game do
           fairness_taps: %{String.t() => String.t()},
           bookends_taps: %{String.t() => String.t()},
           page_seat_ids: [String.t()] | nil,
-          masks: %{String.t() => term()},
+          masks: %{String.t() => Mask.t() | :dot},
           full_table: boolean(),
           bookend_origins: [map()] | nil
         }
@@ -150,9 +151,8 @@ defmodule Thereish.Game do
           | {:mask_landed,
              %{
                required(:seat_id) => String.t(),
-               required(:mask) => term()
+               required(:mask) => Mask.t() | :dot
              }}
-          | {:mask_landed, String.t(), term()}
           | {:start_page, %{required(:seat_id) => String.t()}}
           | {:page_written,
              %{
@@ -388,25 +388,13 @@ defmodule Thereish.Game do
     end
   end
 
-  def apply(%__MODULE__{} = state, {:mask_landed, %{seat_id: seat_id} = attrs}) do
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      true ->
-        mask =
-          case Map.get(attrs, :mask) do
-            m when is_map(m) -> Map.delete(m, :bytes)
-            other -> other
-          end
-
-        masks = Map.put(state.masks || %{}, seat_id, mask)
-        {:ok, %{state | masks: masks}, []}
+  def apply(%__MODULE__{} = state, {:mask_landed, %{seat_id: seat_id, mask: mask}})
+      when is_struct(mask, Mask) or mask == :dot do
+    if seated?(state, seat_id) do
+      {:ok, %{state | masks: Map.put(state.masks || %{}, seat_id, mask)}, []}
+    else
+      {:error, :no_such_seat}
     end
-  end
-
-  def apply(%__MODULE__{} = state, {:mask_landed, seat_id, mask}) when is_binary(seat_id) do
-    apply(state, {:mask_landed, %{seat_id: seat_id, mask: mask}})
   end
 
   def apply(%__MODULE__{} = state, {:start_page, %{seat_id: seat_id}}) do

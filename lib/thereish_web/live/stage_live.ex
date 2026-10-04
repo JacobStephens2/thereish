@@ -21,6 +21,7 @@ defmodule ThereishWeb.StageLive do
 
   import ThereishWeb.RoomComponents
 
+  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Code
 
@@ -357,9 +358,9 @@ defmodule ThereishWeb.StageLive do
         title={seat.name}
       >
         <span class="sr-only">{seat.name}</span>
-        <%= if is_map(seat[:mask]) and (seat.mask[:url] || seat.mask["url"]) do %>
+        <%= if Mask.url(seat[:mask]) do %>
           <img
-            src={seat.mask[:url] || seat.mask["url"]}
+            src={Mask.url(seat.mask)}
             alt={seat.name}
             data-role="seat-mask"
             class="size-14 rounded-lg object-cover border border-base-300 shadow-sm"

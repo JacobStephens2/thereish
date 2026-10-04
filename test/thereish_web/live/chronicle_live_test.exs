@@ -9,6 +9,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
   import Phoenix.LiveViewTest
 
   alias Thereish.Chronicle
+  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Repo
   alias Thereish.Rooms.Room
@@ -413,8 +414,8 @@ defmodule ThereishWeb.ChronicleLiveTest do
               %{seat_id: ctx.jacob.id, text: "dune"}
             ],
             masks: %{
-              ctx.melissa.id => %{url: "/media/masks/mask-historical.png"},
-              ctx.jacob.id => %{url: "/media/masks/mask-jacob-old.png"}
+              ctx.melissa.id => %Mask{url: "/media/masks/mask-historical.png", meta: %{}},
+              ctx.jacob.id => %Mask{url: "/media/masks/mask-jacob-old.png", meta: %{}}
             },
             closed_because: :meld,
             melded?: true,

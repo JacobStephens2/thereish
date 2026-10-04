@@ -130,7 +130,12 @@ defmodule Thereish.Steward do
   end
 
   @doc """
-  Draws one Mask from a Give and a Seat's colour, answering image bytes and meta.
+  Draws one Mask from a Give and a Seat's colour, answering the image bytes, the
+  stored URL and meta.
+
+  The bytes are kept for the Limner bake-off, which judges the pictures
+  themselves. A Room draws through `Thereish.Mask.draw/2`, which keeps only the
+  URL and meta.
 
   Measured here so latency provenance is kept by the seam. A vendor that refuses
   a dark Give answers `{:error, :refused}` rather than crashing.

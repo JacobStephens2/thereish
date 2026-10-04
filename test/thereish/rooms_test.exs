@@ -13,6 +13,7 @@ defmodule Thereish.RoomsTest do
 
   alias Thereish.Chronicle
   alias Thereish.ExperimentFixtures
+  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Server
   alias Thereish.Rooms.Store
@@ -1802,8 +1803,8 @@ defmodule Thereish.RoomsTest do
 
       # Now simulate a late mask arriving
       room_pid = GenServer.whereis(Server.via(ctx.slug))
-      late_mask = %{url: "/media/masks/mask-late.png", meta: %{}}
-      send(room_pid, {:mask_landed, ctx.melissa.id, giving(ctx.slug), {:ok, late_mask}})
+      late_mask = %Mask{url: "/media/masks/mask-late.png", meta: %{}}
+      send(room_pid, {:mask_landed, ctx.melissa.id, giving(ctx.slug), late_mask})
 
       assert_receive :room_changed
 
@@ -4216,24 +4217,20 @@ defmodule Thereish.RoomsTest do
       meld(ctx)
       :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
 
-      late_mask = %{url: "/media/masks/mask-late.png", meta: %{}}
+      late_mask = %Mask{url: "/media/masks/mask-late.png", meta: %{}}
 
       send(
         GenServer.whereis(Server.via(ctx.slug)),
-        {:mask_landed, ctx.melissa.id, giving, {:ok, late_mask}}
+        {:mask_landed, ctx.melissa.id, giving, late_mask}
       )
 
       eventually(fn ->
         [page] = Chronicle.pages(ctx.room.id)
-
-        match?(
-          %{"url" => "/media/masks/mask-late.png"},
-          page.masks_meta[to_string(ctx.melissa.id)]
-        )
+        page.masks_meta[ctx.melissa.id] == late_mask
       end)
 
       [page] = Chronicle.pages(ctx.room.id)
-      assert page.masks_meta[to_string(ctx.jacob.id)] == "dot"
+      assert page.masks_meta[ctx.jacob.id] == :dot
       assert Rooms.snapshot(ctx.slug, ctx.melissa.id).your_mask == nil
     end
 

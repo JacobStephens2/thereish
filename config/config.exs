@@ -333,7 +333,7 @@ config :tailwind,
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id]
+  metadata: [:request_id, :seat_id]
 
 # Room creation rate limiting: sliding hour in memory per device and per address
 config :thereish, :room_creation_rate_limit,

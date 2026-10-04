@@ -21,6 +21,7 @@ defmodule ThereishWeb.RoomLive do
 
   import ThereishWeb.RoomComponents
 
+  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Code
   alias Thereish.Rooms.Seat
@@ -410,12 +411,12 @@ defmodule ThereishWeb.RoomLive do
       >
         <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your Give</p>
         <div
-          :if={@room[:your_mask] && @room.your_mask not in [nil, :dot]}
+          :if={Mask.url(@room[:your_mask])}
           data-role="your-mask"
           class="my-2"
         >
           <img
-            src={@room.your_mask[:url] || @room.your_mask["url"] || @room.your_mask}
+            src={Mask.url(@room.your_mask)}
             alt="Your Mask"
             class="size-24 rounded-xl shadow-md object-cover border border-base-300"
           />

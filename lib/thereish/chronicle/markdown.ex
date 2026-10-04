@@ -8,6 +8,7 @@ defmodule Thereish.Chronicle.Markdown do
 
   alias Thereish.Chronicle
   alias Thereish.Experiments
+  alias Thereish.Mask
   alias Thereish.Repo
   alias Thereish.Rooms.Room
 
@@ -91,20 +92,12 @@ defmodule Thereish.Chronicle.Markdown do
     mask_lines =
       cond do
         page[:gives] && page[:gives] != [] ->
-          page.gives
-          |> Enum.filter(&(is_map(&1[:mask]) and (&1.mask[:url] || &1.mask["url"])))
-          |> Enum.map(fn g ->
-            url = g.mask[:url] || g.mask["url"]
-            "- Mask (#{g.seat_name}): #{url}"
-          end)
+          for g <- page.gives, url = Mask.url(g[:mask]), do: "- Mask (#{g.seat_name}): #{url}"
 
         is_map(page[:masks]) and map_size(page.masks) > 0 ->
-          page.masks
-          |> Enum.filter(fn {_seat, m} -> is_map(m) and (m[:url] || m["url"]) end)
-          |> Enum.map(fn {seat_id, mask} ->
-            url = mask[:url] || mask["url"]
-            "- Mask (#{seat_id}): #{url}"
-          end)
+          for {seat_id, mask} <- page.masks,
+              url = Mask.url(mask),
+              do: "- Mask (#{seat_id}): #{url}"
 
         true ->
           []

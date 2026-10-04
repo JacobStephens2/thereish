@@ -45,7 +45,7 @@ A theme a player supplies to open a Page — improv's audience suggestion, which
 _Avoid_: setting, gift, suggestion, request, custom theme, prompt
 
 **Mask**:
-The small picture a Seat wears for one Page, drawn by the Limner to make that Seat's Give recognizable in a shared illustration style. Its giver sees it as soon as it is ready, everyone else sees it at the first Attempt's reveal after the Bridges are committed, and it stays with the Page in the Chronicle as the Seat's marker.
+The small picture a Seat wears for one Page, drawn by the Limner to make that Seat's Give recognizable in a shared illustration style. Its giver sees it as soon as it is ready, everyone else sees it at the first Attempt's reveal after the Bridges are committed, and it stays with the Page in the Chronicle as the Seat's marker. A Seat whose Mask could not be drawn wears its colour's dot instead; the dot is never stored as a picture.
 _Avoid_: avatar, icon (in copy), profile picture, token, sigil, portrait
 
 **Steward**:

@@ -32,6 +32,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
   alias Thereish.Experiments
+  alias Thereish.Mask
   alias Thereish.Repo
   alias Thereish.Steward.TrackCache
 
@@ -459,19 +460,17 @@ defmodule Thereish.Chronicle do
   @doc """
   Replaces the masks_meta on an existing Chronicle page with the latest masks record.
   """
-  @spec replace_page_masks(Ecto.UUID.t() | Page.t(), map()) :: {:ok, Page.t()} | {:error, term()}
-  def replace_page_masks(page, masks_meta),
-    do: replace_page_field(page, :masks_meta, sanitize_masks(masks_meta))
+  @spec replace_page_masks(Ecto.UUID.t() | Page.t(), %{String.t() => Mask.t() | :dot}) ::
+          {:ok, Page.t()} | {:error, term()}
+  def replace_page_masks(page, masks_meta), do: replace_page_field(page, :masks_meta, masks_meta)
 
   @doc """
   Updates or adds a single seat's mask on a Page's masks_meta.
   """
-  @spec update_page_mask(Ecto.UUID.t() | Page.t(), String.t() | atom(), map() | atom()) ::
+  @spec update_page_mask(Ecto.UUID.t() | Page.t(), String.t(), Mask.t() | :dot) ::
           {:ok, Page.t()} | {:error, term()}
   def update_page_mask(%Page{} = page, seat_id, mask) do
-    current = page.masks_meta || %{}
-    updated = Map.put(current, to_string(seat_id), sanitize_mask(mask))
-    replace_page_masks(page, updated)
+    replace_page_masks(page, Map.put(page.masks_meta || %{}, seat_id, mask))
   end
 
   def update_page_mask(page_id, seat_id, mask) when is_binary(page_id) do
@@ -480,20 +479,6 @@ defmodule Thereish.Chronicle do
       page -> update_page_mask(page, seat_id, mask)
     end
   end
-
-  defp sanitize_masks(nil), do: nil
-
-  defp sanitize_masks(masks) when is_map(masks) do
-    Map.new(masks, fn {k, v} -> {to_string(k), sanitize_mask(v)} end)
-  end
-
-  defp sanitize_masks(other), do: other
-
-  defp sanitize_mask(mask) when is_map(mask) do
-    mask |> Map.delete(:bytes) |> Map.delete("bytes")
-  end
-
-  defp sanitize_mask(other), do: other
 
   defp replace_page_field(%Page{} = page, field, value) do
     page
@@ -582,8 +567,7 @@ defmodule Thereish.Chronicle do
       for page <- pages,
           is_map(page.masks_meta),
           {_seat, mask} <- page.masks_meta,
-          is_map(mask),
-          url = meta_get(mask, :url),
+          url = Mask.url(mask),
           is_binary(url) and url != "" do
         {url, page}
       end
@@ -854,17 +838,13 @@ defmodule Thereish.Chronicle do
         masks_meta = Map.get(page, :masks_meta)
 
         if is_map(masks_meta) and map_size(masks_meta) > 0 do
-          Enum.reduce(masks_meta, acc, fn {_seat_id, mask}, acc_m ->
-            cond do
-              is_map(mask) ->
-                meta = mask[:meta] || mask["meta"] || mask
-                model = meta[:model] || meta["model"] || "unknown"
-                cost = to_decimal(meta[:cost_usd] || meta["cost_usd"])
-                record_call(acc_m, :limner, model, cost)
+          Enum.reduce(masks_meta, acc, fn
+            {_seat_id, %Mask{meta: meta}}, acc_m ->
+              cost = to_decimal(meta["cost_usd"])
+              record_call(acc_m, :limner, meta["model"] || "unknown", cost)
 
-              true ->
-                acc_m
-            end
+            {_seat_id, :dot}, acc_m ->
+              acc_m
           end)
         else
           acc
@@ -1497,22 +1477,13 @@ defmodule Thereish.Chronicle do
           masks = page.masks_meta || %{}
 
           Enum.map(list, fn g ->
-            seat_mask =
-              Map.get(masks, g.seat_id) ||
-                Map.get(masks, to_string(g.seat_id)) ||
-                (is_binary(g.seat_id) &&
-                   case Integer.parse(g.seat_id) do
-                     :error -> Map.get(masks, String.to_atom(g.seat_id))
-                     _ -> nil
-                   end)
-
             %{
               id: g.id,
               seat_id: g.seat_id,
               seat_name: (g.seat && g.seat.name) || "Seat",
               text: g.text,
               order: g.order,
-              mask: seat_mask
+              mask: Map.get(masks, g.seat_id)
             }
           end)
       end
@@ -1533,7 +1504,6 @@ defmodule Thereish.Chronicle do
       author_meta: page.author_meta,
       music_meta: page.music_meta,
       vamp_meta: page.vamp_meta,
-      masks_meta: page.masks_meta,
       masks: page.masks_meta,
       give: page.document["give"] || page.document[:give],
       theme: page.document["theme"] || page.document[:theme],
@@ -1798,7 +1768,7 @@ defmodule Thereish.Chronicle do
         author_meta: entry.author_meta,
         music_meta: entry.music_meta,
         vamp_meta: entry.vamp_meta,
-        masks_meta: sanitize_masks(entry.masks),
+        masks_meta: entry.masks,
         closed_because: to_string(entry.closed_because),
         melded: entry.melded?,
         closeness: entry.closeness,
@@ -1976,9 +1946,7 @@ defmodule Thereish.Chronicle do
               {passed, [claimed | rest]} ->
                 seat_id = claimed.seat_id
 
-                mask =
-                  seat_id &&
-                    (Map.get(masks, seat_id) || Map.get(masks, to_string(seat_id)))
+                mask = seat_id && Map.get(masks, seat_id)
 
                 {%{word: word, seat_id: seat_id, mask: mask}, passed ++ rest}
 
