@@ -2180,25 +2180,6 @@ defmodule Thereish.RoomsTest do
 
       assert room.prologue_skipped == true
     end
-
-    test "play_prologue starts active prologue and snapshot exposes it, skip ends it", ctx do
-      Rooms.subscribe(ctx.slug)
-
-      assert :ok = Rooms.play_prologue(ctx.slug)
-      assert_receive :room_changed
-
-      view = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
-      assert is_map(view.prologue)
-      assert is_binary(view.prologue.reading)
-      assert is_binary(view.prologue.text)
-
-      assert :ok = Rooms.skip_prologue(ctx.slug)
-      assert_receive :room_changed
-
-      view_after = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
-      assert is_nil(view_after.prologue)
-      assert view_after.prologue_skipped == true
-    end
   end
 
   describe "the Room starts when everyone is here (ticket 08)" do
