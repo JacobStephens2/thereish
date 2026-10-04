@@ -8,8 +8,9 @@ defmodule Thereish.Experiments do
   rows stay readable.
 
   This module owns the harness: the Experiments' definitions, each declaring
-  its outcomes and its sample (20 Pages) up front; a Page's assignment; a
-  closed Page's outcome recorded from its Entry; a Bookends tap synced onto
+  its outcomes and its sample (20 Pages) up front; a Page's Assignment; a
+  closed Page's outcome recorded from its Entry and linked to the Entry's own
+  Assignment; a Bookends tap synced onto
   its Page's outcome; each Experiment's blinded progress toward its sample;
   its unblinding, which the admin asks for deliberately and which is refused
   until the sample is recorded; the admin's `overview/0`; and the readout.
@@ -39,6 +40,7 @@ defmodule Thereish.Experiments do
   alias Thereish.Chronicle.ExperimentUnblinding
   alias Thereish.Chronicle.Opinion
   alias Thereish.Chronicle.Page
+  alias Thereish.Experiments.Assignment
   alias Thereish.Repo
   alias Thereish.Rooms.Room
 
@@ -61,15 +63,13 @@ defmodule Thereish.Experiments do
     ]
   }
 
-  @author_model_arms [:flash, :astra]
-
   @author_model_experiment %{
     id: @author_model_id,
     name: "Author model: Flash against Astra",
     description:
       "Ticket 08: Tests whether Gemini 3.8 Flash or GPT-6 Astra writes bookends that yield higher meld rates, fewer attempts, and higher couple satisfaction taps.",
     sample_size: 20,
-    arms: @author_model_arms,
+    arms: [:flash, :astra],
     declared_outcomes: [
       :meld_rate,
       :attempts_to_meld,
@@ -88,82 +88,76 @@ defmodule Thereish.Experiments do
   def definition(@author_model_id), do: @author_model_experiment
   def definition(_), do: @author_model_experiment
 
-  # The Experiment an Arm belongs to: `flash` and `astra` are the Author-model
-  # Experiment, and any other Arm is Bait against plain.
-  defp experiment_id_for_arm(arm) when arm in @author_model_arms,
-    do: @author_model_experiment.id
-
-  defp experiment_id_for_arm(_arm), do: @bait_against_plain_experiment.id
-
-  @doc """
-  The arm a Page plays under when it has none of its own: Flash.
-  """
-  @spec default_arm() :: :flash
-  def default_arm, do: :flash
+  # The Arm a Page plays under when it has no Assignment of its own: Flash,
+  # under the Author-model Experiment, with no row to link.
+  @default_assignment %Assignment{id: nil, experiment_id: @author_model_id, arm: :flash}
 
   @doc """
   Assigns the next Page in a Room its Author-model arm, strictly alternating
-  Flash and Astra from the Room's past assignments, and records the assignment
-  blind.
+  Flash and Astra from the Room's past assignment rows, records its row
+  blind, and answers it as the Page's Assignment.
 
-  An assignment that cannot be read or written is logged and the Page plays
-  under `default_arm/0`: a lost assignment must not stop the Author being asked.
+  When no row can be read or written, that is logged and the Page plays under
+  the default Arm, Flash, with no row: a lost row must not stop the Author
+  being asked.
   """
-  @spec assign(Ecto.UUID.t() | String.t()) :: :flash | :astra
+  @spec assign(Ecto.UUID.t() | String.t()) :: Assignment.t()
   def assign(room_id_or_slug) do
     room_id = resolve_room_id(room_id_or_slug)
     past_arms = room_id |> assignments(@author_model_experiment.id) |> Enum.map(& &1.arm)
     arm = next_arm(past_arms)
 
-    %ExperimentAssignment{}
-    |> ExperimentAssignment.changeset(%{
-      room_id: room_id,
-      page_identifier: "page-#{length(past_arms) + 1}",
-      experiment_id: @author_model_experiment.id,
-      arm: to_string(arm),
-      chapter: "table",
-      assigned_at: DateTime.utc_now()
-    })
-    |> Repo.insert!()
+    row =
+      %ExperimentAssignment{}
+      |> ExperimentAssignment.changeset(%{
+        room_id: room_id,
+        page_identifier: "page-#{length(past_arms) + 1}",
+        experiment_id: @author_model_experiment.id,
+        arm: to_string(arm),
+        chapter: "table",
+        assigned_at: DateTime.utc_now()
+      })
+      |> Repo.insert!()
 
-    arm
+    %Assignment{id: row.id, experiment_id: row.experiment_id, arm: arm}
   rescue
     error ->
       Logger.error(
-        "no experiment arm could be assigned, so the Page plays under #{default_arm()}: " <>
+        "no experiment arm could be assigned, so the Page plays under #{@default_assignment.arm}: " <>
           Exception.message(error)
       )
 
-      default_arm()
+      @default_assignment
   end
 
-  defp next_arm([]), do: default_arm()
+  defp next_arm([]), do: @default_assignment.arm
   defp next_arm(past_arms), do: if(List.last(past_arms) == "flash", do: :astra, else: :flash)
 
   @doc """
   Records the experiment outcome of a closed Page from its Entry, once the
-  Entry is written as `page`, under the experiment the Entry's arm belongs to.
-  Links the Page to the oldest unlinked assignment of that experiment.
+  Entry is written as `page`, under the Experiment and Arm of the Entry's
+  Assignment, and links the Page to that Assignment's own row, unless the row
+  is already linked.
 
-  An Entry with no arm has no experiment to record under, and is refused.
+  An Entry with no Assignment is recorded under the default Arm and links no
+  row, as does an Assignment that has no row.
   """
   @spec record_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
           {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
-  def record_outcome(room_id, %Page{} = page, %Entry{arm: arm} = entry)
-      when is_atom(arm) and not is_nil(arm) do
+  def record_outcome(room_id, %Page{} = page, %Entry{} = entry) do
     room_id = resolve_room_id(room_id)
-    experiment_id = experiment_id_for_arm(arm)
+    assignment = entry.assignment || @default_assignment
 
     closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
 
-    result =
+    outcome =
       %ExperimentOutcome{}
       |> ExperimentOutcome.changeset(%{
         room_id: room_id,
         page_id: page.id,
         page_identifier: page.id,
-        experiment_id: experiment_id,
-        arm: to_string(arm),
+        experiment_id: assignment.experiment_id,
+        arm: to_string(assignment.arm),
         melded: entry.melded?,
         closeness: entry.closeness,
         closing_band: closing_band,
@@ -175,18 +169,21 @@ defmodule Thereish.Experiments do
       })
       |> Repo.insert()
 
-    from(a in ExperimentAssignment,
-      where: a.room_id == ^room_id and is_nil(a.page_id) and a.experiment_id == ^experiment_id,
-      order_by: [asc: a.inserted_at, asc: a.id],
-      limit: 1
-    )
-    |> Repo.one()
-    |> case do
-      nil -> :ok
-      assignment -> assignment |> Ecto.Changeset.change(page_id: page.id) |> Repo.update()
-    end
+    # A Page with no outcome links no row.
+    with {:ok, _} <- outcome, do: link_assignment(room_id, assignment, page)
 
-    result
+    outcome
+  end
+
+  defp link_assignment(_room_id, %Assignment{id: nil}, _page), do: :ok
+
+  defp link_assignment(room_id, %Assignment{id: id}, page) do
+    from(a in ExperimentAssignment,
+      where: a.id == ^id and a.room_id == ^room_id and is_nil(a.page_id)
+    )
+    |> Repo.update_all(set: [page_id: page.id])
+
+    :ok
   end
 
   # Nothing has set these since ADR-0011; the columns stay until a schema
@@ -201,12 +198,17 @@ defmodule Thereish.Experiments do
   Records a Bookends tap (flat, fine, or great) as an append-only event.
   Also syncs the tap into its Page's outcome's taps map, if that outcome
   exists. A tap that names no outcome updates none.
+
+  A tap carrying its Page's `assignment` is recorded under that Assignment's
+  Arm.
   """
   @spec record_bookends_tap(Ecto.UUID.t() | String.t(), map()) ::
           {:ok, BookendsTap.t()} | {:error, Ecto.Changeset.t()}
   def record_bookends_tap(room_id, attrs) do
     room_id = resolve_room_id(room_id)
-    attrs = Map.put(attrs, :room_id, room_id)
+
+    {assignment, attrs} = Map.pop(attrs, :assignment)
+    attrs = attrs |> Map.put(:room_id, room_id) |> put_arm(assignment)
 
     case %BookendsTap{} |> BookendsTap.changeset(attrs) |> Repo.insert() do
       {:ok, tap} ->
@@ -217,6 +219,9 @@ defmodule Thereish.Experiments do
         error
     end
   end
+
+  defp put_arm(attrs, %Assignment{arm: arm}), do: Map.put(attrs, :arm, arm)
+  defp put_arm(attrs, nil), do: attrs
 
   defp sync_outcome_taps(room_id, tap) do
     of_tap =

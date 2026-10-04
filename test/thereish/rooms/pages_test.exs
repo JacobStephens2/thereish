@@ -7,11 +7,15 @@ defmodule Thereish.Rooms.PagesTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Experiments.Assignment
   alias Thereish.Rooms.Pages
 
-  defp opened(arm \\ :flash) do
+  @flash %Assignment{id: "assignment-1", experiment_id: "author_model", arm: :flash}
+  @astra %Assignment{id: "assignment-2", experiment_id: "author_model", arm: :astra}
+
+  defp opened(assignment \\ @flash) do
     page_ref = make_ref()
-    {Pages.page_opened(Pages.new(), page_ref, arm), page_ref}
+    {Pages.page_opened(Pages.new(), page_ref, assignment), page_ref}
   end
 
   test "a write for a written Page lands now" do
@@ -67,7 +71,7 @@ defmodule Thereish.Rooms.PagesTest do
 
     {pages, []} = Pages.write(pages, page_ref, :late_track)
     {pages, []} = Pages.write(pages, old_giving, :late_mask)
-    pages = Pages.page_opened(pages, make_ref(), :flash)
+    pages = Pages.page_opened(pages, make_ref(), @flash)
 
     assert {_pages, []} = Pages.written(pages, "page-1")
   end
@@ -75,7 +79,7 @@ defmodule Thereish.Rooms.PagesTest do
   test "refs from an Author retry resolve to the same Page" do
     {pages, first_ref} = opened()
     retry_ref = make_ref()
-    pages = pages |> Pages.page_opened(retry_ref, :flash) |> Pages.page_closed()
+    pages = pages |> Pages.page_opened(retry_ref, @flash) |> Pages.page_closed()
     {pages, []} = Pages.write(pages, first_ref, :vamp)
 
     assert {pages, [{:write, "page-1", :vamp}]} = Pages.written(pages, "page-1")
@@ -90,7 +94,7 @@ defmodule Thereish.Rooms.PagesTest do
 
     pages = Pages.page_turned(pages)
     {pages, []} = Pages.write(pages, page_ref, :late_track)
-    pages = pages |> Pages.page_opened(make_ref(), :astra) |> Pages.page_closed()
+    pages = pages |> Pages.page_opened(make_ref(), @astra) |> Pages.page_closed()
 
     assert {_pages, []} = Pages.written(pages, "page-2")
   end
@@ -100,7 +104,7 @@ defmodule Thereish.Rooms.PagesTest do
     giving = Pages.giving(pages)
     {pages, []} = Pages.written(pages, "page-1")
 
-    pages = pages |> Pages.page_turned() |> Pages.page_opened(make_ref(), :astra)
+    pages = pages |> Pages.page_turned() |> Pages.page_opened(make_ref(), @astra)
     {pages, []} = Pages.written(pages, "page-2")
 
     assert {pages, [{:write, "page-1", :mask}]} = Pages.write(pages, giving, :mask)
@@ -114,16 +118,16 @@ defmodule Thereish.Rooms.PagesTest do
     assert {_pages, []} = Pages.write(pages, make_ref(), :stray)
   end
 
-  test "the arm of the Page in play survives new Gives but not a turned Page" do
-    assert Pages.arm(Pages.new()) == nil
+  test "the Assignment of the Page in play survives new Gives but not a turned Page" do
+    assert Pages.assignment(Pages.new()) == nil
 
-    {pages, _page_ref} = opened(:astra)
-    assert Pages.arm(pages) == :astra
+    {pages, _page_ref} = opened(@astra)
+    assert Pages.assignment(pages) == @astra
 
     pages = Pages.gives_reset(pages)
-    assert Pages.arm(pages) == :astra
+    assert Pages.assignment(pages) == @astra
 
     pages = Pages.page_turned(pages)
-    assert Pages.arm(pages) == nil
+    assert Pages.assignment(pages) == nil
   end
 end

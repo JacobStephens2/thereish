@@ -7,6 +7,7 @@ defmodule Thereish.Rooms.PlayTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Experiments.Assignment
   alias Thereish.Mask
   alias Thereish.Rooms.Play
   alias Thereish.Rooms.Room
@@ -25,6 +26,7 @@ defmodule Thereish.Rooms.PlayTest do
   @seats [%{id: "mara", name: "Mara"}, %{id: "jacob", name: "Jacob"}]
   @speaker "speaker-token"
   @track %{path: "/media/track.mp3", meta: %{provider: "fake"}}
+  @assignment %Assignment{id: "assignment-1", experiment_id: "author_model", arm: :astra}
 
   # A Room as full as its Seats, unless `room` says otherwise.
   defp new(opts \\ []) do
@@ -55,7 +57,9 @@ defmodule Thereish.Rooms.PlayTest do
     end)
   end
 
-  defp answer({:open_page, request, arm}, _opts), do: {:page_opened, request, arm || :flash, nil}
+  defp answer({:open_page, request, assignment}, _opts),
+    do: {:page_opened, request, assignment || @assignment, nil}
+
   defp answer({:look_up_track, page_ref, _gives}, _opts), do: {:track_looked_up, page_ref, nil}
 
   defp answer({:write_chronicle, _entry}, opts),
@@ -273,7 +277,7 @@ defmodule Thereish.Rooms.PlayTest do
 
       {play, opened} = run(play, {:give, "jacob", "echoing wind"})
       assert {:open_page, %{gives: [_, _]} = request, nil} = find(opened, :open_page)
-      assert {:ask_author, ref, ^request, :flash} = find(opened, :ask_author)
+      assert {:ask_author, ref, ^request, :astra} = find(opened, :ask_author)
       assert phase(play) == :writing
 
       {play, answered} =
@@ -299,7 +303,7 @@ defmodule Thereish.Rooms.PlayTest do
       assert phase(play) == :closed
 
       assert {:write_chronicle, entry} = find(closed, :write_chronicle)
-      assert entry.arm == :flash
+      assert entry.assignment == @assignment
       assert entry.opened_at == @now.at
       assert entry.melded?
 
@@ -324,6 +328,20 @@ defmodule Thereish.Rooms.PlayTest do
                  {:author_completed, make_ref(), {:ok, %{bookends: ["a", "b"]}}},
                  @now
                )
+    end
+  end
+
+  describe "the Page's Assignment" do
+    test "from the Page's opening reaches its Entry at the close and its Bookends tap's write" do
+      {play, _page_ref, _giving} = written(new())
+
+      {play, closed} = meld(play, written: "page-1")
+      assert {:write_chronicle, %{assignment: @assignment}} = find(closed, :write_chronicle)
+
+      {_play, tapped} = run(play, {:tap_bookends, "mara", "great"})
+
+      assert {:write_page, "page-1", {:bookends_tap, %{label: "great", assignment: @assignment}}} =
+               find(tapped, :write_page)
     end
   end
 
@@ -428,7 +446,7 @@ defmodule Thereish.Rooms.PlayTest do
     test "before the Author answers, its answer and its Foley are dropped" do
       {play, _} = run(new(), {:give, "mara", "deep canyon"})
       {play, opened} = run(play, {:give, "jacob", "echoing wind"})
-      {:ask_author, ref, _request, :flash} = find(opened, :ask_author)
+      {:ask_author, ref, _request, :astra} = find(opened, :ask_author)
       {:start_vamp, page_ref, _gives} = find(opened, :start_vamp)
 
       {play, reset} = run(play, {:reset_gives, "mara"})
@@ -443,14 +461,14 @@ defmodule Thereish.Rooms.PlayTest do
       assert view(play).vamp == nil
     end
 
-    test "new Gives keep the Page's arm, so the Room is asked for none" do
+    test "new Gives keep the Page's Assignment, so the Room is asked for none" do
       {play, _} = run(new(), {:give, "mara", "deep canyon"})
       {play, _} = run(play, {:give, "jacob", "echoing wind"})
       {play, _} = run(play, {:reset_gives, "mara"})
       {play, _} = run(play, {:give, "mara", "harbour"})
       {_play, opened} = run(play, {:give, "jacob", "lantern"})
 
-      assert {:open_page, _request, :flash} = find(opened, :open_page)
+      assert {:open_page, _request, @assignment} = find(opened, :open_page)
     end
   end
 

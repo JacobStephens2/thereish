@@ -609,10 +609,10 @@ defmodule Thereish.Steward do
   end
 
   @doc """
-  Assigns the next Page in a Room its experiment arm. A/B assignment lives
-  behind the Steward; `Thereish.Experiments` keeps the rows.
+  Assigns the next Page in a Room its Assignment. A/B assignment
+  lives behind the Steward; `Thereish.Experiments` keeps the rows.
   """
-  @spec assign_arm(Ecto.UUID.t() | String.t()) :: :flash | :astra
+  @spec assign_arm(Ecto.UUID.t() | String.t()) :: Thereish.Experiments.Assignment.t()
   def assign_arm(room_id), do: Thereish.Experiments.assign(room_id)
 
   @doc """

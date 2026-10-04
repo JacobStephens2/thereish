@@ -205,7 +205,7 @@ The Page as it was written at the table: its opening Bookends and where each cam
 _Avoid_: page map, payload, JSON, page data
 
 **Entry**:
-One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the experiment arm. Built when the Page closes and written once (ADR-0003).
+One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the Page's Assignment. Built when the Page closes and written once (ADR-0003).
 _Avoid_: record, row, payload, closed-page map
 
 **Experiment**:
@@ -213,5 +213,9 @@ A declared A/B comparison with a fixed sample, whose Arms stay blinded until it 
 _Avoid_: test, trial, variant
 
 **Arm**:
-The side of an Experiment a Page is played under, assigned when the Author is asked for the Page.
+The side of an Experiment a Page is played under, given to the Page as its **Assignment** when the Author is asked for the Page.
 _Avoid_: variant, bucket, group
+
+**Assignment**:
+The Arm an Experiment gives one Page, recorded blind when the Author is asked for it, and carried with the Page until its outcome is recorded. A Page whose Assignment could not be recorded plays under the default Arm and links no row.
+_Avoid_: allocation, bucket, variant

@@ -34,18 +34,18 @@ defmodule Thereish.Rooms.Pages do
       turned before its write landed, was never written, so its results
       have nowhere to go.
 
-  ## The arm
+  ## The Assignment
 
-  The experiment arm of the Page in play is kept here too. New Gives keep it,
-  so an abandoned Author request and the Page written after it share one
-  assignment; a turned Page clears it.
+  The Assignment of the Page in play is kept here too. New Gives
+  keep it, so an abandoned Author request and the Page written after it share
+  one Assignment; a turned Page clears it.
 
   ## Effects
 
     * `{:write, page_id, write}`: perform this write onto that Chronicle Page
   """
 
-  defstruct giving: nil, page_refs: [], arm: nil, closed?: false, written: %{}, held: []
+  defstruct giving: nil, page_refs: [], assignment: nil, closed?: false, written: %{}, held: []
 
   @type ref :: reference()
   @type page_id :: Ecto.UUID.t()
@@ -53,7 +53,7 @@ defmodule Thereish.Rooms.Pages do
   @type t :: %__MODULE__{
           giving: ref(),
           page_refs: [ref()],
-          arm: atom() | nil,
+          assignment: Thereish.Experiments.Assignment.t() | nil,
           closed?: boolean(),
           written: %{optional(ref()) => page_id()},
           held: [term()]
@@ -70,15 +70,15 @@ defmodule Thereish.Rooms.Pages do
   @spec giving(t()) :: ref()
   def giving(%__MODULE__{giving: giving}), do: giving
 
-  @doc "The Author was asked for a Page under this ref, for this arm."
-  @spec page_opened(t(), ref(), atom()) :: t()
-  def page_opened(%__MODULE__{} = pages, page_ref, arm) do
-    %{pages | page_refs: [page_ref | pages.page_refs], arm: arm}
+  @doc "The Author was asked for a Page under this ref, for this Assignment."
+  @spec page_opened(t(), ref(), Thereish.Experiments.Assignment.t()) :: t()
+  def page_opened(%__MODULE__{} = pages, page_ref, assignment) do
+    %{pages | page_refs: [page_ref | pages.page_refs], assignment: assignment}
   end
 
-  @doc "The experiment arm of the Page in play, or nil before one is assigned."
-  @spec arm(t()) :: atom() | nil
-  def arm(%__MODULE__{arm: arm}), do: arm
+  @doc "The Assignment of the Page in play, or nil before one is made."
+  @spec assignment(t()) :: Thereish.Experiments.Assignment.t() | nil
+  def assignment(%__MODULE__{assignment: assignment}), do: assignment
 
   @doc """
   The Page in play closed and its Chronicle entry is built. Writes for it are
@@ -125,7 +125,7 @@ defmodule Thereish.Rooms.Pages do
   so that Page's write, and the writes held for it, have already landed.
   """
   @spec page_turned(t()) :: t()
-  def page_turned(%__MODULE__{} = pages), do: %{forget_giving(pages) | arm: nil}
+  def page_turned(%__MODULE__{} = pages), do: %{forget_giving(pages) | assignment: nil}
 
   defp in_play?(pages, ref), do: ref == pages.giving or ref in pages.page_refs
 

@@ -2,11 +2,12 @@ defmodule Thereish.Chronicle.Entry do
   @moduledoc """
   One closed Page as the Room hands it to the Chronicle: its Gives, Attempts,
   Bridges and Verdicts, the times Pacing recorded, the music Foley played and
-  the experiment arm. Built when the Page closes and written once (ADR-0003).
+  the Page's Assignment. Built when the Page closes and written once (ADR-0003).
 
   The Game builds it from its own state, and leaves nil what it cannot know:
   it keeps no clock and knows no Foley or experiment. Pacing stamps the times,
-  the Room sets `music_meta` and `vamp_meta` from Occupancy, and Voice attaches
+  the Room sets `music_meta` and `vamp_meta` from Occupancy and `assignment`
+  from Pages, and Voice attaches
   each Verdict's `voice_meta`. Each sets its own fields by name.
 
   It carries exactly what the Chronicle writes, and nothing a screen shows.
@@ -113,7 +114,7 @@ defmodule Thereish.Chronicle.Entry do
     :attempts,
     :opened_at,
     :revealed_at,
-    :arm,
+    :assignment,
     gives: [],
     masks: %{}
   ]
@@ -131,6 +132,6 @@ defmodule Thereish.Chronicle.Entry do
           attempts: [Attempt.t()],
           opened_at: DateTime.t() | nil,
           revealed_at: DateTime.t() | nil,
-          arm: atom() | nil
+          assignment: Thereish.Experiments.Assignment.t() | nil
         }
 end
