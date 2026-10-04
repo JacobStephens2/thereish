@@ -26,7 +26,6 @@ defmodule Thereish.Steward.DigestTest do
         id: Ecto.UUID.generate(),
         bookends: ["lantern", "harbour"],
         gives: [],
-        give: nil,
         melded: true,
         closeness: 91,
         attempts: [
@@ -92,7 +91,7 @@ defmodule Thereish.Steward.DigestTest do
           bookends: ["candy", "cane"],
           melded: false,
           closeness: nil,
-          give: "winter",
+          gives: [%{seat_name: nil, text: "winter"}],
           attempts: [
             %{
               number: 1,

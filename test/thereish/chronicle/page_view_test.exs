@@ -16,6 +16,8 @@ defmodule Thereish.Chronicle.PageViewTest do
   alias Thereish.Chronicle.PageView
   alias Thereish.Chronicle.Recap
   alias Thereish.Chronicle.Verdict
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
   alias Thereish.Mask
   alias Thereish.Rooms.Seat
 
@@ -173,7 +175,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       view = project(page(gives: []))
 
       assert view.gives == []
-      assert view.give == nil
+      assert view.masks_without_give == []
     end
 
     test "with each Give under the Mask its Seat wore" do
@@ -189,6 +191,158 @@ defmodule Thereish.Chronicle.PageViewTest do
       assert give.seat_name == "Seat"
       assert give.text == "cactus"
       assert give.mask == mask("melissa")
+    end
+  end
+
+  describe "project/2 reads a Page's Gives" do
+    test "from its Give rows, ignoring a legacy give in the document" do
+      view =
+        project(
+          page(
+            document: %{"bookends" => ["lantern", "harbour"], "give" => "old setting"},
+            gives: [
+              %Give{
+                id: "give",
+                seat_id: @melissa,
+                seat: %Seat{name: "Melissa"},
+                text: "cactus",
+                order: 0
+              }
+            ]
+          )
+        )
+
+      assert [%{seat_name: "Melissa", text: "cactus"}] = view.gives
+    end
+
+    test "from a legacy document with no Give rows, as one Give with no Seat" do
+      view =
+        project(page(document: %{"bookends" => ["lantern", "harbour"], "give" => "a lighthouse"}))
+
+      assert [give] = view.gives
+      assert give.text == "a lighthouse"
+      assert give.seat_id == nil
+      assert give.seat_name == nil
+      assert give.mask == nil
+    end
+
+    test "from a legacy document with atom keys" do
+      view = project(page(document: %{bookends: ["lantern", "harbour"], give: "a lighthouse"}))
+
+      assert [%{text: "a lighthouse", seat_name: nil}] = view.gives
+    end
+  end
+
+  describe "project/2 places a Page's Masks" do
+    test "on each Give, leaving none without a Give when every Seat gave" do
+      view =
+        project(
+          page(
+            gives: [
+              %Give{id: "g1", seat_id: @melissa, seat: nil, text: "cactus", order: 0},
+              %Give{id: "g2", seat_id: @jacob, seat: nil, text: "dune", order: 1}
+            ],
+            masks_meta: %{@melissa => mask("melissa"), @jacob => mask("jacob")}
+          )
+        )
+
+      assert Enum.map(view.gives, & &1.mask) == [mask("melissa"), mask("jacob")]
+      assert view.masks_without_give == []
+    end
+
+    test "in masks_without_give when its Seat gave nothing, named from the Page's Bridges" do
+      melissa_bridge = %{bridge(@melissa, "beacon", 0) | seat: %Seat{name: "Melissa"}}
+
+      view =
+        project(
+          page(
+            gives: [%Give{id: "g2", seat_id: @jacob, seat: nil, text: "dune", order: 0}],
+            masks_meta: %{@melissa => mask("melissa"), @jacob => mask("jacob")},
+            attempts: [attempt(1, bridges: [melissa_bridge, bridge(@jacob, "cairn", 1)])]
+          )
+        )
+
+      assert [%{mask: jacob_mask}] = view.gives
+      assert jacob_mask == mask("jacob")
+
+      assert view.masks_without_give == [
+               %{seat_id: @melissa, seat_name: "Melissa", mask: mask("melissa")}
+             ]
+    end
+
+    test "without a Seat name when no Bridge on the Page names that Seat" do
+      view = project(page(masks_meta: %{"stranger" => mask("stranger")}))
+
+      assert view.masks_without_give == [
+               %{seat_id: "stranger", seat_name: nil, mask: mask("stranger")}
+             ]
+    end
+
+    test "leaving out a Seat whose Mask is a dot" do
+      view = project(page(masks_meta: %{@melissa => :dot, @jacob => mask("jacob")}))
+
+      assert [%{seat_id: @jacob}] = view.masks_without_give
+    end
+
+    test "as none when the Page kept no Masks" do
+      assert project(page(masks_meta: nil)).masks_without_give == []
+    end
+  end
+
+  describe "project/2 reads a Page's Track" do
+    test "as its path and title when the Page kept a titled Track" do
+      track = %Track{path: "/media/tracks/harbour-lights.mp3", title: "Harbour Lights"}
+
+      assert project(page(music_meta: track)).track == %{
+               path: "/media/tracks/harbour-lights.mp3",
+               title: "Harbour Lights"
+             }
+    end
+
+    test "as nil when the Track has no title" do
+      assert project(page(music_meta: %Track{path: "/media/tracks/x.mp3", title: nil})).track ==
+               nil
+
+      assert project(page(music_meta: %Track{path: "/media/tracks/x.mp3", title: ""})).track ==
+               nil
+    end
+
+    test "as nil when the Track failed or has no path" do
+      failed = %Track{path: "/media/tracks/x.mp3", title: "Lights", failure: "unfinished"}
+
+      assert project(page(music_meta: failed)).track == nil
+      assert project(page(music_meta: %Track{path: nil, title: "Lights"})).track == nil
+    end
+
+    test "as nil when the Page has no Track" do
+      assert project(page(music_meta: nil)).track == nil
+    end
+  end
+
+  describe "project/2 reads a Page's Vamp" do
+    test "as its path, duration and loop when the Page kept its Vamp" do
+      vamp = %Vamp{path: "/media/vamps/harbour.mp3", duration: 30, loop: true}
+
+      assert project(page(vamp_meta: vamp)).vamp == %{
+               path: "/media/vamps/harbour.mp3",
+               duration: 30,
+               loop: true
+             }
+    end
+
+    test "as not looping when its loop is unset" do
+      vamp = %Vamp{path: "/media/vamps/harbour.mp3", duration: nil, loop: nil}
+
+      assert project(page(vamp_meta: vamp)).vamp == %{
+               path: "/media/vamps/harbour.mp3",
+               duration: nil,
+               loop: false
+             }
+    end
+
+    test "as nil when the Vamp has no path, or the Page has none" do
+      assert project(page(vamp_meta: %Vamp{path: ""})).vamp == nil
+      assert project(page(vamp_meta: nil)).vamp == nil
     end
   end
 

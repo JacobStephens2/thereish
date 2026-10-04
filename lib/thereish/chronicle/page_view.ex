@@ -40,15 +40,34 @@ defmodule Thereish.Chronicle.PageView do
           page_arms: Experiments.page_arms()
         }
 
-  @typedoc "One Give, under the Mask its Seat wore."
+  @typedoc """
+  One Give, under the Mask its Seat wore. A Give from a Page written before Give
+  rows has no id, no Seat, no Seat name and no Mask.
+  """
   @type give_view :: %{
-          id: Ecto.UUID.t(),
+          id: Ecto.UUID.t() | nil,
           seat_id: Ecto.UUID.t() | nil,
-          seat_name: String.t(),
+          seat_name: String.t() | nil,
           text: String.t(),
           order: integer(),
           mask: Mask.t() | nil
         }
+
+  @typedoc """
+  A Mask whose Seat gave nothing on the Page, named from that Seat's Bridges on
+  the Page when it has any.
+  """
+  @type mask_without_give :: %{
+          seat_id: Ecto.UUID.t(),
+          seat_name: String.t() | nil,
+          mask: Mask.t()
+        }
+
+  @typedoc "The Track a Page kept, when it has a title."
+  @type track_view :: %{path: String.t(), title: String.t()}
+
+  @typedoc "The Vamp a Page kept."
+  @type vamp_view :: %{path: String.t(), duration: integer() | nil, loop: boolean()}
 
   @typedoc """
   One Bookend as a chip. A first-Attempt chip from a Give names where its word
@@ -190,13 +209,10 @@ defmodule Thereish.Chronicle.PageView do
           room_id: Ecto.UUID.t(),
           document: map(),
           gives: [give_view()],
+          masks_without_give: [mask_without_give()],
           author_meta: map() | nil,
-          music_meta: Track.t() | nil,
-          vamp_meta: Vamp.t() | nil,
-          masks: %{optional(Ecto.UUID.t()) => Mask.t()} | nil,
-          give: String.t() | nil,
-          theme: String.t() | nil,
-          chapter: term(),
+          track: track_view() | nil,
+          vamp: vamp_view() | nil,
           bookends: [String.t()],
           bookend_origins: [bookend_origin()],
           full_table: boolean() | nil,
@@ -222,12 +238,8 @@ defmodule Thereish.Chronicle.PageView do
     :room_id,
     :document,
     :author_meta,
-    :music_meta,
-    :vamp_meta,
-    :masks,
-    :give,
-    :theme,
-    :chapter,
+    :track,
+    :vamp,
     :full_table,
     :closed_because,
     :melded,
@@ -240,6 +252,7 @@ defmodule Thereish.Chronicle.PageView do
     :trap_converged,
     :deep_converged,
     gives: [],
+    masks_without_give: [],
     bookends: [],
     bookend_origins: [],
     attempts: [],
@@ -278,14 +291,11 @@ defmodule Thereish.Chronicle.PageView do
       id: page.id,
       room_id: page.room_id,
       document: page.document,
-      gives: Enum.map(page.gives, &give_view(&1, page.masks_meta || %{})),
+      gives: gives(page),
+      masks_without_give: masks_without_give(page),
       author_meta: page.author_meta,
-      music_meta: page.music_meta,
-      vamp_meta: page.vamp_meta,
-      masks: page.masks_meta,
-      give: page.document["give"] || page.document[:give],
-      theme: page.document["theme"] || page.document[:theme],
-      chapter: page.document["chapter"] || page.document[:chapter],
+      track: track(page.music_meta),
+      vamp: vamp(page.vamp_meta),
       bookends: opening_bookends(page),
       bookend_origins: bookend_origins(page.document),
       full_table: full_table(page.document),
@@ -403,6 +413,49 @@ defmodule Thereish.Chronicle.PageView do
       order: g.order,
       mask: Map.get(masks, g.seat_id)
     }
+  end
+
+  # A Page written before Give rows kept its one Give in its document, with no
+  # Seat. It reads as that one Give, so no reader branches on a Page's vintage
+  # (ADR-0003).
+  defp gives(%Page{gives: [], document: doc}) do
+    case doc["give"] || doc[:give] do
+      nil -> []
+      text -> [%{id: nil, seat_id: nil, seat_name: nil, text: text, order: 0, mask: nil}]
+    end
+  end
+
+  defp gives(page), do: Enum.map(page.gives, &give_view(&1, page.masks_meta || %{}))
+
+  # A Mask reads on its Seat's Give. Only a Mask with a picture whose Seat gave
+  # nothing on the Page is listed apart, named from that Seat's Bridges.
+  defp masks_without_give(page) do
+    gave = MapSet.new(page.gives, & &1.seat_id)
+
+    for {seat_id, mask} <- page.masks_meta || %{},
+        Mask.url(mask),
+        not MapSet.member?(gave, seat_id) do
+      %{seat_id: seat_id, seat_name: bridge_seat_name(page, seat_id), mask: mask}
+    end
+  end
+
+  defp bridge_seat_name(page, seat_id) do
+    Enum.find_value(page.attempts, fn attempt ->
+      Enum.find_value(attempt.bridges, &((&1.seat_id == seat_id and &1.seat) && &1.seat.name))
+    end)
+  end
+
+  # The book shows only a titled Track the Page kept.
+  defp track(%Track{title: title} = track) when is_binary(title) and title != "" do
+    if Track.kept?(track), do: %{path: track.path, title: title}
+  end
+
+  defp track(_other), do: nil
+
+  defp vamp(vamp) do
+    if Vamp.kept?(vamp) do
+      %{path: vamp.path, duration: vamp.duration, loop: vamp.loop not in [nil, false]}
+    end
   end
 
   defp opening_bookends(page) do

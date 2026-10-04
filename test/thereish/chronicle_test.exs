@@ -1474,11 +1474,10 @@ defmodule Thereish.ChronicleTest do
       assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       [view] = Chronicle.page_views(room.id)
-      assert view.masks[ctx.melissa.id].url == "/media/masks/mask-melissa.png"
-      assert view.masks[ctx.melissa.id].meta == %{"model" => "imagen-3", "cost_usd" => 0.04}
       refute Map.has_key?(view, :masks_meta)
       assert [give1, give2] = view.gives
       assert give1.mask.url == "/media/masks/mask-melissa.png"
+      assert give1.mask.meta == %{"model" => "imagen-3", "cost_usd" => 0.04}
       assert give2.mask.url == "/media/masks/mask-jacob.png"
     end
 
@@ -1832,17 +1831,15 @@ defmodule Thereish.ChronicleTest do
       both_view = Enum.find(views, &(&1.id == with_both.id))
       without_view = Enum.find(views, &(&1.id == without.id))
 
-      assert vamp = Chronicle.page_vamp(both_view)
-      assert vamp.path == "/media/vamps/harbour-vamp.mp3"
-      assert vamp.loop == true
-      assert vamp.duration == 30
+      assert both_view.vamp == %{path: "/media/vamps/harbour-vamp.mp3", duration: 30, loop: true}
 
-      assert track = Chronicle.page_track(both_view)
-      assert track.path == "/media/tracks/harbour-lights.mp3"
-      assert track.title == "Harbour Lights"
+      assert both_view.track == %{
+               path: "/media/tracks/harbour-lights.mp3",
+               title: "Harbour Lights"
+             }
 
-      assert Chronicle.page_vamp(without_view) == nil
-      assert Chronicle.page_track(without_view) == nil
+      assert without_view.vamp == nil
+      assert without_view.track == nil
     end
 
     test "replace_page_vamp attaches a late Vamp to the Page without touching its Track", ctx do
@@ -1859,7 +1856,7 @@ defmodule Thereish.ChronicleTest do
                  )
                )
 
-      assert Chronicle.page_vamp(page) == nil
+      assert page.vamp_meta == nil
 
       assert {:ok, updated} =
                Chronicle.replace_page_vamp(page.id, %Vamp{
@@ -1870,9 +1867,8 @@ defmodule Thereish.ChronicleTest do
 
       [view] = Chronicle.page_views(room.id)
       assert view.id == updated.id
-      assert Chronicle.page_vamp(view).path == "/media/vamps/late-harbour.mp3"
-      assert Chronicle.page_track(view).path == "/media/tracks/harbour-lights.mp3"
-      assert Chronicle.page_track(view).title == "Harbour Lights"
+      assert view.vamp.path == "/media/vamps/late-harbour.mp3"
+      assert view.track == %{path: "/media/tracks/harbour-lights.mp3", title: "Harbour Lights"}
     end
 
     test "to_markdown writes a Vamp line beside Track when the Page has one, and omits it otherwise",
