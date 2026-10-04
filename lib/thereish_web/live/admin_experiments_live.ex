@@ -6,7 +6,7 @@ defmodule ThereishWeb.AdminExperimentsLive do
 
   import ThereishWeb.AdminComponents
 
-  alias Thereish.Chronicle
+  alias Thereish.Experiments
 
   @impl true
   def mount(_params, _session, socket) do
@@ -20,10 +20,9 @@ defmodule ThereishWeb.AdminExperimentsLive do
   @impl true
   def handle_event("unblind_experiment", params, socket) do
     room_id = params["room-id"]
-    experiment_id = params["experiment-id"] || Chronicle.active_experiment_id(room_id)
+    experiment_id = params["experiment-id"]
 
-    case Chronicle.record_experiment_unblinding(room_id, %{
-           experiment_id: experiment_id,
+    case Experiments.unblind(room_id, experiment_id, %{
            unblinded_at: DateTime.utc_now(),
            notes: "Deliberate unblinding from admin"
          }) do
@@ -31,7 +30,7 @@ defmodule ThereishWeb.AdminExperimentsLive do
         {:noreply, load_experiments(socket)}
 
       {:error, :sample_incomplete} ->
-        required = Chronicle.experiment_progress(room_id, experiment_id).required
+        required = Experiments.progress(room_id, experiment_id).required
 
         {:noreply,
          put_flash(
@@ -62,34 +61,13 @@ defmodule ThereishWeb.AdminExperimentsLive do
       <.experiment_card
         :for={entry <- @rooms}
         room={entry.room}
-        unblinded={entry.unblinded}
+        unblinded={entry.unblinded?}
         progress={entry.progress}
-        readout={entry.readout}
+        readout={entry.readout || %{experiment: entry.experiment}}
       />
     </main>
     """
   end
 
-  defp load_experiments(socket) do
-    rooms =
-      Enum.flat_map(Chronicle.experiment_rooms(), fn room ->
-        Enum.map(Chronicle.room_experiment_ids(room.id), fn experiment_id ->
-          unblinded = Thereish.Experiments.unblinded?(room.id, experiment_id)
-
-          %{
-            room: room,
-            unblinded: unblinded,
-            progress: Chronicle.experiment_progress(room.id, experiment_id),
-            readout:
-              if unblinded do
-                Chronicle.experiment_readout(room.id, experiment_id)
-              else
-                %{experiment: Thereish.Experiments.definition(experiment_id)}
-              end
-          }
-        end)
-      end)
-
-    assign(socket, :rooms, rooms)
-  end
+  defp load_experiments(socket), do: assign(socket, :rooms, Experiments.overview())
 end

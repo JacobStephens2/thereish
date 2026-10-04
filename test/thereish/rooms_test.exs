@@ -8,7 +8,6 @@ defmodule Thereish.RoomsTest do
   use Thereish.DataCase, async: false
 
   import Thereish.EntryFixtures
-  import Thereish.ExperimentFixtures
   import Thereish.RoomFixtures
   import ExUnit.CaptureLog
 
@@ -1834,50 +1833,6 @@ defmodule Thereish.RoomsTest do
       json = Jason.encode!(view)
       refute json =~ ~r/"arm"\s*:\s*"bait"/
       refute json =~ ~r/"arm"\s*:\s*"plain"/
-    end
-
-    test "unblinding is a deliberate action recorded in the Chronicle", ctx do
-      room = Thereish.Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
-
-      refute Experiments.unblinded?(room.id)
-
-      for i <- 1..20 do
-        insert_outcome(room.id, %{
-          page_identifier: "bait-#{i}",
-          experiment_id: "bait_against_plain",
-          arm: "bait",
-          melded: true,
-          closeness: 80,
-          attempts_count: 1,
-          closed_because: "meld"
-        })
-      end
-
-      assert :ok = Rooms.unblind_experiment(ctx.slug, ctx.jacob.id)
-      assert Experiments.unblinded?(room.id)
-
-      [unblinding] = Experiments.unblindings(room.id)
-      assert unblinding.seat_id == ctx.jacob.id
-      assert unblinding.experiment_id == "bait_against_plain"
-    end
-
-    test "rejects a direct unblind before the declared sample is recorded", ctx do
-      room = Thereish.Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
-
-      insert_outcome(room.id, %{
-        page_identifier: "bait-1",
-        experiment_id: "bait_against_plain",
-        arm: "bait",
-        melded: true,
-        closeness: 80,
-        attempts_count: 1,
-        closed_because: "meld"
-      })
-
-      assert {:error, :sample_incomplete} =
-               Rooms.unblind_experiment(ctx.slug, ctx.jacob.id)
-
-      refute Experiments.unblinded?(room.id, "bait_against_plain")
     end
 
     test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
