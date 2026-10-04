@@ -71,6 +71,14 @@ defmodule Thereish.ChronicleTest do
     end
   end
 
+  # Writes an Entry and records its outcome, as the Room does when a Page closes.
+  defp record_outcome(room, attrs) do
+    entry = entry(attrs)
+    {:ok, page} = Chronicle.write(room.id, entry)
+    {:ok, outcome} = Chronicle.record_page_outcome(room.id, page, entry)
+    {page, outcome}
+  end
+
   defp default_experiment_arm("bait_against_plain"), do: "bait"
   defp default_experiment_arm(_experiment_id), do: "flash"
 
@@ -1122,6 +1130,82 @@ defmodule Thereish.ChronicleTest do
       assert readout.astra.preferences_summary =~ "1 great"
       assert readout.summary_narrative =~ "Flash"
       assert readout.summary_narrative =~ "Astra"
+    end
+  end
+
+  describe "recording a Page's experiment outcome" do
+    setup ctx do
+      %{room: Repo.get_by!(Room, slug: ctx.slug)}
+    end
+
+    test "stores the arm the Entry was played under", %{room: room} do
+      {_page, outcome} = record_outcome(room, arm: :astra)
+
+      assert outcome.arm == "astra"
+    end
+
+    test "files flash and astra under the Author-model experiment and any other arm under Bait against plain",
+         %{room: room} do
+      for {arm, experiment_id} <- [
+            flash: "author_model",
+            astra: "author_model",
+            bait: "bait_against_plain",
+            plain: "bait_against_plain"
+          ] do
+        {_page, outcome} = record_outcome(room, arm: arm)
+
+        assert outcome.experiment_id == experiment_id, "arm #{arm}"
+      end
+    end
+
+    test "reads melded, Closeness, closing band, Attempts and closed-because from the Entry",
+         %{room: room} do
+      {page, outcome} =
+        record_outcome(room,
+          arm: :flash,
+          closed_because: :attempts_spent,
+          melded?: false,
+          closeness: 55,
+          attempts: [
+            %{number: 1, melded?: false, closeness: 30},
+            %{number: 2, melded?: false, closeness: 45},
+            %{number: 3, melded?: false, closeness: 55}
+          ]
+        )
+
+      assert outcome.melded == false
+      assert outcome.closeness == 55
+      assert outcome.closing_band == to_string(Ladder.read(55).band)
+      assert outcome.attempts_count == 3
+      assert outcome.closed_because == "attempts_spent"
+      assert outcome.page_id == page.id
+      assert outcome.page_identifier == to_string(page.id)
+      assert outcome.taps == %{}
+    end
+
+    test "links the Page to the oldest unlinked assignment of its experiment", %{room: room} do
+      record_assignment = fn page_identifier, arm, experiment_id ->
+        {:ok, assignment} =
+          Chronicle.record_experiment_assignment(room.id, %{
+            page_identifier: page_identifier,
+            experiment_id: experiment_id,
+            arm: arm,
+            chapter: "the harbour",
+            assigned_at: DateTime.utc_now()
+          })
+
+        assignment
+      end
+
+      bait = record_assignment.("P000", "bait", "bait_against_plain")
+      oldest = record_assignment.("P001", "flash", "author_model")
+      newer = record_assignment.("P002", "astra", "author_model")
+
+      {page, _outcome} = record_outcome(room, arm: :flash)
+
+      assert Repo.reload!(oldest).page_id == page.id
+      assert Repo.reload!(newer).page_id == nil
+      assert Repo.reload!(bait).page_id == nil
     end
   end
 
