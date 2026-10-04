@@ -736,13 +736,8 @@ defmodule Thereish.Game do
         arm = meta[:arm] || meta["arm"]
         bookends = (state.page && state.page[:bookends]) || state.bookends
 
-        page_id =
-          (state.page && (state.page[:id] || state.page["id"])) ||
-            (bookends && Enum.join(bookends, "-")) || "page"
-
+        # Which Chronicle Page this is the Room's to say, once it is written.
         tap_effect_data = %{
-          page_id: page_id,
-          page_identifier: page_id,
           seat_id: seat_id,
           label: label_str,
           bookends: bookends,

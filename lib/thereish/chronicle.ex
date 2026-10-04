@@ -281,7 +281,8 @@ defmodule Thereish.Chronicle do
 
   @doc """
   Records a bookends tap (flat, fine, or great) as an append-only event.
-  Also syncs the tap into the page outcome's taps map if the outcome exists.
+  Also syncs the tap into its Page's outcome's taps map, if that outcome
+  exists. A tap that names no outcome updates none.
   """
   @spec record_bookends_tap(Ecto.UUID.t() | String.t(), map()) ::
           {:ok, BookendsTap.t()} | {:error, Ecto.Changeset.t()}
@@ -337,16 +338,8 @@ defmodule Thereish.Chronicle do
           nil
       end
 
-    outcome =
-      outcome ||
-        Repo.one(
-          from(o in ExperimentOutcome,
-            where: o.room_id == ^room_id,
-            order_by: [desc: o.inserted_at],
-            limit: 1
-          )
-        )
-
+    # A tap with no outcome of its own is recorded alone rather than attached
+    # to whichever Page happens to be latest.
     if outcome do
       updated_taps = Map.put(outcome.taps || %{}, to_string(tap.seat_id), to_string(tap.label))
       outcome |> Ecto.Changeset.change(taps: updated_taps) |> Repo.update()

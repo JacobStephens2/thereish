@@ -1111,6 +1111,33 @@ defmodule Thereish.ChronicleTest do
     end
   end
 
+  describe "a Bookends tap with no outcome of its own" do
+    test "is recorded alone and updates no other Page's outcome", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      {:ok, earlier} =
+        Chronicle.record_experiment_outcome(room.id, %{
+          page_identifier: "P001",
+          experiment_id: "author_model",
+          arm: "flash",
+          melded: true,
+          closeness: 80,
+          attempts_count: 1,
+          closed_because: "meld"
+        })
+
+      assert {:ok, tap} =
+               Chronicle.record_bookends_tap(room.id, %{
+                 page_identifier: "P002",
+                 seat_id: ctx.mara.id,
+                 label: "great"
+               })
+
+      assert tap.page_identifier == "P002"
+      assert Repo.reload!(earlier).taps == %{}
+    end
+  end
+
   describe "experiment sample minimum (ticket 12)" do
     test "progress counts completed-Page outcomes across both arms, not assignments without outcomes",
          ctx do
