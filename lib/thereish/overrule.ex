@@ -53,12 +53,16 @@ defmodule Thereish.Overrule do
         }
 
   @doc """
-  Opens a proposal from `proposer_id` at `closeness`, the floor of the meld band
-  unless the proposer says otherwise. The proposer agrees with it.
+  Opens a proposal from `proposer_id` at `closeness`, or at the floor of the meld
+  band when the proposer named none. The proposer agrees with it.
   """
-  @spec propose(String.t(), integer()) :: t()
-  def propose(proposer_id, closeness \\ Ladder.meld_threshold()) do
-    %__MODULE__{proposer_id: proposer_id, closeness: closeness, agreed: MapSet.new([proposer_id])}
+  @spec propose(String.t(), integer() | nil) :: t()
+  def propose(proposer_id, closeness \\ nil) do
+    %__MODULE__{
+      proposer_id: proposer_id,
+      closeness: closeness || Ladder.meld_threshold(),
+      agreed: MapSet.new([proposer_id])
+    }
   end
 
   @doc "Adds one Seat's agreement."
@@ -82,9 +86,9 @@ defmodule Thereish.Overrule do
   built together so they cannot disagree about either grade. An ungraded
   Verdict is overruled into a number like any other.
   """
-  @spec rule(t(), map(), attempt()) :: {map(), ruling()}
+  @spec rule(t(), Thereish.Game.verdict(), attempt()) :: {map(), ruling()}
   def rule(%__MODULE__{} = proposal, verdict, attempt) do
-    ruled =
+    ruled_verdict =
       Map.merge(verdict, %{
         graded?: true,
         closeness: proposal.closeness,
@@ -109,11 +113,11 @@ defmodule Thereish.Overrule do
       couple_quip: @quip
     }
 
-    {ruled, ruling}
+    {ruled_verdict, ruling}
   end
 
   @doc "Whether a Verdict has already been overruled. No Verdict has not."
-  @spec overruled?(map() | nil) :: boolean()
+  @spec overruled?(Thereish.Game.verdict() | nil) :: boolean()
   def overruled?(nil), do: false
   def overruled?(verdict), do: Map.get(verdict, :overruled?, false)
 
