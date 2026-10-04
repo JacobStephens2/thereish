@@ -1726,7 +1726,7 @@ defmodule Thereish.GameTest do
       %{closed: closed}
     end
 
-    test "tapping bookends at the close emits a bookends_tap effect carrying bookends, gives, author meta and arm",
+    test "tapping bookends at the close emits a bookends_tap effect carrying bookends, gives and author meta",
          ctx do
       assert Game.view(ctx.closed, nil).phase == :closed
 
@@ -1750,12 +1750,12 @@ defmodule Thereish.GameTest do
                     cost_usd: 0.001,
                     latency_ms: 250,
                     why: "Distant worlds."
-                  },
-                  arm: :flash
+                  }
                 } = tap}
              ] = effects
 
-      # Which Chronicle Page it is on is the Room's to say.
+      # Which Chronicle Page it is on, and its Arm, are the Room's to say.
+      refute Map.has_key?(tap, :arm)
       refute Map.has_key?(tap, :page_id)
       refute Map.has_key?(tap, :page_identifier)
 

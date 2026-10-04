@@ -561,17 +561,15 @@ defmodule Thereish.Game do
         {:error, :invalid_label}
       else
         meta = (state.page && state.page.meta) || %{}
-        arm = meta[:arm] || meta["arm"]
         bookends = (state.page && state.page.bookends) || attempt_bookends(state)
 
-        # Which Chronicle Page this is the Room's to say, once it is written.
+        # Which Chronicle Page this is, and its Arm, are the Room's to say.
         tap_effect_data = %{
           seat_id: seat_id,
           label: label_str,
           bookends: bookends,
           gives: (state.page && state.page.gives) || state.gives,
-          author_meta: meta,
-          arm: arm
+          author_meta: meta
         }
 
         current_taps = state.bookends_taps || %{}
