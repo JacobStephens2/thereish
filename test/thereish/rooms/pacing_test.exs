@@ -1,0 +1,361 @@
+defmodule Thereish.Rooms.PacingTest do
+  @moduledoc """
+  The Room's rules about time, driven call by call with an explicit clock and
+  asserted on the effects Pacing asks for, its view and `may_advance/2`.
+
+  No test reads a struct field and none of them sleeps: a timer firing is a
+  call to `elapsed/4` carrying the token the arming effect handed out.
+  """
+  use ExUnit.Case, async: true
+
+  alias Thereish.Game
+  alias Thereish.Rooms.Pacing
+
+  @durations %{
+    beat: 2_500,
+    hold: 5_000,
+    assayer: [slow: 4_000, unavailable: 10_000],
+    author: [still_writing: 5_000, deadline: 8_000]
+  }
+
+  @page %{id: "test-page", bookends: ["lantern", "harbour"]}
+
+  @verdict {:verdict_received,
+            %{
+              closeness: 0,
+              reasoning: "because",
+              furthest: ["cairn", "beacon"],
+              meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
+            }}
+
+  defp pacing(durations \\ @durations), do: Pacing.new(durations)
+
+  defp at(ms), do: %{ms: ms, at: DateTime.add(~U[2026-10-03 20:00:00Z], ms, :millisecond)}
+
+  defp seat(name), do: %{id: "seat-" <> name, name: name}
+
+  defp bridging do
+    Game.init(seat_limit: 2, seats: [seat("Melissa"), seat("Jacob")], page: @page)
+  end
+
+  defp play(game, event) do
+    {:ok, game, _effects} = Game.apply(game, event)
+    game
+  end
+
+  defp assaying(game \\ bridging(), bridges \\ {"cairn", "beacon"}) do
+    {melissa, jacob} = bridges
+
+    game
+    |> play({:bridge_committed, %{seat_id: "seat-Melissa", bridge: melissa}})
+    |> play({:bridge_committed, %{seat_id: "seat-Jacob", bridge: jacob}})
+  end
+
+  defp graded(closeness) do
+    {:verdict_received, verdict} = @verdict
+    {:verdict_received, %{verdict | closeness: closeness}}
+  end
+
+  # The one timer an effect list arms under `name`: its token and its length.
+  defp timer(effects, name) do
+    [{token, ms}] = for {:timer, ^name, token, ms} <- effects, do: {token, ms}
+    {token, ms}
+  end
+
+  defp timers(effects), do: for({:timer, _name, _token, _ms} = timer <- effects, do: timer)
+
+  defp view(pacing, game \\ bridging(), now \\ at(0)), do: Pacing.view(pacing, game, now)
+
+  describe "the Beat" do
+    test "a Verdict that arrives during the Beat is held and released when it is over" do
+      {pacing, effects} = Pacing.beat_owed(pacing(), at(0))
+      {beat, 2_500} = timer(effects, :beat)
+      {pacing, _effects} = Pacing.assayer_asked(pacing, at(0))
+
+      assert {pacing, []} = Pacing.assayed(pacing, @verdict)
+
+      assert {_pacing, [{:apply, [@verdict]}]} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
+    end
+
+    test "a Verdict that arrives after the Beat is applied at once" do
+      {pacing, effects} = Pacing.beat_owed(pacing(), at(0))
+      {beat, _ms} = timer(effects, :beat)
+      {pacing, _effects} = Pacing.assayer_asked(pacing, at(0))
+
+      assert {pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
+      assert {_pacing, [{:apply, [@verdict]}]} = Pacing.assayed(pacing, @verdict)
+    end
+
+    test "an Assayer that answers is never called slow, however long the Beat runs" do
+      {pacing, _effects} = Pacing.beat_owed(pacing(%{@durations | beat: 60_000}), at(0))
+      {pacing, effects} = Pacing.assayer_asked(pacing, at(0))
+      {rung, _ms} = timer(effects, :assayer)
+
+      {pacing, []} = Pacing.assayed(pacing, @verdict)
+
+      assert {pacing, []} = Pacing.elapsed(pacing, :assayer, rung, at(4_000))
+      assert view(pacing, assaying()).assayer_step == nil
+    end
+  end
+
+  describe "the Assayer's ladder" do
+    test "steps from grading to slow at its first rung and gives up at its last" do
+      game = assaying()
+      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {grading, 4_000} = timer(effects, :assayer)
+
+      assert view(pacing, game).assayer_step == :grading
+
+      {pacing, effects} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
+      {slow, 6_000} = timer(effects, :assayer)
+      assert :broadcast in effects
+      assert view(pacing, game).assayer_step == :slow
+
+      assert {pacing, [{:apply, [{:verdict_unavailable, %{}}]}]} =
+               Pacing.elapsed(pacing, :assayer, slow, at(10_000))
+
+      assert view(pacing, game).assayer_step == nil
+    end
+
+    test "a Verdict that arrives after the ladder gave up is dropped" do
+      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {grading, _ms} = timer(effects, :assayer)
+      {pacing, effects} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
+      {slow, _ms} = timer(effects, :assayer)
+      {pacing, _effects} = Pacing.elapsed(pacing, :assayer, slow, at(10_000))
+
+      assert {_pacing, []} = Pacing.assayed(pacing, @verdict)
+    end
+
+    test "a Verdict that arrives with no Assayer asked is dropped, Beat or not" do
+      assert {_pacing, []} = Pacing.assayed(pacing(), @verdict)
+
+      {pacing, effects} = Pacing.beat_owed(pacing(), at(0))
+      {beat, _ms} = timer(effects, :beat)
+      {pacing, []} = Pacing.assayed(pacing, @verdict)
+
+      assert {_pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
+    end
+
+    test "a rung that fires after its Assayer answered changes nothing" do
+      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {grading, _ms} = timer(effects, :assayer)
+      {pacing, _effects} = Pacing.assayed(pacing, @verdict)
+
+      assert {^pacing, []} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
+    end
+
+    test "a rung from an earlier ladder changes nothing once a fresh one is armed" do
+      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {first, _ms} = timer(effects, :assayer)
+      {pacing, _effects} = Pacing.assayed(pacing, @verdict)
+      {pacing, _effects} = Pacing.assayer_asked(pacing, at(20_000))
+
+      assert {^pacing, []} = Pacing.elapsed(pacing, :assayer, first, at(24_000))
+      assert view(pacing, assaying()).assayer_step == :grading
+    end
+  end
+
+  describe "the Author's ladder" do
+    test "steps from writing to still writing and then fails the Page with timed out" do
+      {pacing, effects} = Pacing.author_asked(pacing(), make_ref(), at(0))
+      {writing, 5_000} = timer(effects, :author)
+
+      assert view(pacing).author_step == :writing
+
+      {pacing, effects} = Pacing.elapsed(pacing, :author, writing, at(5_000))
+      {still, 3_000} = timer(effects, :author)
+      assert :broadcast in effects
+      assert view(pacing).author_step == :still_writing
+
+      assert {pacing, [{:apply, [{:author_failed, %{reason: "timed out"}}]}]} =
+               Pacing.elapsed(pacing, :author, still, at(8_000))
+
+      assert view(pacing).author_step == nil
+    end
+
+    test "the current request's answer stands the ladder down" do
+      ref = make_ref()
+      {pacing, effects} = Pacing.author_asked(pacing(), ref, at(0))
+      {writing, _ms} = timer(effects, :author)
+
+      assert {:current, pacing} = Pacing.author_answered(pacing, ref)
+      assert view(pacing).author_step == nil
+      assert {^pacing, []} = Pacing.elapsed(pacing, :author, writing, at(5_000))
+      assert :stale = Pacing.author_answered(pacing, ref)
+    end
+
+    test "a superseded or unknown request's answer is stale" do
+      old = make_ref()
+      new = make_ref()
+      {pacing, _effects} = Pacing.author_asked(pacing(), old, at(0))
+      {pacing, _effects} = Pacing.author_asked(pacing, new, at(1_000))
+
+      assert :stale = Pacing.author_answered(pacing, old)
+      assert :stale = Pacing.author_answered(pacing, make_ref())
+      assert :stale = Pacing.author_answered(pacing(), old)
+      assert {:current, _pacing} = Pacing.author_answered(pacing, new)
+    end
+
+    test "a retried Author stands the old ladder down and arms a fresh one" do
+      {pacing, effects} = Pacing.author_asked(pacing(), make_ref(), at(0))
+      {old, _ms} = timer(effects, :author)
+      {pacing, _effects} = Pacing.elapsed(pacing, :author, old, at(5_000))
+
+      {pacing, effects} = Pacing.author_asked(pacing, make_ref(), at(9_000))
+      {_fresh, 5_000} = timer(effects, :author)
+
+      assert view(pacing).author_step == :writing
+      assert {^pacing, []} = Pacing.elapsed(pacing, :author, old, at(9_500))
+    end
+
+    test "new Gives stand the Author down" do
+      {pacing, effects} = Pacing.author_asked(pacing(), make_ref(), at(0))
+      {writing, _ms} = timer(effects, :author)
+
+      pacing = Pacing.gives_reset(pacing)
+
+      assert view(pacing).author_step == nil
+      assert {^pacing, []} = Pacing.elapsed(pacing, :author, writing, at(5_000))
+    end
+  end
+
+  describe "the reveal hold" do
+    # The Room as it stands the moment a missed Attempt is revealed at 0 ms.
+    defp revealed(pacing \\ pacing(), closeness \\ 0) do
+      game = assaying()
+      revealed = play(game, graded(closeness))
+      {pacing, effects} = Pacing.moved(pacing, game, revealed, at(0))
+
+      {pacing, revealed, effects}
+    end
+
+    test "refuses advancement one millisecond before its deadline and allows it at it" do
+      {pacing, game, _effects} = revealed()
+
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(0))
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(4_999))
+      refute view(pacing, game, at(4_999)).can_advance?
+
+      assert :ok = Pacing.may_advance(pacing, at(5_000))
+      assert view(pacing, game, at(5_000)).can_advance?
+    end
+
+    test "is armed on a reveal, with a timer that tells every screen when it ends" do
+      {pacing, _game, effects} = revealed()
+      {hold, 5_000} = timer(effects, :hold)
+
+      assert {pacing, [:broadcast]} = Pacing.elapsed(pacing, :hold, hold, at(5_000))
+      assert :ok = Pacing.may_advance(pacing, at(5_000))
+    end
+
+    test "is armed on a closing reveal" do
+      {pacing, game, effects} = revealed(pacing(), 100)
+
+      assert Game.phase(game) == :closed
+      assert {_token, 5_000} = timer(effects, :hold)
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(4_999))
+      refute view(pacing, game, at(4_999)).can_advance?
+      assert view(pacing, game, at(5_000)).can_advance?
+    end
+
+    test "is armed when the Assayer gave up and the reveal has no number" do
+      game = assaying()
+      ungraded = play(game, {:verdict_unavailable, %{}})
+      {pacing, effects} = Pacing.moved(pacing(), game, ungraded, at(0))
+
+      assert {_token, 5_000} = timer(effects, :hold)
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(4_999))
+    end
+
+    test "a timer that fires before the clock reaches the deadline does not lift it" do
+      {pacing, _game, effects} = revealed()
+      {hold, _ms} = timer(effects, :hold)
+
+      {pacing, [:broadcast]} = Pacing.elapsed(pacing, :hold, hold, at(4_000))
+
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(4_999))
+    end
+
+    test "a later snapshot neither restarts nor skips it" do
+      {pacing, game, _effects} = revealed()
+
+      refute view(pacing, game, at(2_000)).can_advance?
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(2_000))
+      refute view(pacing, game, at(4_999)).can_advance?
+      assert view(pacing, game, at(5_000)).can_advance?
+    end
+
+    test "is cleared when the Page moves on to the next Attempt" do
+      {pacing, game, effects} = revealed()
+      {hold, _ms} = timer(effects, :hold)
+
+      next = play(game, {:attempt_advanced, %{seat_id: "seat-Melissa"}})
+      {pacing, []} = Pacing.moved(pacing, game, next, at(5_000))
+
+      assert :ok = Pacing.may_advance(pacing, at(5_000))
+      assert {^pacing, []} = Pacing.elapsed(pacing, :hold, hold, at(5_000))
+      refute view(pacing, next, at(5_000)).can_advance?
+    end
+
+    test "is cleared when a closed Page turns" do
+      {pacing, game, _effects} = revealed(pacing(), 100)
+
+      turned = play(game, {:next_page, %{seat_id: "seat-Melissa"}})
+      {pacing, []} = Pacing.moved(pacing, game, turned, at(5_000))
+
+      assert :ok = Pacing.may_advance(pacing, at(5_000))
+    end
+
+    test "the next reveal is held from its own moment" do
+      {pacing, game, _effects} = revealed()
+      next = play(game, {:attempt_advanced, %{seat_id: "seat-Melissa"}})
+      {pacing, []} = Pacing.moved(pacing, game, next, at(5_000))
+
+      again = assaying(next, {"stone", "signal"})
+      {pacing, []} = Pacing.moved(pacing, next, again, at(6_000))
+      revealed = play(again, graded(0))
+      {pacing, _effects} = Pacing.moved(pacing, again, revealed, at(7_000))
+
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(11_999))
+      assert :ok = Pacing.may_advance(pacing, at(12_000))
+    end
+
+    test "is not armed by moves that are not a reveal" do
+      game = bridging()
+      committed = play(game, {:bridge_committed, %{seat_id: "seat-Melissa", bridge: "cairn"}})
+
+      assert {pacing, []} = Pacing.moved(pacing(), game, committed, at(0))
+      assert {pacing, []} = Pacing.moved(pacing, committed, assaying(), at(10))
+      assert :ok = Pacing.may_advance(pacing, at(10))
+    end
+
+    test "the Beat before the reveal is not the hold" do
+      {pacing, _effects} = Pacing.beat_owed(pacing(), at(0))
+
+      assert :ok = Pacing.may_advance(pacing, at(0))
+      refute view(pacing, assaying(), at(0)).can_advance?
+    end
+
+    test "a hold of zero arms no timer and holds nothing" do
+      {pacing, game, effects} = revealed(pacing(%{@durations | hold: 0}))
+
+      assert timers(effects) == []
+      assert :ok = Pacing.may_advance(pacing, at(0))
+      assert view(pacing, game, at(0)).can_advance?
+    end
+  end
+
+  describe "the view" do
+    test "a fresh Pacing is waiting on nobody, and nothing advances outside a reveal" do
+      assert view(pacing()) == %{assayer_step: nil, author_step: nil, can_advance?: false}
+    end
+  end
+
+  test "a timer name Pacing never armed changes nothing" do
+    pacing = pacing()
+
+    assert {^pacing, []} = Pacing.elapsed(pacing, :beat, 0, at(0))
+    assert {^pacing, []} = Pacing.elapsed(pacing, :hold, 0, at(0))
+  end
+end
