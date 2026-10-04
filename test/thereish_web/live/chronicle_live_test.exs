@@ -847,9 +847,8 @@ defmodule ThereishWeb.ChronicleLiveTest do
       |> element(~s([data-role=opinion-controls] [data-role=tap-fair]))
       |> render_click()
 
-      rendered = render(view)
-      assert rendered =~ "Melissa: too harsh"
-      assert rendered =~ "Melissa: fair"
+      assert has_element?(view, "[data-role=fairness-tap-entry]", "Melissa: fair")
+      refute has_element?(view, "[data-role=fairness-tap-entry]", "Melissa: too harsh")
 
       taps = Chronicle.fairness_taps(Repo.get_by!(Room, slug: slug).id)
       assert Enum.map(taps, & &1.label) == ["too_harsh", "fair"]

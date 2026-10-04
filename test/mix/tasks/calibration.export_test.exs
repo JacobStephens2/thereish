@@ -55,6 +55,32 @@ defmodule Mix.Tasks.Calibration.ExportTest do
     assert hd(parsed)["grade"] == 80
   end
 
+  test "exports each Seat's current opinion only, without the admin's reviews", ctx do
+    room = Repo.get_by!(Room, slug: ctx.slug)
+
+    for attrs <- [
+          %{seat_id: ctx.melissa.id, label: "too_kind"},
+          %{source: "admin", admin_id: Thereish.AdminFixtures.identity().id, label: "too_harsh"}
+        ] do
+      {:ok, _} =
+        Chronicle.record_fairness_tap(
+          room.id,
+          Map.merge(
+            %{attempt_number: 1, bookends: ["lantern", "harbour"], bridges: ["cairn", "cairo"]},
+            attrs
+          )
+        )
+    end
+
+    output =
+      ExUnit.CaptureIO.capture_io(fn ->
+        Mix.Tasks.Calibration.Export.run(["--room", ctx.slug])
+      end)
+
+    assert [%{"label" => "too_kind", "seat_id" => seat_id}] = Jason.decode!(output)
+    assert seat_id == ctx.melissa.id
+  end
+
   test "exports calibration dataset to a file in jsonl format", %{slug: slug} do
     tmp_path =
       Path.join(System.tmp_dir!(), "calibration-test-#{System.unique_integer([:positive])}.jsonl")

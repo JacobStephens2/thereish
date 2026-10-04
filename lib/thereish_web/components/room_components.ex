@@ -13,6 +13,7 @@ defmodule ThereishWeb.RoomComponents do
   """
   use ThereishWeb, :html
 
+  alias Thereish.Chronicle.Opinion
   alias Thereish.Mask
 
   attr :room, :map, required: true, doc: "a snapshot from Thereish.Rooms.snapshot/2"
@@ -615,58 +616,27 @@ defmodule ThereishWeb.RoomComponents do
       </span>
       <div class="flex items-center gap-2">
         <button
+          :for={label <- Opinion.labels()}
           type="button"
           phx-click="fairness_tap"
-          phx-value-label="too_harsh"
-          data-role="tap-too-harsh"
-          data-tap="too_harsh"
+          phx-value-label={label}
+          data-role={"tap-#{String.replace(label, "_", "-")}"}
+          data-tap={label}
           class={[
             "btn btn-sm text-xs font-medium transition-all",
-            if(your_fairness_tap(@room, @seat) == "too_harsh",
-              do: "btn-warning text-warning-content font-bold shadow-sm",
+            if(your_fairness_tap(@room, @seat) == label,
+              do: chosen_fairness_class(label),
               else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
             )
           ]}
         >
-          Too harsh
-        </button>
-        <button
-          type="button"
-          phx-click="fairness_tap"
-          phx-value-label="fair"
-          data-role="tap-fair"
-          data-tap="fair"
-          class={[
-            "btn btn-sm text-xs font-medium transition-all",
-            if(your_fairness_tap(@room, @seat) == "fair",
-              do: "btn-primary font-bold shadow-sm",
-              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-            )
-          ]}
-        >
-          Fair
-        </button>
-        <button
-          type="button"
-          phx-click="fairness_tap"
-          phx-value-label="too_kind"
-          data-role="tap-too-kind"
-          data-tap="too_kind"
-          class={[
-            "btn btn-sm text-xs font-medium transition-all",
-            if(your_fairness_tap(@room, @seat) == "too_kind",
-              do: "btn-info text-info-content font-bold shadow-sm",
-              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-            )
-          ]}
-        >
-          Too kind
+          {String.capitalize(Opinion.human(label))}
         </button>
       </div>
       <%= if tap = your_fairness_tap(@room, @seat) do %>
         <div data-role="your-tap" class="flex items-center gap-1.5 text-xs text-primary font-medium">
           <span data-role="seat-tap" class="font-semibold capitalize">
-            {Thereish.Chronicle.FairnessTap.label_human(tap)}
+            {Opinion.human(tap)}
           </span>
           recorded
         </div>
@@ -1008,6 +978,12 @@ defmodule ThereishWeb.RoomComponents do
       badge_class: "bg-base-300 text-base-content/70 font-bold"
     }
   end
+
+  defp chosen_fairness_class("too_harsh"),
+    do: "btn-warning text-warning-content font-bold shadow-sm"
+
+  defp chosen_fairness_class("fair"), do: "btn-primary font-bold shadow-sm"
+  defp chosen_fairness_class("too_kind"), do: "btn-info text-info-content font-bold shadow-sm"
 
   defp your_fairness_tap(room, seat) do
     room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])

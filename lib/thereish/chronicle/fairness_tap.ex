@@ -1,21 +1,19 @@
 defmodule Thereish.Chronicle.FairnessTap do
   @moduledoc """
-  A single fairness tap from a Seat evaluating an assayed grade.
+  One Opinion row: a Seat's or the admin's reading of an assayed grade, as
+  recorded. The table keeps its old name, fairness taps.
 
-  Accumulates into a labelled set used to calibrate the live Assayer,
-  set the meld threshold, and calibrate band boundaries against how
-  the couple actually judges closeness (ADR-0005, ticket 11).
-
-  Labels are per Seat: two players can disagree about the same grade.
-  The authenticated admin may review any Attempt with source "admin".
+  The rules for building, reading and counting these rows live in
+  `Thereish.Chronicle.Opinion`; this schema only casts and validates one.
   """
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Thereish.Chronicle.Opinion
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @valid_labels ["fair", "too_kind", "too_harsh"]
   @valid_sources ["participant", "admin"]
 
   schema "chronicle_fairness_taps" do
@@ -37,18 +35,6 @@ defmodule Thereish.Chronicle.FairnessTap do
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end
-
-  @doc "Valid label values: fair, too_kind, too_harsh."
-  def valid_labels, do: @valid_labels
-
-  @doc "Human-readable representation of a fairness label."
-  def label_human(:fair), do: "fair"
-  def label_human("fair"), do: "fair"
-  def label_human(:too_kind), do: "too kind"
-  def label_human("too_kind"), do: "too kind"
-  def label_human(:too_harsh), do: "too harsh"
-  def label_human("too_harsh"), do: "too harsh"
-  def label_human(other), do: to_string(other)
 
   @doc false
   def changeset(tap, attrs) do
@@ -84,7 +70,7 @@ defmodule Thereish.Chronicle.FairnessTap do
       :bridges,
       :label
     ])
-    |> validate_inclusion(:label, @valid_labels)
+    |> validate_inclusion(:label, Opinion.labels())
     |> validate_inclusion(:source, @valid_sources)
     |> require_reviewer()
     |> populate_grade()
