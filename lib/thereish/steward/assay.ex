@@ -75,6 +75,26 @@ defmodule Thereish.Steward.Assay do
   def version, do: @version
 
   @doc """
+  The request's Bridges in roster order, as they are shown to the model.
+
+  A request may carry the Bridges with the Seats' names (`seat_bridges`, or the
+  older `player_bridges`) as well as bare (`bridges`). The named ones are used
+  when there are at least two of them, so that the model can read who wrote
+  what. This is the forward ordering; its reverse is the other one the Steward
+  asks for.
+  """
+  @spec ordering(map()) :: Thereish.Steward.ordering()
+  def ordering(%{seat_bridges: seat_bridges})
+      when is_list(seat_bridges) and length(seat_bridges) >= 2,
+      do: seat_bridges
+
+  def ordering(%{player_bridges: player_bridges})
+      when is_list(player_bridges) and length(player_bridges) >= 2,
+      do: player_bridges
+
+  def ordering(%{bridges: bridges}) when is_list(bridges), do: bridges
+
+  @doc """
   Everything one grading request is made of: the Bookends and every Bridge, in the
   order they are to be shown to the model, along with Gives, earlier Attempts, and
   prior Quips (in user content, so the system prompt and its version stay put).

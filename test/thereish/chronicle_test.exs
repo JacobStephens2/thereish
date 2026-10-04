@@ -169,7 +169,7 @@ defmodule Thereish.ChronicleTest do
       assert verdict.reasoning =~ "cairn"
 
       assert verdict.model == "fake"
-      assert verdict.prompt_version == "fake-1"
+      assert verdict.prompt_version == Thereish.Steward.Assay.version()
       assert verdict.latency_ms >= 0
       assert Decimal.eq?(verdict.cost_usd, 0)
 

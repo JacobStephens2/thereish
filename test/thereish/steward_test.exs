@@ -8,6 +8,11 @@ defmodule Thereish.StewardTest do
   answer was sent back rather than shown, that a hedged pair of requests was one
   question asked twice, and that a failure is a failure rather than a number.
 
+  The two orderings, their deadline and how they are reconciled are the
+  Steward's, in front of the seam, so the tests of them ask
+  `Thereish.Steward.assay/2`. The live adapter grades the one ordering it is
+  handed, and its own tests ask it for one.
+
   Nothing here asserts on what the Assayer is asked. The words of the question
   are going to move as the couple calibrate it, and a test that froze them would
   turn every calibration into a test failure. The one thing any of this compares
@@ -37,6 +42,10 @@ defmodule Thereish.StewardTest do
   defp ordering(body), do: first_bridge(body, @pair.bridges)
 
   describe "grading a pair" do
+    setup do
+      assayer(adapter: Live)
+    end
+
     test "both orderings are graded, and both are kept beside the grade" do
       recorded(fn conn, body ->
         case ordering(body) do
@@ -45,7 +54,7 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      {:ok, verdict} = Live.assay(@pair)
+      {:ok, verdict} = Steward.assay(@pair)
 
       # The grade is the mean of the two orderings, and neither of them is lost:
       # a wide gap is the most useful thing to know about a grade that looks
@@ -62,13 +71,63 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(quip: "Both of you went looking for the shore.")))
       end)
 
-      {:ok, verdict} = Live.assay(@pair)
+      {:ok, verdict} = Steward.assay(@pair)
 
       assert verdict.quip == "Both of you went looking for the shore."
       assert verdict.meta.model == "gemini-3.8-flash"
       assert verdict.meta.prompt_version == Thereish.Steward.Assay.version()
-      # Two orderings, hedged two ways, and every token any of them spent.
       assert verdict.meta.cost_usd > 0
+    end
+
+    test "the words are the forward ordering's, and the cost is both orderings'" do
+      assayer(requests: 1, retries: 0)
+
+      recorded(fn conn, body ->
+        case ordering(body) do
+          "beacon" ->
+            Req.Test.json(conn, response(verdict(reasoning: "Forward.", quip: "Forward joke.")))
+
+          "cairn" ->
+            Req.Test.json(conn, response(verdict(reasoning: "Reverse.", quip: "Reverse joke.")))
+        end
+      end)
+
+      {:ok, one} = Live.assay(@pair, @pair.bridges)
+      {:ok, verdict} = Steward.assay(@pair)
+
+      assert verdict.reasoning == "Forward."
+      assert verdict.quip == "Forward joke."
+      assert verdict.meta.reasoning_reverse == "Reverse."
+      # Every recording spends the same tokens, so two orderings cost two of one.
+      assert verdict.meta.cost_usd == 2 * one.cost_usd
+    end
+
+    test "a missing ordering is no Verdict, not half of one" do
+      assayer(requests: 1, retries: 0)
+
+      recorded(fn conn, body ->
+        case ordering(body) do
+          "beacon" -> Req.Test.json(conn, response(verdict(closeness: 80)))
+          "cairn" -> Plug.Conn.send_resp(conn, 503, "upstream is having a moment")
+        end
+      end)
+
+      assert {:error, {:http, 503, _body}} = Steward.assay(@pair)
+      role = Steward.role(:assayer)
+      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
+    end
+
+    test "when both orderings fail, the forward ordering's reason is the one reported" do
+      assayer(requests: 1, retries: 0)
+
+      recorded(fn conn, body ->
+        case ordering(body) do
+          "beacon" -> Plug.Conn.send_resp(conn, 503, "forward")
+          "cairn" -> Plug.Conn.send_resp(conn, 500, "reverse")
+        end
+      end)
+
+      assert {:error, {:http, 503, _body}} = Steward.assay(@pair)
     end
   end
 
@@ -89,9 +148,9 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict} = Live.assay(@pair)
+      assert {:ok, verdict} = Live.assay(@pair, @pair.bridges)
       assert verdict.closeness == 55
-      assert Agent.get(counts, &Map.values/1) == [2, 2]
+      assert Agent.get(counts, &Map.values/1) == [2]
     end
 
     test "an answer that is not JSON at all is asked for again" do
@@ -104,7 +163,7 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict} = Live.assay(@pair)
+      assert {:ok, verdict} = Live.assay(@pair, @pair.bridges)
       assert verdict.closeness == 55
     end
 
@@ -113,7 +172,7 @@ defmodule Thereish.StewardTest do
 
       recorded(fn conn, _body -> Req.Test.json(conn, response(verdict(closeness: 4000))) end)
 
-      assert {:error, {:rejected, why}} = Live.assay(@pair)
+      assert {:error, {:rejected, why}} = Live.assay(@pair, @pair.bridges)
       assert why =~ "schema"
     end
   end
@@ -147,7 +206,7 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      {:ok, verdict} = Live.assay(@pair)
+      {:ok, verdict} = Live.assay(@pair, @pair.bridges)
 
       assert verdict.closeness == 80
 
@@ -157,8 +216,7 @@ defmodule Thereish.StewardTest do
       assert_receive {:asked, "beacon", first}
       assert_receive {:asked, "beacon", second}
       assert first == second
-      assert_receive {:asked, "cairn", _}
-      assert_receive {:asked, "cairn", _}
+      refute_received {:asked, "cairn", _}
     end
   end
 
@@ -172,7 +230,7 @@ defmodule Thereish.StewardTest do
         Plug.Conn.send_resp(conn, 503, "upstream is having a moment")
       end)
 
-      assert {:error, {:http, 503, _body}} = Live.assay(@pair)
+      assert {:error, {:http, 503, _body}} = Live.assay(@pair, @pair.bridges)
     end
 
     # A recorded response is served in this process rather than over a socket,
@@ -180,14 +238,14 @@ defmodule Thereish.StewardTest do
     # request's socket timeout. That is the one that has to hold: the escalation
     # ladder gives up at ten seconds, and it can only do that if the Steward has.
     test "a provider that never answers gives up before the game does" do
-      assayer(requests: 1, retries: 0, deadline_ms: 50)
+      assayer(adapter: Live, requests: 1, retries: 0, deadline_ms: 50)
 
       recorded(fn conn, _body ->
         Process.sleep(5_000)
         Req.Test.json(conn, response(verdict()))
       end)
 
-      assert {:error, :timeout} = Live.assay(@pair)
+      assert {:error, :timeout} = Steward.assay(@pair)
     end
   end
 
@@ -206,6 +264,7 @@ defmodule Thereish.StewardTest do
     defp table_ordering(body), do: first_bridge(body, @table.bridges)
 
     test "four Bridges are one grading, asked in roster order and its reverse" do
+      assayer(adapter: Live)
       counts = counts()
 
       recorded(fn conn, body ->
@@ -229,7 +288,7 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      {:ok, verdict} = Live.assay(@table)
+      {:ok, verdict} = Steward.assay(@table)
 
       # Two orderings and not twenty-four: roster order against its reverse is
       # the same correction at four that it is at two.
@@ -240,6 +299,8 @@ defmodule Thereish.StewardTest do
     end
 
     test "the two furthest words come from the forward ordering" do
+      assayer(adapter: Live)
+
       recorded(fn conn, body ->
         furthest =
           case table_ordering(body) do
@@ -250,7 +311,7 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(furthest: furthest)))
       end)
 
-      {:ok, verdict} = Live.assay(@table)
+      {:ok, verdict} = Steward.assay(@table)
 
       # The two orderings can name different pairs, and the next Attempt's
       # Bookends have to be one pair rather than an average of two.
@@ -262,7 +323,7 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(furthest: ["  BEACON ", "Seagull"])))
       end)
 
-      {:ok, verdict} = Live.assay(@table)
+      {:ok, verdict} = Live.assay(@table, @table.bridges)
 
       # A model that shouted a Bridge back has still named that Bridge, and the
       # words about to be shown as the next Bookends are the words somebody typed.
@@ -281,9 +342,9 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict} = Live.assay(@table)
+      assert {:ok, verdict} = Live.assay(@table, @table.bridges)
       assert verdict.furthest == ["beacon", "seagull"]
-      assert Agent.get(counts, &Map.values/1) == [2, 2]
+      assert Agent.get(counts, &Map.values/1) == [2]
     end
 
     test "a furthest pair that is not two words is asked for again" do
@@ -297,7 +358,7 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict} = Live.assay(@table)
+      assert {:ok, verdict} = Live.assay(@table, @table.bridges)
       assert verdict.furthest == ["beacon", "seagull"]
     end
 
@@ -308,7 +369,7 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(furthest: ["beacon", "gull"])))
       end)
 
-      assert {:error, {:rejected, why}} = Live.assay(@table)
+      assert {:error, {:rejected, why}} = Live.assay(@table, @table.bridges)
       assert why =~ "furthest"
     end
 
@@ -654,11 +715,11 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(closeness: 77)))
       end)
 
-      assert {:ok, _} = Live.assay(@pair)
-      assert {:ok, again} = Live.assay(@pair)
+      assert {:ok, _} = Live.assay(@pair, @pair.bridges)
+      assert {:ok, again} = Live.assay(@pair, @pair.bridges)
 
-      refute Map.has_key?(again.meta, :precedent_hit)
-      assert Agent.get(counts, &Map.values/1) == [2, 2]
+      refute Map.has_key?(again, :precedent_hit)
+      assert Agent.get(counts, &Map.values/1) == [2]
       role = Steward.role(:assayer)
       assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
     end
@@ -719,12 +780,14 @@ defmodule Thereish.StewardTest do
       fake(assay_capture: self())
 
       assert {:ok, first} = Steward.assay(@pair)
-      assert_receive {:assay, _request}
+      assert_received {:assay, _request, ["beacon", "cairn"]}
+      assert_received {:assay, _request, ["cairn", "beacon"]}
+      refute_received {:assay, _request, _ordering}
       refute Map.get(first.meta, :precedent_hit, false)
 
       reversed = %{@pair | bridges: Enum.reverse(@pair.bridges)}
       assert {:ok, second} = Steward.assay(reversed)
-      refute_received {:assay, _request}
+      refute_received {:assay, _request, _ordering}
 
       assert second.meta.precedent_hit == true
       assert second.closeness == first.closeness
@@ -783,6 +846,56 @@ defmodule Thereish.StewardTest do
     end
   end
 
+  describe "both orderings are reconciled in front of the seam, with the Fake Assayer" do
+    test "each ordering is asked once, and the Verdict carries both" do
+      fake(assay_capture: self())
+
+      table = %{bookends: ["lantern", "harbour"], bridges: ["cairn", "cairo", "cable", "beacon"]}
+
+      assert {:ok, verdict} = Steward.assay(table)
+
+      assert_received {:assay, _request, ["cairn", "cairo", "cable", "beacon"]}
+      assert_received {:assay, _request, ["beacon", "cable", "cairo", "cairn"]}
+      refute_received {:assay, _request, _ordering}
+
+      # The Fake's arithmetic grades both orderings 27, and its tie-break names
+      # a different furthest pair in each; the Verdict names the forward one's.
+      assert verdict.closeness == 27
+      assert verdict.meta.forward == 27
+      assert verdict.meta.reverse == 27
+      assert verdict.furthest == ["cairn", "beacon"]
+      assert verdict.reasoning =~ ~s("cairn" and "beacon")
+      assert verdict.meta.reasoning_reverse =~ ~s("beacon" and "cable")
+    end
+
+    test "the Verdict carries the Assayer role's prompt version, the Precedent's key" do
+      assert {:ok, verdict} = Steward.assay(@pair)
+
+      assert verdict.meta.model == "fake"
+      assert verdict.meta.prompt_version == Thereish.Steward.Assay.version()
+      assert verdict.meta.cost_usd == 0.0
+    end
+
+    test "a pair of orderings past the Assayer's deadline is no Verdict" do
+      assayer(deadline_ms: 20)
+      fake(delay_ms: 500)
+
+      assert {:error, :timeout} = Steward.assay(@pair)
+    end
+
+    test "an Assayer that raises is no Verdict, not an exit in the caller" do
+      fake(mode: :raise)
+
+      assert {:error, {:exit, {%RuntimeError{}, _stacktrace}}} = Steward.assay(@pair)
+    end
+
+    test "an Assayer that cannot answer is no Verdict" do
+      fake(mode: :unavailable)
+
+      assert {:error, :no_verdict} = Steward.assay(@pair)
+    end
+  end
+
   describe "the Assayer's prior Quips are composed in front of the seam" do
     defp quipped_page(quips) do
       %{
@@ -802,7 +915,8 @@ defmodule Thereish.StewardTest do
       chronicle = [quipped_page(["first", "second", "third"]), quipped_page(["fourth", "fifth"])]
 
       assert {:ok, _verdict} = Steward.assay(request, chronicle: chronicle)
-      assert_receive {:assay, sent}
+      assert_received {:assay, sent, ["beacon", "cairn"]}
+      assert_received {:assay, ^sent, ["cairn", "beacon"]}
       assert sent.prior_quips == ["second", "third", "fourth", "fifth", "sixth"]
     end
 
@@ -810,7 +924,8 @@ defmodule Thereish.StewardTest do
       fake(assay_capture: self())
 
       assert {:ok, _verdict} = Steward.assay(@pair)
-      assert_receive {:assay, sent}
+      assert_received {:assay, sent, ["beacon", "cairn"]}
+      assert_received {:assay, ^sent, ["cairn", "beacon"]}
       assert sent.prior_quips == []
     end
   end
@@ -889,21 +1004,16 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(furthest: ["light", "evening"])))
       end)
 
-      assert {:ok, verdict} = Live.assay(@n_request)
-      assert verdict.meta.prompt_version == "assay-4"
+      assert {:ok, verdict} = Live.assay(@n_request, @n_request.player_bridges)
       assert verdict.closeness in 0..100
       assert verdict.furthest == ["light", "evening"]
 
-      assert_receive {:user_prompt, prompt1}
-      assert_receive {:user_prompt, prompt2}
-
-      for prompt <- [prompt1, prompt2] do
-        assert prompt =~ "LANTERN"
-        assert prompt =~ "HARBOUR"
-        assert prompt =~ "WHARF"
-        assert prompt =~ "DUSK"
-        assert prompt =~ ~r/Bookends: LANTERN, HARBOUR, WHARF and DUSK/
-      end
+      assert_received {:user_prompt, prompt}
+      assert prompt =~ "LANTERN"
+      assert prompt =~ "HARBOUR"
+      assert prompt =~ "WHARF"
+      assert prompt =~ "DUSK"
+      assert prompt =~ ~r/Bookends: LANTERN, HARBOUR, WHARF and DUSK/
     end
 
     test "request carries Bookends, Bridges with players' names in roster order, earlier Attempts, and Gives with names" do
@@ -940,38 +1050,25 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(furthest: ["beacon", "cairn"])))
       end)
 
-      assert {:ok, verdict} = Live.assay(request)
-      assert verdict.meta.prompt_version == "assay-4"
+      assert {:ok, _graded} = Live.assay(request, request.player_bridges)
 
-      assert_receive {:user_prompt, prompt1}
-      assert_receive {:user_prompt, prompt2}
+      assert_received {:user_prompt, prompt}
+      refute_received {:user_prompt, _}
 
-      for prompt <- [prompt1, prompt2] do
-        # Bookends
-        assert prompt =~ "LANTERN and HARBOUR"
-        # Gives with names
-        assert prompt =~ "Jacob gave: foggy coast"
-        assert prompt =~ "Melissa gave: night watch"
-        # Earlier attempts
-        assert prompt =~ "Attempt 1: Bookends: PIER and QUAY"
-        assert prompt =~ "Jacob bridged with: jetty"
-        assert prompt =~ "Melissa bridged with: dock"
-      end
+      # Bookends
+      assert prompt =~ "LANTERN and HARBOUR"
+      # Gives with names
+      assert prompt =~ "Jacob gave: foggy coast"
+      assert prompt =~ "Melissa gave: night watch"
+      # Earlier attempts
+      assert prompt =~ "Attempt 1: Bookends: PIER and QUAY"
+      assert prompt =~ "Jacob bridged with: jetty"
+      assert prompt =~ "Melissa bridged with: dock"
 
-      # Both orderings tested
-      prompts = [prompt1, prompt2]
-
-      assert Enum.any?(prompts, fn p ->
-               {j, _} = :binary.match(p, "Jacob bridged with: beacon")
-               {m, _} = :binary.match(p, "Melissa bridged with: cairn")
-               j < m
-             end)
-
-      assert Enum.any?(prompts, fn p ->
-               {j, _} = :binary.match(p, "Jacob bridged with: beacon")
-               {m, _} = :binary.match(p, "Melissa bridged with: cairn")
-               m < j
-             end)
+      # The Bridges with their names, in the ordering it was handed.
+      {j, _} = :binary.match(prompt, "Jacob bridged with: beacon")
+      {m, _} = :binary.match(prompt, "Melissa bridged with: cairn")
+      assert j < m
     end
 
     test "rejects a furthest pair that is not two of the bridges (e.g. naming a Give or hallucinated word)" do
@@ -996,9 +1093,9 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict} = Live.assay(request)
+      assert {:ok, verdict} = Live.assay(request, request.player_bridges)
       assert verdict.furthest == ["beacon", "cairn"]
-      assert Agent.get(counts, &Map.values/1) == [2, 2]
+      assert Agent.get(counts, &Map.values/1) == [2]
     end
 
     test "a model that repeatedly names an invalid furthest pair fails with {:rejected, why}" do
@@ -1013,7 +1110,7 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(furthest: ["foggy coast", "beacon"])))
       end)
 
-      assert {:error, {:rejected, why}} = Live.assay(request)
+      assert {:error, {:rejected, why}} = Live.assay(request, request.bridges)
       assert why =~ "furthest"
     end
 

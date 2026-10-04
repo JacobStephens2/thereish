@@ -8,6 +8,9 @@ defmodule Thereish.Steward.FakeTest do
   get. Every assertion the rest of the suite makes about a grade rests on the
   arithmetic here, so the arithmetic is written down once, in a test, rather than
   rediscovered by whoever breaks it.
+
+  Like any adapter, it grades the one ordering it is handed. How two orderings
+  become a Verdict is the Steward's, and is tested through `Thereish.Steward`.
   """
   use ExUnit.Case, async: true
 
@@ -16,9 +19,9 @@ defmodule Thereish.Steward.FakeTest do
   @bookends ["lantern", "harbour"]
 
   defp graded(bridges) do
-    {:ok, verdict} = Fake.assay(%{bookends: @bookends, bridges: bridges})
+    {:ok, answer} = Fake.assay(%{bookends: @bookends, bridges: bridges}, bridges)
 
-    verdict
+    answer
   end
 
   describe "two words, which must be the grade they have always been" do
@@ -39,13 +42,16 @@ defmodule Thereish.Steward.FakeTest do
                  "That is all this Assayer knows how to look at."
 
       assert verdict.quip == "\"cairn\" and \"cairo\" walk into a bar. The bar has no opinion."
-
-      assert verdict.meta.reasoning_reverse ==
-               "\"cairo\" and \"cairn\" share the same 4 letters the other way round."
     end
 
     test "names the only two words as the two furthest apart" do
       assert graded(["cairn", "cairo"]).furthest == ["cairn", "cairo"]
+    end
+
+    test "grades the ordering it is handed, not the request's Bridges" do
+      request = %{bookends: @bookends, bridges: ["cairn", "beacon"]}
+
+      assert {:ok, %{closeness: 80}} = Fake.assay(request, ["cairn", "cairo"])
     end
   end
 
@@ -67,7 +73,7 @@ defmodule Thereish.Steward.FakeTest do
         %{player: "Jacob", bridge: "viking boats"}
       ]
 
-      {:ok, verdict} = Fake.assay(%{bookends: @bookends, bridges: player_bridges})
+      {:ok, verdict} = Fake.assay(%{bookends: @bookends, bridges: player_bridges}, player_bridges)
       assert verdict.closeness == 62
       assert verdict.furthest == ["viking beaches", "viking boats"]
     end
@@ -95,11 +101,16 @@ defmodule Thereish.Steward.FakeTest do
       assert graded(["beacon", "cable", "cairn", "cairo"]).furthest == ["beacon", "cable"]
     end
 
-    test "says the same thing in both orderings, because it is arithmetic" do
-      verdict = graded(@table)
+    test "grades the same in either ordering, because it is arithmetic" do
+      assert graded(Enum.reverse(@table)).closeness == graded(@table).closeness
+    end
 
-      assert verdict.meta.forward == verdict.closeness
-      assert verdict.meta.reverse == verdict.closeness
+    test "names the model and what it cost, and no two-ordering provenance of its own" do
+      answer = graded(@table)
+
+      assert answer.model == "fake"
+      assert answer.cost_usd == 0.0
+      refute Map.has_key?(answer, :meta)
     end
 
     test "writes its reasoning and its quip about the two furthest words" do
@@ -115,10 +126,10 @@ defmodule Thereish.Steward.FakeTest do
 
     test "grades N Bridges against N Bookends the same as against two" do
       {:ok, verdict} =
-        Fake.assay(%{
-          bookends: ["lantern", "harbour", "summit", "ember"],
-          bridges: @table
-        })
+        Fake.assay(
+          %{bookends: ["lantern", "harbour", "summit", "ember"], bridges: @table},
+          @table
+        )
 
       assert verdict.closeness == 27
       assert verdict.furthest == ["cairn", "beacon"]
@@ -130,8 +141,8 @@ defmodule Thereish.Steward.FakeTest do
     @table ["cairn", "cairo", "cable", "beacon"]
 
     test "grades N Bookends the same way it grades two: on the Bridges" do
-      {:ok, with_two} = Fake.assay(%{bookends: @bookends, bridges: @table})
-      {:ok, with_four} = Fake.assay(%{bookends: @four_bookends, bridges: @table})
+      {:ok, with_two} = Fake.assay(%{bookends: @bookends, bridges: @table}, @table)
+      {:ok, with_four} = Fake.assay(%{bookends: @four_bookends, bridges: @table}, @table)
 
       assert with_four.closeness == with_two.closeness
       assert with_four.furthest == with_two.furthest
@@ -140,7 +151,7 @@ defmodule Thereish.Steward.FakeTest do
     end
 
     test "still names exactly two written Bridges as furthest apart" do
-      {:ok, verdict} = Fake.assay(%{bookends: @four_bookends, bridges: @table})
+      {:ok, verdict} = Fake.assay(%{bookends: @four_bookends, bridges: @table}, @table)
 
       assert [left, right] = verdict.furthest
       assert left in @table
@@ -166,11 +177,11 @@ defmodule Thereish.Steward.FakeTest do
     test "an Assayer that cannot answer says so at four words as at two" do
       fake(mode: :unavailable)
 
-      assert Fake.assay(%{bookends: @bookends, bridges: ["cairn", "cairo"]}) ==
-               {:error, :no_verdict}
+      pair = ["cairn", "cairo"]
+      table = ["cairn", "cairo", "cable", "beacon"]
 
-      assert Fake.assay(%{bookends: @bookends, bridges: ["cairn", "cairo", "cable", "beacon"]}) ==
-               {:error, :no_verdict}
+      assert Fake.assay(%{bookends: @bookends, bridges: pair}, pair) == {:error, :no_verdict}
+      assert Fake.assay(%{bookends: @bookends, bridges: table}, table) == {:error, :no_verdict}
     end
 
     test "Fake.speak answers a fixture MP3 with format and meta" do
