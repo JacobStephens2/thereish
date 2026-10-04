@@ -57,6 +57,16 @@ defmodule Thereish.Experiments do
   def definition(_), do: @author_model_experiment
 
   @doc """
+  The experiment an arm belongs to: `flash` and `astra` are the Author-model
+  experiment, and any other arm is Bait against plain.
+  """
+  @spec experiment_id_for_arm(atom() | String.t()) :: String.t()
+  def experiment_id_for_arm(arm) when arm in [:flash, :astra, "flash", "astra"],
+    do: @author_model_experiment.id
+
+  def experiment_id_for_arm(_arm), do: @first_experiment.id
+
+  @doc """
   Assigns arm for the room, strictly alternating arms (:flash then :astra).
   """
   @spec assign_arm([atom() | String.t()]) :: :flash | :astra
