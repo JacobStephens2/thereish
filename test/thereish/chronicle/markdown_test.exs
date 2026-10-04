@@ -108,6 +108,34 @@ defmodule Thereish.Chronicle.MarkdownTest do
     end
   end
 
+  describe "a round trip keeps what a Seat wrote" do
+    test "when its name holds a parenthesis or a colon" do
+      gives = [
+        %{seat_name: "Bo (x)", text: "by the sea", mask: nil},
+        %{seat_name: "Bo: Me", text: "in the fog", mask: nil}
+      ]
+
+      taps = [
+        %{reviewer_name: "Bo: Me", label: "fair"},
+        %{reviewer_name: "Ann", label: "too_harsh"}
+      ]
+
+      [parsed] = round_trip([page(gives: gives, attempts: [attempt(1, fairness_taps: taps)])])
+
+      assert parsed.gives == [
+               %{seat_name: "Bo (x)", text: "by the sea"},
+               %{seat_name: "Bo: Me", text: "in the fog"}
+             ]
+
+      assert [attempt] = parsed.attempts
+
+      assert attempt.fairness_taps == [
+               %{seat_name: "Bo: Me", label: "fair"},
+               %{seat_name: "Ann", label: "too_harsh"}
+             ]
+    end
+  end
+
   describe "a round trip of a Page written before ADR-0010" do
     test "reads its pair Verdicts as no extra Bridges" do
       verdicts = [
