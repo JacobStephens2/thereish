@@ -280,6 +280,15 @@ defmodule Thereish.Game do
   end
 
   @doc """
+  Sets the Room's Full table rule. A Page already written keeps the rule it
+  was written under; the next Page is written under this one.
+  """
+  @spec set_full_table(t(), boolean()) :: t()
+  def set_full_table(%__MODULE__{} = state, enabled) when is_boolean(enabled) do
+    %{state | full_table: enabled}
+  end
+
+  @doc """
   How many attempts one Page gets before it closes unmelded.
 
   Named configuration rather than a constant, because five is a guess about how
