@@ -677,9 +677,11 @@ defmodule Thereish.Game do
   defp plays_page?(%{page_seat_ids: nil}, _seat_id), do: true
   defp plays_page?(state, seat_id), do: seat_id in state.page_seat_ids
 
-  # The one place a Page's Seats are fixed: the Seats that wrote a Give when the
+  # The one place play fixes a Page's Seats: the Seats that wrote a Give when the
   # Author is asked for the Page, whether Start Page asks or the last Give of a
-  # full Room does. Gives reset and the next Page clear them.
+  # full Room does. Gives reset and the next Page clear them. A Game built with
+  # a Page in hand (`init/1`) is the only other start, and it gives that Page
+  # the Seats it was built with.
   defp ask_author(state) do
     page_seat_ids = for seat <- state.seats, Map.has_key?(state.gives, seat.id), do: seat.id
     state = %{state | page_seat_ids: page_seat_ids}
@@ -1300,12 +1302,13 @@ defmodule Thereish.Game do
   end
 
   defp may_start_page(state, seat_id) do
-    cond do
-      not seated?(state, seat_id) -> {:error, :no_such_seat}
-      phase(state) != :giving -> {:error, :not_giving}
-      not Map.has_key?(state.gives, seat_id) -> {:error, :give_required}
-      map_size(state.gives) < 2 -> {:error, :not_enough_gives}
-      true -> :ok
+    with :ok <- taken_by_a_seat(state, seat_id) do
+      cond do
+        phase(state) != :giving -> {:error, :not_giving}
+        not Map.has_key?(state.gives, seat_id) -> {:error, :give_required}
+        map_size(state.gives) < 2 -> {:error, :not_enough_gives}
+        true -> :ok
+      end
     end
   end
 
