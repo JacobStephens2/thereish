@@ -44,6 +44,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Foley.Vamp
   alias Thereish.Mask
   alias Thereish.Repo
+  alias Thereish.Rooms.Room
   alias Thereish.Steward.TrackCache
 
   @doc """
@@ -271,7 +272,7 @@ defmodule Thereish.Chronicle do
   """
   @spec admin_rooms() :: [map()]
   def admin_rooms do
-    from(r in Thereish.Rooms.Room,
+    from(r in Room,
       left_join: p in Page,
       on: p.room_id == r.id,
       group_by: [r.id, r.slug, r.inserted_at],
@@ -372,8 +373,8 @@ defmodule Thereish.Chronicle do
   The Chronicle does the reads; `Markdown` owns the format.
   """
   @spec to_markdown(Ecto.UUID.t() | String.t()) :: String.t()
-  def to_markdown(room_id_or_slug) do
-    room = resolve_room(room_id_or_slug)
+  def to_markdown(room_id_or_code) do
+    room = resolve_room(room_id_or_code)
     Markdown.render(room.slug, page_views(room.id, :asc), Spend.room(room.id))
   end
 
@@ -583,11 +584,11 @@ defmodule Thereish.Chronicle do
 
   defp uuid?(_), do: false
 
-  defp resolve_room(room_id_or_slug) do
-    if uuid?(room_id_or_slug) do
-      Repo.get!(Thereish.Rooms.Room, room_id_or_slug)
+  defp resolve_room(room_id_or_code) do
+    if uuid?(room_id_or_code) do
+      Repo.get!(Room, room_id_or_code)
     else
-      Repo.get_by!(Thereish.Rooms.Room, slug: room_id_or_slug)
+      room_by_code!(room_id_or_code)
     end
   end
 
@@ -595,9 +596,11 @@ defmodule Thereish.Chronicle do
     if uuid?(room_id_or_slug) do
       room_id_or_slug
     else
-      Repo.get_by!(Thereish.Rooms.Room, slug: room_id_or_slug).id
+      room_by_code!(room_id_or_slug).id
     end
   end
+
+  defp room_by_code!(code), do: Repo.get_by!(Room, slug: code)
 
   defp timing_pages do
     from(p in Page,

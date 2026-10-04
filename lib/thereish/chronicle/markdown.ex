@@ -23,11 +23,14 @@ defmodule Thereish.Chronicle.Markdown do
   alias Thereish.Experiments
   alias Thereish.Mask
 
-  @typedoc "One correction read back, from a Page or from one of its Attempts."
+  @typedoc """
+  One correction read back, from a Page or from one of its Attempts. Its
+  `original` is empty when none was written.
+  """
   @type parsed_correction :: %{
           author: String.t(),
           target: String.t(),
-          original: String.t() | nil,
+          original: String.t(),
           corrected: String.t(),
           note: String.t() | nil
         }
@@ -111,7 +114,7 @@ defmodule Thereish.Chronicle.Markdown do
   @page_corrections_heading "#### Corrections"
   @overrule_heading "##### Overrule"
   @attempt_corrections_heading "##### Corrections"
-  @bridge_indent "  - "
+  @item_indent "  - "
   @pair_indent "  "
 
   @correction_pattern ~r/^\s*-\s*By\s+([^:]+):\s*corrected\s+(\w+)(?:\s+from\s+"([^"]+)")?\s+to\s+"([^"]+)"(?:\s+\(Note:\s*"([^"]+)"\))?/
@@ -238,7 +241,7 @@ defmodule Thereish.Chronicle.Markdown do
   end
 
   defp render_attempt(attempt) do
-    bridge_lines = Enum.map(attempt.bridges, &"#{@bridge_indent}#{&1.seat_name}: #{&1.bridge}")
+    bridge_lines = Enum.map(attempt.bridges, &"#{@item_indent}#{&1.seat_name}: #{&1.bridge}")
 
     verdict_lines =
       case attempt.verdicts do
@@ -246,9 +249,7 @@ defmodule Thereish.Chronicle.Markdown do
           [line(:closeness, "Ungraded")]
 
         [single] ->
-          band_str = if single.band, do: " (#{single.band})", else: ""
-
-          [line(:closeness, "#{single.closeness} / 100#{band_str}")] ++
+          [line(:closeness, "#{single.closeness} / 100#{band(single)}")] ++
             if(single.reasoning, do: [line(:reasoning, single.reasoning)], else: []) ++
             if(single.quip, do: [line(:quip, single.quip)], else: []) ++
             if(attempt.carried not in [nil, []],
@@ -295,6 +296,9 @@ defmodule Thereish.Chronicle.Markdown do
     |> Enum.join("\n")
   end
 
+  defp band(%{band: nil}), do: ""
+  defp band(%{band: band}), do: " (#{band})"
+
   defp model_line(verdict) do
     cost_str = if verdict.cost_usd, do: "$#{verdict.cost_usd}", else: "$0.0"
 
@@ -307,10 +311,9 @@ defmodule Thereish.Chronicle.Markdown do
   # A pair Verdict's Reasoning and Quip sit indented under it, unbulleted, so
   # that parse never reads them as the Attempt's own or as a Bridge.
   defp pair_lines(verdict) do
-    band_str = if verdict.band, do: " (#{verdict.band})", else: ""
     pair = "- #{label(:pair)} [#{Enum.join(verdict.bridges, " / ")}]"
 
-    ["#{pair}: #{verdict.closeness} / 100#{band_str}"] ++
+    ["#{pair}: #{verdict.closeness} / 100#{band(verdict)}"] ++
       if(verdict.reasoning,
         do: ["#{@pair_indent}#{label(:reasoning)}: #{verdict.reasoning}"],
         else: []
@@ -340,7 +343,7 @@ defmodule Thereish.Chronicle.Markdown do
     orig = if c.original_value, do: " from \"#{c.original_value}\"", else: ""
     note = if c.note, do: " (Note: \"#{c.note}\")", else: ""
 
-    "#{@bridge_indent}By #{c.author_name}: corrected #{c.target}#{orig} to \"#{c.corrected_value}\"#{note}"
+    "#{@item_indent}By #{c.author_name}: corrected #{c.target}#{orig} to \"#{c.corrected_value}\"#{note}"
   end
 
   defp label(key), do: @labels |> Map.fetch!(key) |> elem(0)
@@ -398,10 +401,7 @@ defmodule Thereish.Chronicle.Markdown do
         parse_attempt(String.to_integer(number), body)
       end
 
-    corrections =
-      for {@page_corrections_heading <> _, body} <- page_sections,
-          correction <- parse_corrections(body),
-          do: correction
+    corrections = parse_corrections(page_sections, @page_corrections_heading)
 
     %{
       bookends: bookends,
@@ -456,10 +456,7 @@ defmodule Thereish.Chronicle.Markdown do
         _ -> nil
       end)
 
-    corrections =
-      for {@attempt_corrections_heading <> _, body} <- attempt_sections,
-          correction <- parse_corrections(body),
-          do: correction
+    corrections = parse_corrections(attempt_sections, @attempt_corrections_heading)
 
     %{
       number: number,
@@ -483,9 +480,9 @@ defmodule Thereish.Chronicle.Markdown do
     lines
     |> Enum.drop_while(&(String.trim_trailing(&1) != prefix(:bridges)))
     |> Enum.drop(1)
-    |> Enum.take_while(&String.starts_with?(&1, @bridge_indent))
+    |> Enum.take_while(&String.starts_with?(&1, @item_indent))
     |> Enum.flat_map(fn line ->
-      case line |> String.replace_prefix(@bridge_indent, "") |> String.split(": ") do
+      case line |> String.replace_prefix(@item_indent, "") |> String.split(": ") do
         [_no_separator] ->
           []
 
@@ -513,44 +510,53 @@ defmodule Thereish.Chronicle.Markdown do
     }
   end
 
-  defp parse_corrections(lines) do
-    Enum.flat_map(lines, fn line ->
-      case Regex.run(@correction_pattern, line) do
-        [_, author, target, orig, corrected | note] ->
-          [
-            %{
-              author: String.trim(author),
-              target: target,
-              original: orig,
-              corrected: corrected,
-              note: List.first(note)
-            }
-          ]
+  # Every correction written under the heading, in the sections given.
+  defp parse_corrections(sections, heading) do
+    for {^heading, lines} <- sections, line <- lines, correction <- parse_correction(line) do
+      correction
+    end
+  end
 
-        _ ->
-          []
-      end
-    end)
+  defp parse_correction(line) do
+    case Regex.run(@correction_pattern, line) do
+      [_, author, target, orig, corrected | note] ->
+        [
+          %{
+            author: String.trim(author),
+            target: target,
+            original: orig,
+            corrected: corrected,
+            note: List.first(note)
+          }
+        ]
+
+      _ ->
+        []
+    end
   end
 
   defp parse_fairness(nil), do: []
 
+  # Each tap splits at its last ":", since an Opinion's label never holds one
+  # while a Seat name may.
   defp parse_fairness(value) do
     value
     |> String.split(",")
     |> Enum.flat_map(fn part ->
-      case String.split(part, ":", parts: 2) do
-        [name, label] ->
+      case String.split(part, ":") do
+        [_no_separator] ->
+          []
+
+        parts ->
+          {name, [label]} = Enum.split(parts, -1)
+
           label_norm =
             case Opinion.label(label) do
               {:ok, parsed} -> parsed
               {:error, :invalid_label} -> String.trim(label)
             end
 
-          [%{seat_name: String.trim(name), label: label_norm}]
-
-        _ ->
-          []
+          [%{seat_name: name |> Enum.join(":") |> String.trim(), label: label_norm}]
       end
     end)
   end
@@ -582,9 +588,10 @@ defmodule Thereish.Chronicle.Markdown do
   end
 
   # A label written with or without a qualifier, as in `- Give (Melissa): text`
-  # or `- Give: text`: answers the qualifier, or nil, and the value.
+  # or `- Give: text`: answers the qualifier, or nil, and the value. The
+  # qualifier runs to the first "): ", so a Seat name may hold a parenthesis.
   defp qualified(line, key) do
-    case Regex.run(~r/^- #{Regex.escape(label(key))} \(([^)]+)\):\s*(.*)/, line) do
+    case Regex.run(~r/^- #{Regex.escape(label(key))} \((.+?)\):\s*(.*)/, line) do
       [_, qualifier, value] ->
         {qualifier, value}
 
