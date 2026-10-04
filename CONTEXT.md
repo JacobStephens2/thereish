@@ -183,3 +183,11 @@ _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)
 **Entry**:
 One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the experiment arm. Built when the Page closes and written once (ADR-0003).
 _Avoid_: record, row, payload, closed-page map
+
+**Experiment**:
+A declared A/B comparison with a fixed sample, whose Arms stay blinded until it is deliberately unblinded.
+_Avoid_: test, trial, variant
+
+**Arm**:
+The side of an Experiment a Page is played under, assigned when the Author is asked for the Page.
+_Avoid_: variant, bucket, group

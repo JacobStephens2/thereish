@@ -10,10 +10,12 @@ defmodule Thereish.ChronicleTest do
   use Thereish.DataCase, async: false
 
   import Thereish.EntryFixtures
+  import Thereish.ExperimentFixtures
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
   alias Thereish.Chronicle.Entry
+  alias Thereish.Experiments
   alias Thereish.Game
   alias Thereish.Ladder
   alias Thereish.Rooms
@@ -54,37 +56,8 @@ defmodule Thereish.ChronicleTest do
     |> Repo.insert()
   end
 
-  defp record_completed_outcomes(room_id, experiment_id, count, opts \\ []) when count > 0 do
-    arm = Keyword.get(opts, :arm, default_experiment_arm(experiment_id))
-
-    for i <- 1..count do
-      {:ok, _} =
-        Chronicle.record_experiment_outcome(room_id, %{
-          page_identifier: "#{experiment_id}-#{i}-#{System.unique_integer([:positive])}",
-          experiment_id: experiment_id,
-          arm: arm,
-          melded: true,
-          closeness: 80,
-          attempts_count: 1,
-          closed_because: "meld"
-        })
-    end
-  end
-
-  # Writes an Entry and records its outcome, as the Room does when a Page closes.
-  defp record_outcome(room, attrs) do
-    entry = entry(attrs)
-    {:ok, page} = Chronicle.write(room.id, entry)
-    {:ok, outcome} = Chronicle.record_page_outcome(room.id, page, entry)
-    {page, outcome}
-  end
-
-  defp default_experiment_arm("bait_against_plain"), do: "bait"
-  defp default_experiment_arm(_experiment_id), do: "flash"
-
-  defp unblind_attrs(experiment_id, seat_id) do
+  defp unblind_attrs(seat_id) do
     %{
-      experiment_id: experiment_id,
       seat_id: seat_id,
       unblinded_at: DateTime.utc_now(),
       notes: "Couch night review"
@@ -963,372 +936,9 @@ defmodule Thereish.ChronicleTest do
       assert {:ok, [legacy_page]} = Chronicle.from_markdown(legacy_markdown)
       assert legacy_page.track == nil
     end
-
-    test "assignment and outcome are Chronicle events, blinded until unblinded", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      # 1. Assignment event at Page start
-      {:ok, assignment} =
-        Chronicle.record_experiment_assignment(room.id, %{
-          page_identifier: "P001",
-          experiment_id: "bait_against_plain",
-          arm: "bait",
-          chapter: "the harbour",
-          assigned_at: DateTime.utc_now()
-        })
-
-      assert assignment.arm == "bait"
-      assert assignment.chapter == "the harbour"
-
-      # Initially blinded
-      refute Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
-
-      # 2. Outcome event at Page close
-      {:ok, outcome} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_identifier: "P001",
-          experiment_id: "bait_against_plain",
-          arm: "bait",
-          melded: true,
-          closeness: 75,
-          attempts_count: 2,
-          closed_because: "meld",
-          trap_converged: true
-        })
-
-      assert outcome.trap_converged == true
-      assert outcome.arm == "bait"
-
-      # Verify events appear in query
-      assignments = Chronicle.experiment_assignments(room.id)
-      assert Enum.any?(assignments, &(&1.page_identifier == "P001" and &1.arm == "bait"))
-
-      assert [recorded_outcome] = Chronicle.experiment_outcomes(room.id)
-      assert recorded_outcome.melded == true
-
-      # Qualitative readout works
-      readout = Chronicle.experiment_readout(room.id)
-      assert readout.bait.pages_count == 1
-      assert readout.bait.melded_count == 1
-      assert readout.bait.trap_sprung_count == 1
-      assert readout.summary_narrative =~ "Bait-scored"
-
-      # 3. Deliberate unblinding waits for the declared sample
-      record_completed_outcomes(room.id, "bait_against_plain", 19)
-
-      {:ok, unblinding} =
-        Chronicle.record_experiment_unblinding(room.id, %{
-          experiment_id: "bait_against_plain",
-          seat_id: ctx.jacob.id,
-          unblinded_at: DateTime.utc_now(),
-          notes: "Couch night review"
-        })
-
-      assert unblinding.experiment_id == "bait_against_plain"
-      assert Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
-    end
-
-    test "author_model experiment records alternating arm assignments and bookends taps", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      # 1. Steward.assign_arm alternates arms within the room
-      assert Thereish.Steward.assign_arm(room.id, "P001") == :flash
-      assert Thereish.Steward.assign_arm(room.id, "P002") == :astra
-      assert Thereish.Steward.assign_arm(room.id, "P003") == :flash
-
-      assignments = Chronicle.experiment_assignments(room.id, "author_model")
-      assert length(assignments) == 3
-      assert Enum.map(assignments, & &1.arm) == ["flash", "astra", "flash"]
-
-      # 2. Record page outcomes with closing_band
-      {:ok, outcome1} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_identifier: "P001",
-          experiment_id: "author_model",
-          arm: "flash",
-          melded: true,
-          closeness: 80,
-          closing_band: "meld",
-          attempts_count: 1,
-          closed_because: "meld"
-        })
-
-      assert outcome1.closing_band == "meld"
-      assert outcome1.taps == %{}
-
-      # 3. Record bookends taps (seats tap flat/fine/great once, replaceable)
-      tap_attrs1 = %{
-        page_identifier: "P001",
-        seat_id: ctx.mara.id,
-        label: "great",
-        bookends: ["lantern", "harbour"],
-        gives: %{ctx.mara.id => "light", ctx.jacob.id => "water"},
-        author_meta: %{"arm" => "flash"},
-        arm: "flash"
-      }
-
-      assert {:ok, tap1} = Chronicle.record_bookends_tap(room.id, tap_attrs1)
-      assert tap1.label == "great"
-      assert tap1.arm == "flash"
-
-      # Mara updates tap to fine (replaceable)
-      tap_attrs1_replaced = Map.put(tap_attrs1, :label, "fine")
-      assert {:ok, _} = Chronicle.record_bookends_tap(room.id, tap_attrs1_replaced)
-
-      # Jacob taps great
-      tap_attrs2 = %{
-        page_identifier: "P001",
-        seat_id: ctx.jacob.id,
-        label: "great",
-        bookends: ["lantern", "harbour"],
-        gives: %{ctx.mara.id => "light", ctx.jacob.id => "water"},
-        author_meta: %{"arm" => "flash"},
-        arm: "flash"
-      }
-
-      assert {:ok, _} = Chronicle.record_bookends_tap(room.id, tap_attrs2)
-
-      # Outcome taps reflect the updated taps per seat
-      [updated_outcome1] = Chronicle.experiment_outcomes(room.id, "author_model")
-      assert updated_outcome1.taps[to_string(ctx.mara.id)] == "fine"
-      assert updated_outcome1.taps[to_string(ctx.jacob.id)] == "great"
-
-      # Also test bookends_taps retrieval
-      taps = Chronicle.bookends_taps(room.id)
-      assert length(taps) == 3
-
-      # 4. Record outcome for P002 (astra)
-      {:ok, _outcome2} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_identifier: "P002",
-          experiment_id: "author_model",
-          arm: "astra",
-          melded: true,
-          closeness: 90,
-          closing_band: "deep_meld",
-          attempts_count: 1,
-          closed_because: "meld"
-        })
-
-      {:ok, _} =
-        Chronicle.record_bookends_tap(room.id, %{
-          page_identifier: "P002",
-          seat_id: ctx.mara.id,
-          label: "great",
-          bookends: ["beacon", "tide"],
-          gives: %{},
-          author_meta: %{"arm" => "astra"},
-          arm: "astra"
-        })
-
-      # 5. Qualitative readout for author_model
-      readout = Chronicle.experiment_readout(room.id, "author_model")
-      assert readout.experiment.id == "author_model"
-      assert readout.flash.pages_count == 1
-      assert readout.astra.pages_count == 1
-      assert readout.flash.preferences_summary =~ "1 great, 1 fine"
-      assert readout.astra.preferences_summary =~ "1 great"
-      assert readout.summary_narrative =~ "Flash"
-      assert readout.summary_narrative =~ "Astra"
-    end
   end
 
-  describe "recording a Page's experiment outcome" do
-    setup ctx do
-      %{room: Repo.get_by!(Room, slug: ctx.slug)}
-    end
-
-    test "stores the arm the Entry was played under", %{room: room} do
-      {_page, outcome} = record_outcome(room, arm: :astra)
-
-      assert outcome.arm == "astra"
-    end
-
-    test "files flash and astra under the Author-model experiment and any other arm under Bait against plain",
-         %{room: room} do
-      for {arm, experiment_id} <- [
-            flash: "author_model",
-            astra: "author_model",
-            bait: "bait_against_plain",
-            plain: "bait_against_plain"
-          ] do
-        {_page, outcome} = record_outcome(room, arm: arm)
-
-        assert outcome.experiment_id == experiment_id, "arm #{arm}"
-      end
-    end
-
-    test "refuses an Entry with no arm rather than recording an empty one", %{room: room} do
-      entry = entry(arm: nil)
-      {:ok, page} = Chronicle.write(room.id, entry)
-
-      assert_raise FunctionClauseError, fn ->
-        Chronicle.record_page_outcome(room.id, page, entry)
-      end
-
-      assert Repo.aggregate(Thereish.Chronicle.ExperimentOutcome, :count) == 0
-    end
-
-    test "reads melded, Closeness, closing band, Attempts and closed-because from the Entry",
-         %{room: room} do
-      {page, outcome} =
-        record_outcome(room,
-          arm: :flash,
-          closed_because: :attempts_spent,
-          melded?: false,
-          closeness: 55,
-          attempts: [
-            %{number: 1, melded?: false, closeness: 30},
-            %{number: 2, melded?: false, closeness: 45},
-            %{number: 3, melded?: false, closeness: 55}
-          ]
-        )
-
-      assert outcome.melded == false
-      assert outcome.closeness == 55
-      assert outcome.closing_band == to_string(Ladder.read(55).band)
-      assert outcome.attempts_count == 3
-      assert outcome.closed_because == "attempts_spent"
-      assert outcome.page_id == page.id
-      assert outcome.page_identifier == to_string(page.id)
-      assert outcome.taps == %{}
-    end
-
-    test "links the Page to the oldest unlinked assignment of its experiment", %{room: room} do
-      record_assignment = fn page_identifier, arm, experiment_id ->
-        {:ok, assignment} =
-          Chronicle.record_experiment_assignment(room.id, %{
-            page_identifier: page_identifier,
-            experiment_id: experiment_id,
-            arm: arm,
-            chapter: "the harbour",
-            assigned_at: DateTime.utc_now()
-          })
-
-        assignment
-      end
-
-      bait = record_assignment.("P000", "bait", "bait_against_plain")
-      oldest = record_assignment.("P001", "flash", "author_model")
-      newer = record_assignment.("P002", "astra", "author_model")
-
-      {page, _outcome} = record_outcome(room, arm: :flash)
-
-      assert Repo.reload!(oldest).page_id == page.id
-      assert Repo.reload!(newer).page_id == nil
-      assert Repo.reload!(bait).page_id == nil
-    end
-  end
-
-  describe "a Bookends tap with no outcome of its own" do
-    test "is recorded alone and updates no other Page's outcome", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      {:ok, earlier} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_identifier: "P001",
-          experiment_id: "author_model",
-          arm: "flash",
-          melded: true,
-          closeness: 80,
-          attempts_count: 1,
-          closed_because: "meld"
-        })
-
-      assert {:ok, tap} =
-               Chronicle.record_bookends_tap(room.id, %{
-                 page_identifier: "P002",
-                 seat_id: ctx.mara.id,
-                 label: "great"
-               })
-
-      assert tap.page_identifier == "P002"
-      assert Repo.reload!(earlier).taps == %{}
-    end
-  end
-
-  describe "experiment sample minimum (ticket 12)" do
-    test "progress counts completed-Page outcomes across both arms, not assignments without outcomes",
-         ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      {:ok, _} =
-        Chronicle.record_experiment_assignment(room.id, %{
-          page_identifier: "in-play",
-          experiment_id: "author_model",
-          arm: "flash",
-          chapter: "harbour",
-          assigned_at: DateTime.utc_now()
-        })
-
-      progress = Chronicle.experiment_progress(room.id, "author_model")
-      assert progress.recorded == 0
-      assert progress.required == 20
-      assert progress.ready? == false
-
-      record_completed_outcomes(room.id, "author_model", 10, arm: "flash")
-      record_completed_outcomes(room.id, "author_model", 9, arm: "astra")
-
-      just_below = Chronicle.experiment_progress(room.id, "author_model")
-      assert just_below.recorded == 19
-      assert just_below.required == 20
-      assert just_below.ready? == false
-
-      record_completed_outcomes(room.id, "author_model", 1, arm: "astra")
-
-      at_threshold = Chronicle.experiment_progress(room.id, "author_model")
-      assert at_threshold.recorded == 20
-      assert at_threshold.ready? == true
-    end
-
-    test "rejects unblinding below the declared minimum and permits it once reached", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-      attrs = unblind_attrs("author_model", ctx.jacob.id)
-
-      record_completed_outcomes(room.id, "author_model", 19)
-
-      assert {:error, :sample_incomplete} =
-               Chronicle.record_experiment_unblinding(room.id, attrs)
-
-      refute Chronicle.experiment_unblinded?(room.id, "author_model")
-
-      record_completed_outcomes(room.id, "author_model", 1)
-
-      assert {:ok, unblinding} = Chronicle.record_experiment_unblinding(room.id, attrs)
-      assert unblinding.experiment_id == "author_model"
-      assert Chronicle.experiment_unblinded?(room.id, "author_model")
-    end
-
-    test "progress and unblinding stay per Room and per experiment", ctx do
-      room_a = Repo.get_by!(Room, slug: ctx.slug)
-      slug_b = open_room()
-      room_b = Repo.get_by!(Room, slug: slug_b)
-
-      record_completed_outcomes(room_a.id, "author_model", 20, arm: "flash")
-      record_completed_outcomes(room_a.id, "bait_against_plain", 19, arm: "bait")
-      record_completed_outcomes(room_b.id, "author_model", 20, arm: "flash")
-
-      assert Chronicle.experiment_progress(room_a.id, "author_model").ready?
-      refute Chronicle.experiment_progress(room_a.id, "bait_against_plain").ready?
-      assert Chronicle.experiment_progress(room_b.id, "author_model").ready?
-
-      assert {:ok, _} =
-               Chronicle.record_experiment_unblinding(
-                 room_a.id,
-                 unblind_attrs("author_model", ctx.jacob.id)
-               )
-
-      assert {:error, :sample_incomplete} =
-               Chronicle.record_experiment_unblinding(
-                 room_a.id,
-                 unblind_attrs("bait_against_plain", ctx.jacob.id)
-               )
-
-      assert Chronicle.experiment_unblinded?(room_a.id, "author_model")
-      refute Chronicle.experiment_unblinded?(room_a.id, "bait_against_plain")
-      refute Chronicle.experiment_unblinded?(room_b.id, "author_model")
-    end
-
+  describe "an experiment's arm in the Chronicle" do
     test "unblinding one experiment does not reveal another experiment's arm in the export",
          ctx do
       room = Repo.get_by!(Room, slug: ctx.slug)
@@ -1362,57 +972,50 @@ defmodule Thereish.ChronicleTest do
           )
         )
 
-      {:ok, _} =
-        Chronicle.record_experiment_assignment(room.id, %{
-          page_id: author_page.id,
-          page_identifier: "author-page",
-          experiment_id: "author_model",
-          arm: "flash",
-          chapter: "harbour",
-          assigned_at: now
-        })
+      insert_assignment(room.id, %{
+        page_id: author_page.id,
+        page_identifier: "author-page",
+        experiment_id: "author_model",
+        arm: "flash",
+        chapter: "harbour",
+        assigned_at: now
+      })
 
-      {:ok, _} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_id: author_page.id,
-          page_identifier: "author-page",
-          experiment_id: "author_model",
-          arm: "flash",
-          melded: true,
-          closeness: 80,
-          attempts_count: 1,
-          closed_because: "meld"
-        })
+      insert_outcome(room.id, %{
+        page_id: author_page.id,
+        page_identifier: "author-page",
+        experiment_id: "author_model",
+        arm: "flash",
+        melded: true,
+        closeness: 80,
+        attempts_count: 1,
+        closed_because: "meld"
+      })
 
-      {:ok, _} =
-        Chronicle.record_experiment_assignment(room.id, %{
-          page_id: bait_page.id,
-          page_identifier: "bait-page",
-          experiment_id: "bait_against_plain",
-          arm: "bait",
-          chapter: "harbour",
-          assigned_at: now
-        })
+      insert_assignment(room.id, %{
+        page_id: bait_page.id,
+        page_identifier: "bait-page",
+        experiment_id: "bait_against_plain",
+        arm: "bait",
+        chapter: "harbour",
+        assigned_at: now
+      })
 
-      {:ok, _} =
-        Chronicle.record_experiment_outcome(room.id, %{
-          page_id: bait_page.id,
-          page_identifier: "bait-page",
-          experiment_id: "bait_against_plain",
-          arm: "bait",
-          melded: true,
-          closeness: 80,
-          attempts_count: 1,
-          closed_because: "meld"
-        })
+      insert_outcome(room.id, %{
+        page_id: bait_page.id,
+        page_identifier: "bait-page",
+        experiment_id: "bait_against_plain",
+        arm: "bait",
+        melded: true,
+        closeness: 80,
+        attempts_count: 1,
+        closed_because: "meld"
+      })
 
-      record_completed_outcomes(room.id, "author_model", 19)
+      insert_outcomes(room.id, "author_model", 19)
 
       assert {:ok, _} =
-               Chronicle.record_experiment_unblinding(
-                 room.id,
-                 unblind_attrs("author_model", ctx.jacob.id)
-               )
+               Experiments.unblind(room.id, "author_model", unblind_attrs(ctx.jacob.id))
 
       views = Chronicle.page_views(room.id)
       author_view = Enum.find(views, &(&1.id == author_page.id))
@@ -1424,8 +1027,16 @@ defmodule Thereish.ChronicleTest do
       assert bait_view.arm == nil
 
       markdown = Chronicle.to_markdown(room.id)
-      assert markdown =~ "- Arm: flash"
+      assert markdown =~ "- Experiment: Author model: Flash against Astra\n- Arm: flash"
+      assert markdown =~ "- Experiment: Blinded (bait_against_plain)"
       refute markdown =~ "- Arm: bait"
+
+      assert {:ok, parsed} = Chronicle.from_markdown(markdown)
+
+      assert Enum.map(parsed, &{&1.experiment, &1.arm}) == [
+               {"Author model: Flash against Astra", "flash"},
+               {"Blinded (bait_against_plain)", nil}
+             ]
     end
   end
 

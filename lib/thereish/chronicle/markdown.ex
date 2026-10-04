@@ -7,6 +7,7 @@ defmodule Thereish.Chronicle.Markdown do
   """
 
   alias Thereish.Chronicle
+  alias Thereish.Experiments
   alias Thereish.Repo
   alias Thereish.Rooms.Room
 
@@ -54,16 +55,13 @@ defmodule Thereish.Chronicle.Markdown do
           []
       end
 
-    experiment_name =
-      case page[:experiment_id] do
-        "author_model" -> "Author model: Flash against Astra"
-        _ -> "Bait against plain"
-      end
-
     experiment_lines =
       cond do
         page[:experiment_unblinded] && page[:arm] ->
-          ["- Experiment: #{experiment_name}", "- Arm: #{page.arm}"]
+          [
+            "- Experiment: #{Experiments.definition(page.experiment_id).name}",
+            "- Arm: #{page.arm}"
+          ]
 
         page[:experiment_id] ->
           ["- Experiment: Blinded (#{page.experiment_id})"]
