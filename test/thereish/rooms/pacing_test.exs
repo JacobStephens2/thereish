@@ -393,6 +393,9 @@ defmodule Thereish.Rooms.PacingTest do
       entry
     end
 
+    defp attempt_times(attempt),
+      do: Map.take(attempt, [:started_at, :assaying_started_at, :revealed_at, :advanced_at])
+
     defp opened_at(pacing), do: Pacing.stamp(pacing, %{gives: [], attempts: []}).opened_at
 
     test "the Page opened when it left waiting, not when the Room started" do
@@ -426,7 +429,7 @@ defmodule Thereish.Rooms.PacingTest do
 
       assert [first, second] = Enum.sort_by(entry.attempts, & &1.number)
 
-      assert Map.take(first, [:started_at, :assaying_started_at, :revealed_at, :advanced_at]) ==
+      assert attempt_times(first) ==
                %{
                  started_at: at(4_000).at,
                  assaying_started_at: at(6_000).at,
@@ -434,7 +437,7 @@ defmodule Thereish.Rooms.PacingTest do
                  advanced_at: at(20_000).at
                }
 
-      assert Map.take(second, [:started_at, :assaying_started_at, :revealed_at, :advanced_at]) ==
+      assert attempt_times(second) ==
                %{
                  started_at: at(20_000).at,
                  assaying_started_at: at(22_000).at,
@@ -462,6 +465,28 @@ defmodule Thereish.Rooms.PacingTest do
       assert arrived == at(2_000).at
       assert [%{started_at: started}] = entry.attempts
       assert started == at(4_000).at
+    end
+
+    test "coming back to giving starts the Gives' times over" do
+      {pacing, writing, _effects} =
+        drive(pacing(), waiting(), @to_giving ++ [give("Melissa", 2_000), give("Jacob", 3_000)])
+
+      {pacing, _giving, _effects} =
+        drive(pacing, writing, [
+          {{:gives_reset, %{seat_id: "seat-Melissa"}}, 5_000},
+          give("Melissa", 7_000)
+        ])
+
+      entry =
+        Pacing.stamp(pacing, %{
+          gives: [%{seat_id: "seat-Melissa"}, %{seat_id: "seat-Jacob"}],
+          attempts: []
+        })
+
+      assert Map.new(entry.gives, &{&1.seat_id, &1.arrived_at}) == %{
+               "seat-Melissa" => at(7_000).at,
+               "seat-Jacob" => nil
+             }
     end
 
     test "a Page with no recorded times is stamped with none" do
