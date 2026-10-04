@@ -74,6 +74,7 @@ defmodule Thereish.Rooms.Pacing do
   rule lives in `elapsed/4` and nowhere else.
   """
 
+  alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.Timing
   alias Thereish.Game
 
@@ -224,31 +225,32 @@ defmodule Thereish.Rooms.Pacing do
   def page_turned(%__MODULE__{} = pacing), do: forget_page(pacing)
 
   @doc """
-  The closing Page's Chronicle `entry`, with when each part of it happened:
+  The closing Page's Chronicle Entry, with when each part of it happened:
   each Give's `arrived_at`, each Attempt's `started_at`, `assaying_started_at`,
-  `revealed_at` and `advanced_at`, and the entry's own `revealed_at` and
+  `revealed_at` and `advanced_at`, and the Entry's own `revealed_at` and
   `opened_at`. A time never recorded is `nil`.
   """
-  @spec stamp(t(), map()) :: map()
-  def stamp(%__MODULE__{times: times} = pacing, entry) do
+  @spec stamp(t(), Entry.t()) :: Entry.t()
+  def stamp(%__MODULE__{times: times} = pacing, %Entry{} = entry) do
     gives =
-      Enum.map(entry[:gives] || [], fn give ->
-        seat_id = give[:seat_id] || give["seat_id"]
-        Map.put(give, :arrived_at, Map.get(times.gives, seat_id))
+      Enum.map(entry.gives, fn %Entry.Give{} = give ->
+        %{give | arrived_at: Map.get(times.gives, give.seat_id)}
       end)
 
     attempts =
-      Enum.map(entry.attempts, fn attempt ->
+      Enum.map(entry.attempts, fn %Entry.Attempt{} = attempt ->
         recorded = Map.get(times.attempts, attempt.number, %{})
 
-        Enum.reduce(@attempt_times, attempt, &Map.put(&2, &1, recorded[&1]))
+        struct!(attempt, Map.new(@attempt_times, &{&1, recorded[&1]}))
       end)
 
-    entry
-    |> Map.put(:gives, gives)
-    |> Map.put(:attempts, attempts)
-    |> Map.put(:revealed_at, Timing.last_revealed(attempts))
-    |> Map.put(:opened_at, pacing.opened_at)
+    %{
+      entry
+      | gives: gives,
+        attempts: attempts,
+        revealed_at: Timing.last_revealed(attempts),
+        opened_at: pacing.opened_at
+    }
   end
 
   @doc """

@@ -4,6 +4,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
   """
   use ThereishWeb.ConnCase, async: false
 
+  import Thereish.EntryFixtures
   import Thereish.RoomFixtures
   import Phoenix.LiveViewTest
 
@@ -199,57 +200,58 @@ defmodule ThereishWeb.ChronicleLiveTest do
 
       [melissa, jacob, ada, sam] = seats
 
-      entry = %{
-        page: %{
-          id: "two-verdicts-live",
-          chapter: "harbour",
-          bookends: ["lantern", "harbour"],
-          why_these: "An earlier night graded the table as two pairs."
-        },
-        closed_because: :attempts,
-        melded?: false,
-        closeness: 85,
-        attempts: [
-          %{
-            number: 1,
+      entry =
+        entry(%{
+          page: %{
+            id: "two-verdicts-live",
+            chapter: "harbour",
             bookends: ["lantern", "harbour"],
-            closeness: 85,
-            melded?: false,
-            bridges: [
-              %{seat_id: melissa.id, bridge: "beacon"},
-              %{seat_id: jacob.id, bridge: "cairn"},
-              %{seat_id: ada.id, bridge: "lamp"},
-              %{seat_id: sam.id, bridge: "seagull"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [melissa.id, jacob.id],
-                bridges: ["beacon", "cairn"],
-                graded?: true,
-                closeness: 85,
-                band: :almost,
-                reasoning: "Close on the shore.",
-                quip: "A cairn for the beacon.",
-                furthest: ["beacon", "cairn"],
-                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
-              },
-              %{
-                seat_ids: [ada.id, sam.id],
-                bridges: ["lamp", "seagull"],
-                graded?: true,
-                closeness: 27,
-                band: :miss,
-                reasoning: "The seagull is having its own evening.",
-                quip: "One of you brought a bird.",
-                furthest: ["lamp", "seagull"],
-                meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
-              }
-            ]
-          }
-        ]
-      }
+            why_these: "An earlier night graded the table as two pairs."
+          },
+          closed_because: :attempts_spent,
+          melded?: false,
+          closeness: 85,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["lantern", "harbour"],
+              closeness: 85,
+              melded?: false,
+              bridges: [
+                %{seat_id: melissa.id, bridge: "beacon"},
+                %{seat_id: jacob.id, bridge: "cairn"},
+                %{seat_id: ada.id, bridge: "lamp"},
+                %{seat_id: sam.id, bridge: "seagull"}
+              ],
+              verdicts: [
+                %{
+                  seat_ids: [melissa.id, jacob.id],
+                  bridges: ["beacon", "cairn"],
+                  graded?: true,
+                  closeness: 85,
+                  band: :almost,
+                  reasoning: "Close on the shore.",
+                  quip: "A cairn for the beacon.",
+                  furthest: ["beacon", "cairn"],
+                  meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
+                },
+                %{
+                  seat_ids: [ada.id, sam.id],
+                  bridges: ["lamp", "seagull"],
+                  graded?: true,
+                  closeness: 27,
+                  band: :miss,
+                  reasoning: "The seagull is having its own evening.",
+                  quip: "One of you brought a bird.",
+                  furthest: ["lamp", "seagull"],
+                  meta: %{model: "fake", prompt_version: "assay-2", latency_ms: 40, cost_usd: 0.0}
+                }
+              ]
+            }
+          ]
+        })
 
-      assert {:ok, _page} = Chronicle.write(room.id, entry, DateTime.utc_now())
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       {:ok, view, html} = live(conn, ~p"/r/#{slug}/chronicle")
 
@@ -402,8 +404,9 @@ defmodule ThereishWeb.ChronicleLiveTest do
       {:ok, _page} =
         Chronicle.write(
           room.id,
-          %{
-            document: %{"bookends" => ["desert", "oasis"]},
+          entry(%{
+            opened_at: now,
+            page: %{bookends: ["desert", "oasis"]},
             author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
             gives: [
               %{seat_id: ctx.melissa.id, text: "cactus"},
@@ -417,8 +420,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
             melded?: true,
             closeness: 90,
             attempts: []
-          },
-          now
+          })
         )
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
@@ -494,108 +496,116 @@ defmodule ThereishWeb.ChronicleLiveTest do
       now = DateTime.utc_now()
 
       # Page 1: Closed Page with music_meta carrying path and title
-      entry1 = %{
-        document: %{"bookends" => ["lantern", "harbour"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: %{
-          provider: "mureka",
-          path: "/media/tracks/harbour-lights.mp3",
-          title: "Harbour Lights"
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 95,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["lantern", "harbour"],
-            closeness: 95,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
-              %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry1 =
+        entry(%{
+          opened_at: now,
+          page: %{bookends: ["lantern", "harbour"]},
+          author_meta: %{model: "gemini-3.8-flash"},
+          music_meta: %{
+            provider: "mureka",
+            path: "/media/tracks/harbour-lights.mp3",
+            title: "Harbour Lights"
+          },
+          closed_because: :meld,
+          melded?: true,
+          closeness: 95,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["lantern", "harbour"],
+              closeness: 95,
+              melded?: true,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
+                %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
+              ],
+              verdicts: []
+            }
+          ]
+        })
 
-      assert {:ok, p1} = Chronicle.write(room.id, entry1, now)
+      assert {:ok, p1} = Chronicle.write(room.id, entry1)
 
       # Page 2: Page with a failed score (music_meta has failure, no path)
-      entry2 = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry2 =
+        entry(%{
+          opened_at: DateTime.add(now, 60, :second),
+          page: %{bookends: ["desert", "oasis"]},
+          author_meta: %{model: "gemini-3.8-flash"},
+          music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
+          closed_because: :meld,
+          melded?: true,
+          closeness: 90,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["desert", "oasis"],
+              closeness: 90,
+              melded?: true,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "water"},
+                %{seat_id: ctx.jacob.id, bridge: "water"}
+              ],
+              verdicts: []
+            }
+          ]
+        })
 
-      assert {:ok, p2} = Chronicle.write(room.id, entry2, DateTime.add(now, 60, :second))
+      assert {:ok, p2} = Chronicle.write(room.id, entry2)
 
       # Page 3: Music under Off (music_meta is nil)
-      entry3 = %{
-        document: %{"bookends" => ["mountain", "valley"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: nil,
-        closed_because: :meld,
-        melded?: true,
-        closeness: 88,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["mountain", "valley"],
-            closeness: 88,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "ridge"},
-              %{seat_id: ctx.jacob.id, bridge: "ridge"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry3 =
+        entry(%{
+          opened_at: DateTime.add(now, 120, :second),
+          page: %{bookends: ["mountain", "valley"]},
+          author_meta: %{model: "gemini-3.8-flash"},
+          music_meta: nil,
+          closed_because: :meld,
+          melded?: true,
+          closeness: 88,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["mountain", "valley"],
+              closeness: 88,
+              melded?: true,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "ridge"},
+                %{seat_id: ctx.jacob.id, bridge: "ridge"}
+              ],
+              verdicts: []
+            }
+          ]
+        })
 
-      assert {:ok, p3} = Chronicle.write(room.id, entry3, DateTime.add(now, 120, :second))
+      assert {:ok, p3} = Chronicle.write(room.id, entry3)
 
       # Page 4: Legacy page without path (music_meta has provider/model/cost but no path)
-      entry4 = %{
-        document: %{"bookends" => ["frost", "glacier"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.04},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 85,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["frost", "glacier"],
-            closeness: 85,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "ice"},
-              %{seat_id: ctx.jacob.id, bridge: "ice"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry4 =
+        entry(%{
+          opened_at: DateTime.add(now, 180, :second),
+          page: %{bookends: ["frost", "glacier"]},
+          author_meta: %{model: "gemini-3.8-flash"},
+          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.04},
+          closed_because: :meld,
+          melded?: true,
+          closeness: 85,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["frost", "glacier"],
+              closeness: 85,
+              melded?: true,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "ice"},
+                %{seat_id: ctx.jacob.id, bridge: "ice"}
+              ],
+              verdicts: []
+            }
+          ]
+        })
 
-      assert {:ok, p4} = Chronicle.write(room.id, entry4, DateTime.add(now, 180, :second))
+      assert {:ok, p4} = Chronicle.write(room.id, entry4)
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
 
@@ -699,66 +709,70 @@ defmodule ThereishWeb.ChronicleLiveTest do
       room = Repo.get_by!(Room, slug: slug)
       now = DateTime.utc_now()
 
-      entry1 = %{
-        document: %{"bookends" => ["lantern", "harbour"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: %{
-          provider: "mureka",
-          path: "/media/tracks/harbour-lights.mp3",
-          title: "Harbour Lights"
-        },
-        vamp_meta: %{
-          path: "/media/vamps/harbour-vamp.mp3",
-          duration: 30,
-          loop: true
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 95,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["lantern", "harbour"],
-            closeness: 95,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
-              %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry1 =
+        entry(%{
+          opened_at: now,
+          page: %{bookends: ["lantern", "harbour"]},
+          author_meta: %{model: "gemini-3.8-flash"},
+          music_meta: %{
+            provider: "mureka",
+            path: "/media/tracks/harbour-lights.mp3",
+            title: "Harbour Lights"
+          },
+          vamp_meta: %{
+            path: "/media/vamps/harbour-vamp.mp3",
+            duration: 30,
+            loop: true
+          },
+          closed_because: :meld,
+          melded?: true,
+          closeness: 95,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["lantern", "harbour"],
+              closeness: 95,
+              melded?: true,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "lighthouse"},
+                %{seat_id: ctx.jacob.id, bridge: "lighthouse"}
+              ],
+              verdicts: []
+            }
+          ]
+        })
 
-      assert {:ok, p1} = Chronicle.write(room.id, entry1, now)
+      assert {:ok, p1} = Chronicle.write(room.id, entry1)
 
-      entry2 = %{
-        document: %{"bookends" => ["desert", "oasis"]},
-        author_meta: %{model: "gemini-3.8-flash"},
-        music_meta: %{
-          provider: "mureka",
-          path: "/media/tracks/oasis.mp3",
-          title: "Oasis"
-        },
-        closed_because: :meld,
-        melded?: true,
-        closeness: 90,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["desert", "oasis"],
-            closeness: 90,
-            melded?: true,
-            bridges: [
-              %{seat_id: ctx.melissa.id, bridge: "water"},
-              %{seat_id: ctx.jacob.id, bridge: "water"}
-            ],
-            verdicts: []
-          }
-        ]
-      }
+      entry2 =
+        entry(%{
+          opened_at: DateTime.add(now, 60, :second),
+          page: %{bookends: ["desert", "oasis"]},
+          author_meta: %{model: "gemini-3.8-flash"},
+          music_meta: %{
+            provider: "mureka",
+            path: "/media/tracks/oasis.mp3",
+            title: "Oasis"
+          },
+          closed_because: :meld,
+          melded?: true,
+          closeness: 90,
+          attempts: [
+            %{
+              number: 1,
+              bookends: ["desert", "oasis"],
+              closeness: 90,
+              melded?: true,
+              bridges: [
+                %{seat_id: ctx.melissa.id, bridge: "water"},
+                %{seat_id: ctx.jacob.id, bridge: "water"}
+              ],
+              verdicts: []
+            }
+          ]
+        })
 
-      assert {:ok, p2} = Chronicle.write(room.id, entry2, DateTime.add(now, 60, :second))
+      assert {:ok, p2} = Chronicle.write(room.id, entry2)
 
       {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
 

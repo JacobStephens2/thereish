@@ -7,6 +7,7 @@ defmodule Thereish.RoomsTest do
   """
   use Thereish.DataCase, async: false
 
+  import Thereish.EntryFixtures
   import Thereish.RoomFixtures
   import ExUnit.CaptureLog
 
@@ -870,10 +871,23 @@ defmodule Thereish.RoomsTest do
       now = DateTime.utc_now()
 
       for {quip, index} <- Enum.with_index(quips, 1) do
-        entry = remembered_page(melissa.id, jacob.id, quip)
+        entry =
+          entry(
+            opened_at: DateTime.add(now, index, :second),
+            attempts: [
+              %{
+                bridges: [
+                  %{seat_id: melissa.id, bridge: "cairn"},
+                  %{seat_id: jacob.id, bridge: "cairns"}
+                ],
+                verdicts: [
+                  %{seat_ids: [melissa.id, jacob.id], bridges: ["cairn", "cairns"], quip: quip}
+                ]
+              }
+            ]
+          )
 
-        assert {:ok, _page} =
-                 Chronicle.write(room.id, entry, DateTime.add(now, index, :second))
+        assert {:ok, _page} = Chronicle.write(room.id, entry)
       end
 
       steward(assay_capture: self())
@@ -887,39 +901,6 @@ defmodule Thereish.RoomsTest do
       assert_receive {:assay, request}, 2_000
       assert request.prior_quips == tl(quips)
       refute "Oldest quip, the one that should drop." in request.prior_quips
-    end
-
-    defp remembered_page(melissa_id, jacob_id, quip) do
-      %{
-        page: %{bookends: ["lantern", "harbour"]},
-        closed_because: :meld,
-        melded?: true,
-        closeness: 91,
-        attempts: [
-          %{
-            number: 1,
-            bookends: ["lantern", "harbour"],
-            closeness: 91,
-            melded?: true,
-            bridges: [
-              %{seat_id: melissa_id, bridge: "cairn"},
-              %{seat_id: jacob_id, bridge: "cairns"}
-            ],
-            verdicts: [
-              %{
-                seat_ids: [melissa_id, jacob_id],
-                bridges: ["cairn", "cairns"],
-                graded?: true,
-                closeness: 91,
-                band: :meld,
-                reasoning: "Same root.",
-                quip: quip,
-                meta: %{model: "fake", prompt_version: "assay-3", latency_ms: 10, cost_usd: 0.0}
-              }
-            ]
-          }
-        ]
-      }
     end
   end
 
@@ -4255,6 +4236,22 @@ defmodule Thereish.RoomsTest do
 
       assert outcomes[page.id].taps == %{to_string(ctx.melissa.id) => "great"}
       assert outcomes[earlier.id].taps == %{}
+    end
+
+    test "a Page played under an assigned arm records its outcome under that arm", ctx do
+      meld(ctx)
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      meld(ctx)
+
+      assert Enum.map(Chronicle.experiment_assignments(ctx.room.id, "author_model"), & &1.arm) ==
+               ["flash", "astra"]
+
+      [first, second] = Chronicle.pages(ctx.room.id)
+
+      outcomes =
+        Map.new(Chronicle.experiment_outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1.arm})
+
+      assert outcomes == %{first.id => "flash", second.id => "astra"}
     end
 
     test "a Mask for an earlier Give that lands after the Page turned is written onto its Page",
