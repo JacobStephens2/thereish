@@ -5,6 +5,7 @@ defmodule Thereish.Chronicle.TimingTest do
   use ExUnit.Case, async: true
 
   alias Thereish.Chronicle.Attempt
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.Give
   alias Thereish.Chronicle.Page
   alias Thereish.Chronicle.Timing
@@ -101,6 +102,7 @@ defmodule Thereish.Chronicle.TimingTest do
 
     %Page{
       id: Ecto.UUID.generate(),
+      document: %Document{},
       opened_at: @opened,
       closed_at: attrs[:closed_at] || at(60),
       revealed_at: attrs[:revealed_at],

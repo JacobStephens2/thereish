@@ -78,6 +78,9 @@ defmodule Thereish.Chronicle.DocumentTest do
 
       assert {:ok, %Document{give: "a lighthouse", identifier: "author-page"}} =
                Document.load(row)
+
+      assert {:ok, %Document{give: "a lighthouse", identifier: "42"}} =
+               Document.load(%{bookends: ["lantern"], give: "a lighthouse", id: 42})
     end
 
     test "reads a row from before the Full table rule as nil, with empty defaults" do

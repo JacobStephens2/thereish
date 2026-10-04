@@ -76,7 +76,7 @@ defmodule Thereish.Chronicle.Document do
        meta: field(row, :meta) || %{},
        full_table: if(is_boolean(field(row, :full_table)), do: field(row, :full_table)),
        give: field(row, :give),
-       identifier: field(row, :id)
+       identifier: identifier(field(row, :id))
      }}
   end
 
@@ -99,6 +99,9 @@ defmodule Thereish.Chronicle.Document do
       _missing -> Map.get(map, key)
     end
   end
+
+  defp identifier(nil), do: nil
+  defp identifier(id), do: to_string(id)
 
   defp put_set(row, _key, nil), do: row
   defp put_set(row, key, value), do: Map.put(row, key, value)
