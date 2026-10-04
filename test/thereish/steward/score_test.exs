@@ -55,7 +55,7 @@ defmodule Thereish.Steward.ScoreTest do
       meta = Steward.score_failure(:timeout)
       assert meta.cost_usd == 0.0
       assert meta.failure == "timeout"
-      assert meta.provider in ["fake", "mureka"]
+      assert meta.provider == "fake"
       assert is_binary(meta.model)
     end
 
@@ -161,11 +161,19 @@ defmodule Thereish.Steward.ScoreTest do
       assert body["prompt"] == Music.prompt(fresh_gives)
 
       assert String.starts_with?(track.path, "/media/tracks/")
+      assert track.meta.provider == "mureka"
       assert track.meta.cost_usd == 0.04
 
       # Verify cached
       assert {:ok, cached} = TrackCache.get(fresh_gives)
       assert cached.path == track.path
+    end
+
+    test "score_failure names the provider the way a landed track does" do
+      steward_cfg = Application.get_env(:thereish, :steward)
+      Application.put_env(:thereish, :steward, Keyword.put(steward_cfg, :adapter, Live))
+
+      assert Steward.score_failure(:timeout).provider == "mureka"
     end
 
     test "handles provider error on miss" do

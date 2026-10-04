@@ -321,7 +321,7 @@ defmodule Thereish.Foley.VoiceTest do
 
       [%{verdicts: [verdict]}] = committed.attempts
 
-      assert %{"provider" => "hume", "voice" => "default", "model" => "default"} =
+      assert %{"provider" => nil, "voice" => "default", "model" => "default"} =
                verdict.voice_meta
     end
   end

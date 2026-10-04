@@ -302,27 +302,8 @@ defmodule Thereish.Steward do
     if adapter() == Thereish.Steward.Fake do
       {"fake", "fake-music"}
     else
-      role =
-        try do
-          role(:foley, :music)
-        rescue
-          _ -> %{}
-        end
-
-      provider =
-        case role[:provider] do
-          Thereish.Steward.Mureka ->
-            "mureka"
-
-          mod when is_atom(mod) and not is_nil(mod) ->
-            mod |> Module.split() |> List.last() |> Macro.underscore()
-
-          other ->
-            to_string(other || "mureka")
-        end
-
-      model = to_string(role[:model] || "auto")
-      {provider, model}
+      %{name: name, settings: settings} = provider(:foley, :music)
+      {name, to_string(settings[:model] || "auto")}
     end
   end
 
@@ -345,30 +326,8 @@ defmodule Thereish.Steward do
     if adapter() == Thereish.Steward.Fake do
       {"fake", "fake-voice"}
     else
-      role =
-        try do
-          role(:foley, :voice)
-        rescue
-          _ -> %{}
-        end
-
-      provider =
-        case role[:provider] do
-          Thereish.Steward.Hume ->
-            "hume"
-
-          Thereish.Steward.ElevenLabs ->
-            "eleven_labs"
-
-          mod when is_atom(mod) and not is_nil(mod) ->
-            mod |> Module.split() |> List.last() |> Macro.underscore()
-
-          other ->
-            to_string(other || "hume")
-        end
-
-      voice = to_string(role[:voice_id] || role[:voice] || "default")
-      {provider, voice}
+      %{name: name, settings: settings} = provider(:foley, :voice)
+      {name, to_string(settings[:voice_id] || settings[:voice] || "default")}
     end
   end
 
@@ -760,6 +719,51 @@ defmodule Thereish.Steward do
     |> Map.new()
   end
 
+  @doc """
+  What answers one media job: the provider module, the name the Chronicle knows
+  it by, the job's settings with its credentials resolved, and the environment
+  variables still missing.
+
+  The media roles are the Limner and Foley's voice, music, Vamp and effects
+  jobs. `module` is `override` when one is given, otherwise the configured
+  `provider`; a role that names none is a configuration error, so this raises.
+  `name` is the module's last alias, underscored (`hume`, `eleven_labs`).
+
+  Each credential the module declares through `credentials/0` is the job's own
+  field (`api_key`) or else the vendor-scoped field on the role
+  (`hume_api_key`). An empty string counts as absent, and an absent credential
+  is `nil` in `settings` and its environment variable is in `missing`.
+  """
+  @spec provider(atom(), atom() | nil, module() | nil) :: %{
+          module: module(),
+          name: String.t(),
+          settings: map(),
+          missing: [String.t()]
+        }
+  def provider(name, job \\ nil, override \\ nil) do
+    settings = if job, do: role(name, job), else: role(name)
+
+    module =
+      override || settings[:provider] ||
+        raise ArgumentError,
+              "no provider configured for #{inspect(Enum.reject([name, job], &is_nil/1))}"
+
+    provider_name = module |> Module.split() |> List.last() |> Macro.underscore()
+
+    {settings, missing} =
+      Enum.reduce(module.credentials(), {settings, []}, fn {field, env}, {settings, missing} ->
+        case present(settings[field]) || present(settings[:"#{provider_name}_#{field}"]) do
+          nil -> {Map.put(settings, field, nil), [env | missing]}
+          key -> {Map.put(settings, field, key), missing}
+        end
+      end)
+
+    %{module: module, name: provider_name, settings: settings, missing: Enum.reverse(missing)}
+  end
+
+  defp present(value) when is_binary(value) and value != "", do: value
+  defp present(_value), do: nil
+
   defp settings(name) do
     :thereish
     |> Application.fetch_env!(:steward)
@@ -770,19 +774,20 @@ defmodule Thereish.Steward do
   @doc """
   Warns at application boot if keys for Foley's active jobs are missing.
 
-  - Music (`:music`): missing `MUREKA_API_KEY` warns that every Page will have
-    only the house loop.
-  - Voice (`:voice`): missing key(s) for the configured voice provider (`HUME_API_KEY`
-    and `HUME_SECRET_KEY` today, `ELEVENLABS_API_KEY` if switched) warns that
-    the voice switch will do nothing.
+  - Music (`:music`): a missing key (`MUREKA_API_KEY` today) warns that every
+    Page will have only the house loop.
+  - Voice (`:voice`): missing key(s) for the configured voice provider
+    (`HUME_API_KEY` and `HUME_SECRET_KEY` today, `ELEVENLABS_API_KEY` if
+    switched) warns that the voice switch will do nothing.
 
-  Emits one warning per Foley job that has no key, in the same words as `bin/deploy`,
-  and silence when every key is present.
+  Emits one warning per Foley job that has no key, in the same words as
+  `bin/deploy`, and silence when every key is present. Which keys are missing
+  is the resolver's answer (`provider/3`).
   """
   @spec warn_missing_foley_keys() :: :ok
   def warn_missing_foley_keys do
-    warn_missing_music_key()
-    warn_missing_voice_keys()
+    warn_missing(provider(:foley, :music), "every Page will have only the house loop")
+    warn_missing(provider(:foley, :voice), "the voice switch will do nothing")
     :ok
   end
 
@@ -794,83 +799,15 @@ defmodule Thereish.Steward do
   """
   @spec warn_missing_limner_keys() :: :ok
   def warn_missing_limner_keys do
-    limner = role(:limner)
-    provider = limner[:provider] || Thereish.Steward.Recraft
-
-    {present?, label} =
-      case provider do
-        Thereish.Steward.Recraft ->
-          {not missing_key?(limner[:recraft_api_key]) or not missing_key?(limner[:api_key]),
-           "RECRAFT_AI_API_KEY"}
-
-        Thereish.Steward.Fal ->
-          {not missing_key?(limner[:fal_key]) or not missing_key?(limner[:api_key]),
-           "FAL_AI_API_KEY"}
-
-        Thereish.Steward.Ideogram ->
-          {not missing_key?(limner[:ideogram_api_key]) or not missing_key?(limner[:api_key]),
-           "IDEOGRAM_API_KEY"}
-
-        Thereish.Steward.Bfl ->
-          {not missing_key?(limner[:bfl_api_key]) or not missing_key?(limner[:api_key]),
-           "BFL_API_KEY"}
-
-        _ ->
-          {not missing_key?(limner[:api_key]), "Limner API key"}
-      end
-
-    unless present? do
-      Logger.warning("no #{label} — every Seat will wear a colour dot")
-    end
-
+    warn_missing(provider(:limner), "every Seat will wear a colour dot")
     :ok
   end
 
-  defp warn_missing_music_key do
-    music = role(:foley, :music)
+  defp warn_missing(%{missing: []}, _consequence), do: :ok
 
-    if missing_key?(music[:api_key]) do
-      Logger.warning("no MUREKA_API_KEY — every Page will have only the house loop")
-    end
+  defp warn_missing(%{missing: keys}, consequence) do
+    Logger.warning("no #{Enum.join(keys, " and ")} — #{consequence}")
   end
-
-  defp warn_missing_voice_keys do
-    voice = role(:foley, :voice)
-
-    missing =
-      case voice[:provider] do
-        Thereish.Steward.ElevenLabs ->
-          if missing_key?(voice[:api_key]) and missing_key?(voice[:elevenlabs_api_key]) do
-            ["ELEVENLABS_API_KEY"]
-          else
-            []
-          end
-
-        Thereish.Steward.Hume ->
-          [
-            if(missing_key?(voice[:api_key]) and missing_key?(voice[:hume_api_key]),
-              do: "HUME_API_KEY"
-            ),
-            if(missing_key?(voice[:secret_key]) and missing_key?(voice[:hume_secret_key]),
-              do: "HUME_SECRET_KEY"
-            )
-          ]
-          |> Enum.reject(&is_nil/1)
-
-        _ ->
-          []
-      end
-
-    case missing do
-      [] ->
-        :ok
-
-      keys ->
-        Logger.warning("no #{Enum.join(keys, " and ")} — the voice switch will do nothing")
-    end
-  end
-
-  defp missing_key?(val), do: is_nil(val) or val == ""
 
   @doc """
   The most Seats a Room may hold while the Assayer is grading it live.

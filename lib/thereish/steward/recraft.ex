@@ -7,12 +7,17 @@ defmodule Thereish.Steward.Recraft do
   a house reference set exists.
   """
 
+  @behaviour Thereish.Steward.Provider
+
   alias Thereish.Steward.Provider
 
   @base_url "https://external.api.recraft.ai"
   @default_model "recraftv4_styles"
   @fallback_model "recraftv4"
   @default_timeout_ms 30_000
+
+  @impl Provider
+  def credentials, do: [api_key: "RECRAFT_AI_API_KEY"]
 
   @spec generate(map() | keyword()) :: {:ok, map()} | {:error, term()}
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
@@ -184,13 +189,9 @@ defmodule Thereish.Steward.Recraft do
   end
 
   defp api_key(request) do
-    cond do
-      present?(get(request, :recraft_api_key, nil)) -> {:ok, get(request, :recraft_api_key, nil)}
-      present?(get(request, :api_key, nil)) -> {:ok, get(request, :api_key, nil)}
-      true -> {:error, :no_api_key}
+    case get(request, :api_key, nil) do
+      key when is_binary(key) and key != "" -> {:ok, key}
+      _ -> {:error, :no_api_key}
     end
   end
-
-  defp present?(key) when is_binary(key) and key != "", do: true
-  defp present?(_), do: false
 end

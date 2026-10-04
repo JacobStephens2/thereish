@@ -7,6 +7,8 @@ defmodule Thereish.Steward.Bfl do
   Masks in one style. Moderated content is `{:error, :refused}`.
   """
 
+  @behaviour Thereish.Steward.Provider
+
   alias Thereish.Steward.Provider
 
   @base_url "https://api.bfl.ai"
@@ -14,6 +16,9 @@ defmodule Thereish.Steward.Bfl do
   @default_timeout_ms 30_000
   @default_deadline_ms 60_000
   @default_poll_ms 500
+
+  @impl Provider
+  def credentials, do: [api_key: "BFL_API_KEY"]
 
   @spec generate(map() | keyword()) :: {:ok, map()} | {:error, term()}
   def generate(request) when is_list(request), do: request |> Map.new() |> generate()
@@ -182,13 +187,9 @@ defmodule Thereish.Steward.Bfl do
   end
 
   defp api_key(request) do
-    cond do
-      present?(get(request, :bfl_api_key, nil)) -> {:ok, get(request, :bfl_api_key, nil)}
-      present?(get(request, :api_key, nil)) -> {:ok, get(request, :api_key, nil)}
-      true -> {:error, :no_api_key}
+    case get(request, :api_key, nil) do
+      key when is_binary(key) and key != "" -> {:ok, key}
+      _ -> {:error, :no_api_key}
     end
   end
-
-  defp present?(key) when is_binary(key) and key != "", do: true
-  defp present?(_), do: false
 end
