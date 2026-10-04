@@ -266,7 +266,7 @@ defmodule Thereish.Rooms.Pacing do
   # kept, so `may_advance/2` judges it the same way either way.
   defp hold(pacing, now) do
     case pacing.durations.hold do
-      ms when ms > 0 ->
+      ms when is_integer(ms) and ms > 0 ->
         {pacing, token} = mint(pacing)
         {%{pacing | hold: %{revealed_ms: now.ms, token: token}}, [{:timer, :hold, token, ms}]}
 

@@ -142,7 +142,8 @@ defmodule Thereish.Rooms.PacingTest do
       {grading, _ms} = timer(effects, :assayer)
       {pacing, _effects} = Pacing.assayed(pacing, @verdict)
 
-      assert {^pacing, []} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
+      assert {pacing, []} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
+      assert view(pacing, assaying()).assayer_step == nil
     end
 
     test "a rung from an earlier ladder changes nothing once a fresh one is armed" do
@@ -151,7 +152,7 @@ defmodule Thereish.Rooms.PacingTest do
       {pacing, _effects} = Pacing.assayed(pacing, @verdict)
       {pacing, _effects} = Pacing.assayer_asked(pacing, at(20_000))
 
-      assert {^pacing, []} = Pacing.elapsed(pacing, :assayer, first, at(24_000))
+      assert {pacing, []} = Pacing.elapsed(pacing, :assayer, first, at(24_000))
       assert view(pacing, assaying()).assayer_step == :grading
     end
   end
@@ -181,7 +182,8 @@ defmodule Thereish.Rooms.PacingTest do
 
       assert {:current, pacing} = Pacing.author_answered(pacing, ref)
       assert view(pacing).author_step == nil
-      assert {^pacing, []} = Pacing.elapsed(pacing, :author, writing, at(5_000))
+      assert {pacing, []} = Pacing.elapsed(pacing, :author, writing, at(5_000))
+      assert view(pacing).author_step == nil
       assert :stale = Pacing.author_answered(pacing, ref)
     end
 
@@ -205,8 +207,8 @@ defmodule Thereish.Rooms.PacingTest do
       {pacing, effects} = Pacing.author_asked(pacing, make_ref(), at(9_000))
       {_fresh, 5_000} = timer(effects, :author)
 
+      assert {pacing, []} = Pacing.elapsed(pacing, :author, old, at(9_500))
       assert view(pacing).author_step == :writing
-      assert {^pacing, []} = Pacing.elapsed(pacing, :author, old, at(9_500))
     end
 
     test "new Gives stand the Author down" do
@@ -215,8 +217,8 @@ defmodule Thereish.Rooms.PacingTest do
 
       pacing = Pacing.gives_reset(pacing)
 
+      assert {pacing, []} = Pacing.elapsed(pacing, :author, writing, at(5_000))
       assert view(pacing).author_step == nil
-      assert {^pacing, []} = Pacing.elapsed(pacing, :author, writing, at(5_000))
     end
   end
 
@@ -294,7 +296,7 @@ defmodule Thereish.Rooms.PacingTest do
       {pacing, []} = Pacing.moved(pacing, game, next, at(5_000))
 
       assert :ok = Pacing.may_advance(pacing, at(5_000))
-      assert {^pacing, []} = Pacing.elapsed(pacing, :hold, hold, at(5_000))
+      assert {pacing, []} = Pacing.elapsed(pacing, :hold, hold, at(5_000))
       refute view(pacing, next, at(5_000)).can_advance?
     end
 
@@ -353,9 +355,9 @@ defmodule Thereish.Rooms.PacingTest do
   end
 
   test "a timer name Pacing never armed changes nothing" do
-    pacing = pacing()
-
-    assert {^pacing, []} = Pacing.elapsed(pacing, :beat, 0, at(0))
-    assert {^pacing, []} = Pacing.elapsed(pacing, :hold, 0, at(0))
+    assert {pacing, []} = Pacing.elapsed(pacing(), :beat, 0, at(0))
+    assert {pacing, []} = Pacing.elapsed(pacing, :hold, 0, at(0))
+    assert {pacing, []} = Pacing.assayed(pacing, @verdict)
+    assert :ok = Pacing.may_advance(pacing, at(0))
   end
 end
