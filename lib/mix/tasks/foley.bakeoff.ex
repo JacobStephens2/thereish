@@ -72,7 +72,7 @@ defmodule Mix.Tasks.Foley.Bakeoff do
       :rand.seed(:exsss, {seed, seed, seed})
     end
 
-    quips = Thereish.Chronicle.recent_quips(room, count)
+    quips = recent_quips(room, count)
 
     if quips == [] do
       Mix.raise("No quips found in Chronicle for room #{inspect(room)}.")
@@ -176,6 +176,38 @@ defmodule Mix.Tasks.Foley.Bakeoff do
 
     Listen to both letters across the quips, note your preference, and unseal key.txt to reveal the winner!
     """)
+  end
+
+  # The last `count` Quips of a Room's Chronicle, oldest first. A Room in the
+  # database is read from its Page views. Room DUST is not one: it is kept for
+  # this harness as an exported Chronicle in `priv/chronicles/<code>.md`.
+  defp recent_quips(room, count) do
+    quips =
+      case Thereish.Rooms.get_room(room) do
+        %Thereish.Rooms.Room{id: room_id} ->
+          for page <- Thereish.Chronicle.page_views(room_id, :asc),
+              attempt <- page.attempts,
+              verdict <- attempt.verdicts,
+              do: verdict.quip
+
+        nil ->
+          exported_quips(room)
+      end
+
+    quips
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.take(-count)
+  end
+
+  defp exported_quips(room) do
+    path = Application.app_dir(:thereish, ["priv", "chronicles", "#{String.downcase(room)}.md"])
+
+    if File.exists?(path) do
+      {:ok, pages} = path |> File.read!() |> Thereish.Chronicle.from_markdown()
+      for page <- pages, attempt <- page.attempts, do: attempt.quip
+    else
+      []
+    end
   end
 
   defp render_variant(dir, num, letter, quip, candidate) do

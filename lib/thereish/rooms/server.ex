@@ -242,10 +242,14 @@ defmodule Thereish.Rooms.Server do
 
   # An Assayer that blows up has failed to grade, which is a thing the game has
   # a rule for. It is not a thing the Room should die of.
-  defp perform({:ask_assayer, request, in_play_quips}, state, _now) do
-    prior_quips = Enum.take(Chronicle.recent_quips(state.room.id, 5) ++ in_play_quips, -5)
-    request = Map.put(request, :prior_quips, prior_quips)
-    Steward.answer_later(fn -> Steward.assay(request) end, &{:assayed, verdict_event(&1)})
+  defp perform({:ask_assayer, request}, state, _now) do
+    chronicle = Chronicle.page_views(state.room.id, :asc)
+
+    Steward.answer_later(
+      fn -> Steward.assay(request, chronicle: chronicle) end,
+      &{:assayed, verdict_event(&1)}
+    )
+
     state
   end
 

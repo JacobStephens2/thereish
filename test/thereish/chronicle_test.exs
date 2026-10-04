@@ -1426,28 +1426,6 @@ defmodule Thereish.ChronicleTest do
     end
   end
 
-  describe "recent_quips/2" do
-    test "returns recent quips from the database in chronological order", ctx do
-      play(ctx, "cairn", "cairns")
-      quips = Chronicle.recent_quips(ctx.slug, 5)
-
-      assert length(quips) == 1
-      assert hd(quips) =~ "walk into a bar"
-    end
-
-    test "falls back to priv/chronicles/<slug>.md when room is not in DB" do
-      quips = Chronicle.recent_quips("DUST", 5)
-
-      assert length(quips) == 5
-
-      assert List.first(quips) ==
-               "Both of you served up plate, proving great minds dish out the same thoughts."
-
-      assert List.last(quips) ==
-               "One brought the raw ingredient while the other rolled the meat into a tidy meatball."
-    end
-  end
-
   describe "masks in Chronicle (ticket 16)" do
     test "Chronicle.write persists masks_meta and page_views includes masks and give masks",
          ctx do
