@@ -188,9 +188,7 @@ defmodule ThereishWeb.SpendLive do
                 <th class="py-3 px-4">Opened</th>
                 <th class="py-3 px-4">Total</th>
                 <th class="py-3 px-4">Calls</th>
-                <th :for={{role_name, _role_key} <- Spend.roles()} class="py-3 px-4">
-                  {role_name}
-                </th>
+                <th :for={{name, _key} <- Spend.roles()} class="py-3 px-4">{name}</th>
                 <th class="py-3 px-4">Unpriced</th>
               </tr>
             </thead>

@@ -9,9 +9,9 @@ defmodule Thereish.Chronicle.Spend do
   on the Page's Masks. This module owns the narrow reads of those rows, decodes
   each into calls, and tallies them.
 
-  The seam is `tally/1`, pure over a list of `t:call/0` facts, so every rule
-  about money (totals, unpriced counts, grouping) can be tested without a
-  database. The Room answer and the all-Rooms answer come from the same tally.
+  This is not a seam over Postgres: the reads stay here. `tally/1` is pure over
+  a list of `t:call/0` facts, so every rule about money (totals, unpriced
+  counts, grouping) can be tested without a database. The Room answer and the all-Rooms answer come from the same tally.
   """
 
   import Ecto.Query
@@ -90,7 +90,7 @@ defmodule Thereish.Chronicle.Spend do
   @spec room(Ecto.UUID.t()) :: room_spend()
   def room(room_id) do
     room = Repo.get!(Room, room_id)
-    calls = Enum.map(calls(room.id), &elem(&1, 1))
+    calls = Enum.map(read_calls(room.id), &elem(&1, 1))
 
     room_spend(room, calls)
   end
@@ -99,7 +99,7 @@ defmodule Thereish.Chronicle.Spend do
   @spec all() :: all_spend()
   def all do
     rooms = Repo.all(from(r in Room, order_by: [asc: r.slug]))
-    calls = calls(:all)
+    calls = read_calls(:all)
     calls_by_room = Enum.group_by(calls, &elem(&1, 0), &elem(&1, 1))
 
     calls
@@ -134,7 +134,7 @@ defmodule Thereish.Chronicle.Spend do
   end
 
   @doc """
-  Formats the spend line for display in the book view and Markdown export.
+  Formats the spend line for the Markdown export's footer.
   """
   @spec line(tally()) :: String.t()
   def line(spend) do
@@ -207,7 +207,7 @@ defmodule Thereish.Chronicle.Spend do
     do: Map.update(by_model, model, add(zero(), cost), &add(&1, cost))
 
   # Every call in scope (one Room's id, or :all), each paired with its Room's id.
-  defp calls(scope) do
+  defp read_calls(scope) do
     pages =
       from(p in Page,
         as: :owner,
@@ -259,7 +259,7 @@ defmodule Thereish.Chronicle.Spend do
   end
 
   defp author_calls(meta) when is_map(meta) and map_size(meta) > 0,
-    do: [call(:author, meta["model"] || meta[:model], meta["cost_usd"] || meta[:cost_usd])]
+    do: [call(:author, meta_value(meta, [:model]), meta_value(meta, [:cost_usd]))]
 
   defp author_calls(_meta), do: []
 
@@ -283,16 +283,15 @@ defmodule Thereish.Chronicle.Spend do
 
   # Older Verdict rows name the voice's model and cost under any of these keys.
   defp voice_calls(meta) when is_map(meta) and map_size(meta) > 0 do
-    model =
-      meta["model"] || meta[:model] ||
-        meta["voice"] || meta[:voice] ||
-        meta["voice_id"] || meta[:voice_id] ||
-        meta["provider"] || meta[:provider]
-
-    [call(:foley, model, meta["cost_usd"] || meta[:cost_usd] || meta["cost"] || meta[:cost])]
+    model = meta_value(meta, [:model, :voice, :voice_id, :provider])
+    [call(:foley, model, meta_value(meta, [:cost_usd, :cost]))]
   end
 
   defp voice_calls(_meta), do: []
+
+  # The first of these keys the meta carries, each looked up as a string, then as an atom.
+  defp meta_value(meta, keys),
+    do: Enum.find_value(keys, fn key -> meta[Atom.to_string(key)] || meta[key] end)
 
   defp call(role, model, cost),
     do: %{role: role, model: to_string(model || "unknown"), cost: to_decimal(cost)}
