@@ -1027,8 +1027,16 @@ defmodule Thereish.ChronicleTest do
       assert bait_view.arm == nil
 
       markdown = Chronicle.to_markdown(room.id)
-      assert markdown =~ "- Arm: flash"
+      assert markdown =~ "- Experiment: Author model: Flash against Astra\n- Arm: flash"
+      assert markdown =~ "- Experiment: Blinded (bait_against_plain)"
       refute markdown =~ "- Arm: bait"
+
+      assert {:ok, parsed} = Chronicle.from_markdown(markdown)
+
+      assert Enum.map(parsed, &{&1.experiment, &1.arm}) == [
+               {"Author model: Flash against Astra", "flash"},
+               {"Blinded (bait_against_plain)", nil}
+             ]
     end
   end
 

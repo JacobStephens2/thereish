@@ -372,26 +372,11 @@ defmodule Thereish.Chronicle do
     all_corrections = corrections(room_id)
     all_recaps = recaps(room_id)
     all_taps = fairness_taps(room_id)
-    all_assignments = Experiments.assignments(room_id)
-    all_outcomes = Experiments.outcomes(room_id)
-
-    unblinded_experiments =
-      room_id
-      |> Experiments.unblindings()
-      |> MapSet.new(& &1.experiment_id)
+    page_arms = Experiments.page_arms(room_id)
 
     Enum.map(
       pages,
-      &compute_page_view(
-        &1,
-        all_overrules,
-        all_corrections,
-        all_taps,
-        all_assignments,
-        all_outcomes,
-        all_recaps,
-        unblinded_experiments
-      )
+      &compute_page_view(&1, all_overrules, all_corrections, all_taps, all_recaps, page_arms)
     )
   end
 
@@ -1361,16 +1346,14 @@ defmodule Thereish.Chronicle do
     )
   end
 
-  def compute_page_view(
-        %Page{} = page,
-        all_overrules,
-        all_corrections,
-        all_taps \\ [],
-        all_assignments \\ [],
-        all_outcomes \\ [],
-        all_recaps \\ [],
-        unblinded_experiments \\ MapSet.new()
-      ) do
+  defp compute_page_view(
+         %Page{} = page,
+         all_overrules,
+         all_corrections,
+         all_taps,
+         all_recaps,
+         page_arms
+       ) do
     page_overrules =
       Enum.filter(all_overrules, fn o ->
         o.page_id == page.id or
@@ -1542,31 +1525,6 @@ defmodule Thereish.Chronicle do
           [] -> []
         end
 
-    page_ident = to_string(page.document["id"] || page.document[:id] || page.id)
-
-    matching_assignment =
-      Enum.find(all_assignments, fn a ->
-        a.page_id == page.id or
-          (a.room_id == page.room_id and to_string(a.page_identifier) == page_ident)
-      end)
-
-    matching_outcome =
-      Enum.find(all_outcomes, fn o ->
-        o.page_id == page.id or
-          (o.room_id == page.room_id and to_string(o.page_identifier) == page_ident)
-      end)
-
-    raw_arm =
-      (matching_assignment && matching_assignment.arm) ||
-        (matching_outcome && matching_outcome.arm)
-
-    experiment_id =
-      (matching_assignment && matching_assignment.experiment_id) ||
-        (matching_outcome && matching_outcome.experiment_id) ||
-        "bait_against_plain"
-
-    unblinded? = MapSet.member?(unblinded_experiments, experiment_id)
-
     %{
       id: page.id,
       room_id: page.room_id,
@@ -1592,15 +1550,9 @@ defmodule Thereish.Chronicle do
       recap: page_recap,
       overrules: Enum.map(page_overrules, &format_overrule/1),
       corrections: Enum.map(page_corrections, &format_correction/1),
-      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1),
-      experiment_id: experiment_id,
-      experiment_unblinded: unblinded?,
-      arm: if(unblinded?, do: raw_arm, else: nil),
-      trap_converged:
-        if(unblinded? && matching_outcome, do: matching_outcome.trap_converged, else: nil),
-      deep_converged:
-        if(unblinded? && matching_outcome, do: matching_outcome.deep_converged, else: nil)
+      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1)
     }
+    |> Map.merge(Experiments.page_arm(page_arms, page))
   end
 
   # The Scribe's last word on a Page, read over by the players'. Two rows can
