@@ -1821,7 +1821,7 @@ defmodule Thereish.RoomsTest do
       # Now simulate a late mask arriving
       room_pid = GenServer.whereis(Server.via(ctx.slug))
       late_mask = %{url: "/media/masks/mask-late.png", meta: %{}}
-      send(room_pid, {:mask_landed, ctx.mara.id, nil, {:ok, late_mask}})
+      send(room_pid, {:mask_landed, ctx.mara.id, giving(ctx.slug), {:ok, late_mask}})
 
       assert_receive :room_changed
 
@@ -4202,6 +4202,116 @@ defmodule Thereish.RoomsTest do
       refute view_after_mara.playing.path == initial_path
       assert initial_path in Store.list_nevers(ctx.room.id)
     end
+  end
+
+  describe "results that land after their Page closed" do
+    setup do
+      slug = open_room()
+      token = device_token()
+      {:ok, mara} = Rooms.join(slug, "Mara", token)
+      {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+      room = Repo.get_by!(Thereish.Rooms.Room, slug: slug)
+
+      %{slug: slug, token: token, mara: mara, jacob: jacob, room: room}
+    end
+
+    # Plays a Page to a meld. With a Speaker held and a slow Voice, the
+    # Verdict is still being spoken when the Page closes, so Voice holds the
+    # Chronicle write.
+    defp meld(ctx) do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "deep canyon")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "echoing wind")
+      await_phase(ctx.slug, :bridging)
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_phase(ctx.slug, :closed)
+    end
+
+    test "a Bookends tap made while Voice holds the Page is recorded on that Page", ctx do
+      # A Page before it, so a misfiled tap would have somewhere to go.
+      meld(ctx)
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+      [earlier] = Chronicle.pages(ctx.room.id)
+
+      steward(voice_delay_ms: 5_000)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token)
+      meld(ctx)
+
+      assert [earlier] == Chronicle.pages(ctx.room.id)
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.mara.id, "great")
+
+      # Turning the Page releases the held write, and the tap after it.
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+
+      [^earlier, page] = Chronicle.pages(ctx.room.id)
+      [tap] = Chronicle.bookends_taps(ctx.room.id)
+      assert tap.page_id == page.id
+      assert tap.page_identifier == page.id
+      assert tap.label == "great"
+
+      outcomes =
+        Map.new(Chronicle.experiment_outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1})
+
+      assert outcomes[page.id].taps == %{to_string(ctx.mara.id) => "great"}
+      assert outcomes[earlier.id].taps == %{}
+    end
+
+    test "a Mask for an earlier Give that lands after the Page turned is written onto its Page",
+         ctx do
+      steward(draw_mode: :refused)
+      giving = giving(ctx.slug)
+      meld(ctx)
+      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+
+      late_mask = %{url: "/media/masks/mask-late.png", meta: %{}}
+
+      send(
+        GenServer.whereis(Server.via(ctx.slug)),
+        {:mask_landed, ctx.mara.id, giving, {:ok, late_mask}}
+      )
+
+      eventually(fn ->
+        [page] = Chronicle.pages(ctx.room.id)
+
+        match?(
+          %{"url" => "/media/masks/mask-late.png"},
+          page.masks_meta[to_string(ctx.mara.id)]
+        )
+      end)
+
+      [page] = Chronicle.pages(ctx.room.id)
+      assert page.masks_meta[to_string(ctx.jacob.id)] == "dot"
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).your_mask == nil
+    end
+
+    test "a Track that lands while Voice holds the Page replaces its unfinished music record",
+         ctx do
+      steward(voice_delay_ms: 1_500, music_delay_ms: 200, vamp_mode: :unavailable)
+      :ok = Rooms.claim_speaker(ctx.slug, ctx.token)
+      meld(ctx)
+
+      assert Chronicle.pages(ctx.room.id) == []
+
+      # The Track lands at 200ms, while the Verdict is still being spoken.
+      eventually(
+        fn -> match?([%{music_meta: %{"path" => _}}], Chronicle.page_views(ctx.slug)) end,
+        "the held Track never reached its Page",
+        3_000
+      )
+
+      [page] = Chronicle.page_views(ctx.slug)
+      assert is_nil(page.music_meta["failure"])
+      assert page.music_meta["path"] =~ "/media/tracks/fake-"
+    end
+  end
+
+  defp giving(slug) do
+    slug
+    |> Server.via()
+    |> :sys.get_state()
+    |> Map.fetch!(:pages)
+    |> Thereish.Rooms.Pages.giving()
   end
 
   defp received_assays(acc \\ []) do
