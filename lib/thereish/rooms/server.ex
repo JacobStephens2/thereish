@@ -357,19 +357,8 @@ defmodule Thereish.Rooms.Server do
       state
   end
 
-  defp perform({:record_overrule, overrule}, state, _now) do
-    {:ok, _} = Chronicle.record_overrule(state.room.id, overrule)
-
-    {:ok, _} =
-      Steward.overrule(
-        overrule,
-        %{
-          closeness: overrule.couple_closeness,
-          reasoning: overrule.couple_reasoning,
-          quip: overrule.couple_quip
-        }
-      )
-
+  defp perform({:record_overrule, ruling}, state, _now) do
+    {:ok, _} = Steward.overrule(state.room.id, ruling)
     state
   rescue
     error ->
