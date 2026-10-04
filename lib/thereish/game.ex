@@ -1422,7 +1422,8 @@ defmodule Thereish.Game do
 
   # One check per Seat action: whether this Seat stands where the action can be
   # taken. What the event carries — the Give's text, the Bridge's word, the
-  # tap's label — is checked after, by `apply/2` alone.
+  # tap's label — is checked after, by `apply/2` alone. A Give and a Bridge ask
+  # about the Phase before the Seat, so their errors read as they always have.
   defp may_give(state, seat_id) do
     cond do
       phase(state) != :giving -> {:error, :not_giving}
