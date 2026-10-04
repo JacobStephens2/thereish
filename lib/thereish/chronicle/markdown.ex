@@ -1,102 +1,196 @@
 defmodule Thereish.Chronicle.Markdown do
   @moduledoc """
-  Renders and parses the Chronicle as Markdown on demand (ADR-0003, ticket 08).
+  The Chronicle's Markdown export, in both directions (ADR-0003, ticket 08).
 
   Both Jacob and coding agents can read and round-trip past Pages
   without a database client.
+
+  Pure. `render/3` takes the Room's Code, its Page views oldest first and its
+  Spend tally, and answers the document; `parse/1` reads a document back. This
+  is not a seam over Postgres: the Chronicle keeps the reads, and this module
+  owns only the format, so every rule about it can be tested from in-memory
+  Page views.
+
+  Render and parse share one vocabulary of line labels, and parse reads by
+  structure rather than by guessing what a line is. Seat names are typed freely,
+  so a Bridge is whatever sits indented under its Attempt's `- Bridges:` line,
+  whatever its Seat is called.
   """
 
-  alias Thereish.Chronicle
   alias Thereish.Chronicle.Opinion
+  alias Thereish.Chronicle.PageView
   alias Thereish.Chronicle.Spend
   alias Thereish.Experiments
   alias Thereish.Mask
-  alias Thereish.Repo
-  alias Thereish.Rooms.Room
+
+  @typedoc "One correction read back, from a Page or from one of its Attempts."
+  @type parsed_correction :: %{
+          author: String.t(),
+          target: String.t(),
+          original: String.t() | nil,
+          corrected: String.t(),
+          note: String.t() | nil
+        }
+
+  @typedoc "One overrule read back: the first one written about its Attempt."
+  @type parsed_overrule :: %{
+          proposer: String.t(),
+          original: integer() | nil,
+          overruled: integer() | nil,
+          reasoning: String.t()
+        }
+
+  @typedoc """
+  One Attempt read back. An Attempt written before ADR-0010, graded one pair at
+  a time, reads with no closeness, band, reasoning or quip.
+  """
+  @type parsed_attempt :: %{
+          number: integer(),
+          bookends: [String.t()],
+          bridges: [{seat_name :: String.t(), bridge :: String.t()}],
+          closeness: integer() | nil,
+          band: String.t() | nil,
+          reasoning: String.t() | nil,
+          quip: String.t() | nil,
+          carried: [String.t()] | nil,
+          fairness_taps: [%{seat_name: String.t(), label: String.t()}],
+          overrule: parsed_overrule() | nil,
+          corrections: [parsed_correction()]
+        }
+
+  @typedoc """
+  One Page read back. A Give written before Give rows reads as from "Seat".
+  `corrections` are the Page-level ones; an Attempt's own are on the Attempt.
+  """
+  @type parsed_page :: %{
+          bookends: [String.t()],
+          melded: boolean(),
+          closeness: integer() | nil,
+          give: String.t() | nil,
+          gives: [%{seat_name: String.t(), text: String.t()}],
+          experiment: String.t() | nil,
+          arm: String.t() | nil,
+          track: String.t() | nil,
+          vamp: String.t() | nil,
+          recap: %{recap: String.t(), callback: String.t() | nil} | nil,
+          attempts: [parsed_attempt()],
+          corrections: [parsed_correction()]
+        }
+
+  # Every line label the export writes, each with the older spellings parse
+  # still accepts so that earlier exports, such as `priv/chronicles/dust.md`,
+  # keep reading. Render writes only `- <label>:`; aliases are read-only.
+  @labels %{
+    bookends: {"Bookends", ["- Anchors:"]},
+    outcome: {"Outcome", ["- Status:"]},
+    closeness: {"Closeness", []},
+    rule: {"Rule", []},
+    bookend: {"Bookend", []},
+    give: {"Give", []},
+    track: {"Track", ["Track:"]},
+    vamp: {"Vamp", ["Vamp:"]},
+    mask: {"Mask", []},
+    experiment: {"Experiment", []},
+    arm: {"Arm", []},
+    opened: {"Opened", []},
+    closed: {"Closed", []},
+    bridges: {"Bridges", []},
+    reasoning: {"Reasoning", []},
+    quip: {"Quip", []},
+    carried: {"Carried", []},
+    model: {"Model", []},
+    fairness: {"Fairness", []},
+    pair: {"Pair", []},
+    proposed_by: {"Proposed by", []},
+    original: {"Original", []},
+    overruled: {"Overruled", []}
+  }
+
+  @page_heading "### Page"
+  @attempt_heading "#### Attempt"
+  @page_corrections_heading "#### Corrections"
+  @overrule_heading "##### Overrule"
+  @attempt_corrections_heading "##### Corrections"
+  @bridge_indent "  - "
+  @pair_indent "  "
+
+  @correction_pattern ~r/^\s*-\s*By\s+([^:]+):\s*corrected\s+(\w+)(?:\s+from\s+"([^"]+)")?\s+to\s+"([^"]+)"(?:\s+\(Note:\s*"([^"]+)"\))?/
 
   @doc """
-  Renders the Chronicle for a Room as a Markdown document.
+  Renders a Room's Chronicle as a Markdown document, from its Code, its Page
+  views oldest first and its Spend tally.
   """
-  @spec render(Ecto.UUID.t() | String.t()) :: String.t()
-  def render(room_id_or_slug) do
-    room = resolve_room(room_id_or_slug)
-    page_views = Chronicle.page_views(room.id, :asc)
+  @spec render(String.t(), [PageView.t()], Spend.tally()) :: String.t()
+  def render(code, page_views, spend) do
+    header = "# The Chronicle\n\n## Room: #{code}\n\n"
+    footer = "\n\n---\n\n" <> Spend.line(spend) <> "\n"
 
-    header = "# The Chronicle\n\n## Room: #{room.slug}\n\n"
+    case page_views do
+      [] ->
+        header <> "No pages played yet." <> footer
 
-    spend_line = room.id |> Spend.room() |> Spend.line()
+      pages ->
+        pages_md =
+          pages
+          |> Enum.with_index(1)
+          |> Enum.map_join("\n\n---\n\n", fn {page, index} -> render_page(page, index) end)
 
-    if page_views == [] do
-      header <> "No pages played yet.\n\n---\n\n" <> spend_line <> "\n"
-    else
-      pages_md =
-        page_views
-        |> Enum.with_index(1)
-        |> Enum.map(fn {page, index} -> render_page(page, index) end)
-        |> Enum.join("\n\n---\n\n")
-
-      header <> pages_md <> "\n\n---\n\n" <> spend_line <> "\n"
+        header <> pages_md <> footer
     end
   end
 
   defp render_page(page, index) do
     bookends_str = Enum.join(page.bookends, " · ")
     outcome_str = if page.melded, do: "Melded", else: "Unmelded"
-    closed_detail = "#{outcome_str} (#{page.closed_because})"
     closeness_str = if page.closeness, do: "#{page.closeness} / 100", else: "None"
 
     give_lines =
       Enum.map(page.gives, fn
-        %{seat_name: nil} = g -> "- Give: #{g.text}"
-        g -> "- Give (#{g.seat_name}): #{g.text}"
+        %{seat_name: nil} = g -> line(:give, g.text)
+        g -> line(:give, g.seat_name, g.text)
       end)
 
     experiment_lines =
       cond do
         page.experiment_unblinded && page.arm ->
           [
-            "- Experiment: #{Experiments.definition(page.experiment_id).name}",
-            "- Arm: #{page.arm}"
+            line(:experiment, Experiments.definition(page.experiment_id).name),
+            line(:arm, page.arm)
           ]
 
         page.experiment_id ->
-          ["- Experiment: Blinded (#{page.experiment_id})"]
+          [line(:experiment, "Blinded (#{page.experiment_id})")]
 
         true ->
           []
       end
 
-    track_lines = if page.track, do: ["- Track: #{page.track.title}"], else: []
-    vamp_lines = if page.vamp, do: ["- Vamp: the short piece"], else: []
+    track_lines = if page.track, do: [line(:track, page.track.title)], else: []
+    vamp_lines = if page.vamp, do: [line(:vamp, "the short piece")], else: []
 
     mask_lines =
-      for(g <- page.gives, url = Mask.url(g.mask), do: "- Mask (#{g.seat_name}): #{url}") ++
+      for(g <- page.gives, url = Mask.url(g.mask), do: line(:mask, g.seat_name, url)) ++
         for m <- page.masks_without_give,
-            do: "- Mask (#{m.seat_name || m.seat_id}): #{Mask.url(m.mask)}"
+            do: line(:mask, m.seat_name || m.seat_id, Mask.url(m.mask))
 
     rule_lines =
       case page.full_table do
-        true -> ["- Rule: Full table"]
-        false -> ["- Rule: Two Bookends"]
+        true -> [line(:rule, "Full table")]
+        false -> [line(:rule, "Two Bookends")]
         _ -> []
       end
 
     bookend_give_lines =
-      Enum.flat_map(page.bookend_origins, fn origin ->
-        if origin.give && origin.word do
-          who = origin.seat_name || "Seat"
-          ["- Bookend (#{origin.word}): from #{who}'s #{origin.give}"]
-        else
-          []
-        end
-      end)
+      for origin <- page.bookend_origins, origin.give && origin.word do
+        line(:bookend, origin.word, "from #{origin.seat_name || "Seat"}'s #{origin.give}")
+      end
 
     meta_lines =
       [
-        "### Page #{index}: #{bookends_str}",
-        "- Bookends: #{bookends_str}",
-        "- Outcome: #{closed_detail}",
-        "- Closeness: #{closeness_str}"
+        "#{@page_heading} #{index}: #{bookends_str}",
+        line(:bookends, bookends_str),
+        line(:outcome, "#{outcome_str} (#{page.closed_because})"),
+        line(:closeness, closeness_str)
       ] ++
         rule_lines ++
         bookend_give_lines ++
@@ -106,41 +200,22 @@ defmodule Thereish.Chronicle.Markdown do
         mask_lines ++
         experiment_lines ++
         [
-          "- Opened: #{page.opened_at && DateTime.to_iso8601(page.opened_at)}",
-          "- Closed: #{page.closed_at && DateTime.to_iso8601(page.closed_at)}"
+          line(:opened, page.opened_at && DateTime.to_iso8601(page.opened_at)),
+          line(:closed, page.closed_at && DateTime.to_iso8601(page.closed_at))
         ]
 
-    attempts_md =
-      page.attempts
-      |> Enum.map(&render_attempt/1)
-      |> Enum.join("\n\n")
+    attempts_md = Enum.map_join(page.attempts, "\n\n", &render_attempt/1)
 
-    page_level_corrections =
-      Enum.filter(page.corrections, fn c -> is_nil(c.attempt_number) end)
-
+    # A sibling of the Attempts rather than a sub-section of the last one, so
+    # that parse can tell where the last Attempt ends.
     page_corrections_md =
-      case page_level_corrections do
-        [] ->
-          nil
+      page.corrections
+      |> Enum.filter(&is_nil(&1.attempt_number))
+      |> render_corrections(@page_corrections_heading)
 
-        corrections ->
-          corr_items =
-            Enum.map(corrections, fn c ->
-              orig = if c.original_value, do: " from \"#{c.original_value}\"", else: ""
-              note = if c.note, do: " (Note: \"#{c.note}\")", else: ""
-
-              "  - By #{c.author_name}: corrected #{c.target}#{orig} to \"#{c.corrected_value}\"#{note}"
-            end)
-            |> Enum.join("\n")
-
-          "##### Corrections\n" <> corr_items
-      end
-
-    sections =
-      [Enum.join(meta_lines, "\n"), render_recap(page.recap), attempts_md, page_corrections_md]
-      |> Enum.reject(&(&1 in [nil, ""]))
-
-    Enum.join(sections, "\n\n")
+    [Enum.join(meta_lines, "\n"), render_recap(page.recap), attempts_md, page_corrections_md]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join("\n\n")
   end
 
   # The Scribe's paragraph, as a blockquote at the head of the Page — which is
@@ -163,129 +238,123 @@ defmodule Thereish.Chronicle.Markdown do
   end
 
   defp render_attempt(attempt) do
-    bookends_str = Enum.join(attempt.bookends, " · ")
-
-    bridges_lines =
-      attempt.bridges
-      |> Enum.map(fn b -> "  - #{b.seat_name}: #{b.bridge}" end)
-      |> Enum.join("\n")
+    bridge_lines = Enum.map(attempt.bridges, &"#{@bridge_indent}#{&1.seat_name}: #{&1.bridge}")
 
     verdict_lines =
       case attempt.verdicts do
         [] ->
-          ["- Closeness: Ungraded"]
+          [line(:closeness, "Ungraded")]
 
         [single] ->
           band_str = if single.band, do: " (#{single.band})", else: ""
-          lines = ["- Closeness: #{single.closeness} / 100#{band_str}"]
 
-          lines =
-            if single.reasoning, do: lines ++ ["- Reasoning: #{single.reasoning}"], else: lines
-
-          lines = if single.quip, do: lines ++ ["- Quip: #{single.quip}"], else: lines
-
-          lines =
-            if attempt.carried && attempt.carried != [] do
-              lines ++ ["- Carried: #{Thereish.Game.join_and(attempt.carried)}"]
-            else
-              lines
-            end
-
-          if single.model do
-            cost_str = if single.cost_usd, do: "$#{single.cost_usd}", else: "$0.0"
-
-            lines ++
-              [
-                "- Model: #{single.model} (prompt #{single.prompt_version}, #{single.latency_ms || 0}ms, #{cost_str})"
-              ]
-          else
-            lines
-          end
+          [line(:closeness, "#{single.closeness} / 100#{band_str}")] ++
+            if(single.reasoning, do: [line(:reasoning, single.reasoning)], else: []) ++
+            if(single.quip, do: [line(:quip, single.quip)], else: []) ++
+            if(attempt.carried not in [nil, []],
+              do: [line(:carried, Thereish.Game.join_and(attempt.carried))],
+              else: []
+            ) ++
+            if(single.model, do: [model_line(single)], else: [])
 
         # An attempt written before ADR-0010, when the Assayer answered one pair
         # at a time. The book is append-only, so those rows still read as pairs.
         multiple ->
-          Enum.flat_map(multiple, fn v ->
-            band_str = if v.band, do: " (#{v.band})", else: ""
-            bridges_label = Enum.join(v.bridges, " / ")
-            lines = ["- Pair [#{bridges_label}]: #{v.closeness} / 100#{band_str}"]
-            lines = if v.reasoning, do: lines ++ ["  Reasoning: #{v.reasoning}"], else: lines
-            lines = if v.quip, do: lines ++ ["  Quip: #{v.quip}"], else: lines
-            lines
-          end)
+          Enum.flat_map(multiple, &pair_lines/1)
+      end
+
+    fairness_lines =
+      case attempt.fairness_taps do
+        [] ->
+          []
+
+        taps ->
+          [
+            line(
+              :fairness,
+              Enum.map_join(taps, ", ", &"#{&1.reviewer_name}: #{Opinion.human(&1.label)}")
+            )
+          ]
       end
 
     overrules_md =
       case attempt.overrules do
-        [] ->
-          nil
-
-        overrules ->
-          overrules_lines =
-            Enum.map(overrules, fn o ->
-              """
-              ##### Overrule
-              - Proposed by: #{o.proposer_name}
-              - Original: #{o.machine_closeness} / 100 ("#{o.machine_reasoning}")
-              - Overruled: #{o.couple_closeness} / 100 ("#{o.couple_reasoning}")
-              """
-              |> String.trim_trailing()
-            end)
-            |> Enum.join("\n\n")
-
-          overrules_lines
+        [] -> nil
+        overrules -> Enum.map_join(overrules, "\n\n", &render_overrule/1)
       end
 
-    corrections_md =
-      case attempt.corrections do
-        [] ->
-          nil
-
-        corrections ->
-          corr_items =
-            Enum.map(corrections, fn c ->
-              orig = if c.original_value, do: " from \"#{c.original_value}\"", else: ""
-              note = if c.note, do: " (Note: \"#{c.note}\")", else: ""
-
-              "  - By #{c.author_name}: corrected #{c.target}#{orig} to \"#{c.corrected_value}\"#{note}"
-            end)
-            |> Enum.join("\n")
-
-          "##### Corrections\n" <> corr_items
-      end
-
-    fairness_md =
-      case attempt.fairness_taps do
-        [] ->
-          nil
-
-        taps ->
-          items =
-            Enum.map(taps, fn t ->
-              "#{t.reviewer_name}: #{Opinion.human(t.label)}"
-            end)
-            |> Enum.join(", ")
-
-          "- Fairness: #{items}"
-      end
-
-    attempt_lines =
-      ([
-         "#### Attempt #{attempt.number}",
-         "- Bookends: #{bookends_str}",
-         "- Bridges:\n#{bridges_lines}"
-       ] ++
-         verdict_lines ++
-         [fairness_md, overrules_md, corrections_md])
-      |> Enum.reject(&is_nil/1)
-
-    Enum.join(attempt_lines, "\n")
+    ([
+       "#{@attempt_heading} #{attempt.number}",
+       line(:bookends, Enum.join(attempt.bookends, " · ")),
+       Enum.join([prefix(:bridges) | bridge_lines], "\n")
+     ] ++
+       verdict_lines ++
+       fairness_lines ++
+       [overrules_md, render_corrections(attempt.corrections, @attempt_corrections_heading)])
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
   end
+
+  defp model_line(verdict) do
+    cost_str = if verdict.cost_usd, do: "$#{verdict.cost_usd}", else: "$0.0"
+
+    line(
+      :model,
+      "#{verdict.model} (prompt #{verdict.prompt_version}, #{verdict.latency_ms || 0}ms, #{cost_str})"
+    )
+  end
+
+  # A pair Verdict's Reasoning and Quip sit indented under it, unbulleted, so
+  # that parse never reads them as the Attempt's own or as a Bridge.
+  defp pair_lines(verdict) do
+    band_str = if verdict.band, do: " (#{verdict.band})", else: ""
+    pair = "- #{label(:pair)} [#{Enum.join(verdict.bridges, " / ")}]"
+
+    ["#{pair}: #{verdict.closeness} / 100#{band_str}"] ++
+      if(verdict.reasoning,
+        do: ["#{@pair_indent}#{label(:reasoning)}: #{verdict.reasoning}"],
+        else: []
+      ) ++
+      if verdict.quip, do: ["#{@pair_indent}#{label(:quip)}: #{verdict.quip}"], else: []
+  end
+
+  defp render_overrule(o) do
+    Enum.join(
+      [
+        @overrule_heading,
+        line(:proposed_by, o.proposer_name),
+        line(:original, "#{o.machine_closeness} / 100 (\"#{o.machine_reasoning}\")"),
+        line(:overruled, "#{o.couple_closeness} / 100 (\"#{o.couple_reasoning}\")")
+      ],
+      "\n"
+    )
+  end
+
+  defp render_corrections([], _heading), do: nil
+
+  defp render_corrections(corrections, heading) do
+    Enum.join([heading | Enum.map(corrections, &correction_line/1)], "\n")
+  end
+
+  defp correction_line(c) do
+    orig = if c.original_value, do: " from \"#{c.original_value}\"", else: ""
+    note = if c.note, do: " (Note: \"#{c.note}\")", else: ""
+
+    "#{@bridge_indent}By #{c.author_name}: corrected #{c.target}#{orig} to \"#{c.corrected_value}\"#{note}"
+  end
+
+  defp label(key), do: @labels |> Map.fetch!(key) |> elem(0)
+
+  defp prefix(key), do: "- #{label(key)}:"
+
+  defp line(key, value), do: "#{prefix(key)} #{value}"
+
+  defp line(key, qualifier, value), do: "- #{label(key)} (#{qualifier}): #{value}"
 
   @doc """
   Parses an exported Chronicle Markdown string back into structured data.
   """
-  @spec parse(String.t()) :: {:ok, [map()]} | {:error, term()}
+  @spec parse(String.t()) :: {:ok, [parsed_page()]} | {:error, term()}
   def parse(markdown) do
     # Strip any trailing spend footer section
     markdown =
@@ -294,125 +363,59 @@ defmodule Thereish.Chronicle.Markdown do
         [clean] -> clean
       end
 
-    # Split by Page sections
-    page_chunks =
-      Regex.split(~r/(?=### Page \d+:)/, markdown)
-      |> Enum.filter(&String.starts_with?(String.trim_leading(&1), "### Page "))
+    {_preamble, pages} =
+      markdown
+      |> String.split("\n")
+      |> sections(&Regex.match?(~r/^#{@page_heading} \d+:/, &1))
 
-    parsed_pages = Enum.map(page_chunks, &parse_page_chunk/1)
-    {:ok, parsed_pages}
+    {:ok, Enum.map(pages, &parse_page/1)}
   end
 
-  defp parse_page_chunk(chunk) do
-    [header_part | attempt_parts] = Regex.split(~r/(?=#### Attempt \d+)/, chunk)
+  defp parse_page({heading, body}) do
+    [_, bookends_text] = Regex.run(~r/^#{@page_heading} \d+:\s*(.*)/, heading)
+    bookends = split_bookends(bookends_text)
 
-    # Parse Page header
-    [page_title | meta_lines] = String.split(header_part, "\n", trim: true)
-    [_, bookends_text] = Regex.run(~r/### Page \d+:\s*(.*)/, page_title)
-    bookends = String.split(bookends_text, " · ") |> Enum.map(&String.trim/1)
-
-    outcome_line =
-      Enum.find(
-        meta_lines,
-        &(String.starts_with?(&1, "- Outcome:") or String.starts_with?(&1, "- Status:"))
-      )
-
-    melded = outcome_line != nil and String.contains?(outcome_line, "Melded")
-
-    closeness_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Closeness:"))
-    closeness = parse_closeness(closeness_line)
-
-    give_lines =
-      Enum.filter(
-        meta_lines,
-        &(String.starts_with?(&1, "- Give:") or Regex.match?(~r/^- Give \([^)]+\):/, &1))
-      )
+    {meta_lines, page_sections} = sections(body, &String.starts_with?(&1, "#### "))
 
     gives =
-      Enum.map(give_lines, fn line ->
-        case Regex.run(~r/^- Give \(([^)]+)\):\s*(.*)/, line) do
-          [_, name, text] ->
-            %{seat_name: name, text: text}
-
-          nil ->
-            text = line |> String.replace_prefix("- Give:", "") |> String.trim()
-            %{seat_name: "Seat", text: text}
+      Enum.flat_map(meta_lines, fn line ->
+        case qualified(line, :give) do
+          {nil, text} -> [%{seat_name: "Seat", text: text}]
+          {name, text} -> [%{seat_name: name, text: text}]
+          nil -> []
         end
       end)
 
     give =
       case gives do
-        [single] -> single.text
         [first | _] -> first.text
         [] -> nil
       end
 
-    experiment_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Experiment:"))
-
-    experiment =
-      if experiment_line do
-        experiment_line
-        |> String.replace_prefix("- Experiment:", "")
-        |> String.trim()
+    attempts =
+      for {heading, body} <- page_sections,
+          [_, number] <- [Regex.run(~r/^#{@attempt_heading} (\d+)/, heading)] do
+        parse_attempt(String.to_integer(number), body)
       end
 
-    arm_line = Enum.find(meta_lines, &String.starts_with?(&1, "- Arm:"))
-
-    arm =
-      if arm_line do
-        arm_line
-        |> String.replace_prefix("- Arm:", "")
-        |> String.trim()
-      end
-
-    track_line =
-      Enum.find(
-        meta_lines,
-        &(String.starts_with?(&1, "- Track:") or String.starts_with?(&1, "Track:"))
-      )
-
-    track =
-      if track_line do
-        track_title =
-          track_line
-          |> String.replace_prefix("- Track:", "")
-          |> String.replace_prefix("Track:", "")
-          |> String.trim()
-
-        if track_title == "", do: nil, else: track_title
-      end
-
-    vamp_line =
-      Enum.find(
-        meta_lines,
-        &(String.starts_with?(&1, "- Vamp:") or String.starts_with?(&1, "Vamp:"))
-      )
-
-    vamp =
-      if vamp_line do
-        vamp_label =
-          vamp_line
-          |> String.replace_prefix("- Vamp:", "")
-          |> String.replace_prefix("Vamp:", "")
-          |> String.trim()
-
-        if vamp_label == "", do: nil, else: vamp_label
-      end
-
-    attempts = Enum.map(attempt_parts, &parse_attempt_chunk/1)
+    corrections =
+      for {@page_corrections_heading <> _, body} <- page_sections,
+          correction <- parse_corrections(body),
+          do: correction
 
     %{
       bookends: bookends,
-      melded: melded,
-      closeness: closeness,
+      melded: (field(meta_lines, :outcome) || "") =~ "Melded",
+      closeness: parse_closeness(field(meta_lines, :closeness)),
       give: give,
       gives: gives,
-      experiment: experiment,
-      arm: arm,
-      track: track,
-      vamp: vamp,
+      experiment: field(meta_lines, :experiment),
+      arm: field(meta_lines, :arm),
+      track: blank_to_nil(field(meta_lines, :track)),
+      vamp: blank_to_nil(field(meta_lines, :vamp)),
       recap: parse_recap(meta_lines),
-      attempts: attempts
+      attempts: attempts,
+      corrections: corrections
     }
   end
 
@@ -441,211 +444,99 @@ defmodule Thereish.Chronicle.Markdown do
     |> Enum.reject(&(&1 == ""))
   end
 
-  defp parse_attempt_chunk(chunk) do
-    lines = String.split(chunk, "\n")
-    [title | _] = lines
-    [_, num_str] = Regex.run(~r/#### Attempt (\d+)/, title)
-    number = String.to_integer(num_str)
+  # An Attempt's own fields are read only from its top-level lines, never from
+  # a Bridge under it or a pair Verdict's indented lines.
+  defp parse_attempt(number, body) do
+    {lines, attempt_sections} = sections(body, &String.starts_with?(&1, "##### "))
+    closeness_value = field(lines, :closeness)
 
-    bookends_line =
-      Enum.find(
-        lines,
-        &(String.starts_with?(String.trim(&1), "- Bookends:") or
-            String.starts_with?(String.trim(&1), "- Anchors:"))
-      )
-
-    bookends =
-      if bookends_line do
-        bookends_line
-        |> String.trim()
-        |> String.replace_prefix("- Bookends:", "")
-        # Compatibility clause: accept old Anchors: lines so earlier exports round-trip
-        |> String.replace_prefix("- Anchors:", "")
-        |> String.trim()
-        |> String.split(" · ")
-        |> Enum.map(&String.trim/1)
-      else
-        []
-      end
-
-    bridges =
-      lines
-      |> Enum.flat_map(fn line ->
-        case Regex.run(~r/^\s*-\s*([^:]+):\s*(.*)$/, line) do
-          [_, name, bridge]
-          when name not in [
-                 "Bookends",
-                 "Anchors",
-                 "Bridges",
-                 "Closeness",
-                 "Reasoning",
-                 "Quip",
-                 "Model",
-                 "Outcome",
-                 "Status",
-                 "Opened",
-                 "Closed",
-                 "Proposed by",
-                 "Original",
-                 "Overruled",
-                 "Fairness",
-                 "Carried",
-                 "Rule"
-               ] ->
-            if String.starts_with?(name, "By ") or String.starts_with?(name, "Bookend") do
-              []
-            else
-              [{String.trim(name), String.trim(bridge)}]
-            end
-
-          _ ->
-            []
-        end
+    overrule =
+      Enum.find_value(attempt_sections, fn
+        {@overrule_heading <> _, overrule_lines} -> parse_overrule(overrule_lines)
+        _ -> nil
       end)
 
-    closeness_line = Enum.find(lines, &String.starts_with?(String.trim(&1), "- Closeness:"))
-    closeness = parse_closeness(closeness_line)
-    band = parse_band(closeness_line)
-
-    reasoning =
-      case Enum.find(lines, &String.starts_with?(String.trim(&1), "- Reasoning:")) do
-        nil -> nil
-        line -> line |> String.replace_prefix("- Reasoning:", "") |> String.trim()
-      end
-
-    quip =
-      case Enum.find(lines, &String.starts_with?(String.trim(&1), "- Quip:")) do
-        nil -> nil
-        line -> line |> String.replace_prefix("- Quip:", "") |> String.trim()
-      end
-
-    carried =
-      case Enum.find(lines, &String.starts_with?(String.trim(&1), "- Carried:")) do
-        nil ->
-          nil
-
-        line ->
-          line
-          |> String.trim()
-          |> String.replace_prefix("- Carried:", "")
-          |> String.trim()
-          |> parse_joined_words()
-      end
-
-    fairness_line = Enum.find(lines, &String.starts_with?(String.trim(&1), "- Fairness:"))
-    fairness_taps = parse_fairness_line(fairness_line)
-    overrule = parse_overrule_section(chunk)
-    corrections = parse_corrections_section(chunk)
+    corrections =
+      for {@attempt_corrections_heading <> _, body} <- attempt_sections,
+          correction <- parse_corrections(body),
+          do: correction
 
     %{
       number: number,
-      bookends: bookends,
-      bridges: bridges,
-      closeness: closeness,
-      band: band,
-      reasoning: reasoning,
-      quip: quip,
-      carried: carried,
-      fairness_taps: fairness_taps,
+      bookends: lines |> field(:bookends) |> split_bookends(),
+      bridges: parse_bridges(lines),
+      closeness: parse_closeness(closeness_value),
+      band: parse_band(closeness_value),
+      reasoning: field(lines, :reasoning),
+      quip: field(lines, :quip),
+      carried: lines |> field(:carried) |> parse_joined_words(),
+      fairness_taps: lines |> field(:fairness) |> parse_fairness(),
       overrule: overrule,
       corrections: corrections
     }
   end
 
-  defp parse_overrule_section(chunk) do
-    if String.contains?(chunk, "##### Overrule") do
-      [_, overrule_part] = String.split(chunk, "##### Overrule", parts: 2)
-      lines = String.split(overrule_part, "\n")
+  # Exactly the indented lines directly under `- Bridges:`. Each splits at its
+  # last ": ", since Legality never lets a Bridge hold a colon while a Seat name
+  # may.
+  defp parse_bridges(lines) do
+    lines
+    |> Enum.drop_while(&(String.trim_trailing(&1) != prefix(:bridges)))
+    |> Enum.drop(1)
+    |> Enum.take_while(&String.starts_with?(&1, @bridge_indent))
+    |> Enum.flat_map(fn line ->
+      case line |> String.replace_prefix(@bridge_indent, "") |> String.split(": ") do
+        [_no_separator] ->
+          []
 
-      proposer =
-        case Enum.find(lines, &String.contains?(&1, "- Proposed by:")) do
-          nil -> "Player"
-          l -> l |> String.replace(~r/.*- Proposed by:\s*/, "") |> String.trim()
-        end
-
-      orig_closeness =
-        case Enum.find(lines, &String.contains?(&1, "- Original:")) do
-          nil -> nil
-          l -> parse_closeness(l)
-        end
-
-      overruled_closeness =
-        case Enum.find(lines, &String.contains?(&1, "- Overruled:")) do
-          nil -> nil
-          l -> parse_closeness(l)
-        end
-
-      reasoning =
-        case Enum.find(lines, &String.contains?(&1, "- Overruled:")) do
-          nil ->
-            ""
-
-          l ->
-            case Regex.run(~r/\("([^"]+)"\)/, l) do
-              [_, r] -> r
-              _ -> ""
-            end
-        end
-
-      %{
-        proposer: proposer,
-        original: orig_closeness,
-        overruled: overruled_closeness,
-        reasoning: reasoning
-      }
-    else
-      nil
-    end
+        parts ->
+          {name, [bridge]} = Enum.split(parts, -1)
+          [{name |> Enum.join(": ") |> String.trim(), String.trim(bridge)}]
+      end
+    end)
   end
 
-  defp parse_corrections_section(chunk) do
-    if String.contains?(chunk, "##### Corrections") do
-      [_, corr_part] = String.split(chunk, "##### Corrections", parts: 2)
+  defp parse_overrule(lines) do
+    overruled = field(lines, :overruled)
 
-      corr_part
-      |> String.split("\n")
-      |> Enum.flat_map(fn line ->
-        case Regex.run(
-               ~r/^\s*-\s*By\s+([^:]+):\s*corrected\s+(\w+)(?:\s+from\s+"([^"]+)")?\s+to\s+"([^"]+)"(?:\s+\(Note:\s*"([^"]+)"\))?/,
-               line
-             ) do
-          [_, author, target, orig, corrected, note] ->
-            [
-              %{
-                author: String.trim(author),
-                target: target,
-                original: orig,
-                corrected: corrected,
-                note: note
-              }
-            ]
+    reasoning =
+      case overruled && Regex.run(~r/\("([^"]+)"\)/, overruled) do
+        [_, r] -> r
+        _ -> ""
+      end
 
-          [_, author, target, orig, corrected] ->
-            [
-              %{
-                author: String.trim(author),
-                target: target,
-                original: orig,
-                corrected: corrected,
-                note: nil
-              }
-            ]
-
-          _ ->
-            []
-        end
-      end)
-    else
-      []
-    end
+    %{
+      proposer: field(lines, :proposed_by) || "Player",
+      original: parse_closeness(field(lines, :original)),
+      overruled: parse_closeness(overruled),
+      reasoning: reasoning
+    }
   end
 
-  defp parse_fairness_line(nil), do: []
+  defp parse_corrections(lines) do
+    Enum.flat_map(lines, fn line ->
+      case Regex.run(@correction_pattern, line) do
+        [_, author, target, orig, corrected | note] ->
+          [
+            %{
+              author: String.trim(author),
+              target: target,
+              original: orig,
+              corrected: corrected,
+              note: List.first(note)
+            }
+          ]
 
-  defp parse_fairness_line(line) do
-    line
-    |> String.replace_prefix("- Fairness:", "")
-    |> String.trim()
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp parse_fairness(nil), do: []
+
+  defp parse_fairness(value) do
+    value
     |> String.split(",")
     |> Enum.flat_map(fn part ->
       case String.split(part, ":", parts: 2) do
@@ -664,10 +555,55 @@ defmodule Thereish.Chronicle.Markdown do
     end)
   end
 
+  # Splits lines at each heading the predicate picks: the lines before the first
+  # heading, then each heading with the lines under it.
+  defp sections(lines, heading?) do
+    {head, rest} = Enum.split_while(lines, &(not heading?.(&1)))
+    {head, headed(rest, heading?)}
+  end
+
+  defp headed([], _heading?), do: []
+
+  defp headed([heading | rest], heading?) do
+    {body, rest} = Enum.split_while(rest, &(not heading?.(&1)))
+    [{heading, body} | headed(rest, heading?)]
+  end
+
+  # The value of the first line written under the label or one of its aliases.
+  defp field(lines, key) do
+    {_label, aliases} = Map.fetch!(@labels, key)
+    prefixes = [prefix(key) | aliases]
+
+    Enum.find_value(lines, fn line ->
+      Enum.find_value(prefixes, fn p ->
+        if String.starts_with?(line, p), do: line |> String.replace_prefix(p, "") |> String.trim()
+      end)
+    end)
+  end
+
+  # A label written with or without a qualifier, as in `- Give (Melissa): text`
+  # or `- Give: text`: answers the qualifier, or nil, and the value.
+  defp qualified(line, key) do
+    case Regex.run(~r/^- #{Regex.escape(label(key))} \(([^)]+)\):\s*(.*)/, line) do
+      [_, qualifier, value] ->
+        {qualifier, value}
+
+      nil ->
+        if String.starts_with?(line, prefix(key)),
+          do: {nil, line |> String.replace_prefix(prefix(key), "") |> String.trim()}
+    end
+  end
+
+  defp split_bookends(nil), do: []
+  defp split_bookends(text), do: text |> String.split(" · ") |> Enum.map(&String.trim/1)
+
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
+
   defp parse_closeness(nil), do: nil
 
-  defp parse_closeness(line) do
-    case Regex.run(~r/(\d+)\s*\/\s*100/, line) do
+  defp parse_closeness(value) do
+    case Regex.run(~r/(\d+)\s*\/\s*100/, value) do
       [_, digits] -> String.to_integer(digits)
       _ -> nil
     end
@@ -675,24 +611,14 @@ defmodule Thereish.Chronicle.Markdown do
 
   defp parse_band(nil), do: nil
 
-  defp parse_band(line) do
-    case Regex.run(~r/\(([^)]+)\)/, line) do
+  defp parse_band(value) do
+    case Regex.run(~r/\(([^)]+)\)/, value) do
       [_, band] -> band
       _ -> nil
     end
   end
 
-  defp resolve_room(room_id_or_slug) do
-    if is_binary(room_id_or_slug) and
-         Regex.match?(
-           ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-           room_id_or_slug
-         ) do
-      Repo.get!(Room, room_id_or_slug)
-    else
-      Repo.get_by!(Room, slug: room_id_or_slug)
-    end
-  end
+  defp parse_joined_words(nil), do: nil
 
   defp parse_joined_words(text) do
     text
