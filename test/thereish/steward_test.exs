@@ -13,6 +13,10 @@ defmodule Thereish.StewardTest do
   turn every calibration into a test failure. The one thing any of this compares
   is that two hedged requests are byte-identical to each other, which is a fact
   about hedging rather than about the wording.
+
+  The Precedent is the Steward's, not the live adapter's, so the tests of it ask
+  `Thereish.Steward.assay/1`: with the live adapter where they watch what the
+  provider was asked, and with the Fake where they only need the rule.
   """
   # Which model answers, how often, and how patiently is application
   # configuration, and these tests move it.
@@ -23,7 +27,9 @@ defmodule Thereish.StewardTest do
 
   import Thereish.StewardFixtures
 
+  alias Thereish.Steward
   alias Thereish.Steward.Live
+  alias Thereish.Steward.Precedent
 
   @pair %{bookends: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
 
@@ -307,7 +313,7 @@ defmodule Thereish.StewardTest do
     end
 
     test "every ordering of the same four Bridges is one precedent" do
-      assayer(requests: 1, retries: 0)
+      assayer(adapter: Live, requests: 1, retries: 0)
       counts = counts()
 
       recorded(fn conn, body ->
@@ -325,12 +331,12 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, _} = Live.assay(@table)
+      assert {:ok, _} = Steward.assay(@table)
       assert Agent.get(counts, &Map.values/1) == [1, 1]
 
       shuffled = %{@table | bridges: ["lamp", "seagull", "beacon", "cairn"]}
 
-      assert {:ok, verdict} = Live.assay(shuffled)
+      assert {:ok, verdict} = Steward.assay(shuffled)
       assert verdict.closeness == 33
       # The whole point of the cache: the same words meeting again get the same
       # grade, whatever order the Seats were filled in (design law 1).
@@ -338,14 +344,14 @@ defmodule Thereish.StewardTest do
     end
 
     test "a cached Verdict carries the two furthest words with it" do
-      assayer(requests: 1, retries: 0)
+      assayer(adapter: Live, requests: 1, retries: 0)
 
       recorded(fn conn, _body ->
         Req.Test.json(conn, response(verdict(furthest: ["beacon", "seagull"])))
       end)
 
-      assert {:ok, _} = Live.assay(@table)
-      assert {:ok, cached} = Live.assay(@table)
+      assert {:ok, _} = Steward.assay(@table)
+      assert {:ok, cached} = Steward.assay(@table)
 
       # A cache hit that lost the furthest pair would replay the grade but not
       # the game: those two words are the next Attempt's Bookends.
@@ -355,7 +361,7 @@ defmodule Thereish.StewardTest do
 
   describe "the verdict cache is the precedent" do
     setup do
-      assayer(requests: 1, retries: 0)
+      assayer(adapter: Live, requests: 1, retries: 0)
     end
 
     test "a Precedent hit's fresh-Quip request carries prior Quips in user content" do
@@ -385,12 +391,12 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, _first} = Live.assay(request)
+      assert {:ok, _first} = Steward.assay(request)
       assert_receive {:verdict_user, graded_user}
       assert graded_user =~ "Jacob brought the lighthouse, Mara brought the dock."
       assert graded_user =~ ~r/constructions already used/i
 
-      assert {:ok, second} = Live.assay(request)
+      assert {:ok, second} = Steward.assay(request)
       assert second.meta.precedent_hit == true
       assert_receive {:quip_user, quip_user}
       assert quip_user =~ "Jacob brought the lighthouse, Mara brought the dock."
@@ -422,7 +428,7 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict1} = Live.assay(@pair)
+      assert {:ok, verdict1} = Steward.assay(@pair)
       assert verdict1.closeness == 77
       assert verdict1.quip == "Original quip."
       refute Map.get(verdict1.meta, :precedent_hit, false)
@@ -430,7 +436,7 @@ defmodule Thereish.StewardTest do
 
       # Subsequent call with the exact same pair is a Precedent hit:
       # inherits closeness, reasoning and furthest pair, and gets a fresh quip
-      assert {:ok, verdict2} = Live.assay(@pair)
+      assert {:ok, verdict2} = Steward.assay(@pair)
       assert verdict2.closeness == 77
       assert verdict2.reasoning == "First run."
       assert verdict2.furthest == ["beacon", "cairn"]
@@ -463,11 +469,11 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict1} = Live.assay(@pair)
+      assert {:ok, verdict1} = Steward.assay(@pair)
       assert verdict1.quip == "Original quip."
 
       # On Precedent hit, quip request fails (500) and falls back to cached quip
-      assert {:ok, verdict2} = Live.assay(@pair)
+      assert {:ok, verdict2} = Steward.assay(@pair)
       assert verdict2.closeness == 77
       assert verdict2.reasoning == "First run."
       assert verdict2.furthest == ["beacon", "cairn"]
@@ -476,7 +482,7 @@ defmodule Thereish.StewardTest do
     end
 
     test "a slow quip request falls back to the cached quip" do
-      assayer(requests: 1, retries: 0, timeout_ms: 50)
+      assayer(adapter: Live, requests: 1, retries: 0, timeout_ms: 50)
 
       recorded(fn conn, body ->
         case body["response_format"]["json_schema"]["name"] do
@@ -499,11 +505,11 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict1} = Live.assay(@pair)
+      assert {:ok, verdict1} = Steward.assay(@pair)
       assert verdict1.quip == "Original quip."
 
       # On Precedent hit, quip request exceeds timeout and falls back
-      assert {:ok, verdict2} = Live.assay(@pair)
+      assert {:ok, verdict2} = Steward.assay(@pair)
       assert verdict2.closeness == 77
       assert verdict2.reasoning == "First run."
       assert verdict2.quip == "Original quip."
@@ -524,11 +530,11 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, _} = Live.assay(@pair)
+      assert {:ok, _} = Steward.assay(@pair)
       assert Agent.get(counts, &Map.values/1) == [1, 1]
 
       reversed = %{@pair | bridges: Enum.reverse(@pair.bridges)}
-      assert {:ok, verdict} = Live.assay(reversed)
+      assert {:ok, verdict} = Steward.assay(reversed)
       assert verdict.closeness == 77
       assert verdict.reasoning == "First run."
       assert verdict.quip == "Reverse quip."
@@ -544,7 +550,7 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(closeness: 77, reasoning: "First run.")))
       end)
 
-      assert {:ok, verdict1} = Live.assay(@pair)
+      assert {:ok, verdict1} = Steward.assay(@pair)
       assert verdict1.closeness == 77
       assert Agent.get(counts, &Map.values/1) == [1, 1]
 
@@ -555,23 +561,21 @@ defmodule Thereish.StewardTest do
         Req.Test.json(conn, response(verdict(closeness: 85, reasoning: "New prompt version.")))
       end)
 
-      assert {:ok, verdict2} = Live.assay(@pair)
+      assert {:ok, verdict2} = Steward.assay(@pair)
       assert verdict2.closeness == 85
       assert verdict2.reasoning == "New prompt version."
       assert Agent.get(counts, &Map.values/1) == [2, 2]
     end
 
     test "Steward.assay returns the cached precedent instantly" do
-      assayer(adapter: Thereish.Steward.Live)
-
       recorded(fn conn, _body ->
         Req.Test.json(conn, response(verdict(closeness: 90, reasoning: "Instant.")))
       end)
 
-      assert {:ok, verdict1} = Thereish.Steward.assay(@pair)
+      assert {:ok, verdict1} = Steward.assay(@pair)
       assert verdict1.closeness == 90
 
-      assert {:ok, verdict2} = Thereish.Steward.assay(@pair)
+      assert {:ok, verdict2} = Steward.assay(@pair)
       assert verdict2.closeness == 90
       assert verdict2.reasoning == "Instant."
       assert verdict2.meta.latency_ms < 50
@@ -591,7 +595,7 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, verdict1} = Live.assay(@pair)
+      assert {:ok, verdict1} = Steward.assay(@pair)
       assert verdict1.closeness == 41
       assert Agent.get(counts, &Map.values/1) == [1, 1]
 
@@ -602,13 +606,13 @@ defmodule Thereish.StewardTest do
       }
 
       assert {:ok, _} =
-               Thereish.Steward.overrule(
+               Steward.overrule(
                  @pair.bookends,
                  @pair.bridges,
                  couple_ruling
                )
 
-      assert {:ok, verdict2} = Live.assay(@pair)
+      assert {:ok, verdict2} = Steward.assay(@pair)
       assert verdict2.closeness == 100
       assert verdict2.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
       assert verdict2.quip == "House law."
@@ -623,10 +627,152 @@ defmodule Thereish.StewardTest do
         quip: "Map ruling."
       }
 
-      assert {:ok, _} = Thereish.Steward.overrule(@pair, couple_ruling)
-      assert {:ok, verdict} = Live.assay(@pair)
+      assert {:ok, _} = Steward.overrule(@pair, couple_ruling)
+      assert {:ok, verdict} = Steward.assay(@pair)
       assert verdict.closeness == 95
       assert verdict.reasoning == "Overruled with request map."
+    end
+  end
+
+  describe "the Live adapter answers only the provider act" do
+    setup do
+      assayer(requests: 1, retries: 2)
+    end
+
+    test "its assay grades on every call and leaves the Precedent to the Steward" do
+      counts = counts()
+
+      recorded(fn conn, body ->
+        asked(counts, ordering(body))
+        Req.Test.json(conn, response(verdict(closeness: 77)))
+      end)
+
+      assert {:ok, _} = Live.assay(@pair)
+      assert {:ok, again} = Live.assay(@pair)
+
+      refute Map.has_key?(again.meta, :precedent_hit)
+      assert Agent.get(counts, &Map.values/1) == [2, 2]
+      role = Steward.role(:assayer)
+      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
+    end
+
+    test "its quip is one request that answers the Quip and what it cost" do
+      test_pid = self()
+      prior = "Jacob brought the lighthouse, Mara brought the dock."
+
+      recorded(fn conn, body ->
+        [%{"content" => user}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
+        send(test_pid, {:quip, body["response_format"]["json_schema"]["name"], user})
+        Req.Test.json(conn, quip_response("A fresh joke about tonight."))
+      end)
+
+      assert {:ok, %{quip: "A fresh joke about tonight.", meta: %{cost_usd: cost}}} =
+               Live.quip(Map.put(@pair, :prior_quips, [prior]))
+
+      assert cost > 0
+      assert_received {:quip, "quip", user}
+      assert user =~ prior
+      assert user =~ ~r/constructions already used/i
+    end
+
+    test "its quip is not asked again when it fails, whatever the role's retries" do
+      counts = counts()
+
+      recorded(fn conn, _body ->
+        asked(counts, :quip)
+        Plug.Conn.send_resp(conn, 500, "quip model failed")
+      end)
+
+      assert {:error, _reason} = Live.quip(@pair)
+      assert Agent.get(counts, &Map.get(&1, :quip)) == 1
+    end
+  end
+
+  describe "the Precedent sits in front of the seam, with the Fake Assayer" do
+    # The Fake answers every test that is not about the provider, so the rule
+    # that the grade shown is the precedent (ADR-0006) is tested here through
+    # the Steward and nothing that knows a provider exists.
+    # Whatever the Fake writes, so these tests are about whose Quip is shown
+    # rather than how the Fake words it.
+    defp the_fake_quip do
+      {:ok, %{quip: quip}} = Thereish.Steward.Fake.quip(@pair)
+      quip
+    end
+
+    defp cached_quip(quip) do
+      {:ok, _} =
+        Steward.overrule(@pair, %{
+          closeness: 64,
+          reasoning: "Ruled at the table.",
+          quip: quip
+        })
+    end
+
+    test "a repeated Attempt is answered from the Precedent, not graded again" do
+      fake(assay_capture: self())
+
+      assert {:ok, first} = Steward.assay(@pair)
+      assert_receive {:assay, _request}
+      refute Map.get(first.meta, :precedent_hit, false)
+
+      reversed = %{@pair | bridges: Enum.reverse(@pair.bridges)}
+      assert {:ok, second} = Steward.assay(reversed)
+      refute_received {:assay, _request}
+
+      assert second.meta.precedent_hit == true
+      assert second.closeness == first.closeness
+      assert second.reasoning == first.reasoning
+      assert second.furthest == first.furthest
+      assert is_integer(second.meta.latency_ms)
+    end
+
+    test "after the players overrule, the same Bookends and Bridges answer their ruling" do
+      assert {:ok, graded} = Steward.assay(@pair)
+      refute graded.closeness == 100
+
+      assert {:ok, _} =
+               Steward.overrule(@pair, %{
+                 closeness: 100,
+                 reasoning: "Overruled jointly across all Seats. Recorded as precedent.",
+                 quip: "House law."
+               })
+
+      assert {:ok, verdict} = Steward.assay(@pair)
+      assert verdict.closeness == 100
+      assert verdict.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
+      assert verdict.meta.precedent_hit == true
+    end
+
+    test "a Precedent hit gets a fresh Quip from the adapter" do
+      cached_quip("The cached quip.")
+
+      assert {:ok, verdict} = Steward.assay(@pair)
+      assert verdict.quip == the_fake_quip()
+      assert verdict.closeness == 64
+      assert verdict.meta.precedent_hit == true
+    end
+
+    test "a Precedent hit whose Quip fails answers the cached Quip at no cost" do
+      cached_quip("The cached quip.")
+      fake(mode: :unavailable)
+
+      assert {:ok, verdict} = Steward.assay(@pair)
+      assert verdict.quip == "The cached quip."
+      assert verdict.closeness == 64
+      assert verdict.meta.cost_usd == 0.0
+      assert verdict.meta.precedent_hit == true
+    end
+
+    test "a Precedent hit whose Quip is slow answers the cached Quip at no cost" do
+      cached_quip("The cached quip.")
+      assayer(quip_timeout_ms: 20)
+      fake(delay_ms: 200)
+
+      assert {:ok, verdict} = Steward.assay(@pair)
+      assert verdict.quip == "The cached quip."
+      assert verdict.meta.cost_usd == 0.0
+      assert verdict.meta.precedent_hit == true
+      assert verdict.meta.latency_ms < 200
     end
   end
 

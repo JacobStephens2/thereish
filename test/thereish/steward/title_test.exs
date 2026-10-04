@@ -3,6 +3,7 @@ defmodule Thereish.Steward.TitleTest do
 
   @moduletag :capture_log
 
+  import ExUnit.CaptureLog
   import Thereish.StewardFixtures
 
   alias Thereish.Steward
@@ -134,14 +135,23 @@ defmodule Thereish.Steward.TitleTest do
                Steward.title_track(["summer camp", "viking beaches"])
     end
 
-    test "answers error when fake title mode is unavailable" do
+    test "answers the title made from the Gives when the fake Scribe cannot title" do
       steward = Application.fetch_env!(:thereish, :steward)
       fake = Keyword.put(steward[:fake], :title_mode, :unavailable)
       Application.put_env(:thereish, :steward, Keyword.put(steward, :fake, fake))
       on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
 
-      assert {:error, :title_unavailable} =
-               Steward.title_track(["summer camp", "viking beaches"])
+      log =
+        capture_log(fn ->
+          assert {:ok, %{title: "Summer Camp · Viking Beaches", meta: meta}} =
+                   Steward.title_track(["summer camp", "viking beaches"], title: "Not Shown")
+
+          assert meta.fallback == true
+          assert meta.cost_usd == 0.0
+          assert meta.model == Steward.role(:scribe, :title).model
+        end)
+
+      assert log =~ "Scribe title failed (:title_unavailable), falling back"
     end
 
     test "waits for delay when configured" do
@@ -215,7 +225,7 @@ defmodule Thereish.Steward.TitleTest do
       end)
 
       assert {:ok, %{title: "Summer Camp · Viking Beaches", meta: meta}} =
-               Live.title_track(["summer camp", "viking beaches"])
+               Steward.title_track(["summer camp", "viking beaches"])
 
       assert meta[:fallback] == true
       assert Agent.get(counts, &Map.get(&1, :title)) == 2
@@ -233,8 +243,10 @@ defmodule Thereish.Steward.TitleTest do
 
       live_title(api_key: nil)
 
+      assert {:error, _reason} = Live.title_track(["summer camp", "viking beaches"])
+
       assert {:ok, %{title: "Summer Camp · Viking Beaches", meta: fallback_meta}} =
-               Live.title_track(["summer camp", "viking beaches"])
+               Steward.title_track(["summer camp", "viking beaches"])
 
       assert fallback_meta[:fallback] == true
     end
