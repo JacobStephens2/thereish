@@ -3,7 +3,7 @@ defmodule Thereish.Experiments do
   The A/B experiment harness (ticket 13, ADR-0004).
 
   The live Experiment is the Author model, Flash against Astra: each Page in a
-  Room is assigned the next arm in strict alternation when the Author is asked
+  Room is assigned the next Arm in strict alternation when the Author is asked
   for it. Bait against plain, ADR-0004's misdirection test, is retired, and its
   rows stay readable. Arm labels are blinded during play on stage and phones so
   neither player can play the label.
@@ -39,8 +39,11 @@ defmodule Thereish.Experiments do
   alias Thereish.Repo
   alias Thereish.Rooms.Room
 
+  @bait_against_plain_id "bait_against_plain"
+  @author_model_id "author_model"
+
   @first_experiment %{
-    id: "bait_against_plain",
+    id: @bait_against_plain_id,
     name: "Bait against plain",
     description:
       "ADR-0004: Tests whether Bait-scored Pages (penalizing obvious traps with the lowest meld rung, rewarding deep bridges) improve couple play over plain semantic grading.",
@@ -58,7 +61,7 @@ defmodule Thereish.Experiments do
   @author_model_arms [:flash, :astra]
 
   @author_model_experiment %{
-    id: "author_model",
+    id: @author_model_id,
     name: "Author model: Flash against Astra",
     description:
       "Ticket 08: Tests whether Gemini 3.8 Flash or GPT-6 Astra writes bookends that yield higher meld rates, fewer attempts, and higher couple satisfaction taps.",
@@ -77,9 +80,9 @@ defmodule Thereish.Experiments do
   """
   @spec definition(atom() | String.t()) :: map()
   def definition(:bait_against_plain), do: @first_experiment
-  def definition("bait_against_plain"), do: @first_experiment
+  def definition(@bait_against_plain_id), do: @first_experiment
   def definition(:author_model), do: @author_model_experiment
-  def definition("author_model"), do: @author_model_experiment
+  def definition(@author_model_id), do: @author_model_experiment
   def definition(_), do: @author_model_experiment
 
   @doc """
@@ -356,10 +359,10 @@ defmodule Thereish.Experiments do
   end
 
   @doc """
-  Blinded progress toward an experiment's declared sample in one Room. A nil
-  experiment means the Room's active experiment.
+  Blinded progress toward an Experiment's declared sample in one Room. A nil
+  Experiment means the Room's active Experiment.
 
-  Counts recorded completed-Page outcomes across both arms combined. Assignments
+  Counts recorded completed-Page outcomes across both Arms combined. Assignments
   that never produced an outcome (still in play, or abandoned) do not count.
   """
   @spec progress(Ecto.UUID.t() | String.t(), String.t() | nil) :: %{
@@ -377,11 +380,11 @@ defmodule Thereish.Experiments do
   end
 
   @doc """
-  Deliberately unblinds an experiment in one Room, recording when and by whom
+  Deliberately unblinds an Experiment in one Room, recording when and by whom
   (`attrs`: `unblinded_at`, and optionally `seat_id` and `notes`). A nil
-  experiment means the Room's active experiment.
+  Experiment means the Room's active Experiment.
 
-  Refused until the Room has recorded the experiment's declared sample of
+  Refused until the Room has recorded the Experiment's declared sample of
   completed-Page outcomes.
   """
   @spec unblind(Ecto.UUID.t() | String.t(), String.t() | nil, map()) ::
@@ -402,8 +405,8 @@ defmodule Thereish.Experiments do
     end
   end
 
-  # The experiment in view for a Room: that of its latest outcome, else of its
-  # latest assignment, else the Author-model experiment.
+  # The Experiment in view for a Room: that of its latest outcome, else of its
+  # latest assignment, else the Author-model Experiment.
   defp active_experiment_id(room_id) do
     latest_outcome = room_id |> outcomes() |> List.last()
     latest_assignment = room_id |> assignments() |> List.last()
@@ -416,8 +419,8 @@ defmodule Thereish.Experiments do
   end
 
   @doc """
-  Every experiment of every Room that has an assignment, newest Room first:
-  the Room, the experiment's definition, whether it is unblinded there, its
+  Every Experiment of every Room that has an assignment, newest Room first:
+  the Room, the Experiment's definition, whether it is unblinded there, its
   progress, and its readout, which is nil while it is blinded.
   """
   @spec overview() :: [
@@ -450,7 +453,7 @@ defmodule Thereish.Experiments do
     |> Repo.all()
   end
 
-  # Experiment ids recorded in a Room, from assignments then outcomes.
+  # The ids of the Experiments recorded in a Room, from assignments then outcomes.
   defp experiment_ids(room_id) do
     assignment_ids =
       from(a in ExperimentAssignment,
@@ -472,7 +475,7 @@ defmodule Thereish.Experiments do
   end
 
   @doc """
-  The qualitative readout of an experiment in one Room, worked out by
+  The qualitative readout of an Experiment in one Room, worked out by
   `summarize/2` from the Room's rows.
 
   A Room with no Author-model outcomes but some Bait-against-plain ones reads
@@ -485,7 +488,7 @@ defmodule Thereish.Experiments do
 
     {experiment_id, outcomes} =
       with [] <- outcomes,
-           "author_model" <- experiment_id,
+           @author_model_id <- experiment_id,
            [_ | _] = bait_outcomes <- outcomes(room_id, @first_experiment.id) do
         {@first_experiment.id, bait_outcomes}
       else
@@ -501,15 +504,15 @@ defmodule Thereish.Experiments do
   end
 
   @doc """
-  Works out an experiment's qualitative readout from rows already in memory:
+  Works out an Experiment's qualitative readout from rows already in memory:
   its outcomes, oldest first, and the Room's fairness taps, overrules and
   Chronicle Page views. This is the readout's test surface; it touches no
   database.
 
   Returns `%{experiment: definition, <arm>: summary, summary_narrative: text}`.
-  Every arm's summary carries its meld rate, longest and current meld streaks
-  and mean attempts to meld. An Author-model arm adds its Bookends taps and
-  closing bands; a Bait-against-plain arm adds its fairness taps, overrules
+  Every Arm's summary carries its meld rate, longest and current meld streaks
+  and mean attempts to meld. An Author-model Arm adds its Bookends taps and
+  closing bands; a Bait-against-plain Arm adds its fairness taps, overrules
   and trap and deep convergence.
 
   Strictly avoids p-values or significance tests: the sample is two people.
@@ -520,7 +523,7 @@ defmodule Thereish.Experiments do
           overrules: [map()],
           views: [map()]
         }) :: map()
-  def summarize("author_model", %{outcomes: outcomes}) do
+  def summarize(@author_model_id, %{outcomes: outcomes}) do
     flash = summarize_author_arm(of_arm(outcomes, "flash"))
     astra = summarize_author_arm(of_arm(outcomes, "astra"))
 
@@ -534,13 +537,13 @@ defmodule Thereish.Experiments do
     }
   end
 
-  def summarize("bait_against_plain", %{outcomes: outcomes} = rows) do
+  def summarize(@bait_against_plain_id, %{outcomes: outcomes} = rows) do
     bait_outcomes = of_arm(outcomes, "bait")
     plain_outcomes = of_arm(outcomes, "plain")
     bait_views = views_of(rows.views, bait_outcomes)
     plain_views = views_of(rows.views, plain_outcomes)
 
-    # Feedback is read from the arm's Page views; a Room with none of them
+    # Feedback is read from the Arm's Page views; a Room with none of them
     # falls back to matching the raw rows by the outcome's Page id.
     {bait_feedback, plain_feedback} =
       if bait_views != [] or plain_views != [] do
@@ -606,7 +609,7 @@ defmodule Thereish.Experiments do
     })
   end
 
-  # The meld rate, streaks and mean attempts every arm's summary shares.
+  # The meld rate, streaks and mean attempts every Arm's summary shares.
   defp meld_summary(outcomes) do
     pages = length(outcomes)
     melded_history = Enum.map(outcomes, & &1.melded)
@@ -633,7 +636,7 @@ defmodule Thereish.Experiments do
     |> Enum.max(fn -> 0 end)
   end
 
-  # The Chronicle Page views an arm's outcomes name, by Page id or the
+  # The Chronicle Page views an Arm's outcomes name, by Page id or the
   # document's own id.
   defp views_of(views, outcomes) do
     identifiers =
