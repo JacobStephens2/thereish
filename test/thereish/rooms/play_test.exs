@@ -412,6 +412,19 @@ defmodule Thereish.Rooms.PlayTest do
       assert view(play).vamp.path == "/media/vamp.mp3"
     end
 
+    test "after the Author has answered, it leaves that Page's times alone" do
+      {play, _page_ref, _giving} = written(new())
+      later = %{ms: 60_000, at: DateTime.add(@now.at, 60)}
+
+      assert {:error, :not_writing} = Play.apply(play, {:reset_gives, "jacob"}, later)
+
+      {_play, closed} = meld(play, written: "page-1")
+      {:write_chronicle, entry} = find(closed, :write_chronicle)
+      assert entry.opened_at == @now.at
+      assert length(entry.gives) == 2
+      assert Enum.all?(entry.gives, &(&1.arrived_at == @now.at))
+    end
+
     test "before the Author answers, its answer and its Foley are dropped" do
       {play, _} = run(new(), {:give, "melissa", "deep canyon"})
       {play, opened} = run(play, {:give, "jacob", "echoing wind"})

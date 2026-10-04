@@ -95,7 +95,9 @@ defmodule Thereish.Rooms.Play do
   alias Thereish.Rooms.Pages
   alias Thereish.Rooms.Room
 
-  defstruct [:game, :pacing, :pages, :occupancy, :voice, :facts, :turned_unwritten]
+  # `pages_before_turn` is Pages as it stood before a turn that released the
+  # Chronicle write, kept until that write's Page id comes back.
+  defstruct [:game, :pacing, :pages, :occupancy, :voice, :facts, :pages_before_turn]
 
   @type t :: %__MODULE__{
           game: Game.t(),
@@ -104,7 +106,7 @@ defmodule Thereish.Rooms.Play do
           occupancy: Occupancy.t(),
           voice: Voice.t(),
           facts: Facts.t(),
-          turned_unwritten: Pages.t() | nil
+          pages_before_turn: Pages.t() | nil
         }
 
   @type seat_id :: String.t()
@@ -279,7 +281,7 @@ defmodule Thereish.Rooms.Play do
         | pacing: Pacing.page_turned(play.pacing),
           pages: Pages.page_turned(play.pages),
           occupancy: Occupancy.page_turned(play.occupancy, members),
-          turned_unwritten: if(writes?, do: play.pages)
+          pages_before_turn: if(writes?, do: play.pages)
       }
 
       {play, moved} = advance(play, game, effects, now)
@@ -405,7 +407,7 @@ defmodule Thereish.Rooms.Play do
   end
 
   # The outcome is in, so a tap released here finds it.
-  def apply(%__MODULE__{turned_unwritten: nil} = play, {:chronicle_written, page_id}, _now) do
+  def apply(%__MODULE__{pages_before_turn: nil} = play, {:chronicle_written, page_id}, _now) do
     {pages, writes} = Pages.written(play.pages, page_id)
     {:ok, %{play | pages: pages}, page_writes(writes)}
   end
@@ -414,9 +416,9 @@ defmodule Thereish.Rooms.Play do
   # nothing has told Pages anything since the turn: the turned Page's Pages is
   # bound to its Chronicle Page and turned again, which is the whole of what
   # the turn did to Pages.
-  def apply(%__MODULE__{turned_unwritten: turned} = play, {:chronicle_written, page_id}, _now) do
+  def apply(%__MODULE__{pages_before_turn: turned} = play, {:chronicle_written, page_id}, _now) do
     {pages, writes} = Pages.written(turned, page_id)
-    {:ok, %{play | pages: Pages.page_turned(pages), turned_unwritten: nil}, page_writes(writes)}
+    {:ok, %{play | pages: Pages.page_turned(pages), pages_before_turn: nil}, page_writes(writes)}
   end
 
   # -- reads ------------------------------------------------------------------
@@ -505,7 +507,7 @@ defmodule Thereish.Rooms.Play do
       |> struct!(arm: Pages.arm(play.pages) || Experiments.default_arm())
       |> then(&Pacing.stamp(play.pacing, &1))
 
-    play = %{play | pages: Pages.page_closed(play.pages), turned_unwritten: nil}
+    play = %{play | pages: Pages.page_closed(play.pages), pages_before_turn: nil}
     voice(play, &Voice.page_closed(&1, entry))
   end
 
