@@ -399,19 +399,20 @@ defmodule Thereish.Steward do
 
   @doc """
   Asks the Scribe to name a Room with one four-letter word that nods to the
-  history in `rooms` and avoids `taken_codes`, answering both word and quip.
+  Chronicles in `chronicles` and avoids `taken_codes`, answering both word and
+  quip.
 
-  `rooms` holds one list of Page views per earlier Room, oldest Page first. A
-  Room with no Pages has no history to nod to and is left out; when none has
-  any, the answer is `{:error, :no_history}`. Each Room is read the way the
-  Author reads it (`Thereish.Steward.Digest.author/1`).
+  `chronicles` holds one Chronicle per earlier Room, as its Page views, oldest
+  Page first. A Room with no Pages has nothing to nod to and is left out; when
+  none has any, the answer is `{:error, :no_history}`. Each Chronicle is read
+  the way the Author reads it (`Thereish.Steward.Digest.author/1`).
   """
   @spec name_room([[map()]], [String.t()]) ::
           {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
-  def name_room(rooms, taken_codes) do
-    case Enum.reject(rooms, &(&1 == [])) do
+  def name_room(chronicles, taken_codes) do
+    case Enum.reject(chronicles, &(&1 == [])) do
       [] -> {:error, :no_history}
-      rooms -> name_from(Enum.map(rooms, &Digest.author/1), taken_codes)
+      chronicles -> name_from(Enum.map(chronicles, &Digest.author/1), taken_codes)
     end
   end
 
@@ -499,18 +500,16 @@ defmodule Thereish.Steward do
 
   The Room's Page views, oldest first, ride in as the `chronicle:` option. The
   adapter is handed the Author's digest of them under `digest:`
-  (`Thereish.Steward.Digest.author/1`), so a Room with no Pages reads as the
-  first Page.
+  (`Thereish.Steward.Digest.author/1`), so a Room with no Pages, or no
+  `chronicle:` at all, reads as the first Page. A `digest:` the caller passes is
+  replaced: what the Author reads is composed here and nowhere else.
   """
   @spec author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   def author(request, opts \\ []) do
     started = System.monotonic_time(:millisecond)
 
-    opts =
-      case Keyword.pop(opts, :chronicle) do
-        {nil, opts} -> opts
-        {views, opts} -> Keyword.put(opts, :digest, Digest.author(views))
-      end
+    {chronicle, opts} = Keyword.pop(opts, :chronicle, [])
+    opts = Keyword.put(opts, :digest, Digest.author(chronicle))
 
     case adapter().author(request, opts) do
       {:ok, result} -> {:ok, timed(result, System.monotonic_time(:millisecond) - started)}

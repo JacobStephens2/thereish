@@ -99,7 +99,7 @@ defmodule Thereish.Rooms do
         device_rooms =
           if is_binary(device_token), do: Store.rooms_for_device(device_token), else: []
 
-        case histories(device_rooms) do
+        case chronicles(device_rooms) do
           [] ->
             # No history: draws a random word and makes one quip-only request under naming deadline
             with {:ok, code} <- create_without_history(seat_count) do
@@ -110,8 +110,8 @@ defmodule Thereish.Rooms do
               {:ok, code}
             end
 
-          rooms ->
-            name_with_scribe_or_fallback(seat_count, rooms)
+          chronicles ->
+            name_with_scribe_or_fallback(seat_count, chronicles)
         end
       end
     else
@@ -121,18 +121,18 @@ defmodule Thereish.Rooms do
 
   def create(_seat_count, _device_token, _opts), do: {:error, :bad_seat_count}
 
-  # One list of Page views per earlier Room, for the Rooms that have any.
-  defp histories(rooms) do
+  # Each earlier Room's Chronicle as Page views, for the Rooms with any Pages.
+  defp chronicles(rooms) do
     rooms
     |> Enum.uniq_by(fn %{room: room} -> room.id end)
     |> Enum.map(fn %{room: room} -> Chronicle.page_views(room.id, :asc) end)
     |> Enum.reject(&(&1 == []))
   end
 
-  defp name_with_scribe_or_fallback(seat_count, rooms) do
+  defp name_with_scribe_or_fallback(seat_count, chronicles) do
     taken = Store.taken_codes()
 
-    case Steward.name_room(rooms, taken) do
+    case Steward.name_room(chronicles, taken) do
       {:ok, %{word: code, quip: quip}} when is_binary(code) ->
         insert_or_fallback(code, seat_count, quip)
 

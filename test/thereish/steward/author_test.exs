@@ -299,6 +299,12 @@ defmodule Thereish.Steward.AuthorTest do
       assert {:ok, _result} = Steward.author(%{gives: gives}, chronicle: [])
       assert_received {:asked, prompt}
       assert prompt =~ "Chronicle digest:\nNothing yet; this is the first Page."
+
+      # A digest the caller wrote itself never reaches the adapter.
+      assert {:ok, _result} = Steward.author(%{gives: gives}, digest: "Page 1 (closeness: 91)")
+      assert_received {:asked, prompt}
+      assert prompt =~ "Chronicle digest:\nNothing yet; this is the first Page."
+      refute prompt =~ "91"
     end
 
     test "rejects if retries are spent without a valid response" do

@@ -142,6 +142,22 @@ defmodule Thereish.Steward.DigestTest do
   end
 
   describe "the Scribe's digest" do
+    test "reads a Verdict with no band as graded, and no number" do
+      attempt = %{
+        number: 1,
+        bridges: [%{seat_name: "Mara", bridge: "cairn"}],
+        verdicts: [verdict(band: nil, reasoning: nil)]
+      }
+
+      digest = Digest.scribe([view(attempts: [attempt])])
+
+      assert digest ==
+               """
+               Page 1 (lantern · harbour) — Melded on attempt 1
+                 Attempt 1: Mara bridged "cairn". Verdict: graded\
+               """
+    end
+
     test "is the first-Page message for a Room with no Pages" do
       assert Digest.scribe([]) == "Nothing yet; this is the first Page."
     end
