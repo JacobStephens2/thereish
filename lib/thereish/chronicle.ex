@@ -32,8 +32,8 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
   alias Thereish.Experiments
-  alias Thereish.Repo
   alias Thereish.Mask
+  alias Thereish.Repo
   alias Thereish.Steward.TrackCache
 
   @doc """

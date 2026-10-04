@@ -135,7 +135,9 @@ defmodule Thereish.Steward do
 
   The bytes are kept for the Limner bake-off, which judges the pictures
   themselves. A Room draws through `Thereish.Mask.draw/2`, which keeps only the
-  URL and meta. Measured here so latency provenance is kept by the seam. A vendor that refuses
+  URL and meta.
+
+  Measured here so latency provenance is kept by the seam. A vendor that refuses
   a dark Give answers `{:error, :refused}` rather than crashing.
   """
   @spec draw(String.t() | map(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
