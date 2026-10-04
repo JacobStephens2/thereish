@@ -4,6 +4,8 @@ defmodule Thereish.Foley.RepertoireTest do
   alias Thereish.Chronicle.Page
   alias Thereish.Foley.Loops
   alias Thereish.Foley.Repertoire
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
   alias Thereish.Repo
   alias Thereish.Rooms.Room
   alias Thereish.Steward.TrackCache
@@ -22,11 +24,7 @@ defmodule Thereish.Foley.RepertoireTest do
       room_id: room_id,
       document: %{bookends: ["sun", "moon"]},
       author_meta: %{arm: "flash"},
-      music_meta: %{
-        path: path,
-        title: title,
-        provider: "fake"
-      },
+      music_meta: %Track{path: path, title: title, meta: %{"provider" => "fake"}},
       closed_because: "meld",
       melded: true,
       closeness: 95,
@@ -116,16 +114,12 @@ defmodule Thereish.Foley.RepertoireTest do
         room_id: room.id,
         document: %{bookends: ["sun", "moon"]},
         author_meta: %{arm: "flash"},
-        music_meta: %{
+        music_meta: %Track{
           path: "/media/tracks/cabin.mp3",
           title: "Cabin Warmth",
-          provider: "fake"
+          meta: %{"provider" => "fake"}
         },
-        vamp_meta: %{
-          path: "/media/vamps/cabin-vamp.mp3",
-          duration: 30,
-          loop: true
-        },
+        vamp_meta: %Vamp{path: "/media/vamps/cabin-vamp.mp3", duration: 30, loop: true},
         closed_because: "meld",
         melded: true,
         closeness: 95,
@@ -142,7 +136,7 @@ defmodule Thereish.Foley.RepertoireTest do
     test "failed or unfinished scores in Chronicle do not count toward settled status" do
       room = create_test_room("failed-score-room")
 
-      # Insert page with failure in music_meta
+      # Insert page with a failed Track
       now = DateTime.utc_now()
 
       %Page{}
@@ -150,10 +144,7 @@ defmodule Thereish.Foley.RepertoireTest do
         room_id: room.id,
         document: %{bookends: ["sun", "moon"]},
         author_meta: %{arm: "flash"},
-        music_meta: %{
-          failure: :timeout,
-          provider: "fake"
-        },
+        music_meta: Track.failed(:timeout),
         closed_because: "meld",
         melded: true,
         closeness: 95,

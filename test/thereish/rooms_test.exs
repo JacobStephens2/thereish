@@ -13,6 +13,7 @@ defmodule Thereish.RoomsTest do
 
   alias Thereish.Chronicle
   alias Thereish.ExperimentFixtures
+  alias Thereish.Foley.Track
   alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Server
@@ -2767,7 +2768,8 @@ defmodule Thereish.RoomsTest do
       end)
 
       [page | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
+      assert %Track{failure: failure} = page.music_meta
+      assert failure != nil
     end
 
     test "failing score emits readable warning log line carrying room code, page ref, failure reason, and timing",
@@ -2858,8 +2860,8 @@ defmodule Thereish.RoomsTest do
       end)
 
       [page | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert page.music_meta[:provider] == "fake" or page.music_meta["provider"] == "fake"
-      assert page.music_meta[:cost_usd] != nil or page.music_meta["cost_usd"] != nil
+      assert %Track{meta: %{"provider" => "fake", "cost_usd" => cost}} = page.music_meta
+      assert cost != nil
     end
 
     test "on Track cache miss: Room starts Vamp and score together; snapshot shows Vamp before Track and Track replacing it; cache hit skips Vamp",
@@ -3373,7 +3375,8 @@ defmodule Thereish.RoomsTest do
       end)
 
       [page | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert page.music_meta[:failure] != nil or page.music_meta["failure"] != nil
+      assert %Track{failure: failure} = page.music_meta
+      assert failure != nil
     end
 
     test "two Rooms scoring at once run one at a time (Rooms test with the Fake)" do
@@ -3557,20 +3560,20 @@ defmodule Thereish.RoomsTest do
       eventually(fn -> Thereish.Chronicle.page_views(ctx.slug) != [] end)
 
       [page_before | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert page_before.music_meta["failure"] == "unfinished"
+      assert page_before.music_meta.failure == "unfinished"
       assert Thereish.Chronicle.page_track(page_before) == nil
 
       eventually(
         fn ->
           [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
-          page_after.music_meta["path"] != nil
+          page_after.music_meta.path != nil
         end,
         "the held-back result never landed",
         3_000
       )
 
       [page_after | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert is_nil(page_after.music_meta["failure"])
+      assert is_nil(page_after.music_meta.failure)
       assert track = Thereish.Chronicle.page_track(page_after)
       assert track.path =~ "/media/tracks/fake-"
 
@@ -3620,9 +3623,9 @@ defmodule Thereish.RoomsTest do
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert view.track.title == "Summer Camp · Viking Beaches"
       assert view.track.path =~ "/media/tracks/"
-      assert view.music_meta[:title] == "Summer Camp · Viking Beaches"
-      assert view.music_meta[:path] == view.track.path
-      assert view.music_meta[:title_cost_usd] != nil
+      assert %Track{title: "Summer Camp · Viking Beaches", meta: meta} = view.music_meta
+      assert view.music_meta.path == view.track.path
+      assert meta["title_cost_usd"] != nil
     end
 
     test "track lands before title (Track before title race)", ctx do
@@ -3646,8 +3649,8 @@ defmodule Thereish.RoomsTest do
 
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert view.track.title == "Lantern · Harbour"
-      assert view.music_meta[:title] == "Lantern · Harbour"
-      assert view.music_meta[:title_cost_usd] != nil
+      assert %Track{title: "Lantern · Harbour", meta: meta} = view.music_meta
+      assert meta["title_cost_usd"] != nil
     end
 
     test "cache hit answers file and title without provider call", ctx do
@@ -3679,7 +3682,7 @@ defmodule Thereish.RoomsTest do
       assert view.track != nil
       assert view.track.title == "Frozen Horizon"
       assert view.track.path == "/media/tracks/frozen-glacier-tundra.mp3"
-      assert view.music_meta[:title] == "Frozen Horizon"
+      assert view.music_meta.title == "Frozen Horizon"
     end
 
     test "cache hit emits readable info log line carrying room code, page ref, and timing", ctx do
@@ -3744,14 +3747,14 @@ defmodule Thereish.RoomsTest do
       eventually(fn ->
         pages = Thereish.Chronicle.page_views(ctx.slug)
 
-        pages != [] and hd(pages).music_meta != nil and
-          (hd(pages).music_meta[:title] != nil or hd(pages).music_meta["title"] != nil)
+        pages != [] and match?(%Track{title: title} when title != nil, hd(pages).music_meta)
       end)
 
       [page | _] = Thereish.Chronicle.page_views(ctx.slug)
-      assert page.music_meta[:title] != nil or page.music_meta["title"] != nil
-      assert page.music_meta[:path] != nil or page.music_meta["path"] != nil
-      assert page.music_meta[:title_cost_usd] != nil or page.music_meta["title_cost_usd"] != nil
+      assert %Track{title: title, path: path, meta: meta} = page.music_meta
+      assert title != nil
+      assert path != nil
+      assert meta["title_cost_usd"] != nil
     end
   end
 
@@ -3917,12 +3920,14 @@ defmodule Thereish.RoomsTest do
       await_phase(ctx.slug, :bridging)
 
       # The in-flight score lands under House: it is kept, not played
-      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.melissa.id).music_meta["path"] != nil end)
+      eventually(fn ->
+        match?(%Track{path: "/" <> _}, Rooms.snapshot(ctx.slug, ctx.melissa.id).music_meta)
+      end)
 
       view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
       assert view.playing.kind == "repertoire"
       assert is_nil(view.track)
-      kept_path = view.music_meta["path"]
+      kept_path = view.music_meta.path
 
       # Switching back to page plays the kept track immediately
       :ok = Rooms.set_music(ctx.slug, "page")
@@ -3963,10 +3968,10 @@ defmodule Thereish.RoomsTest do
         room_id: room.id,
         document: %{bookends: ["glacier", "tundra"]},
         author_meta: %{arm: "flash"},
-        music_meta: %{
+        music_meta: %Track{
           path: "/media/tracks/our-song.mp3",
           title: "Our Song",
-          provider: "fake"
+          meta: %{"provider" => "fake"}
         },
         closed_because: "meld",
         melded: true,
@@ -4244,14 +4249,14 @@ defmodule Thereish.RoomsTest do
 
       # The Track lands at 200ms, while the Verdict is still being spoken.
       eventually(
-        fn -> match?([%{music_meta: %{"path" => _}}], Chronicle.page_views(ctx.slug)) end,
+        fn -> match?([%{music_meta: %Track{path: "/" <> _}}], Chronicle.page_views(ctx.slug)) end,
         "the held Track never reached its Page",
         3_000
       )
 
       [page] = Chronicle.page_views(ctx.slug)
-      assert is_nil(page.music_meta["failure"])
-      assert page.music_meta["path"] =~ "/media/tracks/fake-"
+      assert %Track{failure: nil, path: path} = page.music_meta
+      assert path =~ "/media/tracks/fake-"
     end
   end
 

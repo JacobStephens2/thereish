@@ -81,7 +81,7 @@ Foley announcing an Attempt's Bookends, with optional speech of the Assayer's ba
 _Avoid_: narration, TTS, voiceover, announcer, read-aloud
 
 **Track**:
-The instrumental Foley writes for one Page from its Gives. It is titled by the Scribe and kept, so the same Gives bring the same Track back — a song the Chronicle can remember. A Track belongs to its Page; it may still be what the Speaker is playing after that Page has closed, until the next Page's Track lands.
+The instrumental Foley writes for one Page from its Gives. It is titled by the Scribe and kept, so the same Gives bring the same Track back — a song the Chronicle can remember. A Track belongs to its Page; it may still be what the Speaker is playing after that Page has closed, until the next Page's Track lands. A Page kept its Track when Foley's Track landed for it; a Track that failed or never finished is recorded with the Page but not kept, so the Repertoire never draws it.
 _Avoid_: song (in code), background music, BGM, soundtrack, loop (a Repertoire draw is not this Page's Track)
 
 **Prologue**:
