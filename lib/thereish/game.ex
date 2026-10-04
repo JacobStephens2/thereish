@@ -241,12 +241,8 @@ defmodule Thereish.Game do
     seat_limit = Keyword.fetch!(opts, :seat_limit)
     seats = opts |> Keyword.get(:seats, []) |> Enum.map(&seat/1)
 
-    page_seat_ids =
-      if page != nil and length(seats) >= seat_limit do
-        Enum.map(seats, & &1.id)
-      else
-        nil
-      end
+    # A Game built with a Page is played by the Seats it was built with.
+    page_seat_ids = if page, do: Enum.map(seats, & &1.id)
 
     full_table = Keyword.get_lazy(opts, :full_table, fn -> page_full_table(page, true) end)
 
@@ -334,17 +330,7 @@ defmodule Thereish.Game do
         {:error, :room_full}
 
       true ->
-        new_seats = state.seats ++ [seat]
-
-        page_seat_ids =
-          if state.page != nil and length(new_seats) >= state.seat_limit and
-               is_nil(state.page_seat_ids) do
-            Enum.map(new_seats, & &1.id)
-          else
-            state.page_seat_ids
-          end
-
-        {:ok, %{state | seats: new_seats, page_seat_ids: page_seat_ids}, []}
+        {:ok, %{state | seats: state.seats ++ [seat]}, []}
     end
   end
 
@@ -365,11 +351,8 @@ defmodule Thereish.Game do
           last_gives = Map.put(state.last_gives, seat_id, trimmed)
           state = %{state | gives: gives, last_gives: last_gives}
 
-          if (state.seat_limit && map_size(gives) >= state.seat_limit) and
-               length(state.seats) >= state.seat_limit do
-            participating_seat_ids = Enum.map(state.seats, & &1.id)
-            state = %{state | page_seat_ids: participating_seat_ids}
-            {:ok, state, [{:author, author_request(state)}]}
+          if full?(state) and map_size(gives) >= state.seat_limit do
+            ask_author(state)
           else
             {:ok, state, []}
           end
@@ -387,28 +370,7 @@ defmodule Thereish.Game do
   end
 
   def apply(%__MODULE__{} = state, {:start_page, %{seat_id: seat_id}}) do
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      phase(state) != :giving ->
-        {:error, :not_giving}
-
-      not Map.has_key?(state.gives, seat_id) ->
-        {:error, :give_required}
-
-      map_size(state.gives) < 2 ->
-        {:error, :not_enough_gives}
-
-      true ->
-        participating_seat_ids =
-          state.seats
-          |> Enum.filter(&Map.has_key?(state.gives, &1.id))
-          |> Enum.map(& &1.id)
-
-        state = %{state | page_seat_ids: participating_seat_ids}
-        {:ok, state, [{:author, author_request(state)}]}
-    end
+    with :ok <- may_start_page(state, seat_id), do: ask_author(state)
   end
 
   def apply(%__MODULE__{} = state, {:page_written, bookends, meta}) when is_list(bookends) do
@@ -449,28 +411,14 @@ defmodule Thereish.Game do
   end
 
   def apply(%__MODULE__{} = state, {:author_retried, %{seat_id: seat_id}}) do
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      phase(state) != :writing or is_nil(state.author_failure) ->
-        {:error, :not_failed}
-
-      true ->
-        {:ok, %{state | author_failure: nil}, [{:author, author_request(state)}]}
+    with :ok <- may_retry_author(state, seat_id) do
+      ask_author(%{state | author_failure: nil})
     end
   end
 
   def apply(%__MODULE__{} = state, {:gives_reset, %{seat_id: seat_id}}) do
-    cond do
-      not seated?(state, seat_id) ->
-        {:error, :no_such_seat}
-
-      phase(state) != :writing ->
-        {:error, :not_writing}
-
-      true ->
-        {:ok, %{state | gives: %{}, masks: %{}, author_failure: nil, page_seat_ids: nil}, []}
+    with :ok <- may_reset_gives(state, seat_id) do
+      {:ok, %{state | gives: %{}, masks: %{}, author_failure: nil, page_seat_ids: nil}, []}
     end
   end
 
@@ -646,14 +594,11 @@ defmodule Thereish.Game do
     phase = phase(state)
     opinions = opinions(state)
 
-    viewer_late? =
-      state.page_seat_ids != nil and viewer != nil and viewer not in state.page_seat_ids
-
     carry = if phase == :reveal, do: carry(state)
 
     %{
       phase: phase,
-      late?: viewer_late?,
+      late?: viewer != nil and not plays_page?(state, viewer),
       may: may(state, viewer),
       first_revealed?: first_revealed?(state),
       seats: Enum.map(state.seats, &seat_view(state, &1, viewer)),
@@ -722,17 +667,29 @@ defmodule Thereish.Game do
   def attempt_bookends(%__MODULE__{attempt: nil}), do: nil
   def attempt_bookends(%__MODULE__{attempt: attempt}), do: attempt.bookends
 
-  defp page_seats(state) do
-    if state.page_seat_ids do
-      Enum.filter(state.seats, &(&1.id in state.page_seat_ids))
-    else
-      state.seats
-    end
+  # The Page's Seats, in roster order. Every walk of the Seats that concerns
+  # the Page goes through here. Until the Author is asked for a Page, no Seats
+  # are fixed, and every Seat counts.
+  defp page_seats(state), do: Enum.filter(state.seats, &plays_page?(state, &1.id))
+
+  # Whether a Seat plays the Page. A Seat that sat down after the Author was
+  # asked watches this Page and plays from the next one.
+  defp plays_page?(%{page_seat_ids: nil}, _seat_id), do: true
+  defp plays_page?(state, seat_id), do: seat_id in state.page_seat_ids
+
+  # The one place play fixes a Page's Seats: the Seats that wrote a Give when the
+  # Author is asked for the Page, whether Start Page asks or the last Give of a
+  # full Room does. Gives reset and the next Page clear them. A Game built with
+  # a Page in hand (`init/1`) is the only other start, and it gives that Page
+  # the Seats it was built with.
+  defp ask_author(state) do
+    page_seat_ids = for seat <- state.seats, Map.has_key?(state.gives, seat.id), do: seat.id
+    state = %{state | page_seat_ids: page_seat_ids}
+    {:ok, state, [{:author, author_request(state)}]}
   end
 
   defp author_request(state) do
-    seat_ids = state.page_seat_ids || Enum.map(state.seats, & &1.id)
-    participating = Enum.filter(state.seats, &(&1.id in seat_ids))
+    participating = page_seats(state)
 
     gives =
       Enum.map(participating, fn s ->
@@ -872,28 +829,19 @@ defmodule Thereish.Game do
   @doc "Where a Page has got to (waiting, giving, writing, bridging, assaying, reveal, closed)."
   def phase(state) do
     cond do
-      state.page_seat_ids != nil and state.page == nil ->
-        :writing
-
-      state.page != nil and (state.page_seat_ids != nil or full?(state)) ->
-        seat_count =
-          if state.page_seat_ids, do: length(state.page_seat_ids), else: length(state.seats)
-
+      state.page != nil ->
         cond do
-          map_size(bridges(state)) < seat_count -> :bridging
+          map_size(bridges(state)) < length(page_seats(state)) -> :bridging
           verdict(state) == nil -> :assaying
           over?(state) -> :closed
           true -> :reveal
         end
 
-      state.page != nil and not full?(state) ->
-        :waiting
+      state.page_seat_ids != nil ->
+        :writing
 
       not full?(state) and length(state.seats) < 2 ->
         :waiting
-
-      state.page == nil and full?(state) and map_size(state.gives) >= length(state.seats) ->
-        :writing
 
       true ->
         :giving
@@ -1037,7 +985,7 @@ defmodule Thereish.Game do
   defp furthest_view(_state, _verdict), do: nil
 
   defp bridges_view(state, bridges) do
-    for seat <- state.seats, Map.has_key?(bridges, seat.id) do
+    for seat <- page_seats(state), Map.has_key?(bridges, seat.id) do
       %{seat_id: seat.id, name: seat.name, bridge: bridges[seat.id]}
     end
   end
@@ -1101,9 +1049,7 @@ defmodule Thereish.Game do
   end
 
   defp resolve_overrule_unanimity(state, agreed) do
-    required = state.page_seat_ids || Enum.map(state.seats, & &1.id)
-
-    if Enum.all?(required, &MapSet.member?(agreed, &1)) do
+    if Enum.all?(page_seats(state), &MapSet.member?(agreed, &1.id)) do
       agree_overrule(state)
     else
       {:ok, state, []}
@@ -1184,7 +1130,7 @@ defmodule Thereish.Game do
       closeness: closeness,
       melded?: melded?,
       bridges:
-        for seat <- state.seats, Map.has_key?(attempt.bridges, seat.id) do
+        for seat <- page_seats(state), Map.has_key?(attempt.bridges, seat.id) do
           %{seat_id: seat.id, bridge: attempt.bridges[seat.id]}
         end,
       verdicts: if(attempt.verdict, do: [chronicle_verdict(state, attempt)], else: [])
@@ -1224,8 +1170,6 @@ defmodule Thereish.Game do
   end
 
   defp seat_view(state, seat, viewer) do
-    seat_late? = state.page_seat_ids != nil and seat.id not in state.page_seat_ids
-
     %{
       id: seat.id,
       name: seat.name,
@@ -1233,7 +1177,7 @@ defmodule Thereish.Game do
       mask: mask_for_viewer(state, seat, viewer),
       you?: seat.id == viewer,
       committed?: committed?(state, seat.id),
-      late?: seat_late?
+      late?: not plays_page?(state, seat.id)
     }
   end
 
@@ -1272,7 +1216,10 @@ defmodule Thereish.Game do
       tap_fairness: may_tap_fairness(state, viewer) == :ok,
       advance: may_advance(state, viewer) == :ok,
       tap_bookends: may_tap_bookends(state, viewer) == :ok,
-      next_page: may_next_page(state, viewer) == :ok
+      next_page: may_next_page(state, viewer) == :ok,
+      start_page: may_start_page(state, viewer) == :ok,
+      retry_author: may_retry_author(state, viewer) == :ok,
+      reset_gives: may_reset_gives(state, viewer) == :ok
     }
   end
 
@@ -1354,6 +1301,31 @@ defmodule Thereish.Game do
     end
   end
 
+  defp may_start_page(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id) do
+      cond do
+        phase(state) != :giving -> {:error, :not_giving}
+        not Map.has_key?(state.gives, seat_id) -> {:error, :give_required}
+        map_size(state.gives) < 2 -> {:error, :not_enough_gives}
+        true -> :ok
+      end
+    end
+  end
+
+  defp may_retry_author(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id) do
+      if phase(state) == :writing and state.author_failure != nil,
+        do: :ok,
+        else: {:error, :not_failed}
+    end
+  end
+
+  defp may_reset_gives(state, seat_id) do
+    with :ok <- taken_by_a_seat(state, seat_id) do
+      if phase(state) == :writing, do: :ok, else: {:error, :not_writing}
+    end
+  end
+
   # Whether this Page's first reveal has happened: the reveal is on screen now,
   # or an earlier Attempt of this Page already had one.
   defp first_revealed?(state), do: phase(state) in [:reveal, :closed] or state.played != []
@@ -1369,11 +1341,7 @@ defmodule Thereish.Game do
   end
 
   defp playing_page_seat(state, seat_id) do
-    if state.page_seat_ids != nil and seat_id not in state.page_seat_ids do
-      {:error, :not_playing_page}
-    else
-      :ok
-    end
+    if plays_page?(state, seat_id), do: :ok, else: {:error, :not_playing_page}
   end
 
   defp open_reveal(state) do

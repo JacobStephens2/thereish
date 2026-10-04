@@ -237,18 +237,17 @@ defmodule Thereish.GameTest do
   end
 
   describe "before the Page starts" do
-    test "a Room still short a player is waiting rather than bridging" do
-      state = Game.init(seat_limit: 2, seats: [seat("Mara")], page: @page)
+    test "a Game built with a Page is played by the Seats it was built with" do
+      state = Game.init(seat_limit: 4, seats: [seat("Mara"), seat("Jacob")], page: @page)
 
-      assert Game.view(state, "seat-Mara").phase == :waiting
-      assert {:error, :not_bridging} = commit(state, "Mara", "cairn")
-    end
+      assert Game.view(state, "seat-Mara").phase == :bridging
+      assert Game.view(state, "seat-Mara").bookends == ["lantern", "harbour"]
 
-    test "the player who got there first does not get the Bookends first" do
-      state = Game.init(seat_limit: 2, seats: [seat("Mara")], page: @page)
+      {:ok, state, []} = commit(state, "Mara", "cairn")
+      {:ok, state, effects} = commit(state, "Jacob", "beacon")
 
-      assert Game.view(state, "seat-Mara").bookends == nil
-      refute inspect(Game.view(state, "seat-Mara")) =~ "lantern"
+      assert Game.view(state, nil).phase == :assaying
+      assert [{:assay, %{bridges: ["cairn", "beacon"]}}] = assays(effects)
     end
 
     test "a Room with no Page is giving when full, waiting when not full" do
@@ -260,17 +259,25 @@ defmodule Thereish.GameTest do
       assert Game.view(full, nil).bookends == nil
     end
 
-    test "the last player to join starts the Page for everyone" do
+    test "a Page started while the Room has open Seats is played only by the Seats that gave" do
       state =
-        Game.init(seat_limit: 2, seats: [seat("Mara")], page: @page)
-        |> play([{:seat_joined, seat("Jacob")}])
+        Game.init(seat_limit: 6, seats: [seat("Mara"), seat("Jacob"), seat("Ada")])
+        |> play([
+          {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}},
+          {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}},
+          {:start_page, %{seat_id: "seat-Jacob"}},
+          {:page_written, %{bookends: ["ocean", "lantern"]}}
+        ])
 
-      for viewer <- ["seat-Mara", "seat-Jacob", nil] do
-        view = Game.view(state, viewer)
+      assert Game.view(state, "seat-Ada").late?
+      refute Game.view(state, "seat-Mara").late?
+      assert {:error, :not_playing_page} = commit(state, "Ada", "tide")
 
-        assert view.phase == :bridging
-        assert view.bookends == ["lantern", "harbour"]
-      end
+      {:ok, state, []} = commit(state, "Mara", "coast")
+      {:ok, state, effects} = commit(state, "Jacob", "harbour")
+
+      assert Game.view(state, nil).phase == :assaying
+      assert [{:assay, %{bridges: ["coast", "harbour"]}}] = assays(effects)
     end
   end
 
@@ -2509,7 +2516,10 @@ defmodule Thereish.GameTest do
       :tap_fairness,
       :advance,
       :tap_bookends,
-      :next_page
+      :next_page,
+      :start_page,
+      :retry_author,
+      :reset_gives
     ]
 
     @viewers ["seat-Mara", "seat-Jacob", "seat-Ada", "seat-nobody", nil]
@@ -2529,6 +2539,7 @@ defmodule Thereish.GameTest do
       one_give = give(giving, "Mara", "lighthouse")
       both_gave = give(one_give, "Jacob", "candle")
       {:ok, writing, _} = Game.apply(both_gave, {:start_page, %{seat_id: "seat-Jacob"}})
+      {:ok, failed, []} = Game.apply(writing, {:author_failed, %{reason: "too vague"}})
 
       {:ok, written, []} =
         Game.apply(writing, {:page_written, %{bookends: ["ocean", "lantern"]}})
@@ -2558,7 +2569,9 @@ defmodule Thereish.GameTest do
         waiting: empty,
         giving: giving,
         one_give: one_give,
+        both_gave: both_gave,
         writing: writing,
+        failed: failed,
         bridging: bridging,
         one_bridge: one_bridge,
         assaying: assaying,
@@ -2605,6 +2618,9 @@ defmodule Thereish.GameTest do
       do: [{:bookends_tapped, %{seat_id: seat_id, label: "great"}}]
 
     defp valid_events(:next_page, seat_id), do: [{:next_page, %{seat_id: seat_id}}]
+    defp valid_events(:start_page, seat_id), do: [{:start_page, %{seat_id: seat_id}}]
+    defp valid_events(:retry_author, seat_id), do: [{:author_retried, %{seat_id: seat_id}}]
+    defp valid_events(:reset_gives, seat_id), do: [{:gives_reset, %{seat_id: seat_id}}]
 
     test "a viewer who holds no Seat may do nothing, in any Phase" do
       for {name, state} <- page_states() do
@@ -2620,7 +2636,9 @@ defmodule Thereish.GameTest do
       assert allowed(states.giving, "seat-Mara") == [:give]
       assert allowed(states.one_give, "seat-Mara") == []
       assert allowed(states.one_give, "seat-Jacob") == [:give]
-      assert allowed(states.writing, "seat-Mara") == []
+      assert allowed(states.both_gave, "seat-Mara") == [:start_page]
+      assert allowed(states.writing, "seat-Mara") == [:reset_gives]
+      assert allowed(states.failed, "seat-Jacob") == [:retry_author, :reset_gives]
       assert allowed(states.bridging, "seat-Mara") == [:bridge]
       assert allowed(states.one_bridge, "seat-Mara") == []
       assert allowed(states.one_bridge, "seat-Jacob") == [:bridge]
@@ -2637,6 +2655,31 @@ defmodule Thereish.GameTest do
 
       assert allowed(states.closed, "seat-Mara") ==
                [:propose_overrule, :tap_fairness, :tap_bookends, :next_page]
+    end
+
+    test "Start Page waits for the viewer's own Give and one more" do
+      states = page_states()
+
+      refute may(states.giving, "seat-Mara").start_page
+      refute may(states.one_give, "seat-Jacob").start_page
+      refute may(states.one_give, "seat-Mara").start_page
+      assert may(states.both_gave, "seat-Mara").start_page
+      assert may(states.both_gave, "seat-Jacob").start_page
+    end
+
+    test "Try again waits for the Author to fail, and New Gives is open while the Page is written" do
+      states = page_states()
+
+      refute may(states.writing, "seat-Mara").retry_author
+      assert may(states.failed, "seat-Mara").retry_author
+      assert may(states.writing, "seat-Mara").reset_gives
+      assert may(states.failed, "seat-Mara").reset_gives
+
+      for name <- [:giving, :both_gave, :bridging, :reveal, :closed] do
+        state = Map.fetch!(states, name)
+        refute may(state, "seat-Mara").retry_author, "#{name}"
+        refute may(state, "seat-Mara").reset_gives, "#{name}"
+      end
     end
 
     test "an overrule of an ungraded Attempt can be rated, as the Game accepts the tap" do
