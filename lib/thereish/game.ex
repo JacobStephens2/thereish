@@ -248,6 +248,12 @@ defmodule Thereish.Game do
   @spec init(keyword()) :: t()
   def init(opts) do
     page = Keyword.get(opts, :page)
+
+    unless is_nil(page) or is_struct(page, Document) do
+      raise ArgumentError,
+            "a Game's :page is a Thereish.Chronicle.Document, got: #{inspect(page)}"
+    end
+
     seat_limit = Keyword.fetch!(opts, :seat_limit)
     seats = opts |> Keyword.get(:seats, []) |> Enum.map(&seat/1)
 
@@ -867,7 +873,7 @@ defmodule Thereish.Game do
 
       true ->
         Enum.map(page_seats(state), fn seat ->
-          %{name: seat.name, give: state.page.gives[seat.id] || state.page.gives[seat.name]}
+          %{name: seat.name, give: state.page.gives[seat.id]}
         end)
     end
   end
