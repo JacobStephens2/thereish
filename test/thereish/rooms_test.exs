@@ -4238,6 +4238,22 @@ defmodule Thereish.RoomsTest do
       assert outcomes[earlier.id].taps == %{}
     end
 
+    test "a Page played under an assigned arm records its outcome under that arm", ctx do
+      meld(ctx)
+      :ok = Rooms.next_page(ctx.slug, ctx.melissa.id)
+      meld(ctx)
+
+      assert Enum.map(Chronicle.experiment_assignments(ctx.room.id, "author_model"), & &1.arm) ==
+               ["flash", "astra"]
+
+      [first, second] = Chronicle.pages(ctx.room.id)
+
+      outcomes =
+        Map.new(Chronicle.experiment_outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1.arm})
+
+      assert outcomes == %{first.id => "flash", second.id => "astra"}
+    end
+
     test "a Mask for an earlier Give that lands after the Page turned is written onto its Page",
          ctx do
       steward(draw_mode: :refused)

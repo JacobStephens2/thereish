@@ -376,46 +376,21 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
-  Records an experiment outcome for a closed Page, extracting convergence flags and identifiers.
+  Records the experiment outcome of a closed Page from its Entry, once the
+  Entry is written as `page`. The experiment follows from the Entry's arm:
+  `flash` and `astra` are the Author-model experiment, any other arm is Bait.
+  Links the Page to the oldest unlinked assignment of that experiment.
   """
-  @spec record_page_outcome(
-          Ecto.UUID.t() | String.t(),
-          Page.t(),
-          Entry.t(),
-          atom() | String.t(),
-          String.t() | nil
-        ) ::
+  @spec record_page_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
           {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
-  def record_page_outcome(room_id, page, entry, arm, experiment_id \\ nil) do
+  def record_page_outcome(room_id, %Page{} = page, %Entry{} = entry) do
     room_id = resolve_room_id(room_id)
+    arm = to_string(entry.arm)
 
     experiment_id =
-      experiment_id ||
-        case to_string(arm) do
-          a when a in ["flash", "astra"] -> "author_model"
-          _ -> "bait_against_plain"
-        end
-
-    trap_converged =
-      Enum.any?(entry.attempts, fn att ->
-        Enum.any?(att.verdicts, fn v ->
-          meta = v.meta || %{}
-          meta[:trap_sprung] == true or meta["trap_sprung"] == true
-        end)
-      end)
-
-    deep_converged =
-      Enum.any?(entry.attempts, fn att ->
-        Enum.any?(att.verdicts, fn v ->
-          meta = v.meta || %{}
-          meta[:deep_convergence] == true or meta["deep_convergence"] == true
-        end)
-      end)
-
-    page_identifier =
-      cond do
-        is_map(entry.page) -> entry.page[:id] || entry.page["id"] || page.id
-        true -> page.id
+      case arm do
+        a when a in ["flash", "astra"] -> "author_model"
+        _ -> "bait_against_plain"
       end
 
     closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
@@ -423,16 +398,16 @@ defmodule Thereish.Chronicle do
     result =
       record_experiment_outcome(room_id, %{
         page_id: page.id,
-        page_identifier: to_string(page_identifier),
+        page_identifier: page.id,
         experiment_id: experiment_id,
-        arm: to_string(arm),
+        arm: arm,
         melded: entry.melded?,
         closeness: entry.closeness,
         closing_band: closing_band,
         attempts_count: length(entry.attempts),
         closed_because: to_string(entry.closed_because),
-        trap_converged: trap_converged,
-        deep_converged: deep_converged,
+        trap_converged: any_verdict_meta?(entry, :trap_sprung),
+        deep_converged: any_verdict_meta?(entry, :deep_convergence),
         taps: %{}
       })
 
@@ -449,6 +424,14 @@ defmodule Thereish.Chronicle do
     end
 
     result
+  end
+
+  # Nothing has set these since ADR-0011; the columns stay until a schema
+  # change removes them.
+  defp any_verdict_meta?(%Entry{} = entry, key) do
+    Enum.any?(entry.attempts, fn attempt ->
+      Enum.any?(attempt.verdicts, &((&1.meta || %{})[key] == true))
+    end)
   end
 
   @doc """
