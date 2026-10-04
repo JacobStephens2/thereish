@@ -183,7 +183,8 @@ defmodule Thereish.Steward.Precedent do
   end
 
   @doc """
-  Rewrites an existing precedent (or inserts a new one) with the couple's ruling.
+  Rewrites an existing precedent (or inserts a new one) with the table's ruling:
+  its closeness, reasoning and Quip.
 
   A joint player overrule is the only thing in the system that rewrites
   precedent (ADR-0006, design law 3).
@@ -208,7 +209,7 @@ defmodule Thereish.Steward.Precedent do
       bridges: normalized_bridges,
       closeness: ruling.closeness,
       reasoning: ruling.reasoning,
-      quip: Map.get(ruling, :quip, "House law.")
+      quip: ruling.quip
     }
 
     %Precedent{}

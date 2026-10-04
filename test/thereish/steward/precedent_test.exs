@@ -340,7 +340,8 @@ defmodule Thereish.Steward.PrecedentTest do
       assert {:ok, _} =
                Precedent.overrule("gemini-3.8-flash", "assay-1", req, %{
                  closeness: 99,
-                 reasoning: "Overruled via request map."
+                 reasoning: "Overruled via request map.",
+                 quip: "House law."
                })
 
       assert {:ok, overruled} = Precedent.get("gemini-3.8-flash", "assay-1", req)

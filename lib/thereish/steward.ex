@@ -37,7 +37,8 @@ defmodule Thereish.Steward do
     reads `Thereish.Steward.Precedent` before asking the adapter, and writes the
     adapter's grade down on a miss. A hit is the cached grade with a fresh Quip
     from the adapter's `quip/1`, or the cached Quip if the fresh one fails or is
-    late. `overrule/3` writes the players' ruling under the same key.
+    late. `overrule/2` writes the table's ruling under the same key, in one
+    transaction with the Chronicle's overrule row.
   - **Both orderings.** Which Bridge is listed first changes a model's answer,
     and how much tracks the model's tier (design law 12): the Steward prototype
     caught an 85-point swing on one pair from reversing the players. So on a
@@ -53,6 +54,8 @@ defmodule Thereish.Steward do
 
   require Logger
 
+  alias Thereish.Chronicle
+  alias Thereish.Repo
   alias Thereish.Steward.Assay
   alias Thereish.Steward.Digest
   alias Thereish.Steward.Precedent
@@ -666,21 +669,32 @@ defmodule Thereish.Steward do
   def assign_arm(room_id), do: Thereish.Experiments.assign(room_id)
 
   @doc """
-  Rewrites the precedent for these Bridges with the players' ruling.
+  Records the table's agreed overrule: the Chronicle's overrule row, and the
+  Precedent rewritten with the table's ruling under the Precedent's key.
 
-  A joint player overrule is the only thing in the system that rewrites
-  precedent (ADR-0006, design law 3).
+  A joint overrule is the only thing in the system that rewrites precedent
+  (ADR-0006, design law 3), and the Chronicle must never show one the
+  Precedent did not receive, so both writes are one transaction: if either
+  fails, neither lands.
   """
-  @spec overrule(request(), map()) :: {:ok, term()} | {:error, term()}
-  @spec overrule([String.t()], [String.t()], map()) :: {:ok, term()} | {:error, term()}
-  def overrule(%{bookends: bookends, bridges: bridges}, ruling) do
-    overrule(bookends, bridges, ruling)
-  end
-
-  def overrule(bookends, bridges, ruling) when is_list(bookends) and is_list(bridges) do
+  @spec overrule(Ecto.UUID.t(), Thereish.Overrule.ruling()) ::
+          {:ok, Thereish.Chronicle.Overrule.t()} | {:error, term()}
+  def overrule(room_id, ruling) do
     {model, prompt_version} = precedent_key()
 
-    Precedent.overrule(model, prompt_version, bookends, bridges, ruling)
+    Repo.transaction(fn ->
+      with {:ok, row} <- Chronicle.record_overrule(room_id, ruling),
+           {:ok, _precedent} <-
+             Precedent.overrule(model, prompt_version, ruling.bookends, ruling.bridges, %{
+               closeness: ruling.couple_closeness,
+               reasoning: ruling.couple_reasoning,
+               quip: ruling.couple_quip
+             }) do
+        row
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   @doc """
