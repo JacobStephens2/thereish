@@ -1158,6 +1158,17 @@ defmodule Thereish.ChronicleTest do
       end
     end
 
+    test "refuses an Entry with no arm rather than recording an empty one", %{room: room} do
+      entry = entry(arm: nil)
+      {:ok, page} = Chronicle.write(room.id, entry)
+
+      assert_raise FunctionClauseError, fn ->
+        Chronicle.record_page_outcome(room.id, page, entry)
+      end
+
+      assert Repo.aggregate(Thereish.Chronicle.ExperimentOutcome, :count) == 0
+    end
+
     test "reads melded, Closeness, closing band, Attempts and closed-because from the Entry",
          %{room: room} do
       {page, outcome} =
