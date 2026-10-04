@@ -8,6 +8,7 @@ defmodule Thereish.ExperimentsTest do
 
   alias Thereish.Chronicle
   alias Thereish.Chronicle.ExperimentOutcome
+  alias Thereish.ExperimentFixtures
   alias Thereish.Experiments
   alias Thereish.Ladder
   alias Thereish.Rooms
@@ -68,7 +69,7 @@ defmodule Thereish.ExperimentsTest do
       assert Experiments.assign(room.id) == :astra
       assert Experiments.assign(room.id) == :flash
 
-      assignments = Experiments.assignments(room.id, "author_model")
+      assignments = ExperimentFixtures.assignments(room.id, "author_model")
       assert Enum.map(assignments, & &1.arm) == ["flash", "astra", "flash"]
       assert Enum.all?(assignments, &(&1.page_id == nil))
     end
@@ -145,7 +146,7 @@ defmodule Thereish.ExperimentsTest do
       assert outcome.page_id == page.id
       assert outcome.page_identifier == to_string(page.id)
       assert outcome.taps == %{}
-      assert [^outcome] = Experiments.outcomes(room.id, "author_model")
+      assert [^outcome] = ExperimentFixtures.outcomes(room.id, "author_model")
     end
 
     test "links the Page to the oldest unlinked assignment of its experiment", %{room: room} do
@@ -189,7 +190,7 @@ defmodule Thereish.ExperimentsTest do
                to_string(ctx.jacob.id) => "great"
              }
 
-      assert length(Experiments.bookends_taps(ctx.room.id)) == 3
+      assert length(ExperimentFixtures.bookends_taps(ctx.room.id)) == 3
     end
 
     test "finds its outcome by the Page's id", ctx do
@@ -218,7 +219,7 @@ defmodule Thereish.ExperimentsTest do
 
       assert tap.page_identifier == "P002"
       assert Repo.reload!(earlier).taps == %{}
-      assert [_] = Experiments.bookends_taps(ctx.room.id)
+      assert [_] = ExperimentFixtures.bookends_taps(ctx.room.id)
     end
   end
 
@@ -258,13 +259,13 @@ defmodule Thereish.ExperimentsTest do
 
   describe "unblinding" do
     test "is refused until the declared sample is recorded, then allowed", ctx do
-      refute Experiments.unblinded?(ctx.room.id, "author_model")
+      refute ExperimentFixtures.unblinded?(ctx.room.id, "author_model")
       insert_outcomes(ctx.room.id, "author_model", 19)
 
       assert {:error, :sample_incomplete} =
                Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
 
-      refute Experiments.unblinded?(ctx.room.id)
+      refute ExperimentFixtures.unblinded?(ctx.room.id)
 
       insert_outcomes(ctx.room.id, "author_model", 1)
 
@@ -274,9 +275,9 @@ defmodule Thereish.ExperimentsTest do
       assert unblinding.experiment_id == "author_model"
       assert unblinding.seat_id == ctx.jacob.id
       assert unblinding.notes == "Couch night review"
-      assert Experiments.unblinded?(ctx.room.id, "author_model")
-      assert Experiments.unblinded?(ctx.room.id)
-      refute Experiments.unblinded?(ctx.room.id, "bait_against_plain")
+      assert ExperimentFixtures.unblinded?(ctx.room.id, "author_model")
+      assert ExperimentFixtures.unblinded?(ctx.room.id)
+      refute ExperimentFixtures.unblinded?(ctx.room.id, "bait_against_plain")
     end
 
     test "with no experiment named unblinds the Room's active experiment", ctx do
@@ -285,7 +286,7 @@ defmodule Thereish.ExperimentsTest do
 
       assert {:ok, unblinding} = Experiments.unblind(ctx.room.id, nil, unblind_attrs(ctx.jacob))
       assert unblinding.experiment_id == "bait_against_plain"
-      refute Experiments.unblinded?(ctx.room.id, "author_model")
+      refute ExperimentFixtures.unblinded?(ctx.room.id, "author_model")
     end
 
     test "with no experiment named waits for the active experiment's sample", ctx do
@@ -314,9 +315,9 @@ defmodule Thereish.ExperimentsTest do
       assert {:error, :sample_incomplete} =
                Experiments.unblind(ctx.room.id, "bait_against_plain", unblind_attrs(ctx.jacob))
 
-      assert Experiments.unblinded?(ctx.room.id, "author_model")
-      refute Experiments.unblinded?(ctx.room.id, "bait_against_plain")
-      refute Experiments.unblinded?(room_b.id, "author_model")
+      assert ExperimentFixtures.unblinded?(ctx.room.id, "author_model")
+      refute ExperimentFixtures.unblinded?(ctx.room.id, "bait_against_plain")
+      refute ExperimentFixtures.unblinded?(room_b.id, "author_model")
     end
   end
 

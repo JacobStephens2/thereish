@@ -44,7 +44,7 @@ defmodule Thereish.Experiments do
   @bait_against_plain_id "bait_against_plain"
   @author_model_id "author_model"
 
-  @first_experiment %{
+  @bait_against_plain_experiment %{
     id: @bait_against_plain_id,
     name: "Bait against plain",
     description:
@@ -81,8 +81,8 @@ defmodule Thereish.Experiments do
   Returns the declared experiment definition.
   """
   @spec definition(atom() | String.t()) :: map()
-  def definition(:bait_against_plain), do: @first_experiment
-  def definition(@bait_against_plain_id), do: @first_experiment
+  def definition(:bait_against_plain), do: @bait_against_plain_experiment
+  def definition(@bait_against_plain_id), do: @bait_against_plain_experiment
   def definition(:author_model), do: @author_model_experiment
   def definition(@author_model_id), do: @author_model_experiment
   def definition(_), do: @author_model_experiment
@@ -92,7 +92,7 @@ defmodule Thereish.Experiments do
   defp experiment_id_for_arm(arm) when arm in @author_model_arms,
     do: @author_model_experiment.id
 
-  defp experiment_id_for_arm(_arm), do: @first_experiment.id
+  defp experiment_id_for_arm(_arm), do: @bait_against_plain_experiment.id
 
   @doc """
   The arm a Page plays under when it has none of its own: Flash.
@@ -218,42 +218,31 @@ defmodule Thereish.Experiments do
   end
 
   defp sync_outcome_taps(room_id, tap) do
-    identifier = tap.page_identifier
+    of_tap =
+      case {tap.page_identifier, tap.page_id} do
+        {nil, nil} ->
+          nil
+
+        {identifier, nil} ->
+          dynamic([o], o.page_identifier == ^identifier)
+
+        {nil, page_id} ->
+          dynamic([o], o.page_id == ^page_id)
+
+        {identifier, page_id} ->
+          dynamic([o], o.page_identifier == ^identifier or o.page_id == ^page_id)
+      end
 
     outcome =
-      cond do
-        identifier && tap.page_id ->
-          Repo.one(
-            from(o in ExperimentOutcome,
-              where:
-                o.room_id == ^room_id and
-                  (o.page_identifier == ^identifier or o.page_id == ^tap.page_id),
-              order_by: [desc: o.inserted_at],
-              limit: 1
-            )
+      of_tap &&
+        Repo.one(
+          from(o in ExperimentOutcome,
+            where: o.room_id == ^room_id,
+            where: ^of_tap,
+            order_by: [desc: o.inserted_at],
+            limit: 1
           )
-
-        identifier ->
-          Repo.one(
-            from(o in ExperimentOutcome,
-              where: o.room_id == ^room_id and o.page_identifier == ^identifier,
-              order_by: [desc: o.inserted_at],
-              limit: 1
-            )
-          )
-
-        tap.page_id ->
-          Repo.one(
-            from(o in ExperimentOutcome,
-              where: o.room_id == ^room_id and o.page_id == ^tap.page_id,
-              order_by: [desc: o.inserted_at],
-              limit: 1
-            )
-          )
-
-        true ->
-          nil
-      end
+        )
 
     # A tap with no outcome of its own is recorded alone rather than attached
     # to whichever Page happens to be latest.
@@ -263,29 +252,8 @@ defmodule Thereish.Experiments do
     end
   end
 
-  @doc """
-  Returns all Bookends taps for a Room, oldest first.
-  """
-  @spec bookends_taps(Ecto.UUID.t() | String.t()) :: [BookendsTap.t()]
-  def bookends_taps(room_id_or_slug) do
-    room_id = resolve_room_id(room_id_or_slug)
-
-    from(t in BookendsTap,
-      where: t.room_id == ^room_id,
-      order_by: [asc: t.inserted_at, asc: t.id]
-    )
-    |> Repo.all()
-  end
-
-  @doc """
-  Returns all arm assignments for a Room, oldest first, of one experiment or
-  of every experiment.
-  """
-  @spec assignments(Ecto.UUID.t() | String.t(), String.t() | nil) ::
-          [ExperimentAssignment.t()]
-  def assignments(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
+  # A Room's assignments, oldest first, of one Experiment or of every one.
+  defp assignments(room_id, experiment_id \\ nil) do
     from(a in ExperimentAssignment,
       where: a.room_id == ^room_id,
       order_by: [asc: a.assigned_at, asc: a.id]
@@ -294,14 +262,8 @@ defmodule Thereish.Experiments do
     |> Repo.all()
   end
 
-  @doc """
-  Returns all outcomes for a Room, oldest first, of one experiment or of every
-  experiment.
-  """
-  @spec outcomes(Ecto.UUID.t() | String.t(), String.t() | nil) :: [ExperimentOutcome.t()]
-  def outcomes(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
+  # A Room's outcomes, oldest first, of one Experiment or of every one.
+  defp outcomes(room_id, experiment_id \\ nil) do
     from(o in ExperimentOutcome,
       where: o.room_id == ^room_id,
       order_by: [asc: o.inserted_at, asc: o.id]
@@ -321,14 +283,7 @@ defmodule Thereish.Experiments do
     |> MapSet.new()
   end
 
-  @doc """
-  Whether the experiment, or any experiment when none is named, has been
-  deliberately unblinded in this Room.
-  """
-  @spec unblinded?(Ecto.UUID.t() | String.t(), String.t() | nil) :: boolean()
-  def unblinded?(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
+  defp unblinded?(room_id, experiment_id) do
     from(u in ExperimentUnblinding, where: u.room_id == ^room_id)
     |> of_experiment(experiment_id)
     |> Repo.exists?()
@@ -382,7 +337,7 @@ defmodule Thereish.Experiments do
     outcome = Enum.find(page_arms.outcomes, of_page?)
     # Every assignment and outcome names its Experiment and Arm.
     row = Enum.find(page_arms.assignments, of_page?) || outcome
-    experiment_id = if row, do: row.experiment_id, else: @first_experiment.id
+    experiment_id = if row, do: row.experiment_id, else: @bait_against_plain_experiment.id
     unblinded? = MapSet.member?(page_arms.unblinded, experiment_id)
     revealed_outcome = if unblinded?, do: outcome
 
@@ -543,8 +498,8 @@ defmodule Thereish.Experiments do
     {experiment_id, outcomes} =
       with [] <- outcomes,
            @author_model_id <- experiment_id,
-           [_ | _] = bait_outcomes <- outcomes(room_id, @first_experiment.id) do
-        {@first_experiment.id, bait_outcomes}
+           [_ | _] = bait_outcomes <- outcomes(room_id, @bait_against_plain_experiment.id) do
+        {@bait_against_plain_experiment.id, bait_outcomes}
       else
         _ -> {experiment_id, outcomes}
       end
@@ -586,12 +541,14 @@ defmodule Thereish.Experiments do
       flash: flash,
       astra: astra,
       summary_narrative:
-        "Flash achieved a meld rate of #{flash.meld_rate} (best streak: #{flash.longest_meld_streak}, mean attempts: #{flash.mean_attempts_to_meld}) with #{flash.preferences_summary}. " <>
-          "Astra achieved a meld rate of #{astra.meld_rate} (best streak: #{astra.longest_meld_streak}, mean attempts: #{astra.mean_attempts_to_meld}) with #{astra.preferences_summary}."
+        "#{meld_sentence("Flash", flash)} with #{flash.preferences_summary}. " <>
+          "#{meld_sentence("Astra", astra)} with #{astra.preferences_summary}."
     }
   end
 
-  def summarize(@bait_against_plain_id, %{outcomes: outcomes} = rows) do
+  # Any Experiment but the Author model reads as Bait against plain, as any
+  # other Arm belongs to it.
+  def summarize(_bait_against_plain_id, %{outcomes: outcomes} = rows) do
     bait_outcomes = of_arm(outcomes, "bait")
     plain_outcomes = of_arm(outcomes, "plain")
     bait_views = views_of(rows.views, bait_outcomes)
@@ -610,13 +567,18 @@ defmodule Thereish.Experiments do
     plain = summarize_bait_arm(plain_outcomes, plain_feedback)
 
     %{
-      experiment: @first_experiment,
+      experiment: @bait_against_plain_experiment,
       bait: bait,
       plain: plain,
       summary_narrative:
-        "Bait-scored pages achieved a meld rate of #{bait.meld_rate} (best streak: #{bait.longest_meld_streak}, mean attempts: #{bait.mean_attempts_to_meld}) with #{bait.trap_sprung_count} traps sprung and #{bait.fairness_summary}. " <>
-          "Plain pages achieved a meld rate of #{plain.meld_rate} (best streak: #{plain.longest_meld_streak}, mean attempts: #{plain.mean_attempts_to_meld}) with #{plain.fairness_summary} and #{plain.overrules_count} overrules."
+        "#{meld_sentence("Bait-scored pages", bait)} with #{bait.trap_sprung_count} traps sprung and #{bait.fairness_summary}. " <>
+          "#{meld_sentence("Plain pages", plain)} with #{plain.fairness_summary} and #{plain.overrules_count} overrules."
     }
+  end
+
+  defp meld_sentence(subject, summary) do
+    "#{subject} achieved a meld rate of #{summary.meld_rate} " <>
+      "(best streak: #{summary.longest_meld_streak}, mean attempts: #{summary.mean_attempts_to_meld})"
   end
 
   defp of_arm(outcomes, arm), do: Enum.filter(outcomes, &(&1.arm == arm))

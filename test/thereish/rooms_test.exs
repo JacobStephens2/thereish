@@ -12,7 +12,7 @@ defmodule Thereish.RoomsTest do
   import ExUnit.CaptureLog
 
   alias Thereish.Chronicle
-  alias Thereish.Experiments
+  alias Thereish.ExperimentFixtures
   alias Thereish.Rooms
   alias Thereish.Rooms.Server
   alias Thereish.Rooms.Store
@@ -1837,7 +1837,7 @@ defmodule Thereish.RoomsTest do
 
     test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
       room = Thereish.Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
-      [asgn1] = Experiments.assignments(room.id, "author_model")
+      [asgn1] = ExperimentFixtures.assignments(room.id, "author_model")
       assert asgn1.arm == "flash"
 
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
@@ -1858,7 +1858,7 @@ defmodule Thereish.RoomsTest do
       assert :ok = Rooms.tap_bookends(ctx.slug, ctx.jacob.id, "flat")
       assert Rooms.snapshot(ctx.slug, ctx.jacob.id).your_bookends_tap == "flat"
 
-      [outcome1] = Experiments.outcomes(room.id, "author_model")
+      [outcome1] = ExperimentFixtures.outcomes(room.id, "author_model")
       assert outcome1.arm == "flash"
       assert outcome1.taps[to_string(ctx.mara.id)] == "fine"
       assert outcome1.taps[to_string(ctx.jacob.id)] == "flat"
@@ -1875,7 +1875,7 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "lantern")
       await_phase(ctx.slug, :bridging)
 
-      assignments = Experiments.assignments(room.id, "author_model")
+      assignments = ExperimentFixtures.assignments(room.id, "author_model")
       assert length(assignments) == 2
       assert Enum.map(assignments, & &1.arm) == ["flash", "astra"]
     end
@@ -4181,13 +4181,13 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
 
       [^earlier, page] = Chronicle.pages(ctx.room.id)
-      [tap] = Experiments.bookends_taps(ctx.room.id)
+      [tap] = ExperimentFixtures.bookends_taps(ctx.room.id)
       assert tap.page_id == page.id
       assert tap.page_identifier == page.id
       assert tap.label == "great"
 
       outcomes =
-        Map.new(Experiments.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1})
+        Map.new(ExperimentFixtures.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1})
 
       assert outcomes[page.id].taps == %{to_string(ctx.mara.id) => "great"}
       assert outcomes[earlier.id].taps == %{}
@@ -4198,13 +4198,13 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       meld(ctx)
 
-      assert Enum.map(Experiments.assignments(ctx.room.id, "author_model"), & &1.arm) ==
+      assert Enum.map(ExperimentFixtures.assignments(ctx.room.id, "author_model"), & &1.arm) ==
                ["flash", "astra"]
 
       [first, second] = Chronicle.pages(ctx.room.id)
 
       outcomes =
-        Map.new(Experiments.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1.arm})
+        Map.new(ExperimentFixtures.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1.arm})
 
       assert outcomes == %{first.id => "flash", second.id => "astra"}
     end

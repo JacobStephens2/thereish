@@ -9,6 +9,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.ExperimentFixtures
   alias Thereish.Experiments
   alias Thereish.Repo
   alias Thereish.Rooms
@@ -73,7 +74,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
     refute has_element?(chronicle, "[data-role=experiment-card]")
     refute has_element?(chronicle, "[data-role=unblind-button]")
     refute has_element?(chronicle, "[data-role=arm-tag]")
-    refute Experiments.unblinded?(room.id, "bait_against_plain")
+    refute ExperimentFixtures.unblinded?(room.id, "bait_against_plain")
   end
 
   test "experiment is blinded until deliberately unblinded, then reveals qualitative readout",
@@ -217,7 +218,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
       "experiment-id" => "author_model"
     })
 
-    refute Experiments.unblinded?(room.id, "author_model")
+    refute ExperimentFixtures.unblinded?(room.id, "author_model")
     refute has_element?(view, "[data-role=unblinded-banner]")
     refute has_element?(view, "[data-role=experiment-readout]")
     assert has_element?(view, "#{card} [data-role=blinded-banner]")
@@ -241,7 +242,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
 
     unblind_button(view, "author_model") |> render_click()
 
-    assert Experiments.unblinded?(room.id, "author_model")
+    assert ExperimentFixtures.unblinded?(room.id, "author_model")
     assert has_element?(view, "#{card} [data-role=unblinded-banner]")
     assert has_element?(view, "#{card} [data-role=experiment-readout]")
   end
@@ -276,9 +277,9 @@ defmodule ThereishWeb.AdminExperimentsTest do
 
     element(view, "#{author_a} [data-role=unblind-button]") |> render_click()
 
-    assert Experiments.unblinded?(room_a.id, "author_model")
-    refute Experiments.unblinded?(room_a.id, "bait_against_plain")
-    refute Experiments.unblinded?(room_b.id, "author_model")
+    assert ExperimentFixtures.unblinded?(room_a.id, "author_model")
+    refute ExperimentFixtures.unblinded?(room_a.id, "bait_against_plain")
+    refute ExperimentFixtures.unblinded?(room_b.id, "author_model")
     assert has_element?(view, "#{author_a} [data-role=experiment-readout]")
     refute has_element?(view, "#{bait_a} [data-role=experiment-readout]")
     refute has_element?(view, "#{author_b} [data-role=experiment-readout]")
