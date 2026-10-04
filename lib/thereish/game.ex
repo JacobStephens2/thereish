@@ -708,6 +708,8 @@ defmodule Thereish.Game do
     viewer_late? =
       state.page_seat_ids != nil and viewer != nil and viewer not in state.page_seat_ids
 
+    carry = if phase == :reveal, do: carry(state)
+
     %{
       phase: phase,
       late?: viewer_late?,
@@ -733,12 +735,12 @@ defmodule Thereish.Game do
       # What the next attempt will hang between, so the tap that starts it can
       # say so. The carry-forward is the point of a miss; a button that named
       # neither word would hide it.
-      next_bookends: if(phase == :reveal, do: Enum.map(carry(state).carried, & &1.word)),
+      next_bookends: carry && Enum.map(carry.carried, & &1.word),
       # Whether the Assayer picked those two words or the game fell back to the
       # first two Bridges in roster order. The couple are about to spend an
       # attempt on them, so which of the two happened is theirs to know. At a
       # Full table the table's own Bridges carry, so there is no choice to miss.
-      next_bookends_chosen?: if(phase == :reveal, do: carry(state).chosen?),
+      next_bookends_chosen?: carry && carry.chosen?,
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),

@@ -70,15 +70,6 @@ defmodule Thereish.Chronicle.PageView do
   @typedoc "The Vamp a Page kept."
   @type vamp_view :: %{path: String.t(), duration: integer() | nil, loop: boolean()}
 
-  @typedoc """
-  One Bookend as a chip. A first-Attempt chip from a Give names where its word
-  came from; a later chip names the Seat whose Bridge it carried forward.
-  """
-  @type bookend_chip :: Bookends.chip()
-
-  @typedoc "Where one opening Bookend came from, when a Give dealt it."
-  @type bookend_origin :: Bookends.origin()
-
   @typedoc "One Bridge, read through the latest correction against it."
   @type bridge_view :: %{
           id: Ecto.UUID.t(),
@@ -173,7 +164,7 @@ defmodule Thereish.Chronicle.PageView do
           participant_ids: [Ecto.UUID.t()],
           verdicts: [verdict_view()],
           carried: [String.t()] | nil,
-          bookend_chips: [bookend_chip()],
+          bookend_chips: [Bookends.chip()],
           overrules: [overrule_view()],
           corrections: [correction_view()],
           fairness_taps: [tap_view()]
@@ -204,7 +195,7 @@ defmodule Thereish.Chronicle.PageView do
           track: track_view() | nil,
           vamp: vamp_view() | nil,
           bookends: [String.t()],
-          bookend_origins: [bookend_origin()],
+          bookend_origins: [Bookends.origin()],
           full_table: boolean() | nil,
           closed_because: String.t(),
           melded: boolean(),
@@ -459,7 +450,9 @@ defmodule Thereish.Chronicle.PageView do
 
   # The words a missed Attempt handed on: the next Attempt's Bookends when there
   # was one, else what the table's rule carries (`Bookends.carry/3`) from the
-  # Bridges as the table played them, before any correction (ADR-0019).
+  # Bridges as the table played them, before any correction (ADR-0019). An
+  # Attempt that never reached a Verdict was never revealed, so the table
+  # carried nothing from it.
   defp carried(page, index, attempt) do
     next = Enum.at(page.attempts, index + 1)
 
@@ -470,12 +463,12 @@ defmodule Thereish.Chronicle.PageView do
       is_map(next) ->
         next.bookends
 
+      attempt.verdicts == [] ->
+        nil
+
       true ->
-        verdict =
-          case attempt.verdicts do
-            [first | _] -> %{graded?: first.graded, furthest: first.furthest}
-            [] -> nil
-          end
+        [first | _] = attempt.verdicts
+        verdict = %{graded?: first.graded, furthest: first.furthest}
 
         recorded_bridges(attempt)
         |> Bookends.carry(verdict, full_table(page.document) == true)
