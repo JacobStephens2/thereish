@@ -134,16 +134,21 @@ defmodule Thereish.Steward.TrackCache do
     )
   end
 
-  @doc "Stores generated audio bytes into the media directory and records in cache."
+  @doc """
+  Stores generated audio bytes into the media directory and records in cache.
+
+  `opts` carries the `:provider` name the Steward resolved, and may carry a
+  `:title`.
+  """
   @spec store([String.t() | map()], map(), keyword()) :: {:ok, map()} | {:error, term()}
-  def store(gives, mureka_result, opts \\ []) when is_list(gives) and is_map(mureka_result) do
+  def store(gives, result, opts) when is_list(gives) and is_map(result) do
     cache_key = key(gives)
     filename = filename_for_key(cache_key) <> ".mp3"
     dir = Path.join(media_dir(), "tracks")
     File.mkdir_p!(dir)
     file_path = Path.join(dir, filename)
 
-    case Map.get(mureka_result, :bytes) do
+    case Map.get(result, :bytes) do
       bytes when is_binary(bytes) ->
         File.write!(file_path, bytes)
 
@@ -152,16 +157,16 @@ defmodule Thereish.Steward.TrackCache do
     end
 
     web_path = "/media/tracks/#{filename}"
-    duration = Map.get(mureka_result, :duration, 120) || 120
+    duration = Map.get(result, :duration, 120) || 120
 
     title =
-      Keyword.get(opts, :title) || Map.get(mureka_result, :title) ||
-        Map.get(mureka_result, "title")
+      Keyword.get(opts, :title) || Map.get(result, :title) ||
+        Map.get(result, "title")
 
     meta = %{
-      provider: "mureka",
-      model: Map.get(mureka_result, :model, "auto"),
-      cost_usd: Map.get(mureka_result, :cost_usd, 0.04)
+      provider: Keyword.fetch!(opts, :provider),
+      model: Map.get(result, :model, "auto"),
+      cost_usd: Map.get(result, :cost_usd, 0.04)
     }
 
     track_attrs = %{

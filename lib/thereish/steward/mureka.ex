@@ -6,11 +6,16 @@ defmodule Thereish.Steward.Mureka do
   and downloads the chosen audio URL.
   """
 
+  @behaviour Thereish.Steward.Provider
+
   require Logger
 
   alias Thereish.Steward.Provider
 
   @base_url "https://api.mureka.ai"
+
+  @impl Provider
+  def credentials, do: [api_key: "MUREKA_API_KEY"]
 
   @typedoc "An instrumental music generation request"
   @type request :: %{

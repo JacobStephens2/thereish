@@ -5,6 +5,9 @@ defmodule Thereish.Steward.VoiceTest do
   alias Thereish.Steward.Fake
   alias Thereish.Steward.Hume
   alias Thereish.Steward.Live
+  alias Thereish.Foley.Voice
+
+  import Thereish.EntryFixtures
 
   @sample_mp3 Fake.mp3_fixture()
 
@@ -42,7 +45,6 @@ defmodule Thereish.Steward.VoiceTest do
       assert {:ok, result} = ElevenLabs.speak("Close. [laughs] You both saw the beach.", opts)
       assert result.audio == @sample_mp3
       assert result.format == :mp3
-      assert result.meta.provider == ElevenLabs
       assert result.meta.voice_id == "test-voice-id"
       assert result.meta.model == "eleven_v3_conversational"
       assert result.meta.characters == 40
@@ -111,7 +113,6 @@ defmodule Thereish.Steward.VoiceTest do
       assert {:ok, result} = Hume.speak(line, opts)
       assert result.audio == @sample_mp3
       assert result.format == :mp3
-      assert result.meta.provider == Hume
       assert result.meta.voice_id == "test-hume-voice"
       assert result.meta.model == "octave-2"
       assert result.meta.characters == String.length(line)
@@ -193,7 +194,7 @@ defmodule Thereish.Steward.VoiceTest do
       assert {:ok, result} = Live.speak("Meld. Two minds at once.")
       assert result.audio == @sample_mp3
       assert result.format == :mp3
-      assert result.meta.provider == ElevenLabs
+      assert result.meta.provider == "eleven_labs"
     end
 
     test "Live.speak delegates to Hume as configured winner" do
@@ -229,7 +230,56 @@ defmodule Thereish.Steward.VoiceTest do
       assert {:ok, result} = Live.speak("Meld. Two minds at once.")
       assert result.audio == @sample_mp3
       assert result.format == :mp3
-      assert result.meta.provider == Hume
+      assert result.meta.provider == "hume"
     end
+  end
+
+  describe "the provenance a Verdict's voice leaves in the Chronicle" do
+    test "a landed clip and a failed clip of the same provider record the same provider" do
+      Req.Test.stub(Hume, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{"generations" => [%{"audio" => Base.encode64(@sample_mp3)}]})
+        )
+      end)
+
+      steward = Application.fetch_env!(:thereish, :steward)
+      Application.put_env(:thereish, :steward, Keyword.put(steward, :adapter, Live))
+
+      assert {:ok, clip} = Thereish.Steward.speak("Meld. Two minds at once.")
+      failure = Thereish.Steward.voice_failure(:timeout)
+
+      assert chronicled({:ok, clip})["provider"] == "hume"
+      assert chronicled({:error, failure})["provider"] == "hume"
+    end
+  end
+
+  # What Foley's Voice writes on a held Page once the Verdict's clip, or its
+  # failure, comes back.
+  defp chronicled(result) do
+    table = %{
+      attempt: 1,
+      phase: :closed,
+      bookends: ["harbour", "lantern"],
+      speaker?: true,
+      quips?: true
+    }
+
+    {voice, _} = Voice.verdict_received(Voice.new(), %{band: :miss}, %{table | phase: :assaying})
+
+    {voice, []} =
+      Voice.page_closed(voice, entry(attempts: [%{number: 1, verdicts: [%{band: :miss}]}]))
+
+    {_voice, effects} = Voice.spoken(voice, 1, :verdict, result, table)
+
+    [%{verdicts: [verdict]}] =
+      Enum.find_value(effects, fn
+        {:commit_chronicle, committed} -> committed.attempts
+        _ -> nil
+      end)
+
+    verdict.voice_meta
   end
 end
