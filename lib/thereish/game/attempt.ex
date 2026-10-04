@@ -27,6 +27,16 @@ defmodule Thereish.Game.Attempt do
     opinions: %{}
   ]
 
+  @typedoc "Where one Bookend came from: the Give that dealt it, or the Bridge a miss carried."
+  @type origin :: Bookends.origin() | Bookends.claimed()
+
+  @typedoc "An overrule the table has proposed: who proposed it, the grade, and who agrees."
+  @type proposal :: %{
+          proposer_id: String.t(),
+          closeness: integer(),
+          agreed: MapSet.t(String.t())
+        }
+
   @typedoc """
   `origins` say whose Give or Bridge each Bookend was. They can be shorter than
   the Bookends, when the Author named fewer sources than it wrote words.
@@ -37,16 +47,15 @@ defmodule Thereish.Game.Attempt do
   @type t :: %__MODULE__{
           number: pos_integer(),
           bookends: [String.t()],
-          origins: [Bookends.origin() | Bookends.claimed()],
+          origins: [origin()],
           bridges: %{String.t() => String.t()},
           verdict: Thereish.Game.verdict() | nil,
-          overrule:
-            %{proposer_id: String.t(), closeness: integer(), agreed: MapSet.t(String.t())} | nil,
+          overrule: proposal() | nil,
           opinions: %{String.t() => String.t()}
         }
 
   @doc "Opens Attempt `number` on `bookends`, with nothing yet written against them."
-  @spec open(pos_integer(), [String.t()], [map()]) :: t()
+  @spec open(pos_integer(), [String.t()], [origin()]) :: t()
   def open(number, bookends, origins) do
     %__MODULE__{number: number, bookends: bookends, origins: origins}
   end
