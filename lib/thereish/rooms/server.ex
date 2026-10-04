@@ -836,7 +836,7 @@ defmodule Thereish.Rooms.Server do
     state
   rescue
     error ->
-      Logger.error("a late write onto Page #{page_id} failed: #{Exception.message(error)}")
+      Logger.error("a write onto Page #{page_id} failed: #{Exception.message(error)}")
       state
   end
 
