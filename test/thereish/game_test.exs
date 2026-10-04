@@ -567,6 +567,12 @@ defmodule Thereish.GameTest do
       assert length(request.gives) == 8
     end
 
+    test "setting the Room's Full table rule off asks the next Page for two Bookends" do
+      {_state, effects} = give_all(Game.set_full_table(six_table(), false))
+      assert [{:author, request}] = effects
+      assert request.count == 2
+    end
+
     test "eight Seats have eight distinct house colours" do
       state = eight_table()
       colours = Enum.map(state.seats, &Game.seat_colour(state, &1))
