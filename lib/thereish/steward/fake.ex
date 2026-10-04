@@ -29,6 +29,11 @@ defmodule Thereish.Steward.Fake do
   saying anything — the two shapes a failed grade comes in, both of which the
   game answers the same way.
 
+  `quip/1` is the fresh Quip the Steward asks for on a Precedent hit. It is the
+  Quip this Assayer's own grade writes for those Bridges, and it answers to the
+  same two dials, so a test that wants the Steward to fall back on the cached
+  Quip sets `mode: :unavailable` or a `delay_ms` past the Quip's timeout.
+
   ## The other two roles
 
   The Author and the Scribe have the same dials under the same names —
@@ -54,6 +59,20 @@ defmodule Thereish.Steward.Fake do
     case mode() do
       :grade -> {:ok, grade(bridges)}
       :unavailable -> {:error, :no_verdict}
+      :raise -> raise "this Assayer is having a moment"
+    end
+  end
+
+  # The Quip its own grade writes for these Bridges, so a Precedent hit reads
+  # the same on every screen as the grade that set it. It answers to the
+  # Assayer's dials, because a fresh Quip is the Assayer's to write.
+  @impl true
+  def quip(%{bridges: bridges}) when length(bridges) >= 2 do
+    delay_ms() |> Process.sleep()
+
+    case mode() do
+      :grade -> {:ok, %{quip: grade(bridges).quip, meta: %{cost_usd: 0.0}}}
+      :unavailable -> {:error, :no_quip}
       :raise -> raise "this Assayer is having a moment"
     end
   end
