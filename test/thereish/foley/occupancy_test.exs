@@ -9,6 +9,8 @@ defmodule Thereish.Foley.OccupancyTest do
   use ExUnit.Case, async: true
 
   alias Thereish.Foley.Occupancy
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
 
   @gives ["harbour", "lantern"]
   @draw %{name: "Dusk", title: "Dusk", path: "/loops/dusk.mp3"}
@@ -52,10 +54,11 @@ defmodule Thereish.Foley.OccupancyTest do
       assert view.track == @cached
       assert view.vamp == nil
       assert view.playing == %{path: @cached.path, title: "Harbour Lights", kind: "track"}
-      assert view.music_meta.title == "Harbour Lights"
-      assert view.music_meta["path"] == @cached.path
-      assert view.music_meta.title_cost_usd == 0.0
-      assert view.music_meta.provider == "fake"
+
+      assert %Track{path: "/media/cached.mp3", title: "Harbour Lights", meta: meta} =
+               view.music_meta
+
+      assert meta == %{"provider" => "fake", "title_cost_usd" => 0.0}
     end
 
     test "a cache row with no title is a miss" do
@@ -96,8 +99,7 @@ defmodule Thereish.Foley.OccupancyTest do
       assert [{:persist_vamp_meta, ^ref, vamp_meta}] =
                Enum.filter(effects, &(elem(&1, 0) != :log))
 
-      assert vamp_meta.path == @vamp.path
-      assert vamp_meta["loop"] == true
+      assert %Vamp{path: "/media/vamp.mp3", loop: true} = vamp_meta
       assert logged(effects) == ["vamp landed"]
 
       view = Occupancy.view(occ, table())
@@ -107,7 +109,7 @@ defmodule Thereish.Foley.OccupancyTest do
       {occ, effects} = Occupancy.arrived(occ, ref, {:track, {:ok, @track}}, false)
       assert logged(effects) == ["track landed"]
       assert {:persist_music_meta, ^ref, meta} = List.keyfind(effects, :persist_music_meta, 0)
-      assert meta.path == @track.path
+      assert %Track{path: "/media/track.mp3"} = meta
 
       assert {:cache_track, @gives, %{path: "/media/track.mp3"}} =
                List.keyfind(effects, :cache_track, 0)
@@ -116,7 +118,7 @@ defmodule Thereish.Foley.OccupancyTest do
       assert view.vamp == nil
       assert view.track.path == @track.path
       assert view.playing == %{path: @track.path, title: "Track", kind: "track"}
-      assert view.music_meta.provider == "fake"
+      assert view.music_meta.meta["provider"] == "fake"
     end
 
     test "a Vamp landing after its Track is no longer being made is kept but not played" do
@@ -137,7 +139,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
       {occ, effects} = Occupancy.arrived(occ, ref, {:vamp, {:ok, @vamp}}, true)
 
-      assert {:persist_vamp_meta, ^ref, %{path: "/media/vamp.mp3"}} =
+      assert {:persist_vamp_meta, ^ref, %Vamp{path: "/media/vamp.mp3"}} =
                List.keyfind(effects, :persist_vamp_meta, 0)
 
       view = Occupancy.view(occ, table(%{closed?: true}))
@@ -151,7 +153,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
       {occ, effects} = Occupancy.arrived(occ, ref, {:track, {:ok, @track}}, true)
 
-      assert {:persist_music_meta, ^ref, %{path: "/media/track.mp3"}} =
+      assert {:persist_music_meta, ^ref, %Track{path: "/media/track.mp3"}} =
                List.keyfind(effects, :persist_music_meta, 0)
 
       refute :cache_track in kinds(effects)
@@ -203,8 +205,7 @@ defmodule Thereish.Foley.OccupancyTest do
 
       {occ, effects} = Occupancy.arrived(occ, ref, {:track, {:ok, @track}}, false)
       assert {:persist_music_meta, ^ref, meta} = List.keyfind(effects, :persist_music_meta, 0)
-      assert meta.title == "Salt Road"
-      assert meta.title_cost_usd == 0.002
+      assert %Track{title: "Salt Road", meta: %{"title_cost_usd" => 0.002}} = meta
 
       assert {:cache_track, @gives, %{title: "Salt Road"}} =
                List.keyfind(effects, :cache_track, 0)
@@ -212,7 +213,7 @@ defmodule Thereish.Foley.OccupancyTest do
       view = Occupancy.view(occ, table())
       assert view.playing.title == "Salt Road"
       assert view.track.title == "Salt Road"
-      assert view.music_meta["title"] == "Salt Road"
+      assert view.music_meta.title == "Salt Road"
     end
 
     test "a title arriving after its Track renames it and caches the titled Track" do
@@ -232,9 +233,8 @@ defmodule Thereish.Foley.OccupancyTest do
 
       view = Occupancy.view(occ, table())
       assert view.playing.title == "Salt Road"
-      assert view.music_meta.title == "Salt Road"
-      assert view.music_meta.title_cost_usd == 0.002
-      assert view.music_meta.provider == "fake"
+      assert %Track{title: "Salt Road", meta: meta} = view.music_meta
+      assert %{"title_cost_usd" => 0.002, "provider" => "fake"} = meta
     end
 
     test "a title arriving after its Page closed changes nothing" do
@@ -280,9 +280,8 @@ defmodule Thereish.Foley.OccupancyTest do
       occ = arrive(occ, ref, {:track, {:error, :timeout}})
       occ = arrive(occ, ref, {:track, {:ok, @track}})
 
-      meta = Occupancy.chronicle_meta(occ, "page").music_meta
-      refute Map.has_key?(meta, :failure)
-      assert meta.path == @track.path
+      assert %Track{path: "/media/track.mp3", failure: nil} =
+               Occupancy.chronicle_meta(occ, "page").music_meta
     end
 
     test "a failed Vamp is logged and the draw keeps playing" do

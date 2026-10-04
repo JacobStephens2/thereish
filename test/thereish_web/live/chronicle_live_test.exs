@@ -9,6 +9,8 @@ defmodule ThereishWeb.ChronicleLiveTest do
   import Phoenix.LiveViewTest
 
   alias Thereish.Chronicle
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
   alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Repo
@@ -496,16 +498,16 @@ defmodule ThereishWeb.ChronicleLiveTest do
       room = Repo.get_by!(Room, slug: slug)
       now = DateTime.utc_now()
 
-      # Page 1: Closed Page with music_meta carrying path and title
+      # Page 1: Closed Page with a titled Track
       entry1 =
         entry(%{
           opened_at: now,
           page: %{bookends: ["lantern", "harbour"]},
           author_meta: %{model: "gemini-3.8-flash"},
-          music_meta: %{
-            provider: "mureka",
+          music_meta: %Track{
             path: "/media/tracks/harbour-lights.mp3",
-            title: "Harbour Lights"
+            title: "Harbour Lights",
+            meta: %{"provider" => "mureka"}
           },
           closed_because: :meld,
           melded?: true,
@@ -527,13 +529,16 @@ defmodule ThereishWeb.ChronicleLiveTest do
 
       assert {:ok, p1} = Chronicle.write(room.id, entry1)
 
-      # Page 2: Page with a failed score (music_meta has failure, no path)
+      # Page 2: Page with a failed Track, with no path
       entry2 =
         entry(%{
           opened_at: DateTime.add(now, 60, :second),
           page: %{bookends: ["desert", "oasis"]},
           author_meta: %{model: "gemini-3.8-flash"},
-          music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
+          music_meta: %Track{
+            failure: "timed_out",
+            meta: %{"provider" => "mureka", "cost_usd" => 0.0}
+          },
           closed_because: :meld,
           melded?: true,
           closeness: 90,
@@ -554,7 +559,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
 
       assert {:ok, p2} = Chronicle.write(room.id, entry2)
 
-      # Page 3: Music under Off (music_meta is nil)
+      # Page 3: Music under Off (no Track)
       entry3 =
         entry(%{
           opened_at: DateTime.add(now, 120, :second),
@@ -581,13 +586,15 @@ defmodule ThereishWeb.ChronicleLiveTest do
 
       assert {:ok, p3} = Chronicle.write(room.id, entry3)
 
-      # Page 4: Legacy page without path (music_meta has provider/model/cost but no path)
+      # Page 4: Legacy page whose Track has provider/model/cost but no path
       entry4 =
         entry(%{
           opened_at: DateTime.add(now, 180, :second),
           page: %{bookends: ["frost", "glacier"]},
           author_meta: %{model: "gemini-3.8-flash"},
-          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.04},
+          music_meta: %Track{
+            meta: %{"provider" => "mureka", "model" => "mureka-v1", "cost_usd" => 0.04}
+          },
           closed_because: :meld,
           melded?: true,
           closeness: 85,
@@ -715,16 +722,12 @@ defmodule ThereishWeb.ChronicleLiveTest do
           opened_at: now,
           page: %{bookends: ["lantern", "harbour"]},
           author_meta: %{model: "gemini-3.8-flash"},
-          music_meta: %{
-            provider: "mureka",
+          music_meta: %Track{
             path: "/media/tracks/harbour-lights.mp3",
-            title: "Harbour Lights"
+            title: "Harbour Lights",
+            meta: %{"provider" => "mureka"}
           },
-          vamp_meta: %{
-            path: "/media/vamps/harbour-vamp.mp3",
-            duration: 30,
-            loop: true
-          },
+          vamp_meta: %Vamp{path: "/media/vamps/harbour-vamp.mp3", duration: 30, loop: true},
           closed_because: :meld,
           melded?: true,
           closeness: 95,
@@ -750,10 +753,10 @@ defmodule ThereishWeb.ChronicleLiveTest do
           opened_at: DateTime.add(now, 60, :second),
           page: %{bookends: ["desert", "oasis"]},
           author_meta: %{model: "gemini-3.8-flash"},
-          music_meta: %{
-            provider: "mureka",
+          music_meta: %Track{
             path: "/media/tracks/oasis.mp3",
-            title: "Oasis"
+            title: "Oasis",
+            meta: %{"provider" => "mureka"}
           },
           closed_because: :meld,
           melded?: true,
