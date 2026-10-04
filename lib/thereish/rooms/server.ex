@@ -18,43 +18,12 @@ defmodule Thereish.Rooms.Server do
   written when a Page closes, not as it is played, so a crash costs the Page
   that was in flight — never a Page that finished, and never the Seats.
 
-  ## It owns time, and the rules do not
+  ## Time is Pacing's
 
-  The rules answer the last commit with two things owed: one assay carrying
-  every Bridge, and a beat. This process performs both — a Task for the Assayer,
-  a timer for the beat — and holds the verdict that comes back until the beat is
-  over. After the reveal is up, it holds advancement the same way: a shared
-  deadline every screen reads, which a reconnect cannot restart and a second
-  device cannot skip. That is the whole of the reveal's theatre, and it is why
-  the Game itself can be driven in a test as a list of events with no clock in
-  sight.
-
-  A verdict is never waited on inline. The Room stays answerable while the
-  Assayer thinks, because a phone asking what it missed must not be stuck behind
-  a model. An Assayer that raises or exits is a verdict the game does not have,
-  which is a rule it already knows: the Attempt goes ungraded and the call goes
-  to the players.
-
-  ## An Assayer that is slow, rather than absent
-
-  Design law 10 gives the reveal a ceiling: visible activity through four
-  seconds, a provisional reading at eight, and at ten the game states it has no
-  verdict. This process runs that ladder, because it is made of time. Each step
-  moves what every screen says; the last one is not a step but the end of the
-  wait — the Verdict still outstanding is recorded as absent and the call goes
-  to the couple, which is design law 3's joint authority arriving by the back
-  door rather than an invented number.
-
-  The ladder is armed when the Assayer is asked and disarmed when it answers,
-  not when the reveal appears. Those differ by the beat, and an Assayer that
-  answered in 200 ms is not slow just because the theatre is still running.
-
-  A timer that fires in the same instant a verdict arrives leaves its message in
-  the mailbox, where cancelling it cannot reach. That message is harmless, and
-  the reason is the mailbox's own order: it was posted before the verdict was,
-  so it is read before the verdict is, and long before anything could start a
-  fresh ladder for it to be mistaken for. What it finds is a ladder already
-  stood down, which is the last `{:escalate, _}` clause below.
+  The Beat, the reveal hold, both escalation ladders and when each part of a
+  Page happened are rules about time, and they live in
+  `Thereish.Rooms.Pacing`. This process tells Pacing what happened and when,
+  and performs what it asks: a timer, some Game events, a broadcast.
   """
   use GenServer, restart: :permanent
 
@@ -64,6 +33,7 @@ defmodule Thereish.Rooms.Server do
   alias Thereish.Foley.Occupancy
   alias Thereish.Foley.Voice
   alias Thereish.Game
+  alias Thereish.Rooms.Pacing
   alias Thereish.Rooms.Room
   alias Thereish.Rooms.Seat
   alias Thereish.Rooms.Store
@@ -95,14 +65,7 @@ defmodule Thereish.Rooms.Server do
         slug: slug,
         room: room,
         game: game,
-        beat: nil,
-        held: [],
-        revealed_at: nil,
-        reveal_hold: nil,
-        opened_at: nil,
-        timing: %{gives: %{}, attempts: %{}},
-        assayer: nil,
-        author: nil,
+        pacing: Pacing.new(durations()),
         current_arm: nil,
         current_page_id: nil,
         current_page_ref: nil,
@@ -113,7 +76,9 @@ defmodule Thereish.Rooms.Server do
         prologue: nil
       }
 
-      {:ok, opened(state)}
+      # A Room that comes back with every Seat taken is a Page already open, so
+      # Pacing is told about the Game it starts at as a move onto it.
+      {:ok, pace(state, &Pacing.moved(&1, game, game, now()))}
     else
       nil -> {:stop, {:no_such_room, slug}}
     end
@@ -142,10 +107,10 @@ defmodule Thereish.Rooms.Server do
   end
 
   def handle_call({:next_attempt, seat_id}, _from, state) do
-    with :ok <- reveal_hold_elapsed(state),
+    with :ok <- Pacing.may_advance(state.pacing, now()),
          {:ok, game, effects} <-
            Game.apply(state.game, {:attempt_advanced, %{seat_id: seat_id}}) do
-      {:reply, :ok, state |> clear_reveal_hold() |> advance(game, effects)}
+      {:reply, :ok, advance(state, game, effects)}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -214,38 +179,39 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
+  # Nothing is reset until the Game accepts it: a late tap from a second phone,
+  # after the Author has already written the Page, must leave that Page's
+  # music and times alone.
   def handle_call({:reset_gives, seat_id}, _from, state) do
-    state =
-      state
-      |> author_answered()
-      |> Map.put(:current_page_ref, nil)
-      |> Map.update!(:occupancy, &Occupancy.gives_reset/1)
-      |> Map.put(:giving_ref, make_ref())
-      |> Map.put(:opened_at, nil)
-      |> Map.put(:timing, %{gives: %{}, attempts: %{}})
-
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
-      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      {:ok, game, effects} ->
+        state =
+          state
+          |> Map.update!(:pacing, &Pacing.gives_reset/1)
+          |> Map.update!(:occupancy, &Occupancy.gives_reset/1)
+          |> Map.put(:giving_ref, make_ref())
+          |> Map.put(:current_page_ref, nil)
+
+        {:reply, :ok, advance(state, game, effects)}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
   def handle_call({:next_page, seat_id}, _from, state) do
-    with :ok <- reveal_hold_elapsed(state) do
+    with :ok <- Pacing.may_advance(state.pacing, now()) do
       case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
         {:ok, game, effects} ->
           # A closed Page must not vanish if Foley is still speaking when the
           # couple tap next: Voice releases whatever Page it is holding.
-          state = state |> clear_reveal_hold() |> voice(&Voice.page_turned/1)
+          state = voice(state, &Voice.page_turned/1)
 
           members = Thereish.Foley.Repertoire.members(state.room.id)
 
           new_state =
-            %{
-              state
-              | opened_at: nil,
-                timing: %{gives: %{}, attempts: %{}}
-            }
+            state
+            |> Map.update!(:pacing, &Pacing.page_turned/1)
             |> Map.put(:current_arm, nil)
             |> Map.put(:current_page_id, nil)
             |> Map.put(:current_page_ref, nil)
@@ -432,8 +398,7 @@ defmodule Thereish.Rooms.Server do
     view =
       state.game
       |> Game.view(viewer)
-      |> Map.put(:assayer_step, step(state))
-      |> Map.put(:author_step, author_step(state))
+      |> Map.merge(Pacing.view(state.pacing, state.game, now()))
       |> Map.put(:speaker?, speaker?)
       |> Map.put(:speaker_claimed?, speaker_claimed?)
       |> Map.put(:quips, state.room.quips)
@@ -445,27 +410,15 @@ defmodule Thereish.Rooms.Server do
       |> Map.put(:prologue, state[:prologue])
       |> Map.put(:prologue_script, Thereish.Foley.Prologue.script())
       |> Map.put(:has_chronicle?, has_chronicle?(state))
-      |> Map.put(:can_advance?, can_advance?(state))
 
     {:reply, view, state}
   end
 
-  # A verdict that arrives during the beat waits it out. The players were
-  # promised a fixed beat, and an Assayer that answered in 200 ms must not turn
-  # the reveal into a flinch. The escalation ladder is stood down either way:
-  # this Assayer has answered.
+  # Pacing decides whether the Verdict is held for the Beat, applied or
+  # dropped; Voice hears it as it arrives, so its line is ready by the reveal.
   @impl true
   def handle_info({:assayed, event}, state) do
-    state =
-      state
-      |> answered()
-      |> verdict_heard(event)
-
-    if state.beat do
-      {:noreply, %{state | held: state.held ++ [event]}}
-    else
-      {:noreply, apply_events(state, [event])}
-    end
+    {:noreply, state |> verdict_heard(event) |> pace(&Pacing.assayed(&1, event))}
   end
 
   def handle_info({:voice_spoken, attempt, kind, {:ok, result}}, state) do
@@ -479,80 +432,20 @@ defmodule Thereish.Rooms.Server do
     {:noreply, voice(state, &Voice.spoken(&1, attempt, kind, failure, voice_table(state)))}
   end
 
-  def handle_info(:beat_over, state) do
-    {:noreply, apply_events(%{state | beat: nil, held: []}, state.held)}
+  def handle_info({:pacing, name, token}, state) do
+    {:noreply, pace(state, &Pacing.elapsed(&1, name, token, now()))}
   end
 
-  def handle_info(:reveal_hold_over, state) do
-    broadcast(state.room.slug)
-    {:noreply, %{state | reveal_hold: nil}}
+  # A superseded, timed-out or duplicate Author changes nothing.
+  def handle_info({:author_completed, ref, result}, state) do
+    case Pacing.author_answered(state.pacing, ref) do
+      {:current, pacing} ->
+        {:noreply, apply_events(%{state | pacing: pacing}, [author_event(result, state)])}
+
+      :stale ->
+        {:noreply, state}
+    end
   end
-
-  # Ten seconds is where the game stops waiting and says so. The Verdict is
-  # recorded as absent, which the rules already answer by revealing without a
-  # number and handing the ruling to the couple. A verdict that turns up
-  # afterwards changes nothing: an Attempt is graded once.
-  def handle_info({:escalate, :unavailable}, %{assayer: %{}} = state) do
-    event = {:verdict_unavailable, %{}}
-
-    {:noreply, apply_events(%{state | assayer: nil}, [event])}
-  end
-
-  def handle_info({:escalate, step}, %{assayer: assayer} = state) when assayer != nil do
-    state = %{state | assayer: %{assayer | step: step, timer: escalate_after(step)}}
-    broadcast(state.room.slug)
-
-    {:noreply, state}
-  end
-
-  # The Assayer answered between the timer firing and this process reading its
-  # message. Nothing to escalate.
-  def handle_info({:escalate, _step}, state), do: {:noreply, state}
-
-  def handle_info({:escalate_author, :still_writing}, %{author: author} = state)
-      when author != nil do
-    state = %{
-      state
-      | author: %{author | step: :still_writing, timer: escalate_author_after(:still_writing)}
-    }
-
-    broadcast(state.room.slug)
-    {:noreply, state}
-  end
-
-  def handle_info({:escalate_author, :deadline}, %{author: author} = state)
-      when author != nil do
-    state = author_answered(state)
-    event = {:author_failed, %{reason: "timed out"}}
-    {:noreply, apply_events(state, [event])}
-  end
-
-  def handle_info({:escalate_author, _step}, state), do: {:noreply, state}
-
-  def handle_info({:author_completed, ref, {:ok, result}}, %{author: %{ref: ref}} = state) do
-    state = author_answered(state)
-
-    event =
-      {:page_written,
-       %{
-         bookends: result.bookends,
-         from: result[:from],
-         meta: result.meta,
-         full_table: state.room.full_table
-       }}
-
-    {:noreply, apply_events(state, [event])}
-  end
-
-  def handle_info({:author_completed, ref, {:error, reason}}, %{author: %{ref: ref}} = state) do
-    state = author_answered(state)
-    friendly_reason = format_author_error(reason)
-    event = {:author_failed, %{reason: friendly_reason}}
-    {:noreply, apply_events(state, [event])}
-  end
-
-  # Stale, duplicate, or superseded author tasks change nothing
-  def handle_info({:author_completed, _ref, _result}, state), do: {:noreply, state}
 
   # Every Foley result goes to the Occupancy, which decides whether it still
   # belongs to the Page in play.
@@ -613,6 +506,20 @@ defmodule Thereish.Rooms.Server do
     handle_info({:mask_landed, seat_id, nil, nil, {:ok, mask}}, state)
   end
 
+  defp author_event({:ok, result}, state) do
+    {:page_written,
+     %{
+       bookends: result.bookends,
+       from: result[:from],
+       meta: result.meta,
+       full_table: state.room.full_table
+     }}
+  end
+
+  defp author_event({:error, reason}, _state) do
+    {:author_failed, %{reason: format_author_error(reason)}}
+  end
+
   defp format_author_error({:max_tokens, _}), do: "too broad or complex"
   defp format_author_error(:refused), do: "content declined"
   defp format_author_error({:refusal, msg}), do: "declined: #{msg}"
@@ -661,22 +568,17 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp apply_events(state, events) do
-    old_phase = Game.phase(state.game)
+    Enum.reduce(events, state, fn event, state ->
+      case Game.apply(state.game, event) do
+        {:ok, game, effects} ->
+          advance(state, game, effects)
 
-    new_state =
-      Enum.reduce(events, state, fn event, state ->
-        case Game.apply(state.game, event) do
-          {:ok, game, effects} ->
-            advance(state, game, effects)
-
-          # A verdict for a Page that has moved on is nothing to act on and
-          # nothing to crash over.
-          {:error, _reason} ->
-            state
-        end
-      end)
-
-    maybe_arm_reveal_hold(new_state, old_phase)
+        # A verdict for a Page that has moved on is nothing to act on and
+        # nothing to crash over.
+        {:error, _reason} ->
+          state
+      end
+    end)
   end
 
   # Next or Never, which only the device holding the Speaker may press. Any
@@ -707,8 +609,7 @@ defmodule Thereish.Rooms.Server do
 
     state =
       %{state | game: game}
-      |> record_occurrence_times(old_game)
-      |> opened()
+      |> pace(&Pacing.moved(&1, old_game, game, now()))
 
     state = Enum.reduce(effects, state, &perform/2)
     state = voice(state, &Voice.table_moved(&1, voice_table(state)))
@@ -718,23 +619,7 @@ defmodule Thereish.Rooms.Server do
     state
   end
 
-  # A Page starts when it is on screen, not when the Room process booted. The
-  # difference is everyone typing their names, which is not the ten to fifteen
-  # minutes a Page is supposed to take, and it is this timestamp the couch-night
-  # measurement will read.
-  defp opened(%{opened_at: nil} = state) do
-    if Game.view(state.game, nil).phase == :waiting do
-      state
-    else
-      %{state | opened_at: wall_clock()}
-    end
-  end
-
-  defp opened(state), do: state
-
-  defp perform(:beat, state) do
-    %{state | beat: Process.send_after(self(), :beat_over, beat_ms()), held: []}
-  end
+  defp perform(:beat, state), do: pace(state, &Pacing.beat_owed(&1, now()))
 
   # A closed Page goes into the Chronicle from this process rather than from a
   # task: it is a handful of rows to the same Postgres the Seats came out of,
@@ -753,7 +638,7 @@ defmodule Thereish.Rooms.Server do
     entry =
       entry
       |> Map.merge(Occupancy.chronicle_meta(state.occupancy, state.room.music))
-      |> attach_timing(state)
+      |> then(&Pacing.stamp(state.pacing, &1))
 
     voice(state, &Voice.page_closed(&1, entry))
   end
@@ -804,7 +689,6 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp perform({:author, request}, state) do
-    state = author_answered(state)
     room = self()
     digest = Chronicle.digest(state.room.id)
     page_num = (state.game && state.game.page && state.game.page.id) || nil
@@ -814,7 +698,7 @@ defmodule Thereish.Rooms.Server do
 
     gives = extract_give_strings(request)
 
-    now = System.monotonic_time(:millisecond)
+    gives_landed_at = System.monotonic_time(:millisecond)
 
     cached = cached_track(gives)
 
@@ -822,9 +706,9 @@ defmodule Thereish.Rooms.Server do
       state
       |> Map.put(:current_arm, arm)
       |> Map.put(:current_page_ref, page_ref)
-      |> waiting_on_author(ref)
+      |> pace(&Pacing.author_asked(&1, ref, now()))
       |> occupy_quietly(
-        &Occupancy.page_opened(&1, page_ref, gives, cached, now, state.room.music)
+        &Occupancy.page_opened(&1, page_ref, gives, cached, gives_landed_at, state.room.music)
       )
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
@@ -858,7 +742,26 @@ defmodule Thereish.Rooms.Server do
       send(room, {:assayed, verdict_event(assay(request, page, arm))})
     end)
 
-    waiting_on(state)
+    pace(state, &Pacing.assayer_asked(&1, now()))
+  end
+
+  # Applies a Pacing transition and performs the effects it returns. A timer
+  # is never cancelled: one that fires late carries a token Pacing ignores.
+  defp pace(state, transition) do
+    {pacing, effects} = transition.(state.pacing)
+    Enum.reduce(effects, %{state | pacing: pacing}, &perform_pacing_effect/2)
+  end
+
+  defp perform_pacing_effect({:timer, name, token, ms}, state) do
+    Process.send_after(self(), {:pacing, name, token}, ms)
+    state
+  end
+
+  defp perform_pacing_effect({:apply, events}, state), do: apply_events(state, events)
+
+  defp perform_pacing_effect(:broadcast, state) do
+    broadcast(state.room.slug)
+    state
   end
 
   # Applies an Occupancy transition and performs the effects it returns,
@@ -1060,83 +963,6 @@ defmodule Thereish.Rooms.Server do
     Enum.map(list, &Thereish.Steward.Author.give_text/1)
   end
 
-  defp waiting_on_author(state, ref) do
-    %{
-      state
-      | author: %{
-          ref: ref,
-          step: :writing,
-          timer: escalate_author_after(:writing)
-        }
-    }
-  end
-
-  defp author_answered(%{author: nil} = state), do: state
-
-  defp author_answered(%{author: author} = state) do
-    if author[:timer], do: Process.cancel_timer(author.timer)
-    %{state | author: nil}
-  end
-
-  defp escalate_author_after(step) do
-    next = next_author_step(step)
-
-    Process.send_after(
-      self(),
-      {:escalate_author, next},
-      author_escalation_ms(next) - author_escalation_ms(step)
-    )
-  end
-
-  defp next_author_step(:writing), do: :still_writing
-  defp next_author_step(:still_writing), do: :deadline
-
-  defp author_escalation_ms(:writing), do: 0
-
-  defp author_escalation_ms(step) do
-    :thereish |> Application.fetch_env!(:author_escalation_ms) |> Keyword.fetch!(step)
-  end
-
-  defp author_step(%{author: nil}), do: nil
-  defp author_step(%{author: %{step: step}}), do: step
-
-  # One assay per Attempt, so the ladder is armed by the asking and there is
-  # nothing to keep a set of: what the couple are watching is one reveal and it
-  # is now one request.
-  defp waiting_on(state) do
-    %{state | assayer: %{step: :grading, timer: escalate_after(:grading)}}
-  end
-
-  # An Assayer that has answered is not slow, however long the beat still has to
-  # run.
-  defp answered(%{assayer: nil} = state), do: state
-
-  defp answered(%{assayer: assayer} = state) do
-    Process.cancel_timer(assayer.timer)
-
-    %{state | assayer: nil}
-  end
-
-  defp escalate_after(step) do
-    next = next_step(step)
-
-    Process.send_after(self(), {:escalate, next}, escalation_ms(next) - escalation_ms(step))
-  end
-
-  defp next_step(:grading), do: :slow
-  defp next_step(:slow), do: :unavailable
-
-  defp escalation_ms(:grading), do: 0
-
-  defp escalation_ms(step) do
-    :thereish |> Application.fetch_env!(:assayer_escalation_ms) |> Keyword.fetch!(step)
-  end
-
-  # What every screen is told about the wait. Nothing once the Assayer has
-  # answered — a Page still in its beat is a Page whose grade is in.
-  defp step(%{assayer: nil}), do: nil
-  defp step(%{assayer: %{step: step}}), do: step
-
   # An Assayer that blows up has failed to grade, which is a thing the game has
   # a rule for. It is not a thing the Room should die of.
   defp assay(request, page, arm) do
@@ -1169,13 +995,19 @@ defmodule Thereish.Rooms.Server do
   defp attempt_quips(%{verdict: %{quip: quip}}) when is_binary(quip) and quip != "", do: [quip]
   defp attempt_quips(_attempt), do: []
 
-  # How long the pre-reveal beat runs is the Room's to know, because running it
-  # is the Room's job. The rules only say that a beat is owed.
-  defp beat_ms, do: Application.fetch_env!(:thereish, :reveal_beat_ms)
+  # Pacing reads no configuration, so the Room reads it once, when it opens.
+  defp durations do
+    %{
+      beat: Application.fetch_env!(:thereish, :reveal_beat_ms),
+      hold: Application.fetch_env!(:thereish, :reveal_hold_ms),
+      assayer: Application.fetch_env!(:thereish, :assayer_escalation_ms),
+      author: Application.fetch_env!(:thereish, :author_escalation_ms)
+    }
+  end
 
-  # The pause after a shared reveal, before anyone may advance. Distinct from
-  # the beat that runs before the reveal appears.
-  defp hold_ms, do: Application.fetch_env!(:thereish, :reveal_hold_ms)
+  # The moment Pacing is told about: the monotonic clock, which a test can
+  # freeze, and the wall clock.
+  defp now, do: %{ms: now_ms(), at: wall_clock()}
 
   defp now_ms do
     case Application.get_env(:thereish, :now_ms) do
@@ -1185,130 +1017,6 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp wall_clock, do: DateTime.utc_now()
-
-  defp record_occurrence_times(state, old_game) do
-    now = wall_clock()
-    old_phase = Game.phase(old_game)
-    new_phase = Game.phase(state.game)
-    timing = state[:timing] || %{gives: %{}, attempts: %{}}
-
-    new_give_ids = Map.keys(state.game.gives) -- Map.keys(old_game.gives)
-
-    timing =
-      if old_phase != :giving and new_phase == :giving do
-        %{timing | gives: %{}}
-      else
-        timing
-      end
-
-    timing =
-      Enum.reduce(new_give_ids, timing, fn seat_id, timing ->
-        gives = Map.put(timing[:gives] || %{}, seat_id, now)
-        %{timing | gives: gives}
-      end)
-
-    timing =
-      cond do
-        old_phase == :bridging and new_phase == :assaying ->
-          put_attempt(timing, state.game.attempt, :assaying_started_at, now)
-
-        old_phase == :assaying and new_phase in [:reveal, :closed] ->
-          put_attempt(timing, state.game.attempt, :revealed_at, now)
-
-        old_phase == :reveal and new_phase == :bridging ->
-          timing
-          |> put_attempt(old_game.attempt, :advanced_at, now)
-          |> put_attempt(state.game.attempt, :started_at, now)
-
-        old_phase == :writing and new_phase == :bridging ->
-          put_attempt(timing, state.game.attempt, :started_at, now)
-
-        true ->
-          timing
-      end
-
-    %{state | timing: timing}
-  end
-
-  defp put_attempt(timing, number, field, now) do
-    attempts = timing[:attempts] || %{}
-    current = Map.get(attempts, number, %{})
-
-    if Map.has_key?(current, field) do
-      timing
-    else
-      %{timing | attempts: Map.put(attempts, number, Map.put(current, field, now))}
-    end
-  end
-
-  defp attach_timing(entry, state) do
-    timing = state[:timing] || %{gives: %{}, attempts: %{}}
-    give_times = timing[:gives] || %{}
-    attempt_times = timing[:attempts] || %{}
-
-    gives =
-      Enum.map(entry[:gives] || [], fn give ->
-        seat_id = give[:seat_id] || give["seat_id"]
-        Map.put(give, :arrived_at, Map.get(give_times, seat_id))
-      end)
-
-    attempts =
-      Enum.map(entry.attempts, fn attempt ->
-        times = Map.get(attempt_times, attempt.number, %{})
-
-        attempt
-        |> Map.put(:started_at, times[:started_at])
-        |> Map.put(:assaying_started_at, times[:assaying_started_at])
-        |> Map.put(:revealed_at, times[:revealed_at])
-        |> Map.put(:advanced_at, times[:advanced_at])
-      end)
-
-    entry
-    |> Map.put(:gives, gives)
-    |> Map.put(:attempts, attempts)
-    |> Map.put(:revealed_at, Thereish.Chronicle.Timing.last_revealed(attempts))
-  end
-
-  defp maybe_arm_reveal_hold(state, old_phase) do
-    new_phase = Game.phase(state.game)
-
-    if old_phase == :assaying and new_phase in [:reveal, :closed] do
-      arm_reveal_hold(state)
-    else
-      state
-    end
-  end
-
-  defp arm_reveal_hold(state) do
-    if timer = state[:reveal_hold], do: Process.cancel_timer(timer)
-
-    timer =
-      case hold_ms() do
-        ms when is_integer(ms) and ms > 0 -> Process.send_after(self(), :reveal_hold_over, ms)
-        _ -> nil
-      end
-
-    %{state | revealed_at: now_ms(), reveal_hold: timer}
-  end
-
-  defp clear_reveal_hold(state) do
-    if timer = state[:reveal_hold], do: Process.cancel_timer(timer)
-    %{state | revealed_at: nil, reveal_hold: nil}
-  end
-
-  defp reveal_hold_elapsed(%{revealed_at: nil}), do: :ok
-
-  defp reveal_hold_elapsed(state) do
-    if now_ms() - state.revealed_at >= hold_ms() do
-      :ok
-    else
-      {:error, :reveal_held}
-    end
-  end
-
-  defp can_advance?(state) do
-    Game.phase(state.game) in [:reveal, :closed] and reveal_hold_elapsed(state) == :ok
-  end
 
   defp verdict_event({:ok, verdict}), do: {:verdict_received, verdict}
 
@@ -1388,7 +1096,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp commit_chronicle(entry, state) do
-    {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
+    {:ok, page} = Chronicle.write(state.room.id, entry, entry.opened_at)
 
     arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)

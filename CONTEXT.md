@@ -152,6 +152,10 @@ _Avoid_: scale (on its own), rubric, tiers, grade bands
 The fixed pause between the last Bridge committed and the reveal. It is theatre, not a wait: the Assayer grades during it, and a verdict that lands early is held until it is over.
 _Avoid_: delay, loading, spinner, timeout
 
+**Pacing**:
+The Room's rules about time: the Beat before a reveal, the hold after it, how long the Author and the Assayer are waited on, and when each part of a Page happened. The Game keeps no clock; Pacing is where the Room's clock is read.
+_Avoid_: clock, timer, scheduler, timing (that is the Chronicle's readout)
+
 **Bait**:
 Retired (ADR-0011). The obvious Bridge the Author used to plant, converging on which was a Meld on the lowest rung; kept here so the `bait_against_plain` lines in early Chronicles can be read.
 _Avoid_: decoy, trap, red herring
