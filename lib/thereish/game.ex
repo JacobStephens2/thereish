@@ -49,6 +49,7 @@ defmodule Thereish.Game do
   import Kernel, except: [apply: 2]
 
   alias Thereish.Chronicle.Entry
+  alias Thereish.Chronicle.Opinion
   alias Thereish.Ladder
   alias Thereish.Mask
 
@@ -575,36 +576,9 @@ defmodule Thereish.Game do
   end
 
   def apply(%__MODULE__{} = state, {:fairness_tapped, %{seat_id: seat_id, label: label}}) do
-    verdict = state.verdict
-    label_str = normalize_label(label)
-
-    with :ok <- may_tap_fairness(state, seat_id) do
-      if label_str not in ["fair", "too_kind", "too_harsh"] do
-        {:error, :invalid_label}
-      else
-        grade = Map.get(verdict, :original_closeness) || verdict.closeness
-        band = Map.get(verdict, :original_band) || (grade && Ladder.read(grade).band)
-        meta = verdict.meta || %{}
-        bridges = written_bridges(state)
-
-        tap_effect_data = %{
-          seat_id: seat_id,
-          attempt_number: state.attempt,
-          bookends: state.bookends,
-          bridges: bridges,
-          grade: grade,
-          closeness: grade,
-          band: band && to_string(band),
-          model: meta[:model],
-          prompt_version: meta[:prompt_version],
-          label: label_str
-        }
-
-        current_taps = state.fairness_taps || %{}
-        next_state = %{state | fairness_taps: Map.put(current_taps, seat_id, label_str)}
-
-        {:ok, next_state, [{:fairness_tap, tap_effect_data}]}
-      end
+    with {:ok, opinion} <- opinion_at_reveal(state, seat_id, label) do
+      fairness_taps = Map.put(state.fairness_taps || %{}, seat_id, opinion.label)
+      {:ok, %{state | fairness_taps: fairness_taps}, [{:fairness_tap, opinion}]}
     end
   end
 
@@ -920,6 +894,24 @@ defmodule Thereish.Game do
 
   # Every Bridge of this attempt, in roster order.
   defp written_bridges(state), do: Enum.map(page_seats(state), &state.bridges[&1.id])
+
+  # The revealed Attempt as an Opinion reads it. An overrule keeps the
+  # Assayer's grade as the Verdict's `original_closeness`.
+  defp graded_attempt(state) do
+    verdict = state.verdict
+    meta = verdict.meta || %{}
+
+    %{
+      attempt_number: state.attempt,
+      bookends: state.bookends,
+      bridges: written_bridges(state),
+      participant_ids: for(seat <- page_seats(state), committed?(state, seat.id), do: seat.id),
+      closeness: verdict.closeness,
+      machine_closeness: Map.get(verdict, :original_closeness),
+      model: meta[:model],
+      prompt_version: meta[:prompt_version]
+    }
+  end
 
   # An Attempt is graded once. The Room can deliver the same verdict twice — a
   # retry, a message that outlived the attempt it was about — and the second one
@@ -1469,19 +1461,18 @@ defmodule Thereish.Game do
     end
   end
 
-  # A Verdict the Assayer could not grade has nothing to rate, unless the table
-  # overruled it into a number.
+  # The Game says when a tap may happen. Who may give an Opinion, and of which
+  # grade, is the Opinion's rule: a Verdict the Assayer could not grade has
+  # nothing to rate, unless the table overruled it into a number.
   defp may_tap_fairness(state, seat_id) do
+    with {:ok, _opinion} <- opinion_at_reveal(state, seat_id, :fair), do: :ok
+  end
+
+  defp opinion_at_reveal(state, seat_id, label) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- playing_page_seat(state, seat_id),
          :ok <- verdict_revealed(state) do
-      verdict = state.verdict
-
-      if is_nil(verdict.closeness) and is_nil(Map.get(verdict, :original_closeness)) do
-        {:error, :not_assayed}
-      else
-        :ok
-      end
+      Opinion.new(graded_attempt(state), {:participant, seat_id}, label)
     end
   end
 
@@ -1545,15 +1536,6 @@ defmodule Thereish.Game do
   defp find_seat(state, seat_id), do: Enum.find(state.seats, &(&1.id == seat_id))
 
   defp full?(state), do: length(state.seats) >= state.seat_limit
-
-  defp normalize_label(:fair), do: "fair"
-  defp normalize_label(:too_kind), do: "too_kind"
-  defp normalize_label(:too_harsh), do: "too_harsh"
-  defp normalize_label("fair"), do: "fair"
-  defp normalize_label("too_kind"), do: "too_kind"
-  defp normalize_label("too kind"), do: "too_kind"
-  defp normalize_label("too_harsh"), do: "too_harsh"
-  defp normalize_label("too harsh"), do: "too_harsh"
 
   defp normalize_label(other) when is_binary(other),
     do: other |> String.trim() |> String.downcase()

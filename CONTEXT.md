@@ -181,8 +181,12 @@ The line in a Recap that reaches back to an earlier Page — the sentence next m
 _Avoid_: reference, easter egg, throwback, memory
 
 **Chronicle**:
-The persistent, player-visible record of one Room's play history — its Pages, Verdicts, overrules, retained media, and player feedback. Feedback evaluates the Assayer without rewriting recorded play; earlier corrections remain part of the record.
+The persistent, player-visible record of one Room's play history — its Pages, Verdicts, overrules, retained media, and Opinions. Opinions evaluate the Assayer without rewriting recorded play; earlier corrections remain part of the record.
 _Avoid_: save file, memory file, history, CONTEXT.md (that's this glossary)
+
+**Opinion**:
+A Seat's or the admin's Too harsh / Fair / Too kind reading of one Attempt's grade, as the Assayer gave it before any overrule. Given during play at the reveal or afterwards in the Chronicle. A reviewer's latest Opinion of an Attempt replaces their earlier ones; an Opinion never changes the Verdict or the Precedent (ADR-0019).
+_Avoid_: fairness tap (the table's old name), rating, review, correction, feedback (on its own)
 
 **Entry**:
 One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the experiment arm. Built when the Page closes and written once (ADR-0003).
