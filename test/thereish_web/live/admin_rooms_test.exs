@@ -5,6 +5,7 @@ defmodule ThereishWeb.AdminRoomsTest do
   use ThereishWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Thereish.EntryFixtures
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
@@ -257,26 +258,17 @@ defmodule ThereishWeb.AdminRoomsTest do
       {:ok, _} =
         Chronicle.write(
           room.id,
-          %{
-            page: %{"bookends" => ["lantern", "harbour"]},
-            closed_because: :meld,
-            melded?: true,
-            closeness: 80,
+          entry(
+            opened_at: opened,
             attempts: [
               %{
-                number: 1,
-                bookends: ["lantern", "harbour"],
-                closeness: 80,
-                melded?: true,
                 bridges: [
                   %{seat_id: ctx.mara.id, bridge: "cairn"},
                   %{seat_id: ctx.jacob.id, bridge: "cairns"}
-                ],
-                verdicts: []
+                ]
               }
             ]
-          },
-          opened
+          )
         )
 
       {:ok, view, html} = live(conn, ~p"/admin/timing/#{ctx.slug}")

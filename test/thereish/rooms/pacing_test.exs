@@ -12,6 +12,8 @@ defmodule Thereish.Rooms.PacingTest do
   alias Thereish.Ladder
   alias Thereish.Rooms.Pacing
 
+  import Thereish.EntryFixtures
+
   @durations %{
     beat: 2_500,
     hold: 5_000,
@@ -396,7 +398,10 @@ defmodule Thereish.Rooms.PacingTest do
     defp attempt_times(attempt),
       do: Map.take(attempt, [:started_at, :assaying_started_at, :revealed_at, :advanced_at])
 
-    defp opened_at(pacing), do: Pacing.stamp(pacing, %{gives: [], attempts: []}).opened_at
+    defp opened_at(pacing), do: Pacing.stamp(pacing, entry()).opened_at
+
+    # A Page Mara gave to, closed on its first Attempt, before Pacing stamps it.
+    defp unstamped, do: entry(gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}])
 
     test "the Page opened when it left waiting, not when the Room started" do
       game = waiting()
@@ -457,8 +462,7 @@ defmodule Thereish.Rooms.PacingTest do
       {pacing, []} = Pacing.moved(pacing, waiting(), writing, at(50_000))
       {pacing, []} = Pacing.moved(pacing, writing, bridging, at(60_000))
 
-      entry =
-        Pacing.stamp(pacing, %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]})
+      entry = Pacing.stamp(pacing, unstamped())
 
       assert entry.opened_at == at(1_000).at
       assert [%{arrived_at: arrived}] = entry.gives
@@ -478,10 +482,7 @@ defmodule Thereish.Rooms.PacingTest do
         ])
 
       entry =
-        Pacing.stamp(pacing, %{
-          gives: [%{seat_id: "seat-Mara"}, %{seat_id: "seat-Jacob"}],
-          attempts: []
-        })
+        Pacing.stamp(pacing, entry(gives: [%{seat_id: "seat-Mara"}, %{seat_id: "seat-Jacob"}]))
 
       assert Map.new(entry.gives, &{&1.seat_id, &1.arrived_at}) == %{
                "seat-Mara" => at(7_000).at,
@@ -490,8 +491,7 @@ defmodule Thereish.Rooms.PacingTest do
     end
 
     test "a Page with no recorded times is stamped with none" do
-      entry =
-        Pacing.stamp(pacing(), %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]})
+      entry = Pacing.stamp(pacing(), unstamped())
 
       assert entry.opened_at == nil
       assert entry.revealed_at == nil
@@ -506,21 +506,9 @@ defmodule Thereish.Rooms.PacingTest do
 
       pacing = Pacing.gives_reset(pacing)
 
-      assert Pacing.stamp(pacing, %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]}) ==
-               %{
-                 gives: [%{seat_id: "seat-Mara", arrived_at: nil}],
-                 attempts: [
-                   %{
-                     number: 1,
-                     started_at: nil,
-                     assaying_started_at: nil,
-                     revealed_at: nil,
-                     advanced_at: nil
-                   }
-                 ],
-                 revealed_at: nil,
-                 opened_at: nil
-               }
+      entry = unstamped()
+
+      assert Pacing.stamp(pacing, entry) == %{entry | revealed_at: nil, opened_at: nil}
     end
 
     test "turning the Page forgets the times and stands the Author down" do
@@ -531,8 +519,7 @@ defmodule Thereish.Rooms.PacingTest do
 
       assert view(pacing).author_step == nil
 
-      entry =
-        Pacing.stamp(pacing, %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]})
+      entry = Pacing.stamp(pacing, unstamped())
 
       assert entry.opened_at == nil
       assert [%{arrived_at: nil}] = entry.gives
