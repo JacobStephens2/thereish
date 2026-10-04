@@ -224,22 +224,6 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  def handle_call({:unblind_experiment, seat_id, experiment_id}, _from, state) do
-    case Chronicle.record_experiment_unblinding(state.room.id, %{
-           experiment_id: experiment_id || "bait_against_plain",
-           seat_id: seat_id,
-           unblinded_at: DateTime.utc_now(),
-           notes: "Deliberate unblinding"
-         }) do
-      {:ok, _unblinding} ->
-        broadcast(state.room.slug)
-        {:reply, :ok, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
-  end
-
   def handle_call({:claim_speaker, device_token}, _from, state) do
     if state.room.speaker == device_token do
       {:reply, :ok, state}

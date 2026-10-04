@@ -214,122 +214,232 @@ defmodule Thereish.ExperimentsTest do
     end
   end
 
-  describe "blinding" do
-    test "an experiment stays blinded in a Room until it is unblinded there", ctx do
+  defp unblind_attrs(seat) do
+    %{seat_id: seat.id, unblinded_at: DateTime.utc_now(), notes: "Couch night review"}
+  end
+
+  describe "progress toward the declared sample" do
+    test "counts completed-Page outcomes across both arms, not assignments without outcomes",
+         %{room: room} do
+      insert_assignment(room.id, page_identifier: "in-play")
+
+      assert Experiments.progress(room.id, "author_model") == %{
+               recorded: 0,
+               required: 20,
+               ready?: false
+             }
+
+      insert_outcomes(room.id, "author_model", 10, arm: "flash")
+      insert_outcomes(room.id, "author_model", 9, arm: "astra")
+
+      assert Experiments.progress(room.id, "author_model") == %{
+               recorded: 19,
+               required: 20,
+               ready?: false
+             }
+
+      insert_outcomes(room.id, "author_model", 1, arm: "astra")
+
+      assert Experiments.progress(room.id, "author_model") == %{
+               recorded: 20,
+               required: 20,
+               ready?: true
+             }
+    end
+  end
+
+  describe "unblinding" do
+    test "is refused until the declared sample is recorded, then allowed", ctx do
+      refute Experiments.unblinded?(ctx.room.id, "author_model")
+      insert_outcomes(ctx.room.id, "author_model", 19)
+
+      assert {:error, :sample_incomplete} =
+               Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
+
       refute Experiments.unblinded?(ctx.room.id, "author_model")
       assert Experiments.unblindings(ctx.room.id) == []
 
-      insert_outcomes(ctx.room.id, "author_model", 20)
+      insert_outcomes(ctx.room.id, "author_model", 1)
 
-      {:ok, _} =
-        Chronicle.record_experiment_unblinding(ctx.room.id, %{
-          experiment_id: "author_model",
-          seat_id: ctx.jacob.id,
-          unblinded_at: DateTime.utc_now()
-        })
+      assert {:ok, unblinding} =
+               Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
 
+      assert unblinding.experiment_id == "author_model"
+      assert unblinding.seat_id == ctx.jacob.id
+      assert unblinding.notes == "Couch night review"
       assert Experiments.unblinded?(ctx.room.id, "author_model")
       assert Experiments.unblinded?(ctx.room.id)
       refute Experiments.unblinded?(ctx.room.id, "bait_against_plain")
       assert [%{experiment_id: "author_model"}] = Experiments.unblindings(ctx.room.id)
     end
+
+    test "with no experiment named unblinds the Room's active experiment", ctx do
+      insert_outcomes(ctx.room.id, "author_model", 20)
+      insert_outcomes(ctx.room.id, "bait_against_plain", 20)
+
+      assert {:ok, unblinding} = Experiments.unblind(ctx.room.id, nil, unblind_attrs(ctx.jacob))
+      assert unblinding.experiment_id == "bait_against_plain"
+      refute Experiments.unblinded?(ctx.room.id, "author_model")
+    end
+
+    test "with no experiment named waits for the active experiment's sample", ctx do
+      insert_outcomes(ctx.room.id, "author_model", 20)
+      insert_outcomes(ctx.room.id, "bait_against_plain", 3)
+
+      assert {:error, :sample_incomplete} =
+               Experiments.unblind(ctx.room.id, nil, unblind_attrs(ctx.jacob))
+
+      assert Experiments.progress(ctx.room.id, nil) == %{recorded: 3, required: 20, ready?: false}
+    end
+
+    test "progress and unblinding stay per Room and per experiment", ctx do
+      room_b = Repo.get_by!(Room, slug: open_room())
+
+      insert_outcomes(ctx.room.id, "author_model", 20, arm: "flash")
+      insert_outcomes(ctx.room.id, "bait_against_plain", 19, arm: "bait")
+      insert_outcomes(room_b.id, "author_model", 20, arm: "flash")
+
+      assert Experiments.progress(ctx.room.id, "author_model").ready?
+      refute Experiments.progress(ctx.room.id, "bait_against_plain").ready?
+      assert Experiments.progress(room_b.id, "author_model").ready?
+
+      assert {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
+
+      assert {:error, :sample_incomplete} =
+               Experiments.unblind(ctx.room.id, "bait_against_plain", unblind_attrs(ctx.jacob))
+
+      assert Experiments.unblinded?(ctx.room.id, "author_model")
+      refute Experiments.unblinded?(ctx.room.id, "bait_against_plain")
+      refute Experiments.unblinded?(room_b.id, "author_model")
+    end
   end
 
-  describe "qualitative readout and streaks" do
-    test "calculates longest and current meld streaks" do
-      assert Experiments.calculate_streaks([true, true, false, true, true, true]) == %{
-               longest_meld_streak: 3,
-               current_meld_streak: 3
-             }
+  describe "the readout" do
+    test "summarizes the Author-model arms from their outcomes and Bookends taps", ctx do
+      insert_outcome(ctx.room.id, page_identifier: "P001", arm: "flash", closing_band: "meld")
 
-      assert Experiments.calculate_streaks([true, true, true, false]) == %{
-               longest_meld_streak: 3,
-               current_meld_streak: 0
-             }
+      insert_outcome(ctx.room.id,
+        page_identifier: "P002",
+        arm: "astra",
+        closing_band: "deep_meld"
+      )
 
-      assert Experiments.calculate_streaks([]) == %{
-               longest_meld_streak: 0,
-               current_meld_streak: 0
-             }
-    end
+      for {page_identifier, seat, label} <- [
+            {"P001", ctx.mara, "fine"},
+            {"P001", ctx.jacob, "great"},
+            {"P002", ctx.mara, "great"}
+          ] do
+        {:ok, _} =
+          Experiments.record_bookends_tap(ctx.room.id, %{
+            page_identifier: page_identifier,
+            seat_id: seat.id,
+            label: label
+          })
+      end
 
-    test "reports streaks and preferences rather than p-values" do
-      data = %{
-        bait: %{
-          pages_count: 5,
-          melded_count: 4,
-          melded_history: [true, true, false, true, true],
-          attempts_to_meld: [1, 2, 2, 3],
-          fairness_taps: %{"fair" => 6, "too_kind" => 1, "too_harsh" => 1},
-          overrules_count: 0,
-          trap_sprung_count: 2,
-          deep_convergence_count: 1
-        },
-        plain: %{
-          pages_count: 5,
-          melded_count: 3,
-          melded_history: [false, true, true, false, true],
-          attempts_to_meld: [1, 3, 4],
-          fairness_taps: %{"fair" => 3, "too_kind" => 4, "too_harsh" => 1},
-          overrules_count: 1,
-          trap_sprung_count: 0,
-          deep_convergence_count: 0
-        }
-      }
-
-      readout = Experiments.qualitative_readout(data)
-
-      # Shows streaks and preferences
-      assert readout.bait.meld_rate == "4/5 (80%)"
-      assert readout.plain.meld_rate == "3/5 (60%)"
-      assert readout.bait.longest_meld_streak == 2
-      assert readout.bait.current_meld_streak == 2
-      assert readout.plain.longest_meld_streak == 2
-      assert readout.plain.current_meld_streak == 1
-      assert readout.bait.mean_attempts_to_meld == 2.0
-      assert readout.bait.fairness_summary =~ "6 fair"
-      assert readout.plain.fairness_summary =~ "too kind"
-      assert is_binary(readout.summary_narrative)
-      assert readout.summary_narrative =~ "best streak: 2"
-
-      # Strictly NO p-values or statistical hypothesis testing
-      refute Map.has_key?(readout, :p_value)
-      refute Map.has_key?(readout, :t_stat)
-      refute Map.has_key?(readout, :chi_squared)
-    end
-
-    test "reports streaks and bookends preferences for author_model" do
-      data = %{
-        flash: %{
-          pages_count: 4,
-          melded_count: 3,
-          melded_history: [true, true, false, true],
-          attempts_to_meld: [1, 2, 2],
-          bookends_taps: %{"great" => 4, "fine" => 2, "flat" => 0},
-          closing_bands: %{"meld" => 3, "close" => 1}
-        },
-        astra: %{
-          pages_count: 4,
-          melded_count: 4,
-          melded_history: [true, true, true, true],
-          attempts_to_meld: [1, 1, 2, 1],
-          bookends_taps: %{"great" => 6, "fine" => 1, "flat" => 1},
-          closing_bands: %{"meld" => 2, "deep_meld" => 2}
-        }
-      }
-
-      readout = Experiments.qualitative_readout(data)
+      readout = Experiments.readout(ctx.room.id, "author_model")
 
       assert readout.experiment.id == "author_model"
-      assert readout.flash.meld_rate == "3/4 (75%)"
-      assert readout.astra.meld_rate == "4/4 (100%)"
-      assert readout.flash.longest_meld_streak == 2
-      assert readout.astra.longest_meld_streak == 4
-      assert readout.flash.preferences_summary =~ "4 great"
-      assert readout.astra.preferences_summary =~ "6 great"
-      assert is_binary(readout.summary_narrative)
+      assert readout.flash.pages_count == 1
+      assert readout.astra.pages_count == 1
+      assert readout.flash.preferences_summary == "1 great, 1 fine, 0 flat"
+      assert readout.astra.preferences_summary == "1 great, 0 fine, 0 flat"
+      assert readout.astra.closing_bands == %{"deep_meld" => 1}
       assert readout.summary_narrative =~ "Flash"
       assert readout.summary_narrative =~ "Astra"
+    end
+
+    test "summarizes Bait against plain from its outcomes and its Pages' fairness taps", ctx do
+      entry = entry(arm: :bait)
+      {:ok, page} = Chronicle.write(ctx.room.id, entry)
+
+      insert_outcome(ctx.room.id,
+        page_id: page.id,
+        page_identifier: page.id,
+        experiment_id: "bait_against_plain",
+        arm: "bait",
+        trap_converged: true
+      )
+
+      {:ok, _} =
+        Chronicle.record_fairness_tap(ctx.room.id, %{
+          page_id: page.id,
+          seat_id: ctx.mara.id,
+          attempt_number: 1,
+          bookends: ["lantern", "harbour"],
+          bridges: ["cairn", "cairn"],
+          label: "too_harsh"
+        })
+
+      readout = Experiments.readout(ctx.room.id, "bait_against_plain")
+
+      assert readout.experiment.id == "bait_against_plain"
+      assert readout.bait.pages_count == 1
+      assert readout.bait.trap_sprung_count == 1
+      assert readout.bait.too_harsh_count == 1
+      assert readout.plain.pages_count == 0
+      assert readout.summary_narrative =~ "Bait-scored"
+    end
+
+    test "falls back to Bait against plain when the Author-model experiment has no outcomes",
+         %{room: room} do
+      insert_outcome(room.id, experiment_id: "bait_against_plain", arm: "plain")
+
+      readout = Experiments.readout(room.id, "author_model")
+
+      assert readout.experiment.id == "bait_against_plain"
+      assert readout.plain.pages_count == 1
+    end
+
+    test "with no outcomes at all reads as an empty Author-model readout", %{room: room} do
+      readout = Experiments.readout(room.id, "author_model")
+
+      assert readout.experiment.id == "author_model"
+      assert readout.flash.pages_count == 0
+      assert readout.astra.pages_count == 0
+    end
+  end
+
+  describe "the overview" do
+    test "lists nothing before any experiment row is recorded" do
+      assert Experiments.overview() == []
+    end
+
+    test "gives each Room's experiments with their progress, and a readout only once unblinded",
+         ctx do
+      room_b = Repo.get_by!(Room, slug: open_room())
+
+      insert_assignment(ctx.room.id, experiment_id: "author_model", arm: "flash")
+      insert_assignment(ctx.room.id, experiment_id: "bait_against_plain", arm: "bait")
+      insert_assignment(room_b.id, experiment_id: "author_model", arm: "flash")
+      insert_outcomes(ctx.room.id, "author_model", 20, arm: "flash")
+      insert_outcomes(ctx.room.id, "bait_against_plain", 3)
+
+      {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
+
+      overview = Experiments.overview()
+
+      entry = fn room, experiment_id ->
+        Enum.find(overview, &(&1.room.id == room.id and &1.experiment.id == experiment_id))
+      end
+
+      assert length(overview) == 3
+
+      author = entry.(ctx.room, "author_model")
+      assert author.experiment == Experiments.definition("author_model")
+      assert author.unblinded?
+      assert author.progress == %{recorded: 20, required: 20, ready?: true}
+      assert author.readout == Experiments.readout(ctx.room.id, "author_model")
+
+      bait = entry.(ctx.room, "bait_against_plain")
+      refute bait.unblinded?
+      assert bait.progress == %{recorded: 3, required: 20, ready?: false}
+      assert bait.readout == nil
+
+      other_room = entry.(room_b, "author_model")
+      refute other_room.unblinded?
+      assert other_room.progress.recorded == 0
+      assert other_room.readout == nil
     end
   end
 end
