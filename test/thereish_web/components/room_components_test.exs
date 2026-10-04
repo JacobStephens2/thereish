@@ -1005,6 +1005,14 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "The Porch"
     end
 
+    test "renders 'Music is off' during the reveal" do
+      room = %{music: "off", phase: :reveal, first_revealed?: true, loop: nil, playing: nil}
+      html = render_component(&now_playing/1, room: room)
+
+      assert html =~ ~s(data-role="now-playing")
+      assert html =~ "Music is off"
+    end
+
     test "renders loop name and 'the Repertoire' under house" do
       room = %{
         music: "house",
@@ -1072,7 +1080,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       room = %{
         music: "page",
         phase: :bridging,
-        played: [],
+        first_revealed?: false,
         playing: %{
           title: "Summer Camp · Viking Beaches",
           path: "/media/tracks/p1.mp3",
@@ -1091,7 +1099,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       room = %{
         music: "page",
         phase: :reveal,
-        played: [],
+        first_revealed?: true,
         playing: %{
           title: "Summer Camp · Viking Beaches",
           path: "/media/tracks/p1.mp3",
@@ -1109,7 +1117,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       room = %{
         music: "page",
         phase: :bridging,
-        played: [%{attempt: 1}],
+        first_revealed?: true,
         playing: %{
           title: "Summer Camp · Viking Beaches",
           path: "/media/tracks/p1.mp3",
@@ -1127,7 +1135,7 @@ defmodule ThereishWeb.RoomComponentsTest do
       room = %{
         music: "page",
         phase: :closed,
-        played: [%{attempt: 1}],
+        first_revealed?: true,
         playing: %{
           title: "Summer Camp · Viking Beaches",
           path: "/media/tracks/p1.mp3",
