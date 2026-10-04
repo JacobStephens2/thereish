@@ -13,7 +13,25 @@ defmodule Thereish.Experiments do
   Page is played. The readout is qualitative (streaks, fairness preferences,
   attempts, and trap convergence) rather than p-values because the sample is two
   people.
+
+  Everything that writes the harness's rows lives here: a Page's arm is
+  assigned when the Author is asked for it, a closed Page's outcome is recorded
+  from its Entry, and a Bookends tap is recorded and synced onto its Page's
+  outcome. Like the Chronicle, the rows are tested against real Postgres
+  through the Ecto sandbox.
   """
+
+  import Ecto.Query
+
+  require Logger
+
+  alias Thereish.Chronicle.BookendsTap
+  alias Thereish.Chronicle.Entry
+  alias Thereish.Chronicle.ExperimentAssignment
+  alias Thereish.Chronicle.ExperimentOutcome
+  alias Thereish.Chronicle.ExperimentUnblinding
+  alias Thereish.Chronicle.Page
+  alias Thereish.Repo
 
   @first_experiment %{
     id: "bait_against_plain",
@@ -69,15 +87,265 @@ defmodule Thereish.Experiments do
   def experiment_id_for_arm(_arm), do: @first_experiment.id
 
   @doc """
-  Assigns arm for the room, strictly alternating arms (:flash then :astra).
+  The arm a Page plays under when it has none of its own: Flash.
   """
-  @spec assign_arm([atom() | String.t()]) :: :flash | :astra
-  def assign_arm([]), do: :flash
+  @spec default_arm() :: :flash
+  def default_arm, do: :flash
 
-  def assign_arm(room_history) when is_list(room_history) do
-    case List.last(room_history) do
-      arm when arm in [:flash, "flash"] -> :astra
-      _ -> :flash
+  @doc """
+  Assigns the next Page in a Room its Author-model arm, strictly alternating
+  Flash and Astra from the Room's past assignments, and records the assignment
+  blind.
+
+  An assignment that cannot be read or written is logged and the Page plays
+  under `default_arm/0`: a lost assignment must not stop the Author being asked.
+  """
+  @spec assign(Ecto.UUID.t() | String.t()) :: :flash | :astra
+  def assign(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+    past_arms = room_id |> assignments(@author_model_experiment.id) |> Enum.map(& &1.arm)
+    arm = next_arm(past_arms)
+
+    %ExperimentAssignment{}
+    |> ExperimentAssignment.changeset(%{
+      room_id: room_id,
+      page_identifier: "page-#{length(past_arms) + 1}",
+      experiment_id: @author_model_experiment.id,
+      arm: to_string(arm),
+      chapter: "table",
+      assigned_at: DateTime.utc_now()
+    })
+    |> Repo.insert!()
+
+    arm
+  rescue
+    error ->
+      Logger.error(
+        "no experiment arm could be assigned, so the Page plays under #{default_arm()}: " <>
+          Exception.message(error)
+      )
+
+      default_arm()
+  end
+
+  defp next_arm([]), do: default_arm()
+  defp next_arm(past_arms), do: if(List.last(past_arms) == "flash", do: :astra, else: :flash)
+
+  @doc """
+  Records the experiment outcome of a closed Page from its Entry, once the
+  Entry is written as `page`, under the experiment the Entry's arm belongs to.
+  Links the Page to the oldest unlinked assignment of that experiment.
+
+  An Entry with no arm has no experiment to record under, and is refused.
+  """
+  @spec record_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
+          {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
+  def record_outcome(room_id, %Page{} = page, %Entry{arm: arm} = entry)
+      when is_atom(arm) and not is_nil(arm) do
+    room_id = resolve_room_id(room_id)
+    experiment_id = experiment_id_for_arm(arm)
+
+    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
+
+    result =
+      %ExperimentOutcome{}
+      |> ExperimentOutcome.changeset(%{
+        room_id: room_id,
+        page_id: page.id,
+        page_identifier: page.id,
+        experiment_id: experiment_id,
+        arm: to_string(arm),
+        melded: entry.melded?,
+        closeness: entry.closeness,
+        closing_band: closing_band,
+        attempts_count: length(entry.attempts),
+        closed_because: to_string(entry.closed_because),
+        trap_converged: any_verdict_meta?(entry, :trap_sprung),
+        deep_converged: any_verdict_meta?(entry, :deep_convergence),
+        taps: %{}
+      })
+      |> Repo.insert()
+
+    from(a in ExperimentAssignment,
+      where: a.room_id == ^room_id and is_nil(a.page_id) and a.experiment_id == ^experiment_id,
+      order_by: [asc: a.inserted_at, asc: a.id],
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> :ok
+      assignment -> assignment |> Ecto.Changeset.change(page_id: page.id) |> Repo.update()
+    end
+
+    result
+  end
+
+  # Nothing has set these since ADR-0011; the columns stay until a schema
+  # change removes them.
+  defp any_verdict_meta?(%Entry{} = entry, key) do
+    Enum.any?(entry.attempts, fn attempt ->
+      Enum.any?(attempt.verdicts, &((&1.meta || %{})[key] == true))
+    end)
+  end
+
+  @doc """
+  Records a Bookends tap (flat, fine, or great) as an append-only event.
+  Also syncs the tap into its Page's outcome's taps map, if that outcome
+  exists. A tap that names no outcome updates none.
+  """
+  @spec record_bookends_tap(Ecto.UUID.t() | String.t(), map()) ::
+          {:ok, BookendsTap.t()} | {:error, Ecto.Changeset.t()}
+  def record_bookends_tap(room_id, attrs) do
+    room_id = resolve_room_id(room_id)
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    case %BookendsTap{} |> BookendsTap.changeset(attrs) |> Repo.insert() do
+      {:ok, tap} ->
+        sync_outcome_taps(room_id, tap)
+        {:ok, tap}
+
+      error ->
+        error
+    end
+  end
+
+  defp sync_outcome_taps(room_id, tap) do
+    identifier = tap.page_identifier
+
+    outcome =
+      cond do
+        identifier && tap.page_id ->
+          Repo.one(
+            from(o in ExperimentOutcome,
+              where:
+                o.room_id == ^room_id and
+                  (o.page_identifier == ^identifier or o.page_id == ^tap.page_id),
+              order_by: [desc: o.inserted_at],
+              limit: 1
+            )
+          )
+
+        identifier ->
+          Repo.one(
+            from(o in ExperimentOutcome,
+              where: o.room_id == ^room_id and o.page_identifier == ^identifier,
+              order_by: [desc: o.inserted_at],
+              limit: 1
+            )
+          )
+
+        tap.page_id ->
+          Repo.one(
+            from(o in ExperimentOutcome,
+              where: o.room_id == ^room_id and o.page_id == ^tap.page_id,
+              order_by: [desc: o.inserted_at],
+              limit: 1
+            )
+          )
+
+        true ->
+          nil
+      end
+
+    # A tap with no outcome of its own is recorded alone rather than attached
+    # to whichever Page happens to be latest.
+    if outcome do
+      updated_taps = Map.put(outcome.taps || %{}, to_string(tap.seat_id), to_string(tap.label))
+      outcome |> Ecto.Changeset.change(taps: updated_taps) |> Repo.update()
+    end
+  end
+
+  @doc """
+  Returns all Bookends taps for a Room, oldest first.
+  """
+  @spec bookends_taps(Ecto.UUID.t() | String.t()) :: [BookendsTap.t()]
+  def bookends_taps(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(t in BookendsTap,
+      where: t.room_id == ^room_id,
+      order_by: [asc: t.inserted_at, asc: t.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns all arm assignments for a Room, oldest first, of one experiment or
+  of every experiment.
+  """
+  @spec assignments(Ecto.UUID.t() | String.t(), String.t() | nil) ::
+          [ExperimentAssignment.t()]
+  def assignments(room_id_or_slug, experiment_id \\ nil) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(a in ExperimentAssignment,
+      where: a.room_id == ^room_id,
+      order_by: [asc: a.assigned_at, asc: a.id]
+    )
+    |> of_experiment(experiment_id)
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns all outcomes for a Room, oldest first, of one experiment or of every
+  experiment.
+  """
+  @spec outcomes(Ecto.UUID.t() | String.t(), String.t() | nil) :: [ExperimentOutcome.t()]
+  def outcomes(room_id_or_slug, experiment_id \\ nil) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(o in ExperimentOutcome,
+      where: o.room_id == ^room_id,
+      order_by: [asc: o.inserted_at, asc: o.id]
+    )
+    |> of_experiment(experiment_id)
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns all unblindings for a Room, oldest first, of one experiment or of
+  every experiment.
+  """
+  @spec unblindings(Ecto.UUID.t() | String.t(), String.t() | nil) ::
+          [ExperimentUnblinding.t()]
+  def unblindings(room_id_or_slug, experiment_id \\ nil) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(u in ExperimentUnblinding,
+      where: u.room_id == ^room_id,
+      order_by: [asc: u.unblinded_at, asc: u.id]
+    )
+    |> of_experiment(experiment_id)
+    |> Repo.all()
+  end
+
+  @doc """
+  Whether the experiment, or any experiment when none is named, has been
+  deliberately unblinded in this Room.
+  """
+  @spec unblinded?(Ecto.UUID.t() | String.t(), String.t() | nil) :: boolean()
+  def unblinded?(room_id_or_slug, experiment_id \\ nil) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    from(u in ExperimentUnblinding, where: u.room_id == ^room_id)
+    |> of_experiment(experiment_id)
+    |> Repo.exists?()
+  end
+
+  defp of_experiment(query, nil), do: query
+
+  defp of_experiment(query, experiment_id),
+    do: from(row in query, where: row.experiment_id == ^experiment_id)
+
+  defp resolve_room_id(room_id_or_slug) do
+    if is_binary(room_id_or_slug) and
+         Regex.match?(
+           ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+           room_id_or_slug
+         ) do
+      room_id_or_slug
+    else
+      Repo.get_by!(Thereish.Rooms.Room, slug: room_id_or_slug).id
     end
   end
 

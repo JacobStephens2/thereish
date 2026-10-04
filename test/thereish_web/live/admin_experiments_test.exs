@@ -5,9 +5,11 @@ defmodule ThereishWeb.AdminExperimentsTest do
   use ThereishWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Thereish.ExperimentFixtures
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.Experiments
   alias Thereish.Repo
   alias Thereish.Rooms
   alias Thereish.Rooms.Room
@@ -33,37 +35,6 @@ defmodule ThereishWeb.AdminExperimentsTest do
     await_reveal(ctx.slug)
   end
 
-  defp record_assignment(room_id, experiment_id, arm) do
-    {:ok, _} =
-      Chronicle.record_experiment_assignment(room_id, %{
-        page_identifier: "#{experiment_id}-#{System.unique_integer([:positive])}",
-        experiment_id: experiment_id,
-        arm: arm,
-        chapter: "harbour",
-        assigned_at: DateTime.utc_now()
-      })
-  end
-
-  defp record_completed_outcomes(room_id, experiment_id, count, opts \\ []) when count > 0 do
-    arm = Keyword.get(opts, :arm, default_experiment_arm(experiment_id))
-
-    for i <- 1..count do
-      {:ok, _} =
-        Chronicle.record_experiment_outcome(room_id, %{
-          page_identifier: "#{experiment_id}-#{i}-#{System.unique_integer([:positive])}",
-          experiment_id: experiment_id,
-          arm: arm,
-          melded: true,
-          closeness: 80,
-          attempts_count: 1,
-          closed_because: "meld"
-        })
-    end
-  end
-
-  defp default_experiment_arm("bait_against_plain"), do: "bait"
-  defp default_experiment_arm(_experiment_id), do: "flash"
-
   defp unblind_button(view, experiment_id) do
     element(view, "[data-experiment=#{experiment_id}] [data-role=unblind-button]")
   end
@@ -77,34 +48,32 @@ defmodule ThereishWeb.AdminExperimentsTest do
     room = Repo.get_by!(Room, slug: slug)
     [page] = Chronicle.pages(room.id)
 
-    {:ok, _} =
-      Chronicle.record_experiment_assignment(room.id, %{
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: "bait_against_plain",
-        arm: "bait",
-        chapter: "harbour",
-        assigned_at: DateTime.utc_now()
-      })
+    insert_assignment(room.id, %{
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: "bait_against_plain",
+      arm: "bait",
+      chapter: "harbour",
+      assigned_at: DateTime.utc_now()
+    })
 
-    {:ok, _} =
-      Chronicle.record_experiment_outcome(room.id, %{
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: "bait_against_plain",
-        arm: "bait",
-        melded: true,
-        closeness: 80,
-        attempts_count: 1,
-        closed_because: "meld",
-        trap_converged: false
-      })
+    insert_outcome(room.id, %{
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: "bait_against_plain",
+      arm: "bait",
+      melded: true,
+      closeness: 80,
+      attempts_count: 1,
+      closed_because: "meld",
+      trap_converged: false
+    })
 
     {:ok, chronicle, _html} = live(build_conn(), ~p"/r/#{slug}/chronicle")
     refute has_element?(chronicle, "[data-role=experiment-card]")
     refute has_element?(chronicle, "[data-role=unblind-button]")
     refute has_element?(chronicle, "[data-role=arm-tag]")
-    refute Chronicle.experiment_unblinded?(room.id, "bait_against_plain")
+    refute Experiments.unblinded?(room.id, "bait_against_plain")
   end
 
   test "experiment is blinded until deliberately unblinded, then reveals qualitative readout",
@@ -114,30 +83,28 @@ defmodule ThereishWeb.AdminExperimentsTest do
     room = Repo.get_by!(Room, slug: slug)
     [page] = Chronicle.pages(room.id)
 
-    {:ok, _} =
-      Chronicle.record_experiment_assignment(room.id, %{
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: "bait_against_plain",
-        arm: "bait",
-        chapter: "harbour",
-        assigned_at: DateTime.utc_now()
-      })
+    insert_assignment(room.id, %{
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: "bait_against_plain",
+      arm: "bait",
+      chapter: "harbour",
+      assigned_at: DateTime.utc_now()
+    })
 
-    {:ok, _} =
-      Chronicle.record_experiment_outcome(room.id, %{
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: "bait_against_plain",
-        arm: "bait",
-        melded: true,
-        closeness: 80,
-        attempts_count: 1,
-        closed_because: "meld",
-        trap_converged: false
-      })
+    insert_outcome(room.id, %{
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: "bait_against_plain",
+      arm: "bait",
+      melded: true,
+      closeness: 80,
+      attempts_count: 1,
+      closed_because: "meld",
+      trap_converged: false
+    })
 
-    record_completed_outcomes(room.id, "bait_against_plain", 19)
+    insert_outcomes(room.id, "bait_against_plain", 19)
 
     {:ok, view, _html} = live(conn, ~p"/admin/experiments")
 
@@ -170,31 +137,29 @@ defmodule ThereishWeb.AdminExperimentsTest do
     room = Repo.get_by!(Room, slug: ctx.slug)
     [page] = Chronicle.pages(room.id)
 
-    {:ok, _} =
-      Chronicle.record_experiment_assignment(room.id, %{
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: "author_model",
-        arm: "flash",
-        chapter: "table",
-        assigned_at: DateTime.utc_now()
-      })
+    insert_assignment(room.id, %{
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: "author_model",
+      arm: "flash",
+      chapter: "table",
+      assigned_at: DateTime.utc_now()
+    })
+
+    insert_outcome(room.id, %{
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: "author_model",
+      arm: "flash",
+      melded: true,
+      closeness: 80,
+      closing_band: "meld",
+      attempts_count: 1,
+      closed_because: "meld"
+    })
 
     {:ok, _} =
-      Chronicle.record_experiment_outcome(room.id, %{
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: "author_model",
-        arm: "flash",
-        melded: true,
-        closeness: 80,
-        closing_band: "meld",
-        attempts_count: 1,
-        closed_because: "meld"
-      })
-
-    {:ok, _} =
-      Chronicle.record_bookends_tap(room.id, %{
+      Experiments.record_bookends_tap(room.id, %{
         page_id: page.id,
         page_identifier: page.id,
         seat_id: ctx.mara.id,
@@ -203,7 +168,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
         arm: "flash"
       })
 
-    record_completed_outcomes(room.id, "author_model", 19)
+    insert_outcomes(room.id, "author_model", 19)
 
     {:ok, view, html} = live(conn, ~p"/admin/experiments")
 
@@ -231,9 +196,9 @@ defmodule ThereishWeb.AdminExperimentsTest do
     slug = open_room()
     room = Repo.get_by!(Room, slug: slug)
 
-    record_assignment(room.id, "author_model", "flash")
-    record_completed_outcomes(room.id, "author_model", 10, arm: "flash")
-    record_completed_outcomes(room.id, "author_model", 9, arm: "astra")
+    insert_assignment(room.id, experiment_id: "author_model", arm: "flash")
+    insert_outcomes(room.id, "author_model", 10, arm: "flash")
+    insert_outcomes(room.id, "author_model", 9, arm: "astra")
 
     {:ok, view, _html} = live(conn, ~p"/admin/experiments")
 
@@ -252,7 +217,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
       "experiment-id" => "author_model"
     })
 
-    refute Chronicle.experiment_unblinded?(room.id, "author_model")
+    refute Experiments.unblinded?(room.id, "author_model")
     refute has_element?(view, "[data-role=unblinded-banner]")
     refute has_element?(view, "[data-role=experiment-readout]")
     assert has_element?(view, "#{card} [data-role=blinded-banner]")
@@ -263,9 +228,9 @@ defmodule ThereishWeb.AdminExperimentsTest do
     slug = open_room()
     room = Repo.get_by!(Room, slug: slug)
 
-    record_assignment(room.id, "author_model", "flash")
-    record_completed_outcomes(room.id, "author_model", 10, arm: "flash")
-    record_completed_outcomes(room.id, "author_model", 10, arm: "astra")
+    insert_assignment(room.id, experiment_id: "author_model", arm: "flash")
+    insert_outcomes(room.id, "author_model", 10, arm: "flash")
+    insert_outcomes(room.id, "author_model", 10, arm: "astra")
 
     {:ok, view, _html} = live(conn, ~p"/admin/experiments")
 
@@ -276,7 +241,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
 
     unblind_button(view, "author_model") |> render_click()
 
-    assert Chronicle.experiment_unblinded?(room.id, "author_model")
+    assert Experiments.unblinded?(room.id, "author_model")
     assert has_element?(view, "#{card} [data-role=unblinded-banner]")
     assert has_element?(view, "#{card} [data-role=experiment-readout]")
   end
@@ -288,12 +253,12 @@ defmodule ThereishWeb.AdminExperimentsTest do
     room_a = Repo.get_by!(Room, slug: slug_a)
     room_b = Repo.get_by!(Room, slug: slug_b)
 
-    record_assignment(room_a.id, "author_model", "flash")
-    record_assignment(room_a.id, "bait_against_plain", "bait")
-    record_assignment(room_b.id, "author_model", "flash")
-    record_completed_outcomes(room_a.id, "author_model", 20, arm: "flash")
-    record_completed_outcomes(room_a.id, "bait_against_plain", 3, arm: "bait")
-    record_completed_outcomes(room_b.id, "author_model", 4, arm: "astra")
+    insert_assignment(room_a.id, experiment_id: "author_model", arm: "flash")
+    insert_assignment(room_a.id, experiment_id: "bait_against_plain", arm: "bait")
+    insert_assignment(room_b.id, experiment_id: "author_model", arm: "flash")
+    insert_outcomes(room_a.id, "author_model", 20, arm: "flash")
+    insert_outcomes(room_a.id, "bait_against_plain", 3, arm: "bait")
+    insert_outcomes(room_b.id, "author_model", 4, arm: "astra")
 
     {:ok, view, _html} = live(conn, ~p"/admin/experiments")
 
@@ -311,9 +276,9 @@ defmodule ThereishWeb.AdminExperimentsTest do
 
     element(view, "#{author_a} [data-role=unblind-button]") |> render_click()
 
-    assert Chronicle.experiment_unblinded?(room_a.id, "author_model")
-    refute Chronicle.experiment_unblinded?(room_a.id, "bait_against_plain")
-    refute Chronicle.experiment_unblinded?(room_b.id, "author_model")
+    assert Experiments.unblinded?(room_a.id, "author_model")
+    refute Experiments.unblinded?(room_a.id, "bait_against_plain")
+    refute Experiments.unblinded?(room_b.id, "author_model")
     assert has_element?(view, "#{author_a} [data-role=experiment-readout]")
     refute has_element?(view, "#{bait_a} [data-role=experiment-readout]")
     refute has_element?(view, "#{author_b} [data-role=experiment-readout]")
