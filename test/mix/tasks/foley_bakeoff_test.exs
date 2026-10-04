@@ -26,6 +26,18 @@ defmodule Mix.Tasks.Foley.BakeoffTest do
     assert output =~ dir
     assert output =~ "Baked off 5 quip(s)"
 
+    # DUST is not in the database, so its Quips are read from the exported
+    # Chronicle in priv/chronicles/dust.md: the last five, oldest first.
+    quips = dir |> Path.join("quips.txt") |> File.read!() |> String.split("\n", trim: true)
+
+    assert length(quips) == 5
+
+    assert List.first(quips) ==
+             "01: Both of you served up plate, proving great minds dish out the same thoughts."
+
+    assert List.last(quips) ==
+             "05: One brought the raw ingredient while the other rolled the meat into a tidy meatball."
+
     # Verify audio files exist
     for idx <- 1..5 do
       num = String.pad_leading("#{idx}", 2, "0")
