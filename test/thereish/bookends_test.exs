@@ -122,51 +122,6 @@ defmodule Thereish.BookendsTest do
     end
   end
 
-  describe "origins/1" do
-    test "reads atom-keyed origins on the Game's Page map" do
-      page = %{
-        bookends: ["lantern", "harbour"],
-        bookend_origins: [
-          %{word: "lantern", seat_id: "melissa", seat_name: "Melissa", give: "lighthouse"},
-          %{word: "harbour"}
-        ]
-      }
-
-      assert Bookends.origins(page) == [
-               %{word: "lantern", seat_id: "melissa", seat_name: "Melissa", give: "lighthouse"},
-               %{word: "harbour", seat_id: nil, seat_name: nil, give: nil}
-             ]
-    end
-
-    test "reads string-keyed origins on a Chronicle Page document" do
-      document = %{
-        "bookends" => ["lantern"],
-        "bookend_origins" => [
-          %{"word" => "lantern", "seat_id" => "jacob", "seat_name" => "Jacob", "give" => "dock"}
-        ]
-      }
-
-      assert Bookends.origins(document) == [
-               %{word: "lantern", seat_id: "jacob", seat_name: "Jacob", give: "dock"}
-             ]
-    end
-
-    test "reads the legacy bookend_gives, atom or string keyed" do
-      give = %{"word" => "lantern", "give" => "lighthouse"}
-
-      assert [%{word: "lantern", give: "lighthouse", seat_id: nil}] =
-               Bookends.origins(%{"bookend_gives" => [give]})
-
-      assert [%{word: "lantern", give: "lighthouse"}] =
-               Bookends.origins(%{bookend_gives: [%{word: "lantern", give: "lighthouse"}]})
-    end
-
-    test "is empty when there are none" do
-      assert Bookends.origins(%{"bookends" => ["lantern", "harbour"]}) == []
-      assert Bookends.origins(nil) == []
-    end
-  end
-
   describe "chips/4" do
     test "a first-Attempt chip names its Give and Seat and never wears a Mask" do
       origins = [

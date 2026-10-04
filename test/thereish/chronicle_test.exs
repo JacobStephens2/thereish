@@ -14,6 +14,7 @@ defmodule Thereish.ChronicleTest do
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.Spend
   alias Thereish.Experiments
@@ -74,11 +75,30 @@ defmodule Thereish.ChronicleTest do
 
       assert [page] = chronicled(ctx.slug)
       assert page.author_meta["model"] == "fake-author"
-      assert page.document["bookends"] == ["lantern", "harbour"]
+      assert %Document{bookends: ["lantern", "harbour"], full_table: true} = page.document
       assert page.closed_because == "meld"
       assert page.melded == true
       assert page.closeness == 91
       assert DateTime.compare(page.opened_at, page.closed_at) in [:lt, :eq]
+    end
+
+    test "keeps its Document, read back as the Game wrote it", ctx do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      document = %Document{
+        bookends: ["lantern", "harbour"],
+        origins: [
+          %{word: "lantern", seat_id: ctx.melissa.id, seat_name: "Melissa", give: "lighthouse"},
+          %{word: "harbour", seat_id: nil, seat_name: nil, give: nil}
+        ],
+        gives: %{ctx.melissa.id => "lighthouse", ctx.jacob.id => "dock"},
+        meta: %{"model" => "fake-author"},
+        full_table: false
+      }
+
+      {:ok, page} = Chronicle.write(room.id, entry(page: document))
+
+      assert Repo.get!(Chronicle.Page, page.id).document == document
     end
 
     test "starts its clock when the Room filled, not when the Room opened" do
@@ -712,7 +732,7 @@ defmodule Thereish.ChronicleTest do
 
       entry =
         entry(
-          page: %{bookends: ["nurse", "clinic"]},
+          page: %Document{bookends: ["nurse", "clinic"]},
           gives: [
             %{seat_id: ctx.melissa.id, text: give1},
             %{seat_id: ctx.jacob.id, text: give2}
@@ -811,7 +831,7 @@ defmodule Thereish.ChronicleTest do
       # Page 2: Has a failed Track, with no path
       entry2 =
         entry(
-          page: %{bookends: ["desert", "oasis"]},
+          page: %Document{bookends: ["desert", "oasis"]},
           music_meta: %Track{
             failure: "timed_out",
             meta: %{"provider" => "mureka", "cost_usd" => 0.0}
@@ -825,7 +845,7 @@ defmodule Thereish.ChronicleTest do
       # Page 3: Music off (music_meta is nil)
       entry3 =
         entry(
-          page: %{bookends: ["mountain", "valley"]},
+          page: %Document{bookends: ["mountain", "valley"]},
           music_meta: nil,
           attempts: [%{bookends: ["mountain", "valley"]}],
           opened_at: DateTime.add(now, 120, :second)
@@ -910,11 +930,9 @@ defmodule Thereish.ChronicleTest do
         Chronicle.write(
           room.id,
           entry(
-            page: %{
-              id: "author-page",
-              chapter: "harbour",
-              bookends: ["lantern", "harbour"],
-              why_these: "A couch night."
+            page: %Document{
+              identifier: "author-page",
+              bookends: ["lantern", "harbour"]
             },
             opened_at: now
           )
@@ -924,11 +942,9 @@ defmodule Thereish.ChronicleTest do
         Chronicle.write(
           room.id,
           entry(
-            page: %{
-              id: "bait-page",
-              chapter: "harbour",
-              bookends: ["lantern", "harbour"],
-              why_these: "A couch night."
+            page: %Document{
+              identifier: "bait-page",
+              bookends: ["lantern", "harbour"]
             },
             opened_at: DateTime.add(now, 60, :second)
           )
@@ -1017,11 +1033,8 @@ defmodule Thereish.ChronicleTest do
 
       entry =
         entry(
-          page: %{
-            id: "hand-written-4",
-            chapter: "harbour",
-            bookends: ["lantern", "harbour"],
-            why_these: "A table of four at the shore."
+          page: %Document{
+            bookends: ["lantern", "harbour"]
           },
           closed_because: :attempts_spent,
           melded?: false,
@@ -1069,11 +1082,8 @@ defmodule Thereish.ChronicleTest do
 
       entry =
         entry(
-          page: %{
-            id: "hand-written-2",
-            chapter: "harbour",
-            bookends: ["lantern", "harbour"],
-            why_these: "A couch evening."
+          page: %Document{
+            bookends: ["lantern", "harbour"]
           },
           closed_because: :attempts_spent,
           melded?: false,
@@ -1226,11 +1236,8 @@ defmodule Thereish.ChronicleTest do
 
       entry =
         entry(
-          page: %{
-            id: "two-verdicts-on-one-attempt",
-            chapter: "harbour",
-            bookends: ["lantern", "harbour"],
-            why_these: "An earlier night graded the table as two pairs."
+          page: %Document{
+            bookends: ["lantern", "harbour"]
           },
           closed_because: :attempts_spent,
           melded?: false,
@@ -1349,11 +1356,8 @@ defmodule Thereish.ChronicleTest do
 
       entry =
         entry(
-          page: %{
-            id: "hand-written-n-bookends",
-            chapter: "harbour",
-            bookends: bookends,
-            why_these: "A Full table at the shore."
+          page: %Document{
+            bookends: bookends
           },
           closed_because: :attempts_spent,
           melded?: false,
@@ -1797,7 +1801,7 @@ defmodule Thereish.ChronicleTest do
                Chronicle.write(
                  room.id,
                  entry(
-                   page: %{bookends: ["desert", "oasis"]},
+                   page: %Document{bookends: ["desert", "oasis"]},
                    music_meta: nil,
                    vamp_meta: nil,
                    attempts: [%{bookends: ["desert", "oasis"]}],
@@ -1871,7 +1875,7 @@ defmodule Thereish.ChronicleTest do
                Chronicle.write(
                  room.id,
                  entry(
-                   page: %{bookends: ["desert", "oasis"]},
+                   page: %Document{bookends: ["desert", "oasis"]},
                    music_meta: %Track{path: "/media/tracks/oasis.mp3", title: "Oasis"},
                    attempts: [%{bookends: ["desert", "oasis"]}],
                    opened_at: DateTime.add(now, 60, :second)

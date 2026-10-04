@@ -12,6 +12,7 @@ defmodule Thereish.RoomsTest do
   import ExUnit.CaptureLog
 
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Document
   alias Thereish.ExperimentFixtures
   alias Thereish.Foley.Track
   alias Thereish.Mask
@@ -3837,7 +3838,7 @@ defmodule Thereish.RoomsTest do
       %Thereish.Chronicle.Page{}
       |> Thereish.Chronicle.Page.changeset(%{
         room_id: room.id,
-        document: %{bookends: ["glacier", "tundra"]},
+        document: %Document{bookends: ["glacier", "tundra"]},
         author_meta: %{arm: "flash"},
         music_meta: %Track{
           path: "/media/tracks/our-song.mp3",

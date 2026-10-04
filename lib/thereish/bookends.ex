@@ -98,32 +98,6 @@ defmodule Thereish.Bookends do
   defp claimed({word, bridge}), do: %{word: word, seat_id: bridge && bridge.seat_id}
 
   @doc """
-  Where a Page's first-Attempt Bookends came from, as the Page recorded it.
-
-  Reads the Game's Page map and a Chronicle Page document alike: atom or string
-  keys, and the legacy `bookend_gives` beside `bookend_origins`. A Page that
-  recorded none has none.
-  """
-  @spec origins(map() | nil) :: [origin()]
-  def origins(page) when is_map(page) do
-    raw =
-      field(page, :bookend_origins) || field(page, :bookend_gives) || []
-
-    Enum.map(raw, fn origin ->
-      %{
-        word: field(origin, :word),
-        seat_id: field(origin, :seat_id),
-        seat_name: field(origin, :seat_name),
-        give: field(origin, :give)
-      }
-    end)
-  end
-
-  def origins(_page), do: []
-
-  defp field(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
-
-  @doc """
   One chip per word, padding missing origins with nils.
 
   A first-Attempt chip names the Give and Seat its word came from and never

@@ -9,6 +9,7 @@ defmodule ThereishWeb.AdminMediaTest do
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Document
   alias Thereish.Foley.Track
   alias Thereish.Foley.Vamp
   alias Thereish.Mask
@@ -64,7 +65,7 @@ defmodule ThereishWeb.AdminMediaTest do
       Chronicle.write(
         room_id(ctx),
         entry(
-          page: %{bookends: ["lantern", "harbour"]},
+          page: %Document{bookends: ["lantern", "harbour"]},
           music_meta: %Track{path: track_path, title: "Harbour Lights"},
           vamp_meta: %Vamp{path: vamp_path, duration: 30, loop: true}
         )
@@ -112,7 +113,7 @@ defmodule ThereishWeb.AdminMediaTest do
         Chronicle.write(
           room_id(ctx),
           entry(
-            page: %{bookends: ["lantern", "harbour"]},
+            page: %Document{bookends: ["lantern", "harbour"]},
             music_meta: %Track{path: track_path, title: "Harbour Lights"},
             vamp_meta: %Vamp{path: vamp_path, loop: true}
           )
@@ -157,7 +158,7 @@ defmodule ThereishWeb.AdminMediaTest do
       Chronicle.write(
         room_id(ctx),
         entry(
-          page: %{bookends: ["desert", "oasis"]},
+          page: %Document{bookends: ["desert", "oasis"]},
           masks: %{
             ctx.melissa.id => %Mask{url: historical, meta: %{}},
             ctx.jacob.id => %Mask{url: current, meta: %{}}
@@ -245,7 +246,7 @@ defmodule ThereishWeb.AdminMediaTest do
       Chronicle.write(
         room_id(ctx),
         entry(
-          page: %{bookends: ["lantern", "harbour"]},
+          page: %Document{bookends: ["lantern", "harbour"]},
           music_meta: %Track{path: "/media/tracks/gone-harbour.mp3", title: "Gone Harbour"},
           vamp_meta: %Vamp{path: "/media/vamps/gone-vamp.mp3", loop: true},
           masks: %{ctx.melissa.id => %Mask{url: "/media/masks/gone-mask.png", meta: %{}}}

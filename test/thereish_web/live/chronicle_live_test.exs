@@ -9,6 +9,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
   import Phoenix.LiveViewTest
 
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Document
   alias Thereish.Foley.Track
   alias Thereish.Foley.Vamp
   alias Thereish.Mask
@@ -55,7 +56,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
         room.id,
         entry(%{
           opened_at: DateTime.utc_now(),
-          page: %{bookends: ["desert", "oasis"]},
+          page: %Document{bookends: ["desert", "oasis"]},
           gives: Enum.map(givers, &%{seat_id: &1.id, text: "setting #{&1.name}"}),
           masks: %{
             ctx.melissa.id => %Mask{url: "/media/masks/mask-melissa.png", meta: %{}},
@@ -230,11 +231,8 @@ defmodule ThereishWeb.ChronicleLiveTest do
 
       entry =
         entry(%{
-          page: %{
-            id: "two-verdicts-live",
-            chapter: "harbour",
-            bookends: ["lantern", "harbour"],
-            why_these: "An earlier night graded the table as two pairs."
+          page: %Document{
+            bookends: ["lantern", "harbour"]
           },
           closed_because: :attempts_spent,
           melded?: false,
@@ -471,7 +469,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
           room.id,
           entry(%{
             opened_at: now,
-            page: %{bookends: ["desert", "oasis"]},
+            page: %Document{bookends: ["desert", "oasis"]},
             author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
             gives: [
               %{seat_id: ctx.melissa.id, text: "cactus"},
@@ -564,7 +562,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
       entry1 =
         entry(%{
           opened_at: now,
-          page: %{bookends: ["lantern", "harbour"]},
+          page: %Document{bookends: ["lantern", "harbour"]},
           author_meta: %{model: "gemini-3.8-flash"},
           music_meta: %Track{
             path: "/media/tracks/harbour-lights.mp3",
@@ -595,7 +593,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
       entry2 =
         entry(%{
           opened_at: DateTime.add(now, 60, :second),
-          page: %{bookends: ["desert", "oasis"]},
+          page: %Document{bookends: ["desert", "oasis"]},
           author_meta: %{model: "gemini-3.8-flash"},
           music_meta: %Track{
             failure: "timed_out",
@@ -625,7 +623,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
       entry3 =
         entry(%{
           opened_at: DateTime.add(now, 120, :second),
-          page: %{bookends: ["mountain", "valley"]},
+          page: %Document{bookends: ["mountain", "valley"]},
           author_meta: %{model: "gemini-3.8-flash"},
           music_meta: nil,
           closed_because: :meld,
@@ -652,7 +650,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
       entry4 =
         entry(%{
           opened_at: DateTime.add(now, 180, :second),
-          page: %{bookends: ["frost", "glacier"]},
+          page: %Document{bookends: ["frost", "glacier"]},
           author_meta: %{model: "gemini-3.8-flash"},
           music_meta: %Track{
             meta: %{"provider" => "mureka", "model" => "mureka-v1", "cost_usd" => 0.04}
@@ -782,7 +780,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
       entry1 =
         entry(%{
           opened_at: now,
-          page: %{bookends: ["lantern", "harbour"]},
+          page: %Document{bookends: ["lantern", "harbour"]},
           author_meta: %{model: "gemini-3.8-flash"},
           music_meta: %Track{
             path: "/media/tracks/harbour-lights.mp3",
@@ -813,7 +811,7 @@ defmodule ThereishWeb.ChronicleLiveTest do
       entry2 =
         entry(%{
           opened_at: DateTime.add(now, 60, :second),
-          page: %{bookends: ["desert", "oasis"]},
+          page: %Document{bookends: ["desert", "oasis"]},
           author_meta: %{model: "gemini-3.8-flash"},
           music_meta: %Track{
             path: "/media/tracks/oasis.mp3",

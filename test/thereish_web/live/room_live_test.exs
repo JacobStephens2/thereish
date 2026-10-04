@@ -10,6 +10,7 @@ defmodule ThereishWeb.RoomLiveTest do
   import Thereish.RoomFixtures
   import Phoenix.LiveViewTest
 
+  alias Thereish.Chronicle.Document
   alias Thereish.ExperimentFixtures
   alias Thereish.Rooms
 
@@ -4194,7 +4195,7 @@ defmodule ThereishWeb.RoomLiveTest do
         opened_at: DateTime.utc_now(),
         closed_at: DateTime.utc_now(),
         closed_because: "meld",
-        document: %{"bookends" => ["lantern", "harbour"]},
+        document: %Document{bookends: ["lantern", "harbour"]},
         melded: true
       })
 
@@ -4259,7 +4260,7 @@ defmodule ThereishWeb.RoomLiveTest do
         opened_at: DateTime.utc_now(),
         closed_at: DateTime.utc_now(),
         closed_because: "meld",
-        document: %{"bookends" => ["lantern", "harbour"]},
+        document: %Document{bookends: ["lantern", "harbour"]},
         melded: true
       })
 
