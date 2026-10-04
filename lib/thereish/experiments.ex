@@ -14,10 +14,10 @@ defmodule Thereish.Experiments do
   attempts, and trap convergence) rather than p-values because the sample is two
   people.
 
-  Everything that writes the harness's rows lives here: a Page's arm is
-  assigned when the Author is asked for it, a closed Page's outcome is recorded
-  from its Entry, and a Bookends tap is recorded and synced onto its Page's
-  outcome. Like the Chronicle, the rows are tested against real Postgres
+  The harness's play-time rows are written here: a Page's arm is assigned when
+  the Author is asked for it, a closed Page's outcome is recorded from its
+  Entry, and a Bookends tap is recorded and synced onto its Page's outcome.
+  Unblinding, and the readout, are still written by the Chronicle. Like the Chronicle, the rows are tested against real Postgres
   through the Ecto sandbox.
   """
 
