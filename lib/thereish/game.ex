@@ -576,7 +576,7 @@ defmodule Thereish.Game do
   end
 
   def apply(%__MODULE__{} = state, {:fairness_tapped, %{seat_id: seat_id, label: label}}) do
-    with {:ok, opinion} <- fairness_opinion(state, seat_id, label) do
+    with {:ok, opinion} <- opinion_at_reveal(state, seat_id, label) do
       fairness_taps = Map.put(state.fairness_taps || %{}, seat_id, opinion.label)
       {:ok, %{state | fairness_taps: fairness_taps}, [{:fairness_tap, opinion}]}
     end
@@ -1465,10 +1465,10 @@ defmodule Thereish.Game do
   # grade, is the Opinion's rule: a Verdict the Assayer could not grade has
   # nothing to rate, unless the table overruled it into a number.
   defp may_tap_fairness(state, seat_id) do
-    with {:ok, _opinion} <- fairness_opinion(state, seat_id, :fair), do: :ok
+    with {:ok, _opinion} <- opinion_at_reveal(state, seat_id, :fair), do: :ok
   end
 
-  defp fairness_opinion(state, seat_id, label) do
+  defp opinion_at_reveal(state, seat_id, label) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- playing_page_seat(state, seat_id),
          :ok <- verdict_revealed(state) do

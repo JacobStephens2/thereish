@@ -35,10 +35,10 @@ defmodule Thereish.Chronicle.Opinion do
   """
   @type graded :: %{
           required(:participant_ids) => [Ecto.UUID.t()],
+          required(:attempt_number) => pos_integer(),
+          required(:bookends) => [String.t()],
+          required(:bridges) => [String.t()],
           optional(:page_id) => Ecto.UUID.t() | nil,
-          optional(:attempt_number) => pos_integer(),
-          optional(:bookends) => [String.t()],
-          optional(:bridges) => [String.t()],
           optional(:closeness) => integer() | nil,
           optional(:machine_closeness) => integer() | nil,
           optional(:band) => String.t() | nil,
@@ -128,14 +128,15 @@ defmodule Thereish.Chronicle.Opinion do
   The current Opinions among some rows, oldest first: each reviewer's latest of
   each Attempt.
 
-  The rows come oldest first, by insertion time and then id, as the Chronicle
-  reads them. An Attempt is its Room, number and Bookends, not its Page: a tap
+  The latest is the last row by insertion time and then id; rows without an
+  insertion time keep the order they came in. An Attempt is its Room, number and Bookends, not its Page: a tap
   during play is written before its Page reaches the Chronicle, so it names
   none, and the same Seat's later retrospective Opinion still replaces it.
   """
   @spec current([row]) :: [row] when row: map()
   def current(rows) do
     rows
+    |> Enum.sort(&not_after?/2)
     |> Enum.reverse()
     |> Enum.uniq_by(&{attempt_key(&1), reviewer_of(&1)})
     |> Enum.reverse()
@@ -191,6 +192,20 @@ defmodule Thereish.Chronicle.Opinion do
 
   defp participant_current(rows),
     do: rows |> current() |> Enum.filter(&match?({:participant, _}, reviewer_of(&1)))
+
+  defp not_after?(a, b) do
+    case {Map.get(a, :inserted_at), Map.get(b, :inserted_at)} do
+      {%DateTime{} = at, %DateTime{} = bt} ->
+        case DateTime.compare(at, bt) do
+          :lt -> true
+          :gt -> false
+          :eq -> a.id <= b.id
+        end
+
+      _no_time ->
+        true
+    end
+  end
 
   defp attempt_key(row),
     do: {Map.get(row, :room_id), Map.get(row, :attempt_number), Map.get(row, :bookends)}

@@ -170,7 +170,7 @@ defmodule Thereish.Chronicle do
     reviewer = Map.get(attrs, :as) || Map.get(attrs, "as")
 
     with {:ok, graded} <- opinion_target(room_id, attrs),
-         :ok <- admin_exists(reviewer),
+         :ok <- known_admin(reviewer),
          {:ok, opinion} <-
            Opinion.new(graded, reviewer, Map.get(attrs, :label) || Map.get(attrs, "label")) do
       record_fairness_tap(room_id, opinion)
@@ -1319,14 +1319,15 @@ defmodule Thereish.Chronicle do
   end
 
   # The admin may review any Attempt, but only an admin identity that exists.
-  defp admin_exists({:admin, admin_id}) when is_binary(admin_id) do
+  # Any other reviewer is left to `Opinion.new/3`.
+  defp known_admin({:admin, admin_id}) when is_binary(admin_id) do
     case Repo.get(Thereish.Admin.Identity, admin_id) do
       %Thereish.Admin.Identity{} -> :ok
       nil -> {:error, :not_admin}
     end
   end
 
-  defp admin_exists(_reviewer), do: :ok
+  defp known_admin(_reviewer), do: :ok
 
   defp uuid?(val) when is_binary(val) do
     Regex.match?(

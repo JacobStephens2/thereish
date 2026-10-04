@@ -378,7 +378,7 @@ defmodule ThereishWeb.ChronicleLive do
                     end
                   ]}
                 >
-                  {t.reviewer_name}: {human_label(t.label)}
+                  {t.reviewer_name}: {Opinion.human(t.label)}
                 </span>
               </div>
 
@@ -523,8 +523,6 @@ defmodule ThereishWeb.ChronicleLive do
   end
 
   defp room_path(slug), do: ~p"/r/#{slug}"
-
-  defp human_label(label), do: Opinion.human(label)
 
   attr :event, :string, required: true
   attr :page_id, :string, required: true
