@@ -377,21 +377,14 @@ defmodule Thereish.Chronicle do
 
   @doc """
   Records the experiment outcome of a closed Page from its Entry, once the
-  Entry is written as `page`. The experiment follows from the Entry's arm:
-  `flash` and `astra` are the Author-model experiment, any other arm is Bait.
+  Entry is written as `page`, under the experiment the Entry's arm belongs to.
   Links the Page to the oldest unlinked assignment of that experiment.
   """
   @spec record_page_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
           {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
   def record_page_outcome(room_id, %Page{} = page, %Entry{} = entry) do
     room_id = resolve_room_id(room_id)
-    arm = to_string(entry.arm)
-
-    experiment_id =
-      case arm do
-        a when a in ["flash", "astra"] -> "author_model"
-        _ -> "bait_against_plain"
-      end
+    experiment_id = Thereish.Experiments.experiment_id_for_arm(entry.arm)
 
     closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
 
@@ -400,7 +393,7 @@ defmodule Thereish.Chronicle do
         page_id: page.id,
         page_identifier: page.id,
         experiment_id: experiment_id,
-        arm: arm,
+        arm: to_string(entry.arm),
         melded: entry.melded?,
         closeness: entry.closeness,
         closing_band: closing_band,
