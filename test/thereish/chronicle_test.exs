@@ -18,6 +18,7 @@ defmodule Thereish.ChronicleTest do
   alias Thereish.Experiments
   alias Thereish.Game
   alias Thereish.Ladder
+  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Pacing
   alias Thereish.Rooms.Room
@@ -1839,28 +1840,26 @@ defmodule Thereish.ChronicleTest do
             %{seat_id: ctx.jacob.id, text: "dune"}
           ],
           masks: %{
-            ctx.mara.id => %{
+            ctx.mara.id => %Mask{
               url: "/media/masks/mask-mara.png",
               meta: %{model: "imagen-3", cost_usd: 0.04}
             },
-            ctx.jacob.id => %{
+            ctx.jacob.id => %Mask{
               url: "/media/masks/mask-jacob.png",
               meta: %{model: "imagen-3", cost_usd: 0.04}
             }
           }
         )
 
-      assert {:ok, page} = Chronicle.write(room.id, entry)
-      assert is_map(page.masks_meta)
-      mara_mask = page.masks_meta[to_string(ctx.mara.id)] || page.masks_meta[ctx.mara.id]
-      assert (mara_mask[:url] || mara_mask["url"]) == "/media/masks/mask-mara.png"
+      assert {:ok, _page} = Chronicle.write(room.id, entry)
 
       [view] = Chronicle.page_views(room.id)
-      assert is_map(view.masks)
-      assert view.masks[to_string(ctx.mara.id)]["url"] == "/media/masks/mask-mara.png"
+      assert view.masks[ctx.mara.id].url == "/media/masks/mask-mara.png"
+      assert view.masks[ctx.mara.id].meta == %{"model" => "imagen-3", "cost_usd" => 0.04}
+      refute Map.has_key?(view, :masks_meta)
       assert [give1, give2] = view.gives
-      assert give1.mask["url"] == "/media/masks/mask-mara.png"
-      assert give2.mask["url"] == "/media/masks/mask-jacob.png"
+      assert give1.mask.url == "/media/masks/mask-mara.png"
+      assert give2.mask.url == "/media/masks/mask-jacob.png"
     end
 
     test "replace_page_masks/2 updates masks_meta on a Page and spend reflects it", ctx do
@@ -1871,16 +1870,15 @@ defmodule Thereish.ChronicleTest do
       assert Chronicle.spend(room.id).by_role.limner.calls_count == 0
 
       updated_masks = %{
-        to_string(ctx.mara.id) => %{
-          "url" => "/media/masks/mask-late.png",
-          "meta" => %{"model" => "imagen-3", "cost_usd" => 0.0400}
+        ctx.mara.id => %Mask{
+          url: "/media/masks/mask-late.png",
+          meta: %{model: "imagen-3", cost_usd: 0.0400}
         }
       }
 
       assert {:ok, updated_page} = Chronicle.replace_page_masks(page.id, updated_masks)
 
-      assert updated_page.masks_meta[to_string(ctx.mara.id)]["url"] ==
-               "/media/masks/mask-late.png"
+      assert updated_page.masks_meta[ctx.mara.id].url == "/media/masks/mask-late.png"
 
       spend = Chronicle.spend(room.id)
       assert spend.by_role.limner.calls_count == 1
@@ -1897,7 +1895,7 @@ defmodule Thereish.ChronicleTest do
       entry =
         entry(
           gives: [%{seat_id: ctx.mara.id, text: "cactus"}],
-          masks: %{ctx.mara.id => %{url: "/media/masks/mask-mara.png"}}
+          masks: %{ctx.mara.id => %Mask{url: "/media/masks/mask-mara.png", meta: %{}}}
         )
 
       assert {:ok, _page} = Chronicle.write(room.id, entry)

@@ -10,8 +10,9 @@ defmodule Thereish.Chronicle.Entry do
   each Verdict's `voice_meta`. Each sets its own fields by name.
 
   It carries exactly what the Chronicle writes, and nothing a screen shows.
-  `page`, `author_meta`, `music_meta`, `vamp_meta`, `masks` and each Verdict's
-  `meta` stay opaque maps: they are stored as they come.
+  `page`, `author_meta`, `music_meta`, `vamp_meta` and each Verdict's `meta`
+  stay opaque maps: they are stored as they come. `masks` is each Seat's
+  `Thereish.Mask` or `:dot`, which the Page stores through the Mask's own type.
 
   `bridges` on an Attempt is `%{seat_id, bridge}` per Seat that wrote one, in
   roster order.
@@ -118,7 +119,7 @@ defmodule Thereish.Chronicle.Entry do
   @type t :: %__MODULE__{
           page: map(),
           gives: [Give.t()],
-          masks: map(),
+          masks: %{String.t() => Thereish.Mask.t() | :dot},
           author_meta: map() | nil,
           music_meta: map() | nil,
           vamp_meta: map() | nil,

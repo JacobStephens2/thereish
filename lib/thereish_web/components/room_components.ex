@@ -13,6 +13,8 @@ defmodule ThereishWeb.RoomComponents do
   """
   use ThereishWeb, :html
 
+  alias Thereish.Mask
+
   attr :room, :map, required: true, doc: "a snapshot from Thereish.Rooms.snapshot/2"
   attr :mode, :atom, default: :phone
 
@@ -98,9 +100,9 @@ defmodule ThereishWeb.RoomComponents do
         if(@mode == :stage, do: "gap-1.5", else: "gap-2 text-lg")
       ]}
     >
-      <%= if @seat[:mask] && @seat.mask not in [nil, :dot, :face_down] do %>
+      <%= if Mask.url(@seat[:mask]) do %>
         <img
-          src={@seat.mask[:url] || @seat.mask["url"] || @seat.mask}
+          src={Mask.url(@seat.mask)}
           alt={@seat.name}
           data-role="seat-mask"
           class={[
@@ -236,9 +238,7 @@ defmodule ThereishWeb.RoomComponents do
   defp bookend_word(word) when is_binary(word), do: word
   defp bookend_word(_), do: ""
 
-  defp mask_url(%{mask: url}) when is_binary(url) and url != "", do: url
-  defp mask_url(%{mask: mask}) when is_map(mask), do: mask[:url] || mask["url"]
-  defp mask_url(%{"mask" => mask}) when is_map(mask), do: mask[:url] || mask["url"]
+  defp mask_url(%{mask: mask}), do: Mask.url(mask)
   defp mask_url(_), do: nil
 
   attr :room, :map, required: true
@@ -483,9 +483,9 @@ defmodule ThereishWeb.RoomComponents do
           data-seat={seat.id}
           class="flex flex-col items-center gap-1"
         >
-          <%= if is_map(seat[:mask]) and (seat.mask[:url] || seat.mask["url"]) do %>
+          <%= if Mask.url(seat[:mask]) do %>
             <img
-              src={seat.mask[:url] || seat.mask["url"]}
+              src={Mask.url(seat.mask)}
               alt={seat.name}
               data-role="seat-mask"
               class="size-16 rounded-xl object-cover border-2 shadow-md"
