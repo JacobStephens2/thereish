@@ -129,6 +129,15 @@ defmodule Thereish.Rooms.FactsTest do
       assert is_nil(Facts.view(facts, "stage").prologue)
     end
 
+    test "a tap from a device with no token changes nothing and tells nobody" do
+      held = facts(%{speaker: "a"})
+
+      for token <- [nil, "", "  "] do
+        assert {^held, attrs, []} = run!(held, {:start_sound, token, false})
+        assert attrs == %{}
+      end
+    end
+
     test "a take already playing is not drawn again" do
       {playing, _attrs, _effects} = run!(facts(), :play_prologue)
       take = Facts.view(playing, nil).prologue
@@ -168,7 +177,7 @@ defmodule Thereish.Rooms.FactsTest do
     end
   end
 
-  describe "the switches" do
+  describe "Quips and Full table" do
     test "setting Quips persists the new value" do
       assert {facts, %{quips: false}, []} = run!(facts(), {:set, :quips, false})
       assert Facts.view(facts, nil).quips == false
@@ -181,11 +190,11 @@ defmodule Thereish.Rooms.FactsTest do
       assert Facts.view(facts, nil).full_table == false
     end
 
-    test "setting a switch to the value it has changes nothing" do
+    test "setting either to the value it has changes nothing" do
       start = facts()
 
-      for switch <- [:quips, :full_table] do
-        assert {^start, attrs, []} = run!(start, {:set, switch, true})
+      for fact <- [:quips, :full_table] do
+        assert {^start, attrs, []} = run!(start, {:set, fact, true})
         assert attrs == %{}
       end
     end
@@ -200,12 +209,12 @@ defmodule Thereish.Rooms.FactsTest do
     test "toggling twice returns to the start" do
       start = facts()
 
-      for switch <- [:quips, :full_table] do
-        {once, _attrs, _effects} = run!(start, {:toggle, switch})
-        {twice, attrs, _effects} = run!(once, {:toggle, switch})
+      for fact <- [:quips, :full_table] do
+        {once, _attrs, _effects} = run!(start, {:toggle, fact})
+        {twice, attrs, _effects} = run!(once, {:toggle, fact})
 
         assert twice == start
-        assert attrs == %{switch => true}
+        assert attrs == %{fact => true}
       end
     end
   end
@@ -223,10 +232,10 @@ defmodule Thereish.Rooms.FactsTest do
                run!(facts(), {:set_music, :house})
     end
 
-    test "the music mode the Room already has changes nothing" do
+    test "the music mode the Room already has writes nothing but still tells Occupancy" do
       start = facts()
 
-      assert {^start, attrs, []} = run!(start, {:set_music, "page"})
+      assert {^start, attrs, [{:music_changed, "page"}]} = run!(start, {:set_music, "page"})
       assert attrs == %{}
     end
 
