@@ -5,7 +5,7 @@ Shared language for a couch word game for Jacob and Melissa — two players by d
 ## Language
 
 **Room**:
-Where a set of Seats plays Pages together — N seats, two by default — with private phone views and, when there is a screen for it, a public stage view. A Room of four phones and no stage is still a Room.
+Where a set of Seats plays Pages together — N seats, two by default — with private phone views and, when there is a screen for it, a public stage view. A Room of four phones and no stage is still a Room. The Room's play (its Game, Pacing, Pages, Occupancy, Voice and Room facts) is decided by one pure module, and the Room's process only performs it.
 _Avoid_: game, session, lobby, table
 
 **Code**:

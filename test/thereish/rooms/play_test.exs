@@ -18,14 +18,20 @@ defmodule Thereish.Rooms.PlayTest do
     assayer: [slow: 4_000, unavailable: 10_000],
     author: [still_writing: 5_000, deadline: 20_000]
   }
-  @members [%{name: "Dusk", title: "Dusk", path: "/loops/dusk.mp3"}]
+  @members [
+    %{name: "Dusk", title: "Dusk", path: "/loops/dusk.mp3"},
+    %{name: "Dawn", title: "Dawn", path: "/loops/dawn.mp3"}
+  ]
   @seats [%{id: "melissa", name: "Melissa"}, %{id: "jacob", name: "Jacob"}]
   @speaker "speaker-token"
   @track %{path: "/media/track.mp3", meta: %{provider: "fake"}}
 
-  defp new(room \\ %{}, durations \\ @durations) do
-    room = struct!(%Room{slug: "test", seat_limit: 2}, room)
-    Play.new(%{room: room, seats: @seats}, %{members: @members, durations: durations, now: @now})
+  # A Room as full as its Seats, unless `room` says otherwise.
+  defp new(opts \\ []) do
+    seats = Keyword.get(opts, :seats, @seats)
+    room = struct!(%Room{slug: "test", seat_limit: length(seats)}, Keyword.get(opts, :room, %{}))
+    durations = Keyword.get(opts, :durations, @durations)
+    Play.new(%{room: room, seats: seats}, %{members: @members, durations: durations, now: @now})
   end
 
   # Applies a command the Room's process would run, answering the asks that
@@ -60,8 +66,8 @@ defmodule Thereish.Rooms.PlayTest do
   defp find(effects, tag), do: Enum.find(effects, &(is_tuple(&1) and elem(&1, 0) == tag))
   defp tags(effects), do: Enum.map(effects, &if(is_tuple(&1), do: elem(&1, 0), else: &1))
 
-  defp view(play, viewer \\ nil, token \\ nil),
-    do: Play.view(play, viewer, token, %{now: @now, has_chronicle?: false})
+  defp view(play, viewer \\ nil, token \\ nil, chronicle? \\ false),
+    do: Play.view(play, viewer, token, %{now: @now, has_chronicle?: chronicle?})
 
   defp phase(play), do: view(play).phase
 
@@ -103,6 +109,157 @@ defmodule Thereish.Rooms.PlayTest do
   defp meld(play, opts \\ []) do
     {play, bridged} = bridges(play, "cairn", "cairn", opts)
     assayed(play, bridged, 95, opts)
+  end
+
+  describe "joining" do
+    test "a Seat the rules take is inserted before anything else is performed" do
+      play = new(seats: [], room: %{seat_limit: 2})
+
+      assert {:ok, play, [{:insert_seat, "melissa", "Melissa"} | rest]} =
+               Play.apply(play, {:seat_joined, "melissa", "Melissa"}, @now)
+
+      assert :broadcast in rest
+      assert [%{id: "melissa", name: "Melissa"}] = view(play).seats
+    end
+
+    test "a full Room refuses the Seat and asks for no insert" do
+      assert Play.apply(new(), {:seat_joined, "ada", "Ada"}, @now) == {:error, :room_full}
+    end
+  end
+
+  describe "Room facts" do
+    test "a changed fact is written first, then broadcast, then its effects are performed" do
+      {play, _page_ref, _giving} = written(new())
+
+      assert {:ok, play, [{:persist_room, %{speaker: @speaker}}, :broadcast | voiced]} =
+               Play.apply(play, {:room_fact, {:claim_speaker, @speaker}}, @now)
+
+      assert {:speak, 1, :bookends, _line} = find(voiced, :speak)
+      assert view(play, nil, @speaker).speaker?
+    end
+
+    test "a fact that changes nothing writes nothing and is not broadcast" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+
+      assert {:ok, ^play, []} = Play.apply(play, {:room_fact, {:claim_speaker, @speaker}}, @now)
+    end
+
+    test "a fact that is not persisted is broadcast with no write" do
+      assert {:ok, play, [:broadcast]} = Play.apply(new(), {:room_fact, :play_prologue}, @now)
+      assert %{reading: _, text: _} = view(play).prologue
+    end
+
+    test "skipping the Prologue ends the take playing and is written" do
+      {play, _} = run(new(), {:room_fact, :play_prologue})
+
+      assert {:ok, play, [{:persist_room, %{prologue_skipped: true}}, :broadcast]} =
+               Play.apply(play, {:room_fact, :skip_prologue}, @now)
+
+      assert view(play).prologue == nil
+      assert view(play).prologue_skipped
+    end
+
+    test "a music setting the Room does not have is refused" do
+      assert Play.apply(new(), {:room_fact, {:set_music, "loud"}}, @now) ==
+               {:error, :bad_music_setting}
+    end
+
+    test "the music setting reaches what the Room plays" do
+      assert view(new()).playing.kind == "repertoire"
+
+      {play, effects} = run(new(), {:room_fact, {:set_music, "off"}})
+      assert [{:persist_room, %{music: "off"}}, :broadcast] = effects
+      assert view(play).playing == nil
+      assert view(play).music == "off"
+    end
+
+    test "Full table reaches the Game: the next Page opens on two Bookends" do
+      seats = @seats ++ [%{id: "ada", name: "Ada"}]
+      play = new(seats: seats)
+
+      {play, effects} = run(play, {:room_fact, {:set, :full_table, false}})
+      assert [{:persist_room, %{full_table: false}}, :broadcast] = effects
+
+      {play, _} = run(play, {:give, "melissa", "deep canyon"})
+      {play, _} = run(play, {:give, "jacob", "echoing wind"})
+      {_play, opened} = run(play, {:give, "ada", "quiet harbour"})
+
+      assert {:open_page, %{count: 2}, nil} = find(opened, :open_page)
+    end
+
+    test "flipping Full table mid-Page leaves that Page's Bookends" do
+      {play, _page_ref, _giving} = written(new())
+      bookends = view(play).bookends
+
+      {play, _} = run(play, {:room_fact, {:set, :full_table, false}})
+
+      assert view(play).full_table == false
+      assert view(play).phase == :bridging
+      assert view(play).bookends == bookends
+    end
+  end
+
+  describe "the Speaker's Next and Never" do
+    setup do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+      %{play: play}
+    end
+
+    test "are ignored from a device that does not hold the Speaker", %{play: play} do
+      for press <- [:next, :never], token <- ["another-token", nil] do
+        assert {:ok, ^play, []} = Play.apply(play, {press, token}, @now)
+      end
+    end
+
+    test "Next draws another member and is broadcast", %{play: play} do
+      playing = view(play, nil, @speaker).playing
+
+      assert {:ok, play, effects} = Play.apply(play, {:next, @speaker}, @now)
+      assert List.last(effects) == :broadcast
+      refute view(play, nil, @speaker).playing.path == playing.path
+    end
+
+    test "Never records the member and is broadcast", %{play: play} do
+      %{path: path} = view(play, nil, @speaker).playing
+
+      assert {:ok, play, effects} = Play.apply(play, {:never, @speaker}, @now)
+      assert {:record_never, ^path} = find(effects, :record_never)
+      assert List.last(effects) == :broadcast
+      refute view(play, nil, @speaker).playing.path == path
+    end
+  end
+
+  describe "the view" do
+    test "merges the Game's view, Pacing's waits, the Room facts and what is playing" do
+      {play, _page_ref, _giving} = written(new(room: %{quips: false}))
+
+      view = view(play, "melissa", "a-token", true)
+
+      assert view.phase == :bridging
+      assert view.bookends == ["lighthouse", "picnic"]
+      assert %{author_step: nil, assayer_step: nil, can_advance?: false} = view
+      assert view.quips == false
+      assert view.speaker? == false
+      assert view.playing.kind == "repertoire"
+      assert view.has_chronicle? == true
+    end
+
+    test "answers whether this device holds the Speaker, and never a device token" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+
+      assert view(play, "melissa", @speaker).speaker?
+      refute view(play, "jacob", "another-token").speaker?
+      assert view(play, nil, nil).speaker_claimed?
+
+      for token <- [@speaker, "another-token", nil] do
+        view = view(play, nil, token)
+
+        for key <- [:speaker, :device_token, :voice, :house_loop_only],
+            do: refute(Map.has_key?(view, key))
+
+        refute Jason.encode!(view) =~ @speaker
+      end
+    end
   end
 
   describe "a whole Page" do
@@ -343,7 +500,7 @@ defmodule Thereish.Rooms.PlayTest do
 
   describe "the reveal hold" do
     test "holds Next Attempt and Next Page alike until it is over" do
-      play = new(%{}, %{@durations | hold: 5_000})
+      play = new(durations: %{@durations | hold: 5_000})
 
       {play, _page_ref, _giving} = written(play)
       {play, bridged} = bridges(play, "cairn", "cairo")
