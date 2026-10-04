@@ -9,6 +9,8 @@ defmodule ThereishWeb.AdminMediaTest do
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
   alias Thereish.Mask
   alias Thereish.Repo
   alias Thereish.Rooms
@@ -63,8 +65,8 @@ defmodule ThereishWeb.AdminMediaTest do
         room_id(ctx),
         entry(
           page: %{bookends: ["lantern", "harbour"]},
-          music_meta: %{path: track_path, title: "Harbour Lights"},
-          vamp_meta: %{path: vamp_path, duration: 30, loop: true}
+          music_meta: %Track{path: track_path, title: "Harbour Lights"},
+          vamp_meta: %Vamp{path: vamp_path, duration: 30, loop: true}
         )
       )
 
@@ -111,8 +113,8 @@ defmodule ThereishWeb.AdminMediaTest do
           room_id(ctx),
           entry(
             page: %{bookends: ["lantern", "harbour"]},
-            music_meta: %{path: track_path, title: "Harbour Lights"},
-            vamp_meta: %{path: vamp_path, loop: true}
+            music_meta: %Track{path: track_path, title: "Harbour Lights"},
+            vamp_meta: %Vamp{path: vamp_path, loop: true}
           )
         )
 
@@ -244,8 +246,8 @@ defmodule ThereishWeb.AdminMediaTest do
         room_id(ctx),
         entry(
           page: %{bookends: ["lantern", "harbour"]},
-          music_meta: %{path: "/media/tracks/gone-harbour.mp3", title: "Gone Harbour"},
-          vamp_meta: %{path: "/media/vamps/gone-vamp.mp3", loop: true},
+          music_meta: %Track{path: "/media/tracks/gone-harbour.mp3", title: "Gone Harbour"},
+          vamp_meta: %Vamp{path: "/media/vamps/gone-vamp.mp3", loop: true},
           masks: %{ctx.mara.id => %Mask{url: "/media/masks/gone-mask.png", meta: %{}}}
         )
       )

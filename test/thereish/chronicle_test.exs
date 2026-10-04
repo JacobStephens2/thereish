@@ -16,6 +16,8 @@ defmodule Thereish.ChronicleTest do
   alias Thereish.Chronicle
   alias Thereish.Chronicle.Entry
   alias Thereish.Experiments
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
   alias Thereish.Game
   alias Thereish.Ladder
   alias Thereish.Mask
@@ -840,21 +842,24 @@ defmodule Thereish.ChronicleTest do
       # Page 1: Has a track with path and title
       entry1 =
         entry(
-          music_meta: %{
-            provider: "mureka",
+          music_meta: %Track{
             path: "/media/tracks/harbour-lights.mp3",
-            title: "Harbour Lights"
+            title: "Harbour Lights",
+            meta: %{"provider" => "mureka"}
           },
           opened_at: now
         )
 
       assert {:ok, _p1} = Chronicle.write(room.id, entry1)
 
-      # Page 2: Has failed score (music_meta has failure, no path)
+      # Page 2: Has a failed Track, with no path
       entry2 =
         entry(
           page: %{bookends: ["desert", "oasis"]},
-          music_meta: %{provider: "mureka", failure: :timed_out, cost_usd: 0.0},
+          music_meta: %Track{
+            failure: "timed_out",
+            meta: %{"provider" => "mureka", "cost_usd" => 0.0}
+          },
           attempts: [%{bookends: ["desert", "oasis"]}],
           opened_at: DateTime.add(now, 60, :second)
         )
@@ -1629,7 +1634,10 @@ defmodule Thereish.ChronicleTest do
       entry =
         entry(
           author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400}
+          music_meta: %Track{
+            path: "/media/tracks/a.mp3",
+            meta: %{"provider" => "mureka", "model" => "mureka-v1", "cost_usd" => 0.0400}
+          }
         )
 
       assert {:ok, _page} = Chronicle.write(room.id, entry)
@@ -1649,12 +1657,17 @@ defmodule Thereish.ChronicleTest do
       entry =
         entry(
           author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-          music_meta: %{provider: "mureka", model: "mureka-v1", cost_usd: 0.0400},
-          vamp_meta: %{
+          music_meta: %Track{
+            path: "/media/tracks/a.mp3",
+            meta: %{"provider" => "mureka", "model" => "mureka-v1", "cost_usd" => 0.0400}
+          },
+          vamp_meta: %Vamp{
             path: "/media/vamps/oasis-vamp.mp3",
-            provider: "eleven_labs",
-            model: "eleven_text_to_sound_v2",
-            cost_usd: 0.0120
+            meta: %{
+              "provider" => "eleven_labs",
+              "model" => "eleven_text_to_sound_v2",
+              "cost_usd" => 0.0120
+            }
           }
         )
 
@@ -2181,16 +2194,16 @@ defmodule Thereish.ChronicleTest do
                Chronicle.write(
                  room.id,
                  entry(
-                   music_meta: %{
+                   music_meta: %Track{
                      path: "/media/tracks/harbour-lights.mp3",
                      title: "Harbour Lights"
                    },
-                   vamp_meta: %{
+                   vamp_meta: %Vamp{
                      path: "/media/vamps/harbour-vamp.mp3",
                      duration: 30,
                      format: "mp3",
                      loop: true,
-                     provider: "fake"
+                     meta: %{"provider" => "fake"}
                    },
                    opened_at: now
                  )
@@ -2232,7 +2245,7 @@ defmodule Thereish.ChronicleTest do
                Chronicle.write(
                  room.id,
                  entry(
-                   music_meta: %{
+                   music_meta: %Track{
                      path: "/media/tracks/harbour-lights.mp3",
                      title: "Harbour Lights"
                    }
@@ -2242,7 +2255,7 @@ defmodule Thereish.ChronicleTest do
       assert Chronicle.page_vamp(page) == nil
 
       assert {:ok, updated} =
-               Chronicle.replace_page_vamp(page.id, %{
+               Chronicle.replace_page_vamp(page.id, %Vamp{
                  path: "/media/vamps/late-harbour.mp3",
                  duration: 30,
                  loop: true
@@ -2264,14 +2277,11 @@ defmodule Thereish.ChronicleTest do
                Chronicle.write(
                  room.id,
                  entry(
-                   music_meta: %{
+                   music_meta: %Track{
                      path: "/media/tracks/harbour-lights.mp3",
                      title: "Harbour Lights"
                    },
-                   vamp_meta: %{
-                     path: "/media/vamps/harbour-vamp.mp3",
-                     loop: true
-                   },
+                   vamp_meta: %Vamp{path: "/media/vamps/harbour-vamp.mp3", loop: true},
                    opened_at: now
                  )
                )
@@ -2281,10 +2291,7 @@ defmodule Thereish.ChronicleTest do
                  room.id,
                  entry(
                    page: %{bookends: ["desert", "oasis"]},
-                   music_meta: %{
-                     path: "/media/tracks/oasis.mp3",
-                     title: "Oasis"
-                   },
+                   music_meta: %Track{path: "/media/tracks/oasis.mp3", title: "Oasis"},
                    attempts: [%{bookends: ["desert", "oasis"]}],
                    opened_at: DateTime.add(now, 60, :second)
                  )

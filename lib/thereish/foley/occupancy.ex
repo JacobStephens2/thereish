@@ -39,7 +39,8 @@ defmodule Thereish.Foley.Occupancy do
   """
 
   alias Thereish.Foley.Repertoire
-  alias Thereish.Steward
+  alias Thereish.Foley.Track
+  alias Thereish.Foley.Vamp
 
   defstruct draw: nil,
             deal: [],
@@ -71,10 +72,10 @@ defmodule Thereish.Foley.Occupancy do
           track: map() | nil,
           track_page_ref: page_ref() | nil,
           vamp: map() | nil,
-          vamp_meta: map() | nil,
+          vamp_meta: Vamp.t() | nil,
           title: String.t() | nil,
           title_meta: map() | nil,
-          music_meta: map() | nil,
+          music_meta: Track.t() | nil,
           vamp_running?: boolean(),
           track_running?: boolean(),
           title_running?: boolean()
@@ -89,8 +90,8 @@ defmodule Thereish.Foley.Occupancy do
           | {:enqueue_track, page_ref(), gives(), integer()}
           | {:start_title, page_ref(), gives()}
           | {:look_up_track, page_ref(), gives()}
-          | {:persist_vamp_meta, page_ref(), map()}
-          | {:persist_music_meta, page_ref(), map()}
+          | {:persist_vamp_meta, page_ref(), Vamp.t()}
+          | {:persist_music_meta, page_ref(), Track.t()}
           | {:cache_track, gives(), map()}
           | {:record_never, String.t()}
           | {:log, page_ref(), String.t() | {atom(), term()}, integer() | nil}
@@ -241,13 +242,16 @@ defmodule Thereish.Foley.Occupancy do
   The `music_meta` and `vamp_meta` the Chronicle records for a closing Page.
   Under "page", a Page whose Track never landed records an "unfinished" failure.
   """
-  @spec chronicle_meta(t(), String.t()) :: %{music_meta: map() | nil, vamp_meta: map() | nil}
+  @spec chronicle_meta(t(), String.t()) :: %{
+          music_meta: Track.t() | nil,
+          vamp_meta: Vamp.t() | nil
+        }
   def chronicle_meta(%__MODULE__{} = occ, mode) do
     music_meta =
       cond do
         mode != "page" -> nil
         not is_nil(occ.music_meta) -> occ.music_meta
-        true -> Steward.score_failure(:unfinished)
+        true -> Track.failed(:unfinished)
       end
 
     %{music_meta: music_meta, vamp_meta: occ.vamp_meta}
@@ -256,7 +260,7 @@ defmodule Thereish.Foley.Occupancy do
   # -- arrivals -------------------------------------------------------------
 
   defp arrive(occ, :vamp, {:ok, vamp}, current?, page_ref, closed?) do
-    vamp_meta = vamp_meta(vamp)
+    vamp_meta = Vamp.landed(vamp)
     persist = {:persist_vamp_meta, page_ref, vamp_meta}
 
     cond do
@@ -279,7 +283,8 @@ defmodule Thereish.Foley.Occupancy do
 
   defp arrive(occ, :track, {:ok, track}, true, page_ref, closed?) do
     title = track[:title] || occ.title
-    {track, music_meta} = merge_track_meta(occ.music_meta, track, title, occ.title_meta)
+    music_meta = Track.landed(track, title, occ.title_meta)
+    track = if title, do: Map.put(track, :title, title), else: track
     effects = [{:persist_music_meta, page_ref, music_meta}, log(occ, page_ref, "track landed")]
     occ = %{occ | track_running?: false, vamp: nil}
 
@@ -292,8 +297,7 @@ defmodule Thereish.Foley.Occupancy do
   end
 
   defp arrive(occ, :track, {:ok, track}, false, page_ref, _closed?) do
-    {_track, music_meta} = merge_track_meta(nil, track, track[:title], %{})
-    {occ, [{:persist_music_meta, page_ref, music_meta}]}
+    {occ, [{:persist_music_meta, page_ref, Track.landed(track, track[:title], %{})}]}
   end
 
   defp arrive(occ, :track, {:error, reason}, true, page_ref, closed?) do
@@ -304,8 +308,7 @@ defmodule Thereish.Foley.Occupancy do
     else
       occ = if occ.track_page_ref == page_ref, do: drop_track(occ), else: occ
 
-      {%{occ | music_meta: Steward.score_failure(reason)},
-       [log(occ, page_ref, {:failure, reason})]}
+      {%{occ | music_meta: Track.failed(reason)}, [log(occ, page_ref, {:failure, reason})]}
     end
   end
 
@@ -321,7 +324,7 @@ defmodule Thereish.Foley.Occupancy do
         occ = %{occ | title: title, title_meta: title_meta}
 
         if track_for_page?(occ) do
-          play_track(occ, occ.track, title, title_meta)
+          play_track(occ, title, title_meta)
         else
           {occ, []}
         end
@@ -340,7 +343,7 @@ defmodule Thereish.Foley.Occupancy do
   defp start_track_work(occ, cached) do
     case cached do
       %{title: title} = cached when not is_nil(title) ->
-        {_cached, music_meta} = merge_track_meta(nil, cached, title, %{})
+        music_meta = Track.landed(cached, title, %{})
 
         occ = %{
           occ
@@ -373,56 +376,14 @@ defmodule Thereish.Foley.Occupancy do
   end
 
   # This Page's Track is on the Speaker, titled, and kept for the same Gives.
-  defp play_track(occ, track, title, title_meta) do
-    {track, music_meta} = merge_track_meta(occ.music_meta, track, title, title_meta)
-    put_track(occ, track, music_meta)
+  defp play_track(occ, title, title_meta) do
+    music_meta = Track.titled(occ.music_meta, title, title_meta)
+    put_track(occ, Map.put(occ.track, :title, title), music_meta)
   end
 
   defp put_track(occ, track, music_meta) do
     occ = %{occ | track: track, track_page_ref: occ.page_ref, music_meta: music_meta}
     {occ, [{:cache_track, occ.gives, track}]}
-  end
-
-  # Title, path and title cost go onto the meta already recorded for this
-  # Page, unless that meta records a failure; then the Track's own meta is the
-  # base. Returns the Track carrying its title, and the merged meta.
-  defp merge_track_meta(existing, track, title, title_meta) do
-    title_meta = title_meta || %{}
-    title_cost = title_meta[:cost_usd] || title_meta["cost_usd"] || 0.0
-    track = if title, do: Map.put(track, :title, title), else: track
-
-    base =
-      case existing do
-        %{} = meta when not is_map_key(meta, :failure) and not is_map_key(meta, "failure") ->
-          meta
-
-        _ ->
-          Map.get(track, :meta) || %{}
-      end
-
-    attrs =
-      [path: track.path] ++ if(title, do: [title: title, title_cost_usd: title_cost], else: [])
-
-    {track, put_meta(base, attrs)}
-  end
-
-  defp vamp_meta(vamp) when is_map(vamp) do
-    base = vamp[:meta] || vamp["meta"] || %{}
-
-    put_meta(base,
-      path: vamp[:path] || vamp["path"],
-      duration: vamp[:duration] || vamp["duration"],
-      format: vamp[:format] || vamp["format"],
-      loop: Map.get(vamp, :loop, Map.get(vamp, "loop", true))
-    )
-  end
-
-  defp put_meta(base, pairs) do
-    Enum.reduce(pairs, base || %{}, fn {key, val}, acc ->
-      acc
-      |> Map.put(key, val)
-      |> Map.put(to_string(key), val)
-    end)
   end
 
   defp drop_track(occ), do: %{occ | track: nil, track_page_ref: nil}

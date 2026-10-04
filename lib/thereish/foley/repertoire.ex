@@ -10,6 +10,7 @@ defmodule Thereish.Foley.Repertoire do
 
   alias Thereish.Chronicle.Page
   alias Thereish.Foley.Loops
+  alias Thereish.Foley.Track
   alias Thereish.Repo
   alias Thereish.Steward.TrackCache
 
@@ -41,7 +42,7 @@ defmodule Thereish.Foley.Repertoire do
   end
 
   @doc """
-  Tracks kept in this Room's Chronicle (pages whose music_meta has a playable path and no failure).
+  Tracks kept in this Room's Chronicle: each Page's Track that `Track.kept?/1`.
   """
   @spec chronicle_tracks(Ecto.UUID.t() | String.t()) :: [member()]
   def chronicle_tracks(room_id) do
@@ -50,17 +51,8 @@ defmodule Thereish.Foley.Repertoire do
       select: p.music_meta
     )
     |> Repo.all()
-    |> Enum.flat_map(fn meta ->
-      path = meta["path"] || meta[:path]
-      title = meta["title"] || meta[:title]
-      failure = meta["failure"] || meta[:failure]
-
-      if is_binary(path) and path != "" and is_nil(failure) do
-        [make_member(title, path)]
-      else
-        []
-      end
-    end)
+    |> Enum.filter(&Track.kept?/1)
+    |> Enum.map(fn %Track{path: path, title: title} -> make_member(title, path) end)
     |> Enum.uniq_by(& &1.path)
   end
 
