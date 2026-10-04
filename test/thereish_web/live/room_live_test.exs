@@ -10,6 +10,7 @@ defmodule ThereishWeb.RoomLiveTest do
   import Thereish.RoomFixtures
   import Phoenix.LiveViewTest
 
+  alias Thereish.ExperimentFixtures
   alias Thereish.Rooms
 
   defp join(view, name),
@@ -1425,10 +1426,10 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # Both taps recorded in Chronicle
       room = Thereish.Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
-      taps = Thereish.Chronicle.bookends_taps(room.id)
+      taps = ExperimentFixtures.bookends_taps(room.id)
       assert length(taps) == 3
 
-      [outcome] = Thereish.Chronicle.experiment_outcomes(room.id, "author_model")
+      [outcome] = ExperimentFixtures.outcomes(room.id, "author_model")
       assert Map.values(outcome.taps) |> Enum.sort() == ["fine", "flat"]
 
       seats = Thereish.Repo.preload(room, :seats).seats

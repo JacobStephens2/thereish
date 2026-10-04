@@ -21,13 +21,9 @@ defmodule Thereish.Chronicle do
   import Ecto.Query
 
   alias Thereish.Chronicle.Attempt
-  alias Thereish.Chronicle.BookendsTap
   alias Thereish.Chronicle.Bridge
   alias Thereish.Chronicle.Correction
   alias Thereish.Chronicle.Entry
-  alias Thereish.Chronicle.ExperimentAssignment
-  alias Thereish.Chronicle.ExperimentOutcome
-  alias Thereish.Chronicle.ExperimentUnblinding
   alias Thereish.Chronicle.FairnessTap
   alias Thereish.Chronicle.Give
   alias Thereish.Chronicle.Overrule
@@ -35,6 +31,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Recap
   alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
+  alias Thereish.Experiments
   alias Thereish.Repo
   alias Thereish.Steward.TrackCache
 
@@ -267,536 +264,6 @@ defmodule Thereish.Chronicle do
   end
 
   @doc """
-  Records one experiment arm assignment for a Page as an append-only event (ticket 13).
-  """
-  @spec record_experiment_assignment(Ecto.UUID.t() | String.t(), map()) ::
-          {:ok, ExperimentAssignment.t()} | {:error, Ecto.Changeset.t()}
-  def record_experiment_assignment(room_id, attrs) do
-    room_id = resolve_room_id(room_id)
-    attrs = Map.put(attrs, :room_id, room_id)
-
-    %ExperimentAssignment{}
-    |> ExperimentAssignment.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  @doc """
-  Records a bookends tap (flat, fine, or great) as an append-only event.
-  Also syncs the tap into its Page's outcome's taps map, if that outcome
-  exists. A tap that names no outcome updates none.
-  """
-  @spec record_bookends_tap(Ecto.UUID.t() | String.t(), map()) ::
-          {:ok, BookendsTap.t()} | {:error, Ecto.Changeset.t()}
-  def record_bookends_tap(room_id, attrs) do
-    room_id = resolve_room_id(room_id)
-    attrs = Map.put(attrs, :room_id, room_id)
-
-    case %BookendsTap{} |> BookendsTap.changeset(attrs) |> Repo.insert() do
-      {:ok, tap} ->
-        sync_outcome_taps(room_id, tap)
-        {:ok, tap}
-
-      error ->
-        error
-    end
-  end
-
-  defp sync_outcome_taps(room_id, tap) do
-    identifier = tap.page_identifier
-
-    outcome =
-      cond do
-        identifier && tap.page_id ->
-          Repo.one(
-            from(o in ExperimentOutcome,
-              where:
-                o.room_id == ^room_id and
-                  (o.page_identifier == ^identifier or o.page_id == ^tap.page_id),
-              order_by: [desc: o.inserted_at],
-              limit: 1
-            )
-          )
-
-        identifier ->
-          Repo.one(
-            from(o in ExperimentOutcome,
-              where: o.room_id == ^room_id and o.page_identifier == ^identifier,
-              order_by: [desc: o.inserted_at],
-              limit: 1
-            )
-          )
-
-        tap.page_id ->
-          Repo.one(
-            from(o in ExperimentOutcome,
-              where: o.room_id == ^room_id and o.page_id == ^tap.page_id,
-              order_by: [desc: o.inserted_at],
-              limit: 1
-            )
-          )
-
-        true ->
-          nil
-      end
-
-    # A tap with no outcome of its own is recorded alone rather than attached
-    # to whichever Page happens to be latest.
-    if outcome do
-      updated_taps = Map.put(outcome.taps || %{}, to_string(tap.seat_id), to_string(tap.label))
-      outcome |> Ecto.Changeset.change(taps: updated_taps) |> Repo.update()
-    end
-  end
-
-  @doc """
-  Returns all bookends taps for a Room, oldest first.
-  """
-  @spec bookends_taps(Ecto.UUID.t() | String.t()) :: [BookendsTap.t()]
-  def bookends_taps(room_id_or_code) do
-    room_id = resolve_room_id(room_id_or_code)
-
-    from(t in BookendsTap,
-      where: t.room_id == ^room_id,
-      order_by: [asc: t.inserted_at, asc: t.id]
-    )
-    |> Repo.all()
-  end
-
-  @doc """
-  Records one experiment outcome for a Page as an append-only event (ticket 13).
-  """
-  @spec record_experiment_outcome(Ecto.UUID.t() | String.t(), map()) ::
-          {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
-  def record_experiment_outcome(room_id, attrs) do
-    room_id = resolve_room_id(room_id)
-    attrs = Map.put(attrs, :room_id, room_id)
-
-    %ExperimentOutcome{}
-    |> ExperimentOutcome.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  @doc """
-  Records the experiment outcome of a closed Page from its Entry, once the
-  Entry is written as `page`, under the experiment the Entry's arm belongs to.
-  Links the Page to the oldest unlinked assignment of that experiment.
-  """
-  @spec record_page_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
-          {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
-  def record_page_outcome(room_id, %Page{} = page, %Entry{arm: arm} = entry)
-      when is_atom(arm) and not is_nil(arm) do
-    room_id = resolve_room_id(room_id)
-    experiment_id = Thereish.Experiments.experiment_id_for_arm(entry.arm)
-
-    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
-
-    result =
-      record_experiment_outcome(room_id, %{
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: experiment_id,
-        arm: to_string(entry.arm),
-        melded: entry.melded?,
-        closeness: entry.closeness,
-        closing_band: closing_band,
-        attempts_count: length(entry.attempts),
-        closed_because: to_string(entry.closed_because),
-        trap_converged: any_verdict_meta?(entry, :trap_sprung),
-        deep_converged: any_verdict_meta?(entry, :deep_convergence),
-        taps: %{}
-      })
-
-    # Link page_id to the oldest unlinked assignment for this room and experiment
-    from(a in Thereish.Chronicle.ExperimentAssignment,
-      where: a.room_id == ^room_id and is_nil(a.page_id) and a.experiment_id == ^experiment_id,
-      order_by: [asc: a.inserted_at, asc: a.id],
-      limit: 1
-    )
-    |> Repo.one()
-    |> case do
-      nil -> :ok
-      assign -> assign |> Ecto.Changeset.change(page_id: page.id) |> Repo.update()
-    end
-
-    result
-  end
-
-  # Nothing has set these since ADR-0011; the columns stay until a schema
-  # change removes them.
-  defp any_verdict_meta?(%Entry{} = entry, key) do
-    Enum.any?(entry.attempts, fn attempt ->
-      Enum.any?(attempt.verdicts, &((&1.meta || %{})[key] == true))
-    end)
-  end
-
-  @doc """
-  Records an unblinding action for an experiment as an append-only event (ticket 13).
-
-  Rejected until the Room has recorded the experiment's declared sample of
-  completed-Page outcomes.
-  """
-  @spec record_experiment_unblinding(Ecto.UUID.t(), map()) ::
-          {:ok, ExperimentUnblinding.t()}
-          | {:error, :sample_incomplete | Ecto.Changeset.t()}
-  def record_experiment_unblinding(room_id, attrs) do
-    experiment_id = attrs[:experiment_id] || attrs["experiment_id"]
-
-    if experiment_progress(room_id, experiment_id).ready? do
-      attrs = Map.put(attrs, :room_id, room_id)
-
-      %ExperimentUnblinding{}
-      |> ExperimentUnblinding.changeset(attrs)
-      |> Repo.insert()
-    else
-      {:error, :sample_incomplete}
-    end
-  end
-
-  @doc """
-  Rooms that have at least one experiment assignment, newest first.
-  """
-  @spec experiment_rooms() :: [Thereish.Rooms.Room.t()]
-  def experiment_rooms do
-    room_ids =
-      from(a in ExperimentAssignment, distinct: true, select: a.room_id)
-      |> Repo.all()
-
-    case room_ids do
-      [] ->
-        []
-
-      ids ->
-        from(r in Thereish.Rooms.Room,
-          where: r.id in ^ids,
-          order_by: [desc: r.inserted_at]
-        )
-        |> Repo.all()
-    end
-  end
-
-  @doc """
-  Experiment ids recorded in a Room, from assignments then outcomes.
-  """
-  @spec room_experiment_ids(Ecto.UUID.t() | String.t()) :: [String.t()]
-  def room_experiment_ids(room_id_or_slug) do
-    room_id = resolve_room_id(room_id_or_slug)
-
-    assignment_ids =
-      from(a in ExperimentAssignment,
-        where: a.room_id == ^room_id,
-        distinct: true,
-        select: a.experiment_id
-      )
-      |> Repo.all()
-
-    outcome_ids =
-      from(o in ExperimentOutcome,
-        where: o.room_id == ^room_id,
-        distinct: true,
-        select: o.experiment_id
-      )
-      |> Repo.all()
-
-    Enum.uniq(assignment_ids ++ outcome_ids)
-  end
-
-  @doc """
-  The experiment currently in view for a Room: the latest outcome, else assignment.
-  """
-  @spec active_experiment_id(Ecto.UUID.t() | String.t()) :: String.t()
-  def active_experiment_id(room_id_or_slug) do
-    latest_outcome = room_id_or_slug |> experiment_outcomes(nil) |> List.last()
-    latest_assignment = room_id_or_slug |> experiment_assignments(nil) |> List.last()
-
-    cond do
-      latest_outcome -> latest_outcome.experiment_id
-      latest_assignment -> latest_assignment.experiment_id
-      true -> "author_model"
-    end
-  end
-
-  @doc """
-  Returns all experiment assignments for a Room, oldest first.
-  """
-  @spec experiment_assignments(Ecto.UUID.t() | String.t(), String.t() | nil) ::
-          [ExperimentAssignment.t()]
-  def experiment_assignments(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
-    query =
-      from(a in ExperimentAssignment,
-        where: a.room_id == ^room_id,
-        order_by: [asc: a.assigned_at, asc: a.id]
-      )
-
-    query =
-      if experiment_id,
-        do: from(a in query, where: a.experiment_id == ^experiment_id),
-        else: query
-
-    Repo.all(query)
-  end
-
-  @doc """
-  Returns all experiment outcomes for a Room, oldest first.
-  """
-  @spec experiment_outcomes(Ecto.UUID.t() | String.t(), String.t() | nil) :: [
-          ExperimentOutcome.t()
-        ]
-  def experiment_outcomes(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
-    query =
-      from(o in ExperimentOutcome,
-        where: o.room_id == ^room_id,
-        order_by: [asc: o.inserted_at, asc: o.id]
-      )
-
-    query =
-      if experiment_id,
-        do: from(o in query, where: o.experiment_id == ^experiment_id),
-        else: query
-
-    Repo.all(query)
-  end
-
-  @doc """
-  Returns all unblindings for a Room, oldest first.
-  """
-  @spec experiment_unblindings(Ecto.UUID.t() | String.t(), String.t() | nil) ::
-          [ExperimentUnblinding.t()]
-  def experiment_unblindings(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
-    query =
-      from(u in ExperimentUnblinding,
-        where: u.room_id == ^room_id,
-        order_by: [asc: u.unblinded_at, asc: u.id]
-      )
-
-    query =
-      if experiment_id,
-        do: from(u in query, where: u.experiment_id == ^experiment_id),
-        else: query
-
-    Repo.all(query)
-  end
-
-  @doc """
-  Whether the given experiment has been deliberately unblinded in this Room.
-  """
-  @spec experiment_unblinded?(Ecto.UUID.t() | String.t(), String.t() | nil) :: boolean()
-  def experiment_unblinded?(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
-    query = from(u in ExperimentUnblinding, where: u.room_id == ^room_id)
-
-    query =
-      if experiment_id,
-        do: from(u in query, where: u.experiment_id == ^experiment_id),
-        else: query
-
-    Repo.exists?(query)
-  end
-
-  @doc """
-  Returns past assigned arms in the given chapter stratum.
-  """
-  @spec chapter_assignments(Ecto.UUID.t() | String.t(), String.t(), String.t()) :: [atom()]
-  def chapter_assignments(room_id_or_slug, chapter, experiment_id \\ "bait_against_plain") do
-    room_id = resolve_room_id(room_id_or_slug)
-
-    from(a in ExperimentAssignment,
-      where:
-        a.room_id == ^room_id and a.chapter == ^chapter and a.experiment_id == ^experiment_id,
-      order_by: [asc: a.assigned_at, asc: a.id],
-      select: a.arm
-    )
-    |> Repo.all()
-    |> Enum.map(&String.to_atom/1)
-  end
-
-  @doc """
-  Blinded progress toward an experiment's declared sample size in one Room.
-
-  Counts recorded completed-Page outcomes across both arms combined. Assignments
-  that never produced an outcome (still in play, or abandoned) do not count.
-  """
-  @spec experiment_progress(Ecto.UUID.t() | String.t(), String.t()) :: %{
-          recorded: non_neg_integer(),
-          required: pos_integer(),
-          ready?: boolean()
-        }
-  def experiment_progress(room_id_or_slug, experiment_id) do
-    required = Thereish.Experiments.definition(experiment_id).sample_size
-    recorded = length(experiment_outcomes(room_id_or_slug, experiment_id))
-
-    %{recorded: recorded, required: required, ready?: recorded >= required}
-  end
-
-  @doc """
-  Computes the qualitative readout for an experiment in a Room.
-  """
-  @spec experiment_readout(Ecto.UUID.t() | String.t(), String.t()) :: map()
-  def experiment_readout(room_id_or_slug, experiment_id \\ "author_model") do
-    room_id = resolve_room_id(room_id_or_slug)
-    outcomes = experiment_outcomes(room_id, experiment_id)
-
-    # Fall back to bait_against_plain if author_model has no outcomes and bait_against_plain does
-    {experiment_id, outcomes} =
-      if outcomes == [] and experiment_id == "author_model" do
-        bait_outcomes = experiment_outcomes(room_id, "bait_against_plain")
-
-        if bait_outcomes != [] do
-          {"bait_against_plain", bait_outcomes}
-        else
-          {"author_model", []}
-        end
-      else
-        {experiment_id, outcomes}
-      end
-
-    views = page_views(room_id)
-    taps = fairness_taps(room_id)
-    bookends_taps = bookends_taps(room_id)
-    overrules = overrules(room_id)
-
-    data =
-      summarize_experiment_data(
-        experiment_id,
-        outcomes,
-        taps,
-        bookends_taps,
-        overrules,
-        views
-      )
-
-    Thereish.Experiments.qualitative_readout(data)
-  end
-
-  defp summarize_experiment_data(
-         "author_model",
-         outcomes,
-         _fairness_taps,
-         _bookends_taps,
-         _overrules,
-         _views
-       ) do
-    flash_outcomes = Enum.filter(outcomes, &(&1.arm == "flash"))
-    astra_outcomes = Enum.filter(outcomes, &(&1.arm == "astra"))
-
-    %{
-      flash: summarize_author_arm_raw(flash_outcomes),
-      astra: summarize_author_arm_raw(astra_outcomes)
-    }
-  end
-
-  defp summarize_experiment_data(
-         _experiment_id,
-         outcomes,
-         taps,
-         _bookends_taps,
-         overrules,
-         views
-       ) do
-    bait_outcomes = Enum.filter(outcomes, &(&1.arm == "bait"))
-    plain_outcomes = Enum.filter(outcomes, &(&1.arm == "plain"))
-
-    bait_page_identifiers =
-      Enum.flat_map(bait_outcomes, &[to_string(&1.page_id), to_string(&1.page_identifier)])
-      |> Enum.reject(&(&1 in ["", "nil"]))
-      |> MapSet.new()
-
-    plain_page_identifiers =
-      Enum.flat_map(plain_outcomes, &[to_string(&1.page_id), to_string(&1.page_identifier)])
-      |> Enum.reject(&(&1 in ["", "nil"]))
-      |> MapSet.new()
-
-    bait_views =
-      Enum.filter(views, fn v ->
-        to_string(v.id) in bait_page_identifiers or
-          to_string(v.document["id"]) in bait_page_identifiers
-      end)
-
-    plain_views =
-      Enum.filter(views, fn v ->
-        to_string(v.id) in plain_page_identifiers or
-          to_string(v.document["id"]) in plain_page_identifiers
-      end)
-
-    {taps_bait, taps_plain} =
-      if bait_views != [] or plain_views != [] do
-        {
-          Enum.flat_map(bait_views, & &1.fairness_taps),
-          Enum.flat_map(plain_views, & &1.fairness_taps)
-        }
-      else
-        page_ids_bait = Enum.map(bait_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
-        page_ids_plain = Enum.map(plain_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
-
-        {
-          Enum.filter(taps, &(&1.page_id in page_ids_bait)),
-          Enum.filter(taps, &(&1.page_id in page_ids_plain))
-        }
-      end
-
-    {overrules_bait_count, overrules_plain_count} =
-      if bait_views != [] or plain_views != [] do
-        {
-          Enum.flat_map(bait_views, & &1.overrules) |> length(),
-          Enum.flat_map(plain_views, & &1.overrules) |> length()
-        }
-      else
-        page_ids_bait = Enum.map(bait_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
-        page_ids_plain = Enum.map(plain_outcomes, & &1.page_id) |> Enum.reject(&is_nil/1)
-
-        {
-          Enum.count(overrules, &(&1.page_id in page_ids_bait)),
-          Enum.count(overrules, &(&1.page_id in page_ids_plain))
-        }
-      end
-
-    %{
-      bait: summarize_arm_raw(bait_outcomes, taps_bait, overrules_bait_count),
-      plain: summarize_arm_raw(plain_outcomes, taps_plain, overrules_plain_count)
-    }
-  end
-
-  defp summarize_author_arm_raw(outcomes) do
-    taps_list =
-      outcomes
-      |> Enum.flat_map(fn o -> (o.taps && Map.values(o.taps)) || [] end)
-      |> Enum.map(&to_string/1)
-
-    closing_bands_map =
-      outcomes
-      |> Enum.map(& &1.closing_band)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.frequencies()
-
-    %{
-      pages_count: length(outcomes),
-      melded_count: Enum.count(outcomes, & &1.melded),
-      melded_history: Enum.map(outcomes, & &1.melded),
-      attempts_to_meld: outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
-      bookends_taps: Enum.frequencies(taps_list),
-      closing_bands: closing_bands_map
-    }
-  end
-
-  defp summarize_arm_raw(outcomes, taps, overrules_count) do
-    %{
-      pages_count: length(outcomes),
-      melded_count: Enum.count(outcomes, & &1.melded),
-      melded_history: Enum.map(outcomes, & &1.melded),
-      attempts_to_meld: outcomes |> Enum.filter(& &1.melded) |> Enum.map(& &1.attempts_count),
-      fairness_taps: Enum.frequencies_by(taps, & &1.label),
-      overrules_count: overrules_count,
-      trap_sprung_count: Enum.count(outcomes, & &1.trap_converged),
-      deep_convergence_count: Enum.count(outcomes, & &1.deep_converged)
-    }
-  end
-
-  @doc """
   Every closed Page in one Room, oldest first, with its attempts, Bridges and
   verdicts loaded.
 
@@ -905,26 +372,11 @@ defmodule Thereish.Chronicle do
     all_corrections = corrections(room_id)
     all_recaps = recaps(room_id)
     all_taps = fairness_taps(room_id)
-    all_assignments = experiment_assignments(room_id)
-    all_outcomes = experiment_outcomes(room_id)
-
-    unblinded_experiments =
-      room_id
-      |> experiment_unblindings()
-      |> MapSet.new(& &1.experiment_id)
+    page_arms = Experiments.page_arms(room_id)
 
     Enum.map(
       pages,
-      &compute_page_view(
-        &1,
-        all_overrules,
-        all_corrections,
-        all_taps,
-        all_assignments,
-        all_outcomes,
-        all_recaps,
-        unblinded_experiments
-      )
+      &compute_page_view(&1, all_overrules, all_corrections, all_taps, all_recaps, page_arms)
     )
   end
 
@@ -1894,16 +1346,14 @@ defmodule Thereish.Chronicle do
     )
   end
 
-  def compute_page_view(
-        %Page{} = page,
-        all_overrules,
-        all_corrections,
-        all_taps \\ [],
-        all_assignments \\ [],
-        all_outcomes \\ [],
-        all_recaps \\ [],
-        unblinded_experiments \\ MapSet.new()
-      ) do
+  defp compute_page_view(
+         %Page{} = page,
+         all_overrules,
+         all_corrections,
+         all_taps,
+         all_recaps,
+         page_arms
+       ) do
     page_overrules =
       Enum.filter(all_overrules, fn o ->
         o.page_id == page.id or
@@ -2075,31 +1525,6 @@ defmodule Thereish.Chronicle do
           [] -> []
         end
 
-    page_ident = to_string(page.document["id"] || page.document[:id] || page.id)
-
-    matching_assignment =
-      Enum.find(all_assignments, fn a ->
-        a.page_id == page.id or
-          (a.room_id == page.room_id and to_string(a.page_identifier) == page_ident)
-      end)
-
-    matching_outcome =
-      Enum.find(all_outcomes, fn o ->
-        o.page_id == page.id or
-          (o.room_id == page.room_id and to_string(o.page_identifier) == page_ident)
-      end)
-
-    raw_arm =
-      (matching_assignment && matching_assignment.arm) ||
-        (matching_outcome && matching_outcome.arm)
-
-    experiment_id =
-      (matching_assignment && matching_assignment.experiment_id) ||
-        (matching_outcome && matching_outcome.experiment_id) ||
-        "bait_against_plain"
-
-    unblinded? = MapSet.member?(unblinded_experiments, experiment_id)
-
     %{
       id: page.id,
       room_id: page.room_id,
@@ -2125,15 +1550,9 @@ defmodule Thereish.Chronicle do
       recap: page_recap,
       overrules: Enum.map(page_overrules, &format_overrule/1),
       corrections: Enum.map(page_corrections, &format_correction/1),
-      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1),
-      experiment_id: experiment_id,
-      experiment_unblinded: unblinded?,
-      arm: if(unblinded?, do: raw_arm, else: nil),
-      trap_converged:
-        if(unblinded? && matching_outcome, do: matching_outcome.trap_converged, else: nil),
-      deep_converged:
-        if(unblinded? && matching_outcome, do: matching_outcome.deep_converged, else: nil)
+      fairness_taps: Enum.map(page_taps, &format_fairness_tap/1)
     }
+    |> Map.merge(Experiments.page_arm(page_arms, page))
   end
 
   # The Scribe's last word on a Page, read over by the players'. Two rows can

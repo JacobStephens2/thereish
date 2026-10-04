@@ -2,21 +2,50 @@ defmodule Thereish.Experiments do
   @moduledoc """
   The A/B experiment harness (ticket 13, ADR-0004).
 
-  Every Page is randomly assigned to an arm, stratified by Chapter so one arm
-  does not collect all the easy meaning-spaces. Arm labels are blinded during play
-  on stage and phones so neither player can play the label.
+  The live Experiment is the Author model, Flash against Astra: each Page in a
+  Room is assigned the next Arm in strict alternation when the Author is asked
+  for it. Bait against plain, ADR-0004's misdirection test, is retired, and its
+  rows stay readable.
 
-  The first experiment is Bait-scored Pages against plain ones, testing ADR-0004's
-  misdirection decision.
+  This module owns the harness: the Experiments' definitions, each declaring
+  its outcomes and its sample (20 Pages) up front; a Page's assignment; a
+  closed Page's outcome recorded from its Entry; a Bookends tap synced onto
+  its Page's outcome; each Experiment's blinded progress toward its sample;
+  its unblinding, which the admin asks for deliberately and which is refused
+  until the sample is recorded; the admin's `overview/0`; and the readout.
 
-  Declared outcomes and sample size (20 Pages) are fixed up front before the first
-  Page is played. The readout is qualitative (streaks, fairness preferences,
-  attempts, and trap convergence) rather than p-values because the sample is two
-  people.
+  It also owns Page blinding. Arm labels stay hidden during play on stage and
+  phones, and in the Chronicle, so neither player can play the label: the
+  Chronicle's Page views take their experiment fields from `page_arms/1` and
+  `page_arm/2`, which show an Arm only once its Experiment is unblinded in
+  the Room.
+
+  The readout is qualitative (streaks, preferences, attempts, closing bands
+  and trap convergence) rather than p-values, because the sample is two
+  people. Its arithmetic is the pure `summarize/2`, tested without a
+  database. Like the Chronicle, the rows are tested against real Postgres
+  through the Ecto sandbox.
   """
 
-  @first_experiment %{
-    id: "bait_against_plain",
+  import Ecto.Query
+
+  require Logger
+
+  alias Thereish.Chronicle
+  alias Thereish.Chronicle.BookendsTap
+  alias Thereish.Chronicle.Entry
+  alias Thereish.Chronicle.ExperimentAssignment
+  alias Thereish.Chronicle.ExperimentOutcome
+  alias Thereish.Chronicle.ExperimentUnblinding
+  alias Thereish.Chronicle.Page
+  alias Thereish.Repo
+  alias Thereish.Rooms.Room
+
+  @bait_against_plain_id "bait_against_plain"
+  @author_model_id "author_model"
+
+  @bait_against_plain_experiment %{
+    id: @bait_against_plain_id,
     name: "Bait against plain",
     description:
       "ADR-0004: Tests whether Bait-scored Pages (penalizing obvious traps with the lowest meld rung, rewarding deep bridges) improve couple play over plain semantic grading.",
@@ -34,7 +63,7 @@ defmodule Thereish.Experiments do
   @author_model_arms [:flash, :astra]
 
   @author_model_experiment %{
-    id: "author_model",
+    id: @author_model_id,
     name: "Author model: Flash against Astra",
     description:
       "Ticket 08: Tests whether Gemini 3.8 Flash or GPT-6 Astra writes bookends that yield higher meld rates, fewer attempts, and higher couple satisfaction taps.",
@@ -52,205 +81,599 @@ defmodule Thereish.Experiments do
   Returns the declared experiment definition.
   """
   @spec definition(atom() | String.t()) :: map()
-  def definition(:bait_against_plain), do: @first_experiment
-  def definition("bait_against_plain"), do: @first_experiment
+  def definition(:bait_against_plain), do: @bait_against_plain_experiment
+  def definition(@bait_against_plain_id), do: @bait_against_plain_experiment
   def definition(:author_model), do: @author_model_experiment
-  def definition("author_model"), do: @author_model_experiment
+  def definition(@author_model_id), do: @author_model_experiment
   def definition(_), do: @author_model_experiment
 
-  @doc """
-  The experiment an arm belongs to: `flash` and `astra` are the Author-model
-  experiment, and any other arm is Bait against plain.
-  """
-  @spec experiment_id_for_arm(atom()) :: String.t()
-  def experiment_id_for_arm(arm) when arm in @author_model_arms,
+  # The Experiment an Arm belongs to: `flash` and `astra` are the Author-model
+  # Experiment, and any other Arm is Bait against plain.
+  defp experiment_id_for_arm(arm) when arm in @author_model_arms,
     do: @author_model_experiment.id
 
-  def experiment_id_for_arm(_arm), do: @first_experiment.id
+  defp experiment_id_for_arm(_arm), do: @bait_against_plain_experiment.id
 
   @doc """
-  Assigns arm for the room, strictly alternating arms (:flash then :astra).
+  The arm a Page plays under when it has none of its own: Flash.
   """
-  @spec assign_arm([atom() | String.t()]) :: :flash | :astra
-  def assign_arm([]), do: :flash
+  @spec default_arm() :: :flash
+  def default_arm, do: :flash
 
-  def assign_arm(room_history) when is_list(room_history) do
-    case List.last(room_history) do
-      arm when arm in [:flash, "flash"] -> :astra
-      _ -> :flash
+  @doc """
+  Assigns the next Page in a Room its Author-model arm, strictly alternating
+  Flash and Astra from the Room's past assignments, and records the assignment
+  blind.
+
+  An assignment that cannot be read or written is logged and the Page plays
+  under `default_arm/0`: a lost assignment must not stop the Author being asked.
+  """
+  @spec assign(Ecto.UUID.t() | String.t()) :: :flash | :astra
+  def assign(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+    past_arms = room_id |> assignments(@author_model_experiment.id) |> Enum.map(& &1.arm)
+    arm = next_arm(past_arms)
+
+    %ExperimentAssignment{}
+    |> ExperimentAssignment.changeset(%{
+      room_id: room_id,
+      page_identifier: "page-#{length(past_arms) + 1}",
+      experiment_id: @author_model_experiment.id,
+      arm: to_string(arm),
+      chapter: "table",
+      assigned_at: DateTime.utc_now()
+    })
+    |> Repo.insert!()
+
+    arm
+  rescue
+    error ->
+      Logger.error(
+        "no experiment arm could be assigned, so the Page plays under #{default_arm()}: " <>
+          Exception.message(error)
+      )
+
+      default_arm()
+  end
+
+  defp next_arm([]), do: default_arm()
+  defp next_arm(past_arms), do: if(List.last(past_arms) == "flash", do: :astra, else: :flash)
+
+  @doc """
+  Records the experiment outcome of a closed Page from its Entry, once the
+  Entry is written as `page`, under the experiment the Entry's arm belongs to.
+  Links the Page to the oldest unlinked assignment of that experiment.
+
+  An Entry with no arm has no experiment to record under, and is refused.
+  """
+  @spec record_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
+          {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
+  def record_outcome(room_id, %Page{} = page, %Entry{arm: arm} = entry)
+      when is_atom(arm) and not is_nil(arm) do
+    room_id = resolve_room_id(room_id)
+    experiment_id = experiment_id_for_arm(arm)
+
+    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
+
+    result =
+      %ExperimentOutcome{}
+      |> ExperimentOutcome.changeset(%{
+        room_id: room_id,
+        page_id: page.id,
+        page_identifier: page.id,
+        experiment_id: experiment_id,
+        arm: to_string(arm),
+        melded: entry.melded?,
+        closeness: entry.closeness,
+        closing_band: closing_band,
+        attempts_count: length(entry.attempts),
+        closed_because: to_string(entry.closed_because),
+        trap_converged: any_verdict_meta?(entry, :trap_sprung),
+        deep_converged: any_verdict_meta?(entry, :deep_convergence),
+        taps: %{}
+      })
+      |> Repo.insert()
+
+    from(a in ExperimentAssignment,
+      where: a.room_id == ^room_id and is_nil(a.page_id) and a.experiment_id == ^experiment_id,
+      order_by: [asc: a.inserted_at, asc: a.id],
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> :ok
+      assignment -> assignment |> Ecto.Changeset.change(page_id: page.id) |> Repo.update()
     end
+
+    result
+  end
+
+  # Nothing has set these since ADR-0011; the columns stay until a schema
+  # change removes them.
+  defp any_verdict_meta?(%Entry{} = entry, key) do
+    Enum.any?(entry.attempts, fn attempt ->
+      Enum.any?(attempt.verdicts, &((&1.meta || %{})[key] == true))
+    end)
   end
 
   @doc """
-  Computes a qualitative readout comparing the arms.
-
-  Strictly avoids p-values or significance tests, focusing on streaks,
-  preferences, attempts to meld, and closing bands for the two players.
+  Records a Bookends tap (flat, fine, or great) as an append-only event.
+  Also syncs the tap into its Page's outcome's taps map, if that outcome
+  exists. A tap that names no outcome updates none.
   """
-  @spec qualitative_readout(map()) :: map()
-  def qualitative_readout(data) when is_map(data) do
-    if is_author_model_data?(data) do
-      readout_author_model(data)
+  @spec record_bookends_tap(Ecto.UUID.t() | String.t(), map()) ::
+          {:ok, BookendsTap.t()} | {:error, Ecto.Changeset.t()}
+  def record_bookends_tap(room_id, attrs) do
+    room_id = resolve_room_id(room_id)
+    attrs = Map.put(attrs, :room_id, room_id)
+
+    case %BookendsTap{} |> BookendsTap.changeset(attrs) |> Repo.insert() do
+      {:ok, tap} ->
+        sync_outcome_taps(room_id, tap)
+        {:ok, tap}
+
+      error ->
+        error
+    end
+  end
+
+  defp sync_outcome_taps(room_id, tap) do
+    of_tap =
+      case {tap.page_identifier, tap.page_id} do
+        {nil, nil} ->
+          nil
+
+        {identifier, nil} ->
+          dynamic([o], o.page_identifier == ^identifier)
+
+        {nil, page_id} ->
+          dynamic([o], o.page_id == ^page_id)
+
+        {identifier, page_id} ->
+          dynamic([o], o.page_identifier == ^identifier or o.page_id == ^page_id)
+      end
+
+    outcome =
+      of_tap &&
+        Repo.one(
+          from(o in ExperimentOutcome,
+            where: o.room_id == ^room_id,
+            where: ^of_tap,
+            order_by: [desc: o.inserted_at],
+            limit: 1
+          )
+        )
+
+    # A tap with no outcome of its own is recorded alone rather than attached
+    # to whichever Page happens to be latest.
+    if outcome do
+      updated_taps = Map.put(outcome.taps || %{}, to_string(tap.seat_id), to_string(tap.label))
+      outcome |> Ecto.Changeset.change(taps: updated_taps) |> Repo.update()
+    end
+  end
+
+  # A Room's assignments, oldest first, of one Experiment or of every one.
+  defp assignments(room_id, experiment_id \\ nil) do
+    from(a in ExperimentAssignment,
+      where: a.room_id == ^room_id,
+      order_by: [asc: a.assigned_at, asc: a.id]
+    )
+    |> of_experiment(experiment_id)
+    |> Repo.all()
+  end
+
+  # A Room's outcomes, oldest first, of one Experiment or of every one.
+  defp outcomes(room_id, experiment_id \\ nil) do
+    from(o in ExperimentOutcome,
+      where: o.room_id == ^room_id,
+      order_by: [asc: o.inserted_at, asc: o.id]
+    )
+    |> of_experiment(experiment_id)
+    |> Repo.all()
+  end
+
+  # The ids of the Experiments unblinded in a Room.
+  defp unblinded_experiment_ids(room_id) do
+    from(u in ExperimentUnblinding,
+      where: u.room_id == ^room_id,
+      distinct: true,
+      select: u.experiment_id
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  defp unblinded?(room_id, experiment_id) do
+    from(u in ExperimentUnblinding, where: u.room_id == ^room_id)
+    |> of_experiment(experiment_id)
+    |> Repo.exists?()
+  end
+
+  @typedoc "A Room's experiment rows, loaded once by `page_arms/1` for `page_arm/2`."
+  @opaque page_arms :: %{
+            assignments: [ExperimentAssignment.t()],
+            outcomes: [ExperimentOutcome.t()],
+            unblinded: MapSet.t(String.t())
+          }
+
+  @doc """
+  Loads a Room's assignments, outcomes and unblinded experiments once, for
+  `page_arm/2` to read each of its Pages from.
+  """
+  @spec page_arms(Ecto.UUID.t() | String.t()) :: page_arms()
+  def page_arms(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    %{
+      assignments: assignments(room_id),
+      outcomes: outcomes(room_id),
+      unblinded: unblinded_experiment_ids(room_id)
+    }
+  end
+
+  @doc """
+  One Page view's experiment fields, read from its Room's `page_arms/1`.
+
+  A Page's assignment and outcome are matched by its id or by its document's
+  own id. Its experiment is that of its assignment, else of its outcome, else
+  Bait against plain. Its arm, trap convergence and deep convergence stay nil
+  until that experiment is unblinded in the Room.
+  """
+  @spec page_arm(page_arms(), Page.t()) :: %{
+          experiment_id: String.t(),
+          experiment_unblinded: boolean(),
+          arm: String.t() | nil,
+          trap_converged: boolean() | nil,
+          deep_converged: boolean() | nil
+        }
+  def page_arm(page_arms, %Page{} = page) do
+    page_ident = to_string(page.document["id"] || page.document[:id] || page.id)
+
+    of_page? = fn row ->
+      row.page_id == page.id or
+        (row.room_id == page.room_id and to_string(row.page_identifier) == page_ident)
+    end
+
+    outcome = Enum.find(page_arms.outcomes, of_page?)
+    # Every assignment and outcome names its Experiment and Arm.
+    row = Enum.find(page_arms.assignments, of_page?) || outcome
+    experiment_id = if row, do: row.experiment_id, else: @bait_against_plain_experiment.id
+    unblinded? = MapSet.member?(page_arms.unblinded, experiment_id)
+    revealed_outcome = if unblinded?, do: outcome
+
+    %{
+      experiment_id: experiment_id,
+      experiment_unblinded: unblinded?,
+      arm: if(unblinded? && row, do: row.arm),
+      trap_converged: revealed_outcome && revealed_outcome.trap_converged,
+      deep_converged: revealed_outcome && revealed_outcome.deep_converged
+    }
+  end
+
+  defp of_experiment(query, nil), do: query
+
+  defp of_experiment(query, experiment_id),
+    do: from(row in query, where: row.experiment_id == ^experiment_id)
+
+  defp resolve_room_id(room_id_or_slug) do
+    if is_binary(room_id_or_slug) and
+         Regex.match?(
+           ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+           room_id_or_slug
+         ) do
+      room_id_or_slug
     else
-      readout_bait_against_plain(data)
+      Repo.get_by!(Room, slug: room_id_or_slug).id
     end
   end
 
-  defp is_author_model_data?(data) do
-    Map.has_key?(data, :flash) or Map.has_key?(data, "flash") or
-      Map.has_key?(data, :astra) or Map.has_key?(data, "astra")
+  @doc """
+  Blinded progress toward an Experiment's declared sample in one Room. A nil
+  Experiment means the Room's active Experiment.
+
+  Counts recorded completed-Page outcomes across both Arms combined. Assignments
+  that never produced an outcome (still in play, or abandoned) do not count.
+  """
+  @spec progress(Ecto.UUID.t() | String.t(), String.t() | nil) :: %{
+          recorded: non_neg_integer(),
+          required: pos_integer(),
+          ready?: boolean()
+        }
+  def progress(room_id_or_slug, experiment_id) do
+    room_id = resolve_room_id(room_id_or_slug)
+    experiment_id = experiment_id || active_experiment_id(room_id)
+    required = definition(experiment_id).sample_size
+    recorded = length(outcomes(room_id, experiment_id))
+
+    %{recorded: recorded, required: required, ready?: recorded >= required}
   end
 
-  defp readout_author_model(data) do
-    flash_data = Map.get(data, :flash) || Map.get(data, "flash") || %{}
-    astra_data = Map.get(data, :astra) || Map.get(data, "astra") || %{}
+  @doc """
+  Deliberately unblinds an Experiment in one Room, recording when and by whom
+  (`attrs`: `unblinded_at`, and optionally `seat_id` and `notes`). A nil
+  Experiment means the Room's active Experiment.
 
-    flash_summary = summarize_author_arm(flash_data)
-    astra_summary = summarize_author_arm(astra_data)
+  Refused until the Room has recorded the Experiment's declared sample of
+  completed-Page outcomes.
+  """
+  @spec unblind(Ecto.UUID.t() | String.t(), String.t() | nil, map()) ::
+          {:ok, ExperimentUnblinding.t()}
+          | {:error, :sample_incomplete | Ecto.Changeset.t()}
+  def unblind(room_id_or_slug, experiment_id, attrs) do
+    room_id = resolve_room_id(room_id_or_slug)
+    experiment_id = experiment_id || active_experiment_id(room_id)
 
-    narrative = generate_author_narrative(flash_summary, astra_summary)
+    if progress(room_id, experiment_id).ready? do
+      %ExperimentUnblinding{}
+      |> ExperimentUnblinding.changeset(
+        Map.merge(attrs, %{room_id: room_id, experiment_id: experiment_id})
+      )
+      |> Repo.insert()
+    else
+      {:error, :sample_incomplete}
+    end
+  end
+
+  # The Experiment in view for a Room: that of its latest outcome, else of its
+  # latest assignment, else the Author-model Experiment.
+  defp active_experiment_id(room_id) do
+    latest_outcome = room_id |> outcomes() |> List.last()
+    latest_assignment = room_id |> assignments() |> List.last()
+
+    cond do
+      latest_outcome -> latest_outcome.experiment_id
+      latest_assignment -> latest_assignment.experiment_id
+      true -> @author_model_experiment.id
+    end
+  end
+
+  @doc """
+  Every Experiment of every Room that has an assignment, newest Room first:
+  the Room, the Experiment's definition, whether it is unblinded there, its
+  progress, and its readout, which is nil while it is blinded.
+  """
+  @spec overview() :: [
+          %{
+            room: Room.t(),
+            experiment: map(),
+            unblinded?: boolean(),
+            progress: map(),
+            readout: map() | nil
+          }
+        ]
+  def overview do
+    for room <- experiment_rooms(), experiment_id <- experiment_ids(room.id) do
+      unblinded? = unblinded?(room.id, experiment_id)
+
+      %{
+        room: room,
+        experiment: definition(experiment_id),
+        unblinded?: unblinded?,
+        progress: progress(room.id, experiment_id),
+        readout: if(unblinded?, do: readout(room.id, experiment_id))
+      }
+    end
+  end
+
+  defp experiment_rooms do
+    room_ids = Repo.all(from(a in ExperimentAssignment, distinct: true, select: a.room_id))
+
+    from(r in Room, where: r.id in ^room_ids, order_by: [desc: r.inserted_at])
+    |> Repo.all()
+  end
+
+  # The ids of the Experiments recorded in a Room, from assignments then outcomes.
+  defp experiment_ids(room_id) do
+    assignment_ids =
+      from(a in ExperimentAssignment,
+        where: a.room_id == ^room_id,
+        distinct: true,
+        select: a.experiment_id
+      )
+      |> Repo.all()
+
+    outcome_ids =
+      from(o in ExperimentOutcome,
+        where: o.room_id == ^room_id,
+        distinct: true,
+        select: o.experiment_id
+      )
+      |> Repo.all()
+
+    Enum.uniq(assignment_ids ++ outcome_ids)
+  end
+
+  @doc """
+  The qualitative readout of an Experiment in one Room, worked out by
+  `summarize/2` from the Room's rows.
+
+  A Room with no Author-model outcomes but some Bait-against-plain ones reads
+  out Bait against plain instead.
+  """
+  @spec readout(Ecto.UUID.t() | String.t(), String.t()) :: map()
+  def readout(room_id_or_slug, experiment_id) do
+    room_id = resolve_room_id(room_id_or_slug)
+    outcomes = outcomes(room_id, experiment_id)
+
+    {experiment_id, outcomes} =
+      with [] <- outcomes,
+           @author_model_id <- experiment_id,
+           [_ | _] = bait_outcomes <- outcomes(room_id, @bait_against_plain_experiment.id) do
+        {@bait_against_plain_experiment.id, bait_outcomes}
+      else
+        _ -> {experiment_id, outcomes}
+      end
+
+    summarize(experiment_id, %{
+      outcomes: outcomes,
+      fairness_taps: Chronicle.fairness_taps(room_id),
+      overrules: Chronicle.overrules(room_id),
+      views: Chronicle.page_views(room_id)
+    })
+  end
+
+  @doc """
+  Works out an Experiment's qualitative readout from rows already in memory:
+  its outcomes, oldest first, and the Room's fairness taps, overrules and
+  Chronicle Page views. This is the readout's test surface; it touches no
+  database.
+
+  Returns `%{experiment: definition, <arm>: summary, summary_narrative: text}`.
+  Every Arm's summary carries its meld rate, longest and current meld streaks
+  and mean attempts to meld. An Author-model Arm adds its Bookends taps and
+  closing bands; a Bait-against-plain Arm adds its fairness taps, overrules
+  and trap and deep convergence.
+
+  Strictly avoids p-values or significance tests: the sample is two people.
+  """
+  @spec summarize(String.t(), %{
+          outcomes: [ExperimentOutcome.t()],
+          fairness_taps: [map()],
+          overrules: [map()],
+          views: [map()]
+        }) :: map()
+  def summarize(@author_model_id, %{outcomes: outcomes}) do
+    flash = summarize_author_arm(of_arm(outcomes, "flash"))
+    astra = summarize_author_arm(of_arm(outcomes, "astra"))
 
     %{
       experiment: @author_model_experiment,
-      flash: flash_summary,
-      astra: astra_summary,
-      summary_narrative: narrative
+      flash: flash,
+      astra: astra,
+      summary_narrative:
+        "#{meld_sentence("Flash", flash)} with #{flash.preferences_summary}. " <>
+          "#{meld_sentence("Astra", astra)} with #{astra.preferences_summary}."
     }
   end
 
-  defp summarize_author_arm(arm_data) do
-    pages = Map.get(arm_data, :pages_count, 0)
-    melded = Map.get(arm_data, :melded_count, 0)
-    melded_history = Map.get(arm_data, :melded_history, [])
-    streaks = calculate_streaks(melded_history)
-    attempts = Map.get(arm_data, :attempts_to_meld, [])
-    taps = Map.get(arm_data, :bookends_taps, %{})
-    closing_bands = Map.get(arm_data, :closing_bands, %{})
+  # Any Experiment but the Author model reads as Bait against plain, as any
+  # other Arm belongs to it.
+  def summarize(_bait_against_plain_id, %{outcomes: outcomes} = rows) do
+    bait_outcomes = of_arm(outcomes, "bait")
+    plain_outcomes = of_arm(outcomes, "plain")
+    bait_views = views_of(rows.views, bait_outcomes)
+    plain_views = views_of(rows.views, plain_outcomes)
 
-    meld_pct = if pages > 0, do: round(melded / pages * 100), else: 0
-    meld_rate_str = "#{melded}/#{pages} (#{meld_pct}%)"
-
-    mean_attempts =
-      if attempts != [] do
-        Float.round(Enum.sum(attempts) / length(attempts), 1)
+    # Feedback is read from the Arm's Page views; a Room with none of them
+    # falls back to matching the raw rows by the outcome's Page id.
+    {bait_feedback, plain_feedback} =
+      if bait_views != [] or plain_views != [] do
+        {view_feedback(bait_views), view_feedback(plain_views)}
       else
-        0.0
+        {row_feedback(rows, bait_outcomes), row_feedback(rows, plain_outcomes)}
       end
 
-    great_count = Map.get(taps, "great", 0) + Map.get(taps, :great, 0)
-    fine_count = Map.get(taps, "fine", 0) + Map.get(taps, :fine, 0)
-    flat_count = Map.get(taps, "flat", 0) + Map.get(taps, :flat, 0)
-
-    preferences_str = "#{great_count} great, #{fine_count} fine, #{flat_count} flat"
+    bait = summarize_bait_arm(bait_outcomes, bait_feedback)
+    plain = summarize_bait_arm(plain_outcomes, plain_feedback)
 
     %{
-      pages_count: pages,
-      melded_count: melded,
-      meld_rate: meld_rate_str,
-      longest_meld_streak: streaks.longest_meld_streak,
-      current_meld_streak: streaks.current_meld_streak,
-      mean_attempts_to_meld: mean_attempts,
-      preferences_summary: preferences_str,
-      great_count: great_count,
-      fine_count: fine_count,
-      flat_count: flat_count,
-      closing_bands: closing_bands,
+      experiment: @bait_against_plain_experiment,
+      bait: bait,
+      plain: plain,
+      summary_narrative:
+        "#{meld_sentence("Bait-scored pages", bait)} with #{bait.trap_sprung_count} traps sprung and #{bait.fairness_summary}. " <>
+          "#{meld_sentence("Plain pages", plain)} with #{plain.fairness_summary} and #{plain.overrules_count} overrules."
+    }
+  end
+
+  defp meld_sentence(subject, summary) do
+    "#{subject} achieved a meld rate of #{summary.meld_rate} " <>
+      "(best streak: #{summary.longest_meld_streak}, mean attempts: #{summary.mean_attempts_to_meld})"
+  end
+
+  defp of_arm(outcomes, arm), do: Enum.filter(outcomes, &(&1.arm == arm))
+
+  defp summarize_author_arm(outcomes) do
+    taps =
+      outcomes
+      |> Enum.flat_map(&Map.values(&1.taps || %{}))
+      |> Enum.frequencies_by(&to_string/1)
+
+    great = Map.get(taps, "great", 0)
+    fine = Map.get(taps, "fine", 0)
+    flat = Map.get(taps, "flat", 0)
+
+    outcomes
+    |> meld_summary()
+    |> Map.merge(%{
+      preferences_summary: "#{great} great, #{fine} fine, #{flat} flat",
+      great_count: great,
+      fine_count: fine,
+      flat_count: flat,
+      closing_bands:
+        outcomes |> Enum.map(& &1.closing_band) |> Enum.reject(&is_nil/1) |> Enum.frequencies(),
       bookends_taps: taps
-    }
+    })
   end
 
-  defp generate_author_narrative(flash, astra) do
-    "Flash achieved a meld rate of #{flash.meld_rate} (best streak: #{flash.longest_meld_streak}, mean attempts: #{flash.mean_attempts_to_meld}) with #{flash.preferences_summary}. " <>
-      "Astra achieved a meld rate of #{astra.meld_rate} (best streak: #{astra.longest_meld_streak}, mean attempts: #{astra.mean_attempts_to_meld}) with #{astra.preferences_summary}."
+  defp summarize_bait_arm(outcomes, {fairness_taps, overrules_count}) do
+    labels = Enum.frequencies_by(fairness_taps, &to_string(&1.label))
+    fair = Map.get(labels, "fair", 0)
+    too_kind = Map.get(labels, "too_kind", 0)
+    too_harsh = Map.get(labels, "too_harsh", 0)
+
+    outcomes
+    |> meld_summary()
+    |> Map.merge(%{
+      fairness_summary: "#{fair} fair, #{too_kind} too kind, #{too_harsh} too harsh",
+      fair_count: fair,
+      too_kind_count: too_kind,
+      too_harsh_count: too_harsh,
+      overrules_count: overrules_count,
+      trap_sprung_count: Enum.count(outcomes, & &1.trap_converged),
+      deep_convergence_count: Enum.count(outcomes, & &1.deep_converged)
+    })
   end
 
-  defp readout_bait_against_plain(data) do
-    bait_data = Map.get(data, :bait) || Map.get(data, "bait") || %{}
-    plain_data = Map.get(data, :plain) || Map.get(data, "plain") || %{}
-
-    bait_summary = summarize_arm(bait_data)
-    plain_summary = summarize_arm(plain_data)
-
-    narrative = generate_narrative(bait_summary, plain_summary)
-
-    %{
-      experiment: @first_experiment,
-      bait: bait_summary,
-      plain: plain_summary,
-      summary_narrative: narrative
-    }
-  end
-
-  defp summarize_arm(arm_data) do
-    pages = Map.get(arm_data, :pages_count, 0)
-    melded = Map.get(arm_data, :melded_count, 0)
-    melded_history = Map.get(arm_data, :melded_history, [])
-    streaks = calculate_streaks(melded_history)
-    attempts = Map.get(arm_data, :attempts_to_meld, [])
-    taps = Map.get(arm_data, :fairness_taps, %{})
-    overrules = Map.get(arm_data, :overrules_count, 0)
-    traps = Map.get(arm_data, :trap_sprung_count, 0)
-    deep = Map.get(arm_data, :deep_convergence_count, 0)
-
+  # The meld rate, streaks and mean attempts every Arm's summary shares.
+  defp meld_summary(outcomes) do
+    pages = length(outcomes)
+    melded_history = Enum.map(outcomes, & &1.melded)
+    melded = Enum.count(melded_history, & &1)
+    attempts = for o <- outcomes, o.melded, do: o.attempts_count
     meld_pct = if pages > 0, do: round(melded / pages * 100), else: 0
-    meld_rate_str = "#{melded}/#{pages} (#{meld_pct}%)"
-
-    mean_attempts =
-      if attempts != [] do
-        Float.round(Enum.sum(attempts) / length(attempts), 1)
-      else
-        0.0
-      end
-
-    fair_count = Map.get(taps, "fair", 0) + Map.get(taps, :fair, 0)
-    kind_count = Map.get(taps, "too_kind", 0) + Map.get(taps, :too_kind, 0)
-    harsh_count = Map.get(taps, "too_harsh", 0) + Map.get(taps, :too_harsh, 0)
-
-    fairness_str = "#{fair_count} fair, #{kind_count} too kind, #{harsh_count} too harsh"
 
     %{
       pages_count: pages,
       melded_count: melded,
-      meld_rate: meld_rate_str,
-      longest_meld_streak: streaks.longest_meld_streak,
-      current_meld_streak: streaks.current_meld_streak,
-      mean_attempts_to_meld: mean_attempts,
-      fairness_summary: fairness_str,
-      fair_count: fair_count,
-      too_kind_count: kind_count,
-      too_harsh_count: harsh_count,
-      overrules_count: overrules,
-      trap_sprung_count: traps,
-      deep_convergence_count: deep
+      meld_rate: "#{melded}/#{pages} (#{meld_pct}%)",
+      longest_meld_streak: longest_streak(melded_history),
+      current_meld_streak: melded_history |> Enum.reverse() |> Enum.take_while(& &1) |> length(),
+      mean_attempts_to_meld:
+        if(attempts == [], do: 0.0, else: Float.round(Enum.sum(attempts) / length(attempts), 1))
     }
   end
 
-  @doc """
-  Calculates longest and current meld streaks from chronological history of meld results.
-  """
-  @spec calculate_streaks([boolean()]) :: %{
-          longest_meld_streak: non_neg_integer(),
-          current_meld_streak: non_neg_integer()
-        }
-  def calculate_streaks(melded_history) when is_list(melded_history) do
-    longest =
-      melded_history
-      |> Enum.chunk_by(& &1)
-      |> Enum.filter(fn [first | _] -> first == true end)
-      |> Enum.map(&length/1)
-      |> Enum.max(fn -> 0 end)
-
-    current =
-      melded_history
-      |> Enum.reverse()
-      |> Enum.take_while(& &1)
-      |> length()
-
-    %{longest_meld_streak: longest, current_meld_streak: current}
+  defp longest_streak(melded_history) do
+    melded_history
+    |> Enum.chunk_by(& &1)
+    |> Enum.filter(fn [melded? | _] -> melded? end)
+    |> Enum.map(&length/1)
+    |> Enum.max(fn -> 0 end)
   end
 
-  defp generate_narrative(bait, plain) do
-    "Bait-scored pages achieved a meld rate of #{bait.meld_rate} (best streak: #{bait.longest_meld_streak}, mean attempts: #{bait.mean_attempts_to_meld}) with #{bait.trap_sprung_count} traps sprung and #{bait.fairness_summary}. " <>
-      "Plain pages achieved a meld rate of #{plain.meld_rate} (best streak: #{plain.longest_meld_streak}, mean attempts: #{plain.mean_attempts_to_meld}) with #{plain.fairness_summary} and #{plain.overrules_count} overrules."
+  # The Chronicle Page views an Arm's outcomes name, by Page id or the
+  # document's own id.
+  defp views_of(views, outcomes) do
+    identifiers =
+      outcomes
+      |> Enum.flat_map(&[to_string(&1.page_id), to_string(&1.page_identifier)])
+      |> Enum.reject(&(&1 in ["", "nil"]))
+      |> MapSet.new()
+
+    Enum.filter(views, fn view ->
+      to_string(view.id) in identifiers or to_string(view.document["id"]) in identifiers
+    end)
+  end
+
+  defp view_feedback(views) do
+    {Enum.flat_map(views, & &1.fairness_taps), views |> Enum.flat_map(& &1.overrules) |> length()}
+  end
+
+  defp row_feedback(rows, outcomes) do
+    page_ids = for o <- outcomes, o.page_id, do: o.page_id
+
+    {Enum.filter(rows.fairness_taps, &(&1.page_id in page_ids)),
+     Enum.count(rows.overrules, &(&1.page_id in page_ids))}
   end
 end

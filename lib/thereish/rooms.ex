@@ -421,15 +421,6 @@ defmodule Thereish.Rooms do
   def reset_gives(slug, seat_id), do: call(slug, {:reset_gives, seat_id})
 
   @doc """
-  Deliberately unblinds an experiment in the Room (ticket 13).
-  """
-  @spec unblind_experiment(String.t(), String.t() | nil, String.t()) ::
-          :ok | {:error, :sample_incomplete | term()}
-  def unblind_experiment(slug, seat_id, experiment_id \\ "bait_against_plain") do
-    call(slug, {:unblind_experiment, seat_id, experiment_id})
-  end
-
-  @doc """
   Claims the speaker for `device_token`.
 
   A claim from the current speaker is a no-op.

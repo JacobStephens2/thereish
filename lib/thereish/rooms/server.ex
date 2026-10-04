@@ -30,6 +30,7 @@ defmodule Thereish.Rooms.Server do
   require Logger
 
   alias Thereish.Chronicle
+  alias Thereish.Experiments
   alias Thereish.Foley.Occupancy
   alias Thereish.Foley.Voice
   alias Thereish.Game
@@ -220,22 +221,6 @@ defmodule Thereish.Rooms.Server do
       end
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
-    end
-  end
-
-  def handle_call({:unblind_experiment, seat_id, experiment_id}, _from, state) do
-    case Chronicle.record_experiment_unblinding(state.room.id, %{
-           experiment_id: experiment_id || "bait_against_plain",
-           seat_id: seat_id,
-           unblinded_at: DateTime.utc_now(),
-           notes: "Deliberate unblinding"
-         }) do
-      {:ok, _unblinding} ->
-        broadcast(state.room.slug)
-        {:reply, :ok, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
     end
   end
 
@@ -615,7 +600,7 @@ defmodule Thereish.Rooms.Server do
     entry =
       entry
       |> struct!(Occupancy.chronicle_meta(state.occupancy, state.room.music))
-      |> struct!(arm: Pages.arm(state.pages) || :flash)
+      |> struct!(arm: Pages.arm(state.pages) || Experiments.default_arm())
       |> then(&Pacing.stamp(state.pacing, &1))
 
     state
@@ -661,7 +646,7 @@ defmodule Thereish.Rooms.Server do
   defp perform({:author, request}, state) do
     room = self()
     digest = Chronicle.digest(state.room.id)
-    arm = Pages.arm(state.pages) || Steward.assign_arm(state.room.id, nil)
+    arm = Pages.arm(state.pages) || Steward.assign_arm(state.room.id)
     ref = make_ref()
     page_ref = make_ref()
 
@@ -702,7 +687,7 @@ defmodule Thereish.Rooms.Server do
 
   defp perform({:assay, request}, state) do
     room = self()
-    arm = Pages.arm(state.pages) || :flash
+    arm = Pages.arm(state.pages) || Experiments.default_arm()
     page = state.game.page
     request = with_prior_quips(request, state)
 
@@ -853,7 +838,8 @@ defmodule Thereish.Rooms.Server do
     do: Chronicle.replace_page_music(page_id, meta)
 
   defp write_onto(page_id, {:bookends_tap, tap_data}, state) do
-    {:ok, _} = Chronicle.record_bookends_tap(state.room.id, Map.put(tap_data, :page_id, page_id))
+    {:ok, _} =
+      Experiments.record_bookends_tap(state.room.id, Map.put(tap_data, :page_id, page_id))
   end
 
   defp cached_track(gives) do
@@ -1081,7 +1067,7 @@ defmodule Thereish.Rooms.Server do
   defp commit_chronicle(entry, state) do
     {:ok, page} = Chronicle.write(state.room.id, entry)
 
-    _ = Chronicle.record_page_outcome(state.room.id, page, entry)
+    _ = Experiments.record_outcome(state.room.id, page, entry)
 
     Scribe.write_about(state.room, page)
 
