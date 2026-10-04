@@ -6,6 +6,8 @@ defmodule Thereish.Steward.Hume do
   delivers base64-encoded audio within JSON, which is decoded into binary audio
   bytes. Character cost is computed based on input text length.
   """
+  @behaviour Thereish.Steward.Provider
+
   require Logger
 
   alias Thereish.Steward.Provider
@@ -14,8 +16,12 @@ defmodule Thereish.Steward.Hume do
   @default_timeout_ms 3_000
   @default_voice_id "44cb3a51-07b4-4934-83fd-9d9e8d363ce6"
 
+  @impl Provider
+  def credentials, do: [api_key: "HUME_API_KEY", secret_key: "HUME_SECRET_KEY"]
+
   @doc """
-  Synthesizes speech for one line of text via Hume TTS API.
+  Synthesizes speech for one line of text via Hume TTS API, with the `api_key`
+  and optional `secret_key` it is handed.
   """
   @spec speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def speak(line, opts \\ []) do
@@ -92,36 +98,15 @@ defmodule Thereish.Steward.Hume do
   defp parse_error(status, body), do: {:http, status, body}
 
   defp api_key(opts) do
-    cond do
-      Keyword.has_key?(opts, :api_key) ->
-        case Keyword.get(opts, :api_key) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-
-      Keyword.has_key?(opts, :hume_api_key) ->
-        case Keyword.get(opts, :hume_api_key) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
-
-      true ->
-        case config_key(:hume_api_key) do
-          key when is_binary(key) and key != "" -> {:ok, key}
-          _ -> {:error, :no_api_key}
-        end
+    case Keyword.get(opts, :api_key) do
+      key when is_binary(key) and key != "" -> {:ok, key}
+      _ -> {:error, :no_api_key}
     end
   end
 
   defp secret_key(opts) do
-    key =
-      case Keyword.get(opts, :secret_key) || Keyword.get(opts, :hume_secret_key) do
-        k when is_binary(k) and k != "" -> k
-        _ -> config_key(:hume_secret_key)
-      end
-
-    case key do
-      k when is_binary(k) and k != "" -> {:ok, k}
+    case Keyword.get(opts, :secret_key) do
+      key when is_binary(key) and key != "" -> {:ok, key}
       _ -> {:error, :no_secret_key}
     end
   end
@@ -130,15 +115,6 @@ defmodule Thereish.Steward.Hume do
     case Keyword.get(opts, :voice_id) do
       id when is_binary(id) and id != "" -> {:ok, id}
       _ -> {:ok, @default_voice_id}
-    end
-  end
-
-  defp config_key(field) do
-    try do
-      role = Thereish.Steward.role(:foley, :voice)
-      role[field] || (field == :hume_api_key && role[:api_key])
-    rescue
-      _ -> nil
     end
   end
 
@@ -160,7 +136,6 @@ defmodule Thereish.Steward.Hume do
            audio: audio,
            format: :mp3,
            meta: %{
-             provider: __MODULE__,
              voice_id: voice_id,
              model: model,
              characters: characters,

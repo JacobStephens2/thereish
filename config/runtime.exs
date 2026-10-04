@@ -60,7 +60,7 @@ if key = System.get_env("ELEVENLABS_API_KEY") do
   config :thereish, :steward,
     roles: [
       foley: [
-        elevenlabs_api_key: key,
+        eleven_labs_api_key: key,
         jobs: [
           effects: [api_key: key],
           vamp: [api_key: key]
@@ -96,7 +96,7 @@ if key = System.get_env("BFL_API_KEY") || System.get_env("BLACK_FOREST_LABS_API_
 end
 
 if key = System.get_env("FAL_KEY") || System.get_env("FAL_AI_API_KEY") do
-  config :thereish, :steward, roles: [limner: [fal_key: key]]
+  config :thereish, :steward, roles: [limner: [fal_api_key: key]]
 end
 
 if script_url = System.get_env("UMAMI_SCRIPT_URL") do

@@ -158,48 +158,48 @@ defmodule Thereish.Steward.Live do
 
     case kind do
       :music ->
-        role = Steward.role(:foley, :music)
+        provider = Steward.provider(:foley, :music)
         prompt = Map.get(brief_map, :prompt) || brief_map[:text] || ""
 
         # Mureka enforces concurrent requests limit 1, so generate sequentially
         results =
           Enum.map(1..n, fn _ ->
             params =
-              role
+              provider.settings
               |> Map.merge(brief_map)
               |> Map.merge(Map.new(opts))
               |> Map.put(:prompt, prompt)
-              |> Map.put(:n, Map.get(role, :n, 1))
+              |> Map.put(:n, Map.get(provider.settings, :n, 1))
 
-            Thereish.Steward.Mureka.generate(params)
+            provider.module.generate(params)
           end)
 
-        wrap_candidates(results, start_time)
+        wrap_candidates(results, provider, start_time)
 
       _effects ->
-        role = Steward.role(:foley, :effects)
+        provider = Steward.provider(:foley, :effects)
         text = Map.get(brief_map, :prompt) || Map.get(brief_map, :text) || ""
-        timeout_ms = Map.get(role, :timeout_ms, 30_000)
+        timeout_ms = Map.get(provider.settings, :timeout_ms, 30_000)
 
         tasks =
           for _ <- 1..n do
             Task.async(fn ->
               params =
-                role
+                provider.settings
                 |> Map.merge(brief_map)
                 |> Map.merge(Map.new(opts))
                 |> Map.put(:text, text)
 
-              Thereish.Steward.ElevenLabs.generate(params)
+              provider.module.generate(params)
             end)
           end
 
         results = Task.await_many(tasks, timeout_ms * n)
-        wrap_candidates(results, start_time)
+        wrap_candidates(results, provider, start_time)
     end
   end
 
-  defp wrap_candidates(results, start_time) do
+  defp wrap_candidates(results, provider, start_time) do
     latency_ms = System.monotonic_time(:millisecond) - start_time
 
     with :ok <- check_all_ok(results) do
@@ -208,6 +208,7 @@ defmodule Thereish.Steward.Live do
           %{
             bytes: result.bytes,
             meta: %{
+              provider: provider.name,
               model: result.model,
               cost_usd: result.cost_usd,
               latency_ms: latency_ms
@@ -237,25 +238,18 @@ defmodule Thereish.Steward.Live do
 
   @impl true
   def speak(line, opts \\ []) do
-    role =
-      try do
-        Steward.role(:foley, :voice)
-      rescue
-        _ -> %{}
-      end
-
-    provider =
-      Keyword.get(opts, :provider) ||
-        role[:provider] ||
-        Thereish.Steward.Hume
+    {override, opts} = Keyword.pop(opts, :provider)
+    provider = Steward.provider(:foley, :voice, override)
 
     merged_opts =
-      role
+      provider.settings
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
       |> Keyword.merge(opts)
-      |> Keyword.put(:provider, provider)
 
-    provider.speak(line, merged_opts)
+    with {:ok, clip} <- provider.module.speak(line, merged_opts) do
+      {:ok,
+       Map.update(clip, :meta, %{provider: provider.name}, &Map.put(&1, :provider, provider.name))}
+    end
   end
 
   @impl true
@@ -265,17 +259,17 @@ defmodule Thereish.Steward.Live do
         {:ok, track}
 
       :miss ->
-        role = Steward.role(:foley, :music)
+        provider = Steward.provider(:foley, :music)
         prompt = Music.prompt(gives)
 
         params =
-          role
+          provider.settings
           |> Map.merge(Map.new(opts))
           |> Map.put(:prompt, prompt)
           |> Map.put(:n, 1)
 
-        with {:ok, result} <- Thereish.Steward.Mureka.generate(params),
-             {:ok, track} <- TrackCache.store(gives, result) do
+        with {:ok, result} <- provider.module.generate(params),
+             {:ok, track} <- TrackCache.store(gives, result, provider: provider.name) do
           {:ok, track}
         end
     end
@@ -283,24 +277,17 @@ defmodule Thereish.Steward.Live do
 
   @impl true
   def vamp(gives, opts \\ []) do
-    role =
-      try do
-        Steward.role(:foley, :vamp)
-      rescue
-        _ -> %{}
-      end
-
+    provider = Steward.provider(:foley, :vamp)
     prompt = Music.vamp_prompt(gives)
 
     params =
-      role
+      provider.settings
       |> Map.merge(Map.new(opts))
-      |> Map.put(:job_kind, :vamp)
       |> Map.put(:text, prompt)
       |> Map.put(:duration_seconds, 30.0)
       |> Map.put(:loop, true)
 
-    case Thereish.Steward.ElevenLabs.generate(params) do
+    case provider.module.generate(params) do
       {:ok, %{bytes: bytes} = result} ->
         vamp_dir = Path.join(TrackCache.media_dir(), "vamps")
         File.mkdir_p!(vamp_dir)
@@ -310,7 +297,7 @@ defmodule Thereish.Steward.Live do
         File.write!(disk_path, bytes)
         web_path = "/media/vamps/#{filename}"
 
-        model = result[:model] || Map.get(role, :model, "eleven_text_to_sound_v2")
+        model = result[:model] || Map.get(provider.settings, :model)
         cost_usd = result[:cost_usd] || 0.0
 
         {:ok,
@@ -320,7 +307,7 @@ defmodule Thereish.Steward.Live do
            format: :mp3,
            loop: true,
            meta: %{
-             provider: "eleven_labs",
+             provider: provider.name,
              model: model,
              cost_usd: cost_usd,
              duration_seconds: 30.0,
@@ -365,12 +352,8 @@ defmodule Thereish.Steward.Live do
 
   @impl true
   def draw(give, colour, opts \\ []) do
-    role =
-      try do
-        Steward.role(:limner)
-      rescue
-        _ -> %{}
-      end
+    {override, opts} = Keyword.pop(opts, :provider)
+    provider = Steward.provider(:limner, nil, override)
 
     prompt =
       Keyword.get(opts, :prompt) ||
@@ -379,29 +362,24 @@ defmodule Thereish.Steward.Live do
           else: Thereish.Steward.Limner.prompt(give, colour)
         )
 
-    references = Thereish.Steward.Limner.references(role)
-
-    provider =
-      Keyword.get(opts, :provider) ||
-        role[:provider] ||
-        Thereish.Steward.Fal
+    references = Thereish.Steward.Limner.references(provider.settings)
 
     params =
-      role
+      provider.settings
       |> Map.merge(Map.new(opts))
       |> Map.put(:prompt, prompt)
       |> Map.put(:give, Thereish.Steward.Author.give_text(give))
       |> Map.put(:colour, colour)
       |> Map.put(:references, references)
 
-    case provider.generate(params) do
+    case provider.module.generate(params) do
       {:ok, result} ->
         {:ok,
          %{
            bytes: result.bytes,
            format: result[:format] || :png,
            meta: %{
-             provider: provider_name(provider),
+             provider: provider.name,
              model: result.model,
              cost_usd: result.cost_usd
            }
@@ -410,10 +388,6 @@ defmodule Thereish.Steward.Live do
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  defp provider_name(mod) when is_atom(mod) do
-    mod |> Module.split() |> List.last() |> Macro.underscore()
   end
 
   @impl true

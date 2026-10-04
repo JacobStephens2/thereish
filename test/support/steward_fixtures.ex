@@ -273,7 +273,7 @@ defmodule Thereish.StewardFixtures do
       steward
       |> Keyword.put(:adapter, Thereish.Steward.Live)
       |> Keyword.put(:http_options, [])
-      |> put_in([:roles, :foley, :elevenlabs_api_key], key)
+      |> put_in([:roles, :foley, :eleven_labs_api_key], key)
       |> put_in([:roles, :foley, :jobs, :effects, :api_key], key)
       |> put_in([:roles, :foley, :jobs, :voice, :provider], Thereish.Steward.ElevenLabs)
       |> put_in([:roles, :foley, :jobs, :voice, :voice_id], "JBFqnCBsd6RMkjVDRZzb")

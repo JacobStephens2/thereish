@@ -192,7 +192,7 @@ defmodule Thereish.Steward.TrackCacheTest do
         cost_usd: 0.04
       }
 
-      assert {:ok, track} = TrackCache.store(gives, mureka_result)
+      assert {:ok, track} = TrackCache.store(gives, mureka_result, provider: "mureka")
       assert track.title == "Solitude Station"
       assert String.starts_with?(track.path, "/media/tracks/")
       assert track.format == :mp3
