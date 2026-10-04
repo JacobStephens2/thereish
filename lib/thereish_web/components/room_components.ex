@@ -1380,7 +1380,7 @@ defmodule ThereishWeb.RoomComponents do
         "Music is off"
 
       room[:playing] && room.playing[:kind] in ["track", "vamp"] ->
-        if room[:first_revealed?] and room.playing[:title] do
+        if room[:first_revealed?] == true and room.playing[:title] do
           "Now playing: #{room.playing.title} (written for this Page)"
         else
           "Now playing: written for this Page"
