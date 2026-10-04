@@ -471,21 +471,8 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp author_event({:error, reason}, _state) do
-    {:author_failed, %{reason: format_author_error(reason)}}
+    {:author_failed, %{reason: Steward.author_failure(reason)}}
   end
-
-  defp format_author_error({:max_tokens, _}), do: "too broad or complex"
-  defp format_author_error(:refused), do: "content declined"
-  defp format_author_error({:refusal, msg}), do: "declined: #{msg}"
-  defp format_author_error(%Req.TransportError{reason: :timeout}), do: "timed out"
-  defp format_author_error(%{reason: :timeout}), do: "timed out"
-  defp format_author_error(:timeout), do: "timed out"
-  defp format_author_error(:unavailable), do: "unavailable"
-  defp format_author_error({:exit, _}), do: "process exited"
-  defp format_author_error(%RuntimeError{message: msg}), do: msg
-  defp format_author_error(reason) when is_binary(reason), do: reason
-  defp format_author_error(reason) when is_atom(reason), do: to_string(reason)
-  defp format_author_error(reason), do: inspect(reason)
 
   # The browser's own Seat wins over the name it typed, so typing someone else's
   # name on a phone that is already seated cannot take their Seat.
@@ -639,7 +626,6 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp perform({:author, request}, state) do
-    room = self()
     digest = Chronicle.digest(state.room.id)
     arm = Pages.arm(state.pages) || Steward.assign_arm(state.room.id)
     ref = make_ref()
@@ -659,36 +645,19 @@ defmodule Thereish.Rooms.Server do
         &Occupancy.page_opened(&1, page_ref, gives, cached, gives_landed_at, state.room.music)
       )
 
-    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      try do
-        case Steward.author(request, job: arm, digest: digest) do
-          {:ok, result} ->
-            send(room, {:author_completed, ref, {:ok, result}})
-
-          {:error, reason} ->
-            send(room, {:author_completed, ref, {:error, reason}})
-        end
-      rescue
-        error ->
-          send(room, {:author_completed, ref, {:error, error}})
-      catch
-        :exit, reason ->
-          send(room, {:author_completed, ref, {:error, {:exit, reason}}})
-      end
-    end)
+    Steward.answer_later(
+      fn -> Steward.author(request, job: arm, digest: digest) end,
+      &{:author_completed, ref, &1}
+    )
 
     state
   end
 
+  # An Assayer that blows up has failed to grade, which is a thing the game has
+  # a rule for. It is not a thing the Room should die of.
   defp perform({:assay, request}, state) do
-    room = self()
-    arm = Pages.arm(state.pages) || Experiments.default_arm()
-    page = state.game.page
     request = with_prior_quips(request, state)
-
-    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      send(room, {:assayed, verdict_event(assay(request, page, arm))})
-    end)
+    Steward.answer_later(fn -> Steward.assay(request) end, &{:assayed, verdict_event(&1)})
 
     pace(state, &Pacing.assayer_asked(&1, now()))
   end
@@ -745,7 +714,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp perform_occupancy_effect({:start_vamp, page_ref, gives}, state) do
-    start_music_task(page_ref, :vamped, fn -> Steward.vamp(gives) end)
+    Steward.answer_later(fn -> Steward.vamp(gives) end, &{:vamped, page_ref, &1})
     {state, false}
   end
 
@@ -762,7 +731,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp perform_occupancy_effect({:start_title, page_ref, gives}, state) do
-    start_music_task(page_ref, :titled, fn -> Steward.title_track(gives) end)
+    Steward.answer_later(fn -> Steward.title_track(gives) end, &{:titled, page_ref, &1})
     {state, false}
   end
 
@@ -851,37 +820,22 @@ defmodule Thereish.Rooms.Server do
 
   defp closed?(state), do: Game.phase(state.game) == :closed
 
-  defp start_music_task(page_ref, tag, fun) do
-    room_pid = self()
-
-    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      try do
-        case fun.() do
-          {:ok, result} ->
-            send(room_pid, {tag, page_ref, {:ok, result}})
-
-          {:error, reason} ->
-            send(room_pid, {tag, page_ref, {:error, reason}})
-        end
-      rescue
-        error ->
-          send(room_pid, {tag, page_ref, {:error, error}})
-      catch
-        :exit, reason ->
-          send(room_pid, {tag, page_ref, {:error, {:exit, reason}}})
-      end
-    end)
-  end
-
+  # A Mask that could not be drawn is worn as the Seat's dot, so a draw that
+  # crashed lands as one.
   defp start_mask_task(state, seat_id, give) do
-    room = self()
     giving_ref = Pages.giving(state.pages)
     colour = Game.seat_colour(state.game, seat_id)
 
-    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      Logger.metadata(seat_id: seat_id)
-      send(room, {:mask_landed, seat_id, giving_ref, Mask.draw(give, colour)})
-    end)
+    Steward.answer_later(
+      fn ->
+        Logger.metadata(seat_id: seat_id)
+        Mask.draw(give, colour)
+      end,
+      fn
+        {:error, _} -> {:mask_landed, seat_id, giving_ref, :dot}
+        mask -> {:mask_landed, seat_id, giving_ref, mask}
+      end
+    )
 
     state
   end
@@ -904,16 +858,6 @@ defmodule Thereish.Rooms.Server do
 
   defp extract_from_give_list(list) do
     Enum.map(list, &Thereish.Steward.Author.give_text/1)
-  end
-
-  # An Assayer that blows up has failed to grade, which is a thing the game has
-  # a rule for. It is not a thing the Room should die of.
-  defp assay(request, page, arm) do
-    Steward.assay(request, page, arm)
-  rescue
-    error -> {:error, error}
-  catch
-    :exit, reason -> {:error, {:exit, reason}}
   end
 
   defp with_prior_quips(request, state) do
@@ -1013,25 +957,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp speak_line(attempt, kind, line) do
-    room = self()
-
-    Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      try do
-        case Steward.speak(line) do
-          {:ok, result} ->
-            send(room, {:voice_spoken, attempt, kind, {:ok, result}})
-
-          {:error, reason} ->
-            send(room, {:voice_spoken, attempt, kind, {:error, reason}})
-        end
-      rescue
-        error ->
-          send(room, {:voice_spoken, attempt, kind, {:error, error}})
-      catch
-        :exit, reason ->
-          send(room, {:voice_spoken, attempt, kind, {:error, {:exit, reason}}})
-      end
-    end)
+    Steward.answer_later(fn -> Steward.speak(line) end, &{:voice_spoken, attempt, kind, &1})
   end
 
   defp speaker?(state) do
