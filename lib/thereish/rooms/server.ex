@@ -34,6 +34,7 @@ defmodule Thereish.Rooms.Server do
   alias Thereish.Foley.Voice
   alias Thereish.Game
   alias Thereish.Rooms.Pacing
+  alias Thereish.Rooms.Pages
   alias Thereish.Rooms.Room
   alias Thereish.Rooms.Seat
   alias Thereish.Rooms.Store
@@ -66,13 +67,9 @@ defmodule Thereish.Rooms.Server do
         room: room,
         game: game,
         pacing: Pacing.new(durations()),
-        current_arm: nil,
-        current_page_id: nil,
-        current_page_ref: nil,
-        recorded_pages: %{},
+        pages: Pages.new(),
         occupancy: Occupancy.new(Thereish.Foley.Repertoire.members(room.id)),
         voice: Voice.new(),
-        giving_ref: make_ref(),
         prologue: nil
       }
 
@@ -189,8 +186,7 @@ defmodule Thereish.Rooms.Server do
           state
           |> Map.update!(:pacing, &Pacing.gives_reset/1)
           |> Map.update!(:occupancy, &Occupancy.gives_reset/1)
-          |> Map.put(:giving_ref, make_ref())
-          |> Map.put(:current_page_ref, nil)
+          |> Map.update!(:pages, &Pages.gives_reset/1)
 
         {:reply, :ok, advance(state, game, effects)}
 
@@ -204,7 +200,9 @@ defmodule Thereish.Rooms.Server do
       case Game.apply(state.game, {:next_page, %{seat_id: seat_id}}) do
         {:ok, game, effects} ->
           # A closed Page must not vanish if Foley is still speaking when the
-          # couple tap next: Voice releases whatever Page it is holding.
+          # couple tap next: Voice releases whatever Page it is holding, and
+          # its write releases what Pages held for it. Only then may Pages
+          # forget the Page in play.
           state = voice(state, &Voice.page_turned/1)
 
           members = Thereish.Foley.Repertoire.members(state.room.id)
@@ -212,10 +210,7 @@ defmodule Thereish.Rooms.Server do
           new_state =
             state
             |> Map.update!(:pacing, &Pacing.page_turned/1)
-            |> Map.put(:current_arm, nil)
-            |> Map.put(:current_page_id, nil)
-            |> Map.put(:current_page_ref, nil)
-            |> Map.put(:giving_ref, make_ref())
+            |> Map.update!(:pages, &Pages.page_turned/1)
             |> Map.update!(:occupancy, &Occupancy.page_turned(&1, members))
 
           {:reply, :ok, advance(new_state, game, effects)}
@@ -454,56 +449,35 @@ defmodule Thereish.Rooms.Server do
     {:noreply, occupy(state, &Occupancy.arrived(&1, page_ref, {kind, result}, closed?(state)))}
   end
 
-  def handle_info({:mask_landed, seat_id, giving_ref, page_ref, result}, state) do
-    current_giving? = is_nil(giving_ref) or state[:giving_ref] == giving_ref
-
+  # A Mask for the Gives in play is the Game's to accept, whatever it is. One
+  # for Gives already past only adds something if it was drawn. Either way,
+  # Pages decides which Chronicle Page it lands on.
+  def handle_info({:mask_landed, seat_id, giving_ref, result}, state) do
     mask =
       case result do
-        {:ok, mask_data} when is_map(mask_data) -> Map.delete(mask_data, :bytes)
-        mask_data when is_map(mask_data) -> Map.delete(mask_data, :bytes)
-        :dot -> :dot
-        {:error, _reason} -> :dot
+        {:ok, mask} when is_map(mask) -> Map.delete(mask, :bytes)
         _ -> :dot
       end
 
-    if current_giving? do
-      case Game.apply(state.game, {:mask_landed, %{seat_id: seat_id, mask: mask}}) do
-        {:ok, game, effects} ->
-          state = advance(state, game, effects)
+    cond do
+      giving_ref == Pages.giving(state.pages) ->
+        case Game.apply(state.game, {:mask_landed, %{seat_id: seat_id, mask: mask}}) do
+          {:ok, game, effects} ->
+            state = advance(state, game, effects)
+            {:noreply, write_page(state, giving_ref, {:mask, seat_id, mask})}
 
-          page_id = page_id(state, page_ref) || page_id(state, state.current_page_ref)
+          {:error, _reason} ->
+            {:noreply, state}
+        end
 
-          if not is_nil(page_id) do
-            Chronicle.replace_page_masks(page_id, game.masks)
-          end
+      is_map(mask) ->
+        {state, wrote?} = run_pages(state, &Pages.write(&1, giving_ref, {:mask, seat_id, mask}))
+        if wrote?, do: broadcast(state.room.slug)
+        {:noreply, state}
 
-          {:noreply, state}
-
-        {:error, _reason} ->
-          {:noreply, state}
-      end
-    else
-      page_id = page_id(state, page_ref)
-
-      if not is_nil(page_id) and is_map(mask) do
-        Chronicle.update_page_mask(page_id, seat_id, mask)
-        broadcast(state.room.slug)
-      end
-
-      {:noreply, state}
+      true ->
+        {:noreply, state}
     end
-  end
-
-  def handle_info({:mask_landed, seat_id, giving_ref, result}, state) do
-    handle_info({:mask_landed, seat_id, giving_ref, nil, result}, state)
-  end
-
-  def handle_info({:mask_landed, seat_id, result}, state) do
-    handle_info({:mask_landed, seat_id, nil, nil, result}, state)
-  end
-
-  def handle_info({:late_mask, seat_id, mask}, state) do
-    handle_info({:mask_landed, seat_id, nil, nil, {:ok, mask}}, state)
   end
 
   defp author_event({:ok, result}, state) do
@@ -640,7 +614,9 @@ defmodule Thereish.Rooms.Server do
       |> Map.merge(Occupancy.chronicle_meta(state.occupancy, state.room.music))
       |> then(&Pacing.stamp(state.pacing, &1))
 
-    voice(state, &Voice.page_closed(&1, entry))
+    state
+    |> Map.update!(:pages, &Pages.page_closed/1)
+    |> voice(&Voice.page_closed(&1, entry))
   end
 
   defp perform({:overrule, overrule}, state) do
@@ -672,27 +648,16 @@ defmodule Thereish.Rooms.Server do
       state
   end
 
+  # A tap is made on a closed Page, so it belongs to the Page in play, which
+  # Voice may not have let into the Chronicle yet.
   defp perform({:bookends_tap, tap_data}, state) do
-    tap_data =
-      if state[:current_page_id] do
-        Map.put(tap_data, :page_id, state.current_page_id)
-      else
-        tap_data
-      end
-
-    {:ok, _} = Chronicle.record_bookends_tap(state.room.id, tap_data)
-    state
-  rescue
-    error ->
-      Logger.error("the bookends tap could not be recorded: #{Exception.message(error)}")
-      state
+    write_page(state, Pages.giving(state.pages), {:bookends_tap, tap_data})
   end
 
   defp perform({:author, request}, state) do
     room = self()
     digest = Chronicle.digest(state.room.id)
-    page_num = (state.game && state.game.page && state.game.page.id) || nil
-    arm = state[:current_arm] || Steward.assign_arm(state.room.id, page_num)
+    arm = Pages.arm(state.pages) || Steward.assign_arm(state.room.id, nil)
     ref = make_ref()
     page_ref = make_ref()
 
@@ -704,8 +669,7 @@ defmodule Thereish.Rooms.Server do
 
     state =
       state
-      |> Map.put(:current_arm, arm)
-      |> Map.put(:current_page_ref, page_ref)
+      |> Map.update!(:pages, &Pages.page_opened(&1, page_ref, arm))
       |> pace(&Pacing.author_asked(&1, ref, now()))
       |> occupy_quietly(
         &Occupancy.page_opened(&1, page_ref, gives, cached, gives_landed_at, state.room.music)
@@ -734,7 +698,7 @@ defmodule Thereish.Rooms.Server do
 
   defp perform({:assay, request}, state) do
     room = self()
-    arm = state[:current_arm] || :flash
+    arm = Pages.arm(state.pages) || :flash
     page = state.game.page
     request = with_prior_quips(request, state)
 
@@ -824,11 +788,11 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp perform_occupancy_effect({:persist_vamp_meta, page_ref, meta}, state) do
-    persist_to_page(state, page_ref, &Chronicle.replace_page_vamp(&1, meta))
+    run_pages(state, &Pages.write(&1, page_ref, {:vamp, meta}))
   end
 
   defp perform_occupancy_effect({:persist_music_meta, page_ref, meta}, state) do
-    persist_to_page(state, page_ref, &Chronicle.replace_page_music(&1, meta))
+    run_pages(state, &Pages.write(&1, page_ref, {:music, meta}))
   end
 
   defp perform_occupancy_effect({:cache_track, gives, track}, state) do
@@ -851,16 +815,41 @@ defmodule Thereish.Rooms.Server do
     {state, false}
   end
 
-  # Writes onto the Chronicle Page a Page ref names, once that Page is recorded.
-  defp persist_to_page(state, page_ref, write) do
-    case page_id(state, page_ref) do
-      nil ->
-        {state, false}
+  # Hands Pages a write onto the Page `ref` names, for callers that broadcast
+  # on their own.
+  defp write_page(state, ref, write) do
+    {state, _wrote?} = run_pages(state, &Pages.write(&1, ref, write))
+    state
+  end
 
-      page_id ->
-        write.(page_id)
-        {state, true}
-    end
+  # Applies a Pages transition and performs the writes it returns. Answers the
+  # new state and whether a Chronicle Page was written.
+  defp run_pages(state, transition) do
+    {pages, effects} = transition.(state.pages)
+    state = Enum.reduce(effects, %{state | pages: pages}, &perform_page_write/2)
+    {state, effects != []}
+  end
+
+  # A write that fails is logged and swallowed, like the Page it lands on.
+  defp perform_page_write({:write, page_id, write}, state) do
+    write_onto(page_id, write, state)
+    state
+  rescue
+    error ->
+      Logger.error("a late write onto Page #{page_id} failed: #{Exception.message(error)}")
+      state
+  end
+
+  defp write_onto(page_id, {:mask, seat_id, mask}, _state),
+    do: Chronicle.update_page_mask(page_id, seat_id, mask)
+
+  defp write_onto(page_id, {:vamp, meta}, _state), do: Chronicle.replace_page_vamp(page_id, meta)
+
+  defp write_onto(page_id, {:music, meta}, _state),
+    do: Chronicle.replace_page_music(page_id, meta)
+
+  defp write_onto(page_id, {:bookends_tap, tap_data}, state) do
+    {:ok, _} = Chronicle.record_bookends_tap(state.room.id, Map.put(tap_data, :page_id, page_id))
   end
 
   defp cached_track(gives) do
@@ -876,15 +865,6 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp closed?(state), do: Game.phase(state.game) == :closed
-
-  # The Chronicle Page a Page ref names: one recorded already, or the Page in
-  # play once its own write has landed.
-  defp page_id(_state, nil), do: nil
-
-  defp page_id(state, page_ref) do
-    Map.get(state.recorded_pages, page_ref) ||
-      if page_ref == state.current_page_ref, do: state.current_page_id
-  end
 
   defp start_music_task(page_ref, tag, fun) do
     room_pid = self()
@@ -910,8 +890,7 @@ defmodule Thereish.Rooms.Server do
 
   defp start_mask_task(state, seat_id, give) do
     room = self()
-    giving_ref = state[:giving_ref]
-    page_ref = state.current_page_ref
+    giving_ref = Pages.giving(state.pages)
     colour = Game.seat_colour(state.game, seat_id)
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
@@ -919,24 +898,24 @@ defmodule Thereish.Rooms.Server do
         case Steward.draw(give, colour, size: 512) do
           {:ok, mask_data} ->
             mask = Map.delete(mask_data, :bytes)
-            send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:ok, mask}})
+            send(room, {:mask_landed, seat_id, giving_ref, {:ok, mask}})
 
           {:error, reason} ->
             Logger.warning(
               "Limner draw failed for seat #{seat_id}: #{inspect(reason, limit: 40)}"
             )
 
-            send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, reason}})
+            send(room, {:mask_landed, seat_id, giving_ref, {:error, reason}})
         end
       rescue
         error ->
           Logger.warning("Limner draw crashed for seat #{seat_id}: #{Exception.message(error)}")
 
-          send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, error}})
+          send(room, {:mask_landed, seat_id, giving_ref, {:error, error}})
       catch
         :exit, reason ->
           Logger.warning("Limner draw exited for seat #{seat_id}: #{inspect(reason, limit: 20)}")
-          send(room, {:mask_landed, seat_id, giving_ref, page_ref, {:error, {:exit, reason}}})
+          send(room, {:mask_landed, seat_id, giving_ref, {:error, {:exit, reason}}})
       end
     end)
 
@@ -1098,16 +1077,14 @@ defmodule Thereish.Rooms.Server do
   defp commit_chronicle(entry, state) do
     {:ok, page} = Chronicle.write(state.room.id, entry, entry.opened_at)
 
-    arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
+    arm = (entry.author_meta && entry.author_meta["arm"]) || Pages.arm(state.pages) || :flash
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
 
     Scribe.write_about(state.room, page)
 
-    recorded_pages = Map.put(state.recorded_pages, state.current_page_ref, page.id)
-
+    # The outcome is in, so a tap released here finds it.
+    {state, _wrote?} = run_pages(state, &Pages.written(&1, page.id))
     state
-    |> Map.put(:current_page_id, page.id)
-    |> Map.put(:recorded_pages, recorded_pages)
   rescue
     error ->
       Logger.error("the Chronicle could not be written: #{Exception.message(error)}")
