@@ -16,6 +16,7 @@ defmodule Thereish.Chronicle.PageView do
   tested from in-memory structs.
   """
 
+  alias Thereish.Bookends
   alias Thereish.Chronicle.Attempt
   alias Thereish.Chronicle.Correction
   alias Thereish.Chronicle.FairnessTap
@@ -68,26 +69,6 @@ defmodule Thereish.Chronicle.PageView do
 
   @typedoc "The Vamp a Page kept."
   @type vamp_view :: %{path: String.t(), duration: integer() | nil, loop: boolean()}
-
-  @typedoc """
-  One Bookend as a chip. A first-Attempt chip from a Give names where its word
-  came from; a later chip names the Seat whose Bridge it carried forward.
-  """
-  @type bookend_chip :: %{
-          required(:word) => String.t(),
-          required(:mask) => Mask.t() | nil,
-          optional(:seat_id) => Ecto.UUID.t() | nil,
-          optional(:give) => String.t() | nil,
-          optional(:seat_name) => String.t() | nil
-        }
-
-  @typedoc "Where one opening Bookend came from, when a Give dealt it."
-  @type bookend_origin :: %{
-          word: String.t() | nil,
-          give: String.t() | nil,
-          seat_id: Ecto.UUID.t() | nil,
-          seat_name: String.t() | nil
-        }
 
   @typedoc "One Bridge, read through the latest correction against it."
   @type bridge_view :: %{
@@ -183,7 +164,7 @@ defmodule Thereish.Chronicle.PageView do
           participant_ids: [Ecto.UUID.t()],
           verdicts: [verdict_view()],
           carried: [String.t()] | nil,
-          bookend_chips: [bookend_chip()],
+          bookend_chips: [Bookends.chip()],
           overrules: [overrule_view()],
           corrections: [correction_view()],
           fairness_taps: [tap_view()]
@@ -214,7 +195,7 @@ defmodule Thereish.Chronicle.PageView do
           track: track_view() | nil,
           vamp: vamp_view() | nil,
           bookends: [String.t()],
-          bookend_origins: [bookend_origin()],
+          bookend_origins: [Bookends.origin()],
           full_table: boolean() | nil,
           closed_because: String.t(),
           melded: boolean(),
@@ -297,7 +278,7 @@ defmodule Thereish.Chronicle.PageView do
       track: track(page.music_meta),
       vamp: vamp(page.vamp_meta),
       bookends: opening_bookends(page),
-      bookend_origins: bookend_origins(page.document),
+      bookend_origins: Bookends.origins(page.document),
       full_table: full_table(page.document),
       closed_because: page.closed_because,
       melded: page.melded,
@@ -345,7 +326,7 @@ defmodule Thereish.Chronicle.PageView do
       bridges: bridges,
       participant_ids: Enum.map(attempt.bridges, & &1.seat_id),
       verdicts: verdicts,
-      carried: carried(page, index, attempt, verdicts, bridges),
+      carried: carried(page, index, attempt),
       bookend_chips: bookend_chips(page, attempt, index),
       overrules: Enum.map(attempt_overrules, &overrule_view/1),
       corrections: Enum.map(attempt_corrections, &correction_view/1),
@@ -468,8 +449,11 @@ defmodule Thereish.Chronicle.PageView do
   end
 
   # The words a missed Attempt handed on: the next Attempt's Bookends when there
-  # was one, else every Bridge at a Full table, else the furthest pair.
-  defp carried(page, index, attempt, verdicts, bridges) do
+  # was one, else what the table's rule carries (`Bookends.carry/3`) from the
+  # Bridges as the table played them, before any correction (ADR-0019). An
+  # Attempt that never reached a Verdict was never revealed, so the table
+  # carried nothing from it.
+  defp carried(page, index, attempt) do
     next = Enum.at(page.attempts, index + 1)
 
     cond do
@@ -479,25 +463,22 @@ defmodule Thereish.Chronicle.PageView do
       is_map(next) ->
         next.bookends
 
-      full_table(page.document) == true ->
-        Enum.map(bridges, & &1.bridge)
+      attempt.verdicts == [] ->
+        nil
 
       true ->
-        carried_pair(verdicts, bridges)
+        [first | _] = attempt.verdicts
+        verdict = %{graded?: first.graded, furthest: first.furthest}
+
+        recorded_bridges(attempt)
+        |> Bookends.carry(verdict, full_table(page.document) == true)
+        |> Map.fetch!(:carried)
+        |> Enum.map(& &1.word)
     end
   end
 
-  defp carried_pair(verdicts, bridges) do
-    case List.first(verdicts) do
-      %{furthest: [_, _] = furthest} ->
-        furthest
-
-      %{graded: false} ->
-        bridges |> Enum.map(& &1.bridge) |> Enum.take(2)
-
-      _ ->
-        nil
-    end
+  defp recorded_bridges(attempt) do
+    Enum.map(attempt.bridges || [], &%{seat_id: &1.seat_id, bridge: &1.bridge})
   end
 
   defp full_table(doc) when is_map(doc) do
@@ -510,57 +491,21 @@ defmodule Thereish.Chronicle.PageView do
 
   defp full_table(_), do: nil
 
-  defp bookend_origins(doc) when is_map(doc) do
-    raw =
-      Map.get(doc, "bookend_origins") || Map.get(doc, :bookend_origins) ||
-        Map.get(doc, "bookend_gives") || Map.get(doc, :bookend_gives) || []
-
-    Enum.map(raw, fn origin ->
-      %{
-        word: origin[:word] || origin["word"],
-        give: origin[:give] || origin["give"],
-        seat_id: origin[:seat_id] || origin["seat_id"],
-        seat_name: origin[:seat_name] || origin["seat_name"]
-      }
-    end)
-  end
-
-  defp bookend_origins(_), do: []
-
   # A first-Attempt chip names the Give its word came from and wears no Mask,
   # even when its origin names a Seat. A later chip claims the Bridge it carried
   # from the Attempt before, at most once per Bridge, and wears that Seat's Mask.
   defp bookend_chips(page, attempt, index) do
-    origins = bookend_origins(page.document)
-    masks = page.masks_meta || %{}
+    words = attempt.bookends || []
 
-    cond do
-      attempt.number == 1 and origins != [] ->
-        Enum.map(origins, &Map.put(&1, :mask, nil))
+    origins =
+      if attempt.number == 1 do
+        Bookends.origins(page.document)
+      else
+        prev = if index > 0, do: Enum.at(page.attempts, index - 1)
+        Bookends.claim(words, (prev && recorded_bridges(prev)) || [])
+      end
 
-      attempt.number == 1 ->
-        Enum.map(attempt.bookends || [], &%{word: &1, mask: nil})
-
-      true ->
-        prev = Enum.at(page.attempts, index - 1)
-        unclaimed = (prev && prev.bridges) || []
-
-        {chips, _rest} =
-          Enum.map_reduce(attempt.bookends || [], unclaimed, fn word, remaining ->
-            case Enum.split_while(remaining, &(&1.bridge != word)) do
-              {passed, [claimed | rest]} ->
-                seat_id = claimed.seat_id
-                mask = seat_id && Map.get(masks, seat_id)
-
-                {%{word: word, seat_id: seat_id, mask: mask}, passed ++ rest}
-
-              {_all, []} ->
-                {%{word: word, mask: nil}, remaining}
-            end
-          end)
-
-        chips
-    end
+    Bookends.chips(words, origins, attempt.number, page.masks_meta || %{})
   end
 
   # The Scribe's last word on a Page, read over by the players'. Two rows can
