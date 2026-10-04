@@ -31,13 +31,15 @@ defmodule Thereish.Experiments do
     ]
   }
 
+  @author_model_arms [:flash, :astra]
+
   @author_model_experiment %{
     id: "author_model",
     name: "Author model: Flash against Astra",
     description:
       "Ticket 08: Tests whether Gemini 3.8 Flash or GPT-6 Astra writes bookends that yield higher meld rates, fewer attempts, and higher couple satisfaction taps.",
     sample_size: 20,
-    arms: [:flash, :astra],
+    arms: @author_model_arms,
     declared_outcomes: [
       :meld_rate,
       :attempts_to_meld,
@@ -60,8 +62,8 @@ defmodule Thereish.Experiments do
   The experiment an arm belongs to: `flash` and `astra` are the Author-model
   experiment, and any other arm is Bait against plain.
   """
-  @spec experiment_id_for_arm(atom() | String.t()) :: String.t()
-  def experiment_id_for_arm(arm) when arm in [:flash, :astra, "flash", "astra"],
+  @spec experiment_id_for_arm(atom()) :: String.t()
+  def experiment_id_for_arm(arm) when arm in @author_model_arms,
     do: @author_model_experiment.id
 
   def experiment_id_for_arm(_arm), do: @first_experiment.id

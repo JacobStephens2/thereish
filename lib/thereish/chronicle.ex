@@ -382,7 +382,8 @@ defmodule Thereish.Chronicle do
   """
   @spec record_page_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
           {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
-  def record_page_outcome(room_id, %Page{} = page, %Entry{} = entry) do
+  def record_page_outcome(room_id, %Page{} = page, %Entry{arm: arm} = entry)
+      when is_atom(arm) and not is_nil(arm) do
     room_id = resolve_room_id(room_id)
     experiment_id = Thereish.Experiments.experiment_id_for_arm(entry.arm)
 
