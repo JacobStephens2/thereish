@@ -625,7 +625,7 @@ defmodule ThereishWeb.RoomComponents do
           class={[
             "btn btn-sm text-xs font-medium transition-all",
             if(your_fairness_tap(@room, @seat) == label,
-              do: chosen_fairness_class(label),
+              do: chosen_opinion_class(label),
               else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
             )
           ]}
@@ -979,11 +979,11 @@ defmodule ThereishWeb.RoomComponents do
     }
   end
 
-  defp chosen_fairness_class("too_harsh"),
+  defp chosen_opinion_class("too_harsh"),
     do: "btn-warning text-warning-content font-bold shadow-sm"
 
-  defp chosen_fairness_class("fair"), do: "btn-primary font-bold shadow-sm"
-  defp chosen_fairness_class("too_kind"), do: "btn-info text-info-content font-bold shadow-sm"
+  defp chosen_opinion_class("fair"), do: "btn-primary font-bold shadow-sm"
+  defp chosen_opinion_class("too_kind"), do: "btn-info text-info-content font-bold shadow-sm"
 
   defp your_fairness_tap(room, seat) do
     room[:your_tap] || (room[:fairness_taps] && seat && room.fairness_taps[seat.id])

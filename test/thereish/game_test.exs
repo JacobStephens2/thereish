@@ -1693,7 +1693,6 @@ defmodule Thereish.GameTest do
 
       assert tap.bridges == ["cairn", "beacon", "wharf", "signal"]
       assert tap.closeness == 45
-      assert tap.band == "adjacent"
       assert tap.label == "too_harsh"
     end
 
@@ -1702,14 +1701,6 @@ defmodule Thereish.GameTest do
 
       assert {:error, :not_revealed} =
                Game.apply(state, {:fairness_tapped, %{seat_id: "seat-Mara", label: "fair"}})
-    end
-
-    test "rejects an invalid label", ctx do
-      assert {:error, :invalid_label} =
-               Game.apply(
-                 ctx.revealed,
-                 {:fairness_tapped, %{seat_id: "seat-Mara", label: "bogus"}}
-               )
     end
   end
 

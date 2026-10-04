@@ -30,6 +30,8 @@ defmodule Thereish.Chronicle.OpinionTest do
     })
   end
 
+  defp at(minute), do: DateTime.add(~U[2026-10-01 20:00:00.000000Z], minute, :minute)
+
   defp row(attrs) do
     struct!(
       %FairnessTap{
@@ -155,14 +157,31 @@ defmodule Thereish.Chronicle.OpinionTest do
 
     test "keeps each reviewer's latest, oldest first" do
       rows = [
-        row(id: "m1", seat_id: @mara, label: "fair"),
-        row(id: "j1", seat_id: @jacob, label: "too_kind"),
-        row(id: "a1", source: "admin", seat_id: nil, admin_id: @admin, label: "fair"),
-        row(id: "m2", seat_id: @mara, label: "too_harsh"),
-        row(id: "m1-attempt-2", attempt_number: 2, seat_id: @mara)
+        row(id: "m1", seat_id: @mara, label: "fair", inserted_at: at(1)),
+        row(id: "j1", seat_id: @jacob, label: "too_kind", inserted_at: at(2)),
+        row(
+          id: "a1",
+          source: "admin",
+          seat_id: nil,
+          admin_id: @admin,
+          label: "fair",
+          inserted_at: at(3)
+        ),
+        row(id: "m2", seat_id: @mara, label: "too_harsh", inserted_at: at(4)),
+        row(id: "m1-attempt-2", attempt_number: 2, seat_id: @mara, inserted_at: at(5))
       ]
 
       assert rows |> Opinion.current() |> Enum.map(& &1.id) == ["j1", "a1", "m2", "m1-attempt-2"]
+    end
+
+    test "reads the latest by insertion time and then id, whatever order the rows come in" do
+      rows = [
+        row(id: "b", label: "too_kind", inserted_at: at(2)),
+        row(id: "c", label: "too_harsh", inserted_at: at(1)),
+        row(id: "a", label: "fair", inserted_at: at(2))
+      ]
+
+      assert [%{id: "b"}] = Opinion.current(rows)
     end
 
     test "treats different Bookends or Rooms as different Attempts" do
