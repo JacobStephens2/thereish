@@ -3,11 +3,12 @@ defmodule Thereish.Rooms.Play do
   The Room's play in memory: the Game together with Pacing, Pages, Occupancy,
   Voice and Room facts, and every rule about how those six are told things.
 
-  It is pure. The Room's process hands it each command it receives, a tap
-  from a phone, a timer or a result from the Steward, with the moment it was
-  received, and gets back the new Play and one flat list of effects to
-  perform in order. It touches no database, process, PubSub or Steward, and
-  reads no clock: `now` is the `%{ms, at}` map Pacing already takes.
+  The Room's process hands it each command it receives, a tap from a phone,
+  a timer or a result from the Steward, with the moment it was received, and
+  gets back the new Play and one flat list of effects to perform in order. It
+  touches no database, process, PubSub or Steward, and reads no clock: `now`
+  is the `%{ms, at}` map Pacing already takes. Its one impurity is the one
+  Pages already has: it mints fresh refs for the Author and for a Page.
 
   Refusals answer `{:error, reason}` and change nothing: the Game's reasons,
   `:reveal_held` from Pacing, `:refused` from Occupancy and
@@ -94,7 +95,7 @@ defmodule Thereish.Rooms.Play do
   alias Thereish.Rooms.Pages
   alias Thereish.Rooms.Room
 
-  defstruct [:game, :pacing, :pages, :occupancy, :voice, :facts, :turned]
+  defstruct [:game, :pacing, :pages, :occupancy, :voice, :facts, :turned_unwritten]
 
   @type t :: %__MODULE__{
           game: Game.t(),
@@ -103,7 +104,7 @@ defmodule Thereish.Rooms.Play do
           occupancy: Occupancy.t(),
           voice: Voice.t(),
           facts: Facts.t(),
-          turned: Pages.t() | nil
+          turned_unwritten: Pages.t() | nil
         }
 
   @type seat_id :: String.t()
@@ -137,7 +138,29 @@ defmodule Thereish.Rooms.Play do
           | {:chronicle_written, Ecto.UUID.t()}
 
   @typedoc "Something for the Room's process to do, in order. Play performs none of them."
-  @type effect :: atom() | tuple()
+  @type effect ::
+          :broadcast
+          | {:broadcast, {:bookends_ready | :voice_ready, integer()}}
+          | {:insert_seat, seat_id(), String.t()}
+          | {:persist_room, map()}
+          | {:timer, Pacing.name(), Pacing.token(), non_neg_integer()}
+          | {:open_page, map(), atom() | nil}
+          | {:ask_author, reference(), map(), atom()}
+          | {:ask_assayer, map(), [String.t()]}
+          | {:draw_mask, seat_id(), reference(), String.t(), String.t()}
+          | {:speak, integer(), Voice.kind(), String.t()}
+          | {:start_vamp, reference(), [String.t()]}
+          | {:enqueue_track, reference(), [String.t()], integer()}
+          | {:start_title, reference(), [String.t()]}
+          | {:look_up_track, reference(), [String.t()]}
+          | {:cache_track, [String.t()], map()}
+          | {:record_never, String.t()}
+          | {:log, reference(), String.t() | {atom(), term()}, integer() | nil}
+          | {:log, Logger.level(), String.t()}
+          | {:write_chronicle, Entry.t()}
+          | {:write_page, Ecto.UUID.t(), term()}
+          | {:record_overrule, map()}
+          | {:record_fairness_tap, map()}
 
   @doc """
   The Play of a Room with these Seats, built from the Room's row, the
@@ -256,7 +279,7 @@ defmodule Thereish.Rooms.Play do
         | pacing: Pacing.page_turned(play.pacing),
           pages: Pages.page_turned(play.pages),
           occupancy: Occupancy.page_turned(play.occupancy, members),
-          turned: if(writes?, do: play.pages)
+          turned_unwritten: if(writes?, do: play.pages)
       }
 
       {play, moved} = advance(play, game, effects, now)
@@ -274,11 +297,7 @@ defmodule Thereish.Rooms.Play do
       persist = if attrs == %{}, do: [], else: [{:persist_room, attrs}]
       broadcast = if facts != play.facts, do: [:broadcast], else: []
 
-      {play, effects} =
-        Enum.reduce(fact_effects, {%{play | facts: facts}, []}, fn effect, {play, acc} ->
-          {play, more} = fact_changed(play, effect)
-          {play, acc ++ more}
-        end)
+      {play, effects} = each(%{play | facts: facts}, fact_effects, &fact_changed/2)
 
       {:ok, play, persist ++ broadcast ++ effects}
     end
@@ -386,14 +405,18 @@ defmodule Thereish.Rooms.Play do
   end
 
   # The outcome is in, so a tap released here finds it.
-  def apply(%__MODULE__{turned: nil} = play, {:chronicle_written, page_id}, _now) do
+  def apply(%__MODULE__{turned_unwritten: nil} = play, {:chronicle_written, page_id}, _now) do
     {pages, writes} = Pages.written(play.pages, page_id)
     {:ok, %{play | pages: pages}, page_writes(writes)}
   end
 
-  def apply(%__MODULE__{turned: turned} = play, {:chronicle_written, page_id}, _now) do
+  # The write a turn released answers here, before any other command, so
+  # nothing has told Pages anything since the turn: the turned Page's Pages is
+  # bound to its Chronicle Page and turned again, which is the whole of what
+  # the turn did to Pages.
+  def apply(%__MODULE__{turned_unwritten: turned} = play, {:chronicle_written, page_id}, _now) do
     {pages, writes} = Pages.written(turned, page_id)
-    {:ok, %{play | pages: Pages.page_turned(pages), turned: nil}, page_writes(writes)}
+    {:ok, %{play | pages: Pages.page_turned(pages), turned_unwritten: nil}, page_writes(writes)}
   end
 
   # -- reads ------------------------------------------------------------------
@@ -426,6 +449,18 @@ defmodule Thereish.Rooms.Play do
   @spec in_play?(t()) :: boolean()
   def in_play?(%__MODULE__{} = play), do: Game.phase(play.game) in [:bridging, :assaying, :reveal]
 
+  # Runs `fun` over `items` in order, threading the Play through, and answers
+  # the effects of every step, in order.
+  defp each(play, items, fun) do
+    {effects, play} =
+      Enum.flat_map_reduce(items, play, fn item, play ->
+        {play, effects} = fun.(play, item)
+        {effects, play}
+      end)
+
+    {play, effects}
+  end
+
   # -- the Game ---------------------------------------------------------------
 
   defp move(play, event, now) do
@@ -438,14 +473,10 @@ defmodule Thereish.Rooms.Play do
   # A Verdict for a Page that has moved on is nothing to act on and nothing
   # to crash over.
   defp apply_events(play, events, now) do
-    Enum.reduce(events, {play, []}, fn event, {play, acc} ->
+    each(play, events, fn play, event ->
       case Game.apply(play.game, event) do
-        {:ok, game, effects} ->
-          {play, more} = advance(play, game, effects, now)
-          {play, acc ++ more}
-
-        {:error, _reason} ->
-          {play, acc}
+        {:ok, game, effects} -> advance(play, game, effects, now)
+        {:error, _reason} -> {play, []}
       end
     end)
   end
@@ -454,11 +485,7 @@ defmodule Thereish.Rooms.Play do
     old_game = play.game
     {play, paced} = pace(%{play | game: game}, &Pacing.moved(&1, old_game, game, now), now)
 
-    {play, performed} =
-      Enum.reduce(game_effects, {play, []}, fn effect, {play, acc} ->
-        {play, more} = game_effect(play, effect, now)
-        {play, acc ++ more}
-      end)
+    {play, performed} = each(play, game_effects, &game_effect(&1, &2, now))
 
     {play, voiced} = voice(play, &Voice.table_moved(&1, voice_table(play)))
 
@@ -478,7 +505,7 @@ defmodule Thereish.Rooms.Play do
       |> struct!(arm: Pages.arm(play.pages) || Experiments.default_arm())
       |> then(&Pacing.stamp(play.pacing, &1))
 
-    play = %{play | pages: Pages.page_closed(play.pages), turned: nil}
+    play = %{play | pages: Pages.page_closed(play.pages), turned_unwritten: nil}
     voice(play, &Voice.page_closed(&1, entry))
   end
 
@@ -525,13 +552,9 @@ defmodule Thereish.Rooms.Play do
   defp pace(play, transition, now) do
     {pacing, effects} = transition.(play.pacing)
 
-    Enum.reduce(effects, {%{play | pacing: pacing}, []}, fn
-      {:apply, events}, {play, acc} ->
-        {play, more} = apply_events(play, events, now)
-        {play, acc ++ more}
-
-      effect, {play, acc} ->
-        {play, acc ++ [effect]}
+    each(%{play | pacing: pacing}, effects, fn
+      play, {:apply, events} -> apply_events(play, events, now)
+      play, effect -> {play, [effect]}
     end)
   end
 
@@ -584,18 +607,14 @@ defmodule Thereish.Rooms.Play do
   # Occupancy's metadata goes onto a Page through Pages; every other effect
   # is the Room's to perform. Answers whether a Page was written.
   defp occupancy_effects(play, occupancy, effects) do
-    Enum.reduce(effects, {%{play | occupancy: occupancy}, [], false}, fn
-      {:persist_vamp_meta, page_ref, meta}, {play, acc, wrote?} ->
-        {play, written} = write_page(play, page_ref, {:vamp, meta})
-        {play, acc ++ written, wrote? or written != []}
+    {play, effects} =
+      each(%{play | occupancy: occupancy}, effects, fn
+        play, {:persist_vamp_meta, page_ref, meta} -> write_page(play, page_ref, {:vamp, meta})
+        play, {:persist_music_meta, page_ref, meta} -> write_page(play, page_ref, {:music, meta})
+        play, effect -> {play, [effect]}
+      end)
 
-      {:persist_music_meta, page_ref, meta}, {play, acc, wrote?} ->
-        {play, written} = write_page(play, page_ref, {:music, meta})
-        {play, acc ++ written, wrote? or written != []}
-
-      effect, {play, acc, wrote?} ->
-        {play, acc ++ [effect], wrote?}
-    end)
+    {play, effects, Enum.any?(effects, &match?({:write_page, _id, _write}, &1))}
   end
 
   # The Room's facts Occupancy is told on each call rather than keeping a copy.
