@@ -190,27 +190,27 @@ defmodule ThereishWeb.ChronicleLive do
                   {Enum.join(page.bookends, " · ")}
                 </h2>
                 <span
-                  :if={page[:full_table] == true}
+                  :if={page.full_table == true}
                   data-role="page-rule"
                   class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
                   Full table
                 </span>
                 <span
-                  :if={page[:full_table] == false}
+                  :if={page.full_table == false}
                   data-role="page-rule"
                   class="rounded-full bg-base-300 px-2.5 py-0.5 text-xs font-semibold opacity-80"
                 >
                   Two Bookends
                 </span>
                 <span
-                  :for={g <- page[:gives] || []}
+                  :for={g <- page.gives}
                   data-role="give-tag"
                   class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
                   <.enlargeable_mask
-                    :if={Mask.url(g[:mask])}
-                    url={Mask.url(g[:mask])}
+                    :if={Mask.url(g.mask)}
+                    url={Mask.url(g.mask)}
                     alt={"Mask for " <> g.seat_name}
                     seat_id={g.seat_id}
                     class="h-4 w-4 rounded-full object-cover"
@@ -218,7 +218,7 @@ defmodule ThereishWeb.ChronicleLive do
                   <span>Give ({g.seat_name}): {g.text}</span>
                 </span>
                 <span
-                  :if={(page[:gives] == nil or page[:gives] == []) and page[:give]}
+                  :if={page.gives == [] and page.give}
                   data-role="give-tag"
                   class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
@@ -247,7 +247,7 @@ defmodule ThereishWeb.ChronicleLive do
 
           <!-- Masks if present -->
           <div
-            :if={is_map(page[:masks]) and Enum.any?(page.masks, fn {_, m} -> Mask.url(m) end)}
+            :if={is_map(page.masks) and Enum.any?(page.masks, fn {_, m} -> Mask.url(m) end)}
             data-role="page-masks"
             class="flex items-center gap-3 rounded-lg bg-base-200/50 p-3"
           >
@@ -296,12 +296,12 @@ defmodule ThereishWeb.ChronicleLive do
               </div>
 
               <.bookends
-                room={%{bookend_chips: attempt[:bookend_chips] || []}}
+                room={%{bookend_chips: attempt.bookend_chips}}
                 mode={:phone}
               />
 
               <p
-                :for={chip <- attempt[:bookend_chips] || []}
+                :for={chip <- attempt.bookend_chips}
                 :if={chip[:give]}
                 data-role="bookend-give"
                 class="text-xs opacity-70"
@@ -315,7 +315,7 @@ defmodule ThereishWeb.ChronicleLive do
                   <span class="text-sm font-semibold opacity-70">{b.seat_name}:</span>
                   <span class="font-medium underline decoration-primary/40 decoration-2">{b.bridge}</span>
                   <span
-                    :if={b[:corrected?] && b[:original_bridge]}
+                    :if={b.corrected? && b.original_bridge}
                     class="text-xs line-through opacity-50"
                   >
                     ({b.original_bridge})
@@ -347,7 +347,7 @@ defmodule ThereishWeb.ChronicleLive do
               </div>
 
               <p
-                :if={attempt[:carried] && attempt.carried != []}
+                :if={attempt.carried && attempt.carried != []}
                 data-role="carried-words"
                 class="text-xs opacity-70"
               >
@@ -356,7 +356,7 @@ defmodule ThereishWeb.ChronicleLive do
 
               <!-- Fairness taps on this attempt -->
               <div
-                :if={attempt[:fairness_taps] && attempt.fairness_taps != []}
+                :if={attempt.fairness_taps != []}
                 data-role="fairness-taps"
                 class="mt-1 flex flex-wrap items-center gap-1.5 text-xs"
               >
@@ -365,8 +365,8 @@ defmodule ThereishWeb.ChronicleLive do
                 </span>
                 <span
                   :for={t <- attempt.fairness_taps}
-                  data-role={if t[:source] == "admin", do: "admin-review", else: "fairness-tap-entry"}
-                  data-source={t[:source] || "participant"}
+                  data-role={if t.source == "admin", do: "admin-review", else: "fairness-tap-entry"}
+                  data-source={t.source}
                   class={[
                     "rounded px-1.5 py-0.5 text-xs font-medium",
                     case t.label do
@@ -377,7 +377,7 @@ defmodule ThereishWeb.ChronicleLive do
                     end
                   ]}
                 >
-                  {t[:reviewer_name] || t.seat_name}: {human_label(t.label)}
+                  {t.reviewer_name}: {human_label(t.label)}
                 </span>
               </div>
 
@@ -532,17 +532,15 @@ defmodule ThereishWeb.ChronicleLive do
   end
 
   defp current_opinion(attempt, {:participant, seat_id}) do
-    attempt
-    |> Map.get(:fairness_taps, [])
-    |> Enum.filter(&(&1[:source] != "admin" and &1.seat_id == seat_id))
+    attempt.fairness_taps
+    |> Enum.filter(&(&1.source != "admin" and &1.seat_id == seat_id))
     |> List.last()
     |> then(&(&1 && &1.label))
   end
 
   defp current_opinion(attempt, :admin) do
-    attempt
-    |> Map.get(:fairness_taps, [])
-    |> Enum.filter(&(&1[:source] == "admin"))
+    attempt.fairness_taps
+    |> Enum.filter(&(&1.source == "admin"))
     |> List.last()
     |> then(&(&1 && &1.label))
   end
