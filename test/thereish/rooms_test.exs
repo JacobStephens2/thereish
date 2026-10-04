@@ -2591,6 +2591,36 @@ defmodule Thereish.RoomsTest do
       assert Enum.any?(info_lines, &(&1 =~ "track landed" and &1 =~ ~r/\+\d+ms/))
     end
 
+    test "New Gives the Game refuses leave the Page's music and times alone", ctx do
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
+      await_phase(ctx.slug, :bridging)
+      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.mara.id).playing.kind == "track" end)
+
+      music = &Map.take(&1, [:vamp, :track, :music_meta, :loop, :playing])
+      before = music.(Rooms.snapshot(ctx.slug, ctx.mara.id))
+      refused_at = DateTime.utc_now()
+
+      # A second phone's late tap, after the Author has already written the Page.
+      assert {:error, :not_writing} = Rooms.reset_gives(ctx.slug, ctx.jacob.id)
+      assert music.(Rooms.snapshot(ctx.slug, ctx.mara.id)) == before
+
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_phase(ctx.slug, :closed)
+
+      room = Store.get_room(ctx.slug)
+      [page] = eventually(fn -> Chronicle.pages(room.id) |> then(&(&1 != [] and &1)) end)
+
+      assert DateTime.compare(page.opened_at, refused_at) == :lt
+
+      for give <- page.gives do
+        assert %DateTime{} = give.arrived_at
+        assert DateTime.compare(give.arrived_at, refused_at) == :lt
+        assert DateTime.compare(page.opened_at, give.arrived_at) in [:lt, :eq]
+      end
+    end
+
     test "a landed track holds over through the close and into the next Page",
          ctx do
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")

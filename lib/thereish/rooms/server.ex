@@ -20,8 +20,8 @@ defmodule Thereish.Rooms.Server do
 
   ## Time is Pacing's
 
-  The Beat, the reveal hold and both escalation ladders are rules about time,
-  and they live in `Thereish.Rooms.Pacing`. This process tells Pacing what
+  The Beat, the reveal hold, both escalation ladders and when each part of a
+  Page happened are rules about time, and they live in `Thereish.Rooms.Pacing`. This process tells Pacing what
   happened and when, and performs what it asks: a timer, some Game events, a
   broadcast.
   """
@@ -66,8 +66,6 @@ defmodule Thereish.Rooms.Server do
         room: room,
         game: game,
         pacing: Pacing.new(durations()),
-        opened_at: nil,
-        timing: %{gives: %{}, attempts: %{}},
         current_arm: nil,
         current_page_id: nil,
         current_page_ref: nil,
@@ -78,7 +76,9 @@ defmodule Thereish.Rooms.Server do
         prologue: nil
       }
 
-      {:ok, opened(state)}
+      # A Room that comes back with every Seat taken is a Page already open, so
+      # Pacing is told about the Game it starts at as a move onto it.
+      {:ok, pace(state, &Pacing.moved(&1, game, game, now()))}
     else
       nil -> {:stop, {:no_such_room, slug}}
     end
@@ -179,19 +179,23 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
+  # Nothing is reset until the Game accepts it: a late tap from a second phone,
+  # after the Author has already written the Page, must leave that Page's
+  # music and times alone.
   def handle_call({:reset_gives, seat_id}, _from, state) do
-    state =
-      state
-      |> Map.update!(:pacing, &Pacing.gives_reset/1)
-      |> Map.put(:current_page_ref, nil)
-      |> Map.update!(:occupancy, &Occupancy.gives_reset/1)
-      |> Map.put(:giving_ref, make_ref())
-      |> Map.put(:opened_at, nil)
-      |> Map.put(:timing, %{gives: %{}, attempts: %{}})
-
     case Game.apply(state.game, {:gives_reset, %{seat_id: seat_id}}) do
-      {:ok, game, effects} -> {:reply, :ok, advance(state, game, effects)}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      {:ok, game, effects} ->
+        state =
+          state
+          |> Map.update!(:pacing, &Pacing.gives_reset/1)
+          |> Map.update!(:occupancy, &Occupancy.gives_reset/1)
+          |> Map.put(:giving_ref, make_ref())
+          |> Map.put(:current_page_ref, nil)
+
+        {:reply, :ok, advance(state, game, effects)}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -206,11 +210,8 @@ defmodule Thereish.Rooms.Server do
           members = Thereish.Foley.Repertoire.members(state.room.id)
 
           new_state =
-            %{
-              state
-              | opened_at: nil,
-                timing: %{gives: %{}, attempts: %{}}
-            }
+            state
+            |> Map.update!(:pacing, &Pacing.page_turned/1)
             |> Map.put(:current_arm, nil)
             |> Map.put(:current_page_id, nil)
             |> Map.put(:current_page_ref, nil)
@@ -608,8 +609,6 @@ defmodule Thereish.Rooms.Server do
 
     state =
       %{state | game: game}
-      |> record_occurrence_times(old_game)
-      |> opened()
       |> pace(&Pacing.moved(&1, old_game, game, now()))
 
     state = Enum.reduce(effects, state, &perform/2)
@@ -619,20 +618,6 @@ defmodule Thereish.Rooms.Server do
 
     state
   end
-
-  # A Page starts when it is on screen, not when the Room process booted. The
-  # difference is everyone typing their names, which is not the ten to fifteen
-  # minutes a Page is supposed to take, and it is this timestamp the couch-night
-  # measurement will read.
-  defp opened(%{opened_at: nil} = state) do
-    if Game.view(state.game, nil).phase == :waiting do
-      state
-    else
-      %{state | opened_at: wall_clock()}
-    end
-  end
-
-  defp opened(state), do: state
 
   defp perform(:beat, state), do: pace(state, &Pacing.beat_owed(&1, now()))
 
@@ -653,7 +638,7 @@ defmodule Thereish.Rooms.Server do
     entry =
       entry
       |> Map.merge(Occupancy.chronicle_meta(state.occupancy, state.room.music))
-      |> attach_timing(state)
+      |> then(&Pacing.stamp(state.pacing, &1))
 
     voice(state, &Voice.page_closed(&1, entry))
   end
@@ -1033,89 +1018,6 @@ defmodule Thereish.Rooms.Server do
 
   defp wall_clock, do: DateTime.utc_now()
 
-  defp record_occurrence_times(state, old_game) do
-    now = wall_clock()
-    old_phase = Game.phase(old_game)
-    new_phase = Game.phase(state.game)
-    timing = state[:timing] || %{gives: %{}, attempts: %{}}
-
-    new_give_ids = Map.keys(state.game.gives) -- Map.keys(old_game.gives)
-
-    timing =
-      if old_phase != :giving and new_phase == :giving do
-        %{timing | gives: %{}}
-      else
-        timing
-      end
-
-    timing =
-      Enum.reduce(new_give_ids, timing, fn seat_id, timing ->
-        gives = Map.put(timing[:gives] || %{}, seat_id, now)
-        %{timing | gives: gives}
-      end)
-
-    timing =
-      cond do
-        old_phase == :bridging and new_phase == :assaying ->
-          put_attempt(timing, state.game.attempt, :assaying_started_at, now)
-
-        old_phase == :assaying and new_phase in [:reveal, :closed] ->
-          put_attempt(timing, state.game.attempt, :revealed_at, now)
-
-        old_phase == :reveal and new_phase == :bridging ->
-          timing
-          |> put_attempt(old_game.attempt, :advanced_at, now)
-          |> put_attempt(state.game.attempt, :started_at, now)
-
-        old_phase == :writing and new_phase == :bridging ->
-          put_attempt(timing, state.game.attempt, :started_at, now)
-
-        true ->
-          timing
-      end
-
-    %{state | timing: timing}
-  end
-
-  defp put_attempt(timing, number, field, now) do
-    attempts = timing[:attempts] || %{}
-    current = Map.get(attempts, number, %{})
-
-    if Map.has_key?(current, field) do
-      timing
-    else
-      %{timing | attempts: Map.put(attempts, number, Map.put(current, field, now))}
-    end
-  end
-
-  defp attach_timing(entry, state) do
-    timing = state[:timing] || %{gives: %{}, attempts: %{}}
-    give_times = timing[:gives] || %{}
-    attempt_times = timing[:attempts] || %{}
-
-    gives =
-      Enum.map(entry[:gives] || [], fn give ->
-        seat_id = give[:seat_id] || give["seat_id"]
-        Map.put(give, :arrived_at, Map.get(give_times, seat_id))
-      end)
-
-    attempts =
-      Enum.map(entry.attempts, fn attempt ->
-        times = Map.get(attempt_times, attempt.number, %{})
-
-        attempt
-        |> Map.put(:started_at, times[:started_at])
-        |> Map.put(:assaying_started_at, times[:assaying_started_at])
-        |> Map.put(:revealed_at, times[:revealed_at])
-        |> Map.put(:advanced_at, times[:advanced_at])
-      end)
-
-    entry
-    |> Map.put(:gives, gives)
-    |> Map.put(:attempts, attempts)
-    |> Map.put(:revealed_at, Thereish.Chronicle.Timing.last_revealed(attempts))
-  end
-
   defp verdict_event({:ok, verdict}), do: {:verdict_received, verdict}
 
   # The Assayer failing is a rule, not an exception: the game says it has no
@@ -1194,7 +1096,7 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp commit_chronicle(entry, state) do
-    {:ok, page} = Chronicle.write(state.room.id, entry, state.opened_at)
+    {:ok, page} = Chronicle.write(state.room.id, entry, entry.opened_at)
 
     arm = (entry.author_meta && entry.author_meta["arm"]) || state[:current_arm] || :flash
     _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
