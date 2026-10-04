@@ -37,6 +37,7 @@ defmodule Thereish.Experiments do
   alias Thereish.Chronicle.ExperimentAssignment
   alias Thereish.Chronicle.ExperimentOutcome
   alias Thereish.Chronicle.ExperimentUnblinding
+  alias Thereish.Chronicle.Opinion
   alias Thereish.Chronicle.Page
   alias Thereish.Repo
   alias Thereish.Rooms.Room
@@ -521,8 +522,9 @@ defmodule Thereish.Experiments do
   Returns `%{experiment: definition, <arm>: summary, summary_narrative: text}`.
   Every Arm's summary carries its meld rate, longest and current meld streaks
   and mean attempts to meld. An Author-model Arm adds its Bookends taps and
-  closing bands; a Bait-against-plain Arm adds its fairness taps, overrules
-  and trap and deep convergence.
+  closing bands; a Bait-against-plain Arm adds the tally of its current
+  participant Opinions (`Opinion.tally/1`), its overrules and its trap and deep
+  convergence.
 
   Strictly avoids p-values or significance tests: the sample is two people.
   """
@@ -607,10 +609,8 @@ defmodule Thereish.Experiments do
   end
 
   defp summarize_bait_arm(outcomes, {fairness_taps, overrules_count}) do
-    labels = Enum.frequencies_by(fairness_taps, &to_string(&1.label))
-    fair = Map.get(labels, "fair", 0)
-    too_kind = Map.get(labels, "too_kind", 0)
-    too_harsh = Map.get(labels, "too_harsh", 0)
+    %{"fair" => fair, "too_kind" => too_kind, "too_harsh" => too_harsh} =
+      Opinion.tally(fairness_taps)
 
     outcomes
     |> meld_summary()

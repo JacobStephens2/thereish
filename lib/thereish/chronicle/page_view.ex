@@ -19,6 +19,7 @@ defmodule Thereish.Chronicle.PageView do
   alias Thereish.Chronicle.Attempt
   alias Thereish.Chronicle.Correction
   alias Thereish.Chronicle.FairnessTap
+  alias Thereish.Chronicle.Opinion
   alias Thereish.Chronicle.Overrule
   alias Thereish.Chronicle.Page
   alias Thereish.Chronicle.Recap
@@ -160,6 +161,7 @@ defmodule Thereish.Chronicle.PageView do
           closeness: integer() | nil,
           melded: boolean(),
           bridges: [bridge_view()],
+          participant_ids: [Ecto.UUID.t()],
           verdicts: [verdict_view()],
           carried: [String.t()] | nil,
           bookend_chips: [bookend_chip()],
@@ -251,8 +253,9 @@ defmodule Thereish.Chronicle.PageView do
   Projects one closed Page against its Room's rows.
 
   A Page's own overrules and fairness taps are every row that names the Page
-  plus every row about one of its Attempts (`about_attempt?/3`). Its
-  corrections are the rows that name it.
+  plus every row about one of its Attempts (`about_attempt?/3`). Of the fairness
+  taps, only each reviewer's current Opinion is shown (`Opinion.current/1`).
+  Its corrections are the rows that name it.
   """
   @spec project(Page.t(), rows()) :: t()
   def project(%Page{} = page, rows) do
@@ -263,7 +266,7 @@ defmodule Thereish.Chronicle.PageView do
     own = %{
       overrules: Enum.filter(rows.overrules, of_page?),
       corrections: Enum.filter(rows.corrections, &(&1.page_id == page.id)),
-      fairness_taps: Enum.filter(rows.fairness_taps, of_page?)
+      fairness_taps: rows.fairness_taps |> Enum.filter(of_page?) |> Opinion.current()
     }
 
     attempts =
@@ -330,6 +333,7 @@ defmodule Thereish.Chronicle.PageView do
       closeness: attempt.closeness,
       melded: attempt.melded,
       bridges: bridges,
+      participant_ids: Enum.map(attempt.bridges, & &1.seat_id),
       verdicts: verdicts,
       carried: carried(page, index, attempt, verdicts, bridges),
       bookend_chips: bookend_chips(page, attempt, index),

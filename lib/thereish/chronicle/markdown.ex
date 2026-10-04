@@ -7,6 +7,7 @@ defmodule Thereish.Chronicle.Markdown do
   """
 
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Opinion
   alias Thereish.Experiments
   alias Thereish.Mask
   alias Thereish.Repo
@@ -291,8 +292,7 @@ defmodule Thereish.Chronicle.Markdown do
         taps ->
           items =
             Enum.map(taps, fn t ->
-              display_label = Thereish.Chronicle.FairnessTap.label_human(t.label)
-              "#{t.reviewer_name}: #{display_label}"
+              "#{t.reviewer_name}: #{Opinion.human(t.label)}"
             end)
             |> Enum.join(", ")
 
@@ -681,10 +681,9 @@ defmodule Thereish.Chronicle.Markdown do
       case String.split(part, ":", parts: 2) do
         [name, label] ->
           label_norm =
-            case String.trim(label) do
-              "too kind" -> "too_kind"
-              "too harsh" -> "too_harsh"
-              other -> other
+            case Opinion.label(label) do
+              {:ok, parsed} -> parsed
+              {:error, :invalid_label} -> String.trim(label)
             end
 
           [%{seat_name: String.trim(name), label: label_norm}]
