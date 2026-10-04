@@ -228,5 +228,12 @@ defmodule Thereish.Experiments.SummarizeTest do
       assert readout.plain.overrules_count == 1
       assert readout.bait.too_harsh_count + readout.plain.too_harsh_count == 0
     end
+
+    test "reads out an experiment it does not recognise, as it reads any non-Author-model arm" do
+      readout = summarize("unrecognised", %{outcomes: history("bait", [true, false])})
+
+      assert readout.experiment.id == "bait_against_plain"
+      assert readout.bait.meld_rate == "1/2 (50%)"
+    end
   end
 end
