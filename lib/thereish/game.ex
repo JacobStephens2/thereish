@@ -48,6 +48,7 @@ defmodule Thereish.Game do
   # worth more than the Kernel import it displaces.
   import Kernel, except: [apply: 2]
 
+  alias Thereish.Bookends
   alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.Opinion
   alias Thereish.Ladder
@@ -276,7 +277,7 @@ defmodule Thereish.Game do
       page_seat_ids: page_seat_ids,
       masks: %{},
       full_table: full_table == true,
-      bookend_origins: page_origins(page)
+      bookend_origins: Bookends.origins(page)
     }
   end
 
@@ -584,13 +585,13 @@ defmodule Thereish.Game do
 
   def apply(%__MODULE__{} = state, {:attempt_advanced, %{seat_id: seat_id}}) do
     with :ok <- may_advance(state, seat_id) do
-      carried = carried(state)
+      %{carried: carried} = carry(state)
 
       {:ok,
        %{
          state
          | bookends: Enum.map(carried, & &1.word),
-           bookend_origins: Enum.map(carried, &Map.take(&1, [:seat_id])),
+           bookend_origins: carried,
            attempt: state.attempt + 1,
            bridges: %{},
            verdict: nil,
@@ -610,7 +611,7 @@ defmodule Thereish.Game do
          state
          | page: page,
            bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
-           bookend_origins: page_origins(page),
+           bookend_origins: Bookends.origins(page),
            attempt: 1,
            bridges: %{},
            verdict: nil,
@@ -732,12 +733,12 @@ defmodule Thereish.Game do
       # What the next attempt will hang between, so the tap that starts it can
       # say so. The carry-forward is the point of a miss; a button that named
       # neither word would hide it.
-      next_bookends: if(phase == :reveal, do: carried_bookends(state)),
+      next_bookends: if(phase == :reveal, do: Enum.map(carry(state).carried, & &1.word)),
       # Whether the Assayer picked those two words or the game fell back to the
       # first two Bridges in roster order. The couple are about to spend an
       # attempt on them, so which of the two happened is theirs to know. At a
       # Full table the table's own Bridges carry, so there is no choice to miss.
-      next_bookends_chosen?: if(phase == :reveal, do: next_bookends_chosen?(state)),
+      next_bookends_chosen?: if(phase == :reveal, do: carry(state).chosen?),
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
@@ -998,7 +999,7 @@ defmodule Thereish.Game do
     |> Map.delete(:reasoning)
     |> Map.merge(%{
       bridges: bridges_view(state, state.bridges),
-      furthest: furthest_view(state, chosen_furthest(state)),
+      furthest: furthest_view(state, state.verdict),
       gives: gives
     })
   end
@@ -1022,90 +1023,32 @@ defmodule Thereish.Game do
 
   defp headline(_state), do: nil
 
-  # Carry-forward reads the Page's rule (ADR-0016). At a Full table every
-  # Seat's Bridge becomes the next Attempt's Bookends, in roster order. Off, the
-  # two the Assayer named as furthest apart carry — Medium's rule — and with no
-  # Verdict the first two in roster order carry, which `next_bookends_chosen?`
-  # tells the screens.
+  # Carry-forward reads the Page's rule (ADR-0016), which `Bookends.carry/3`
+  # owns: at a Full table every Seat's Bridge, in roster order; off, the two the
+  # Assayer named as furthest apart, or the first two in roster order when it
+  # named none the roster can account for, which `chosen?` tells the screens.
   #
   # Nothing here defends against two carried words being the same word: that
   # needs an Assayer that names a word twice, and if one ever does, the next
   # attempt is a Page with one word twice rather than a crash.
-  defp carried_bookends(state), do: Enum.map(carried(state), & &1.word)
+  defp carry(state) do
+    bridges =
+      for seat <- page_seats(state), Map.has_key?(state.bridges, seat.id) do
+        %{seat_id: seat.id, bridge: state.bridges[seat.id]}
+      end
 
-  defp carried(state) do
-    if page_full_table(state.page, state.full_table) do
-      Enum.map(page_seats(state), fn seat ->
-        %{word: state.bridges[seat.id], seat_id: seat.id}
-      end)
-    else
-      two_carried(state)
-    end
-  end
-
-  defp two_carried(state) do
-    words = chosen_furthest(state) || Enum.take(written_bridges(state), 2)
-
-    {origins, _remaining} =
-      Enum.map_reduce(words, written_seat_bridges(state), fn word, remaining ->
-        case Enum.split_while(remaining, fn {_seat, bridge} -> bridge != word end) do
-          {passed, [{seat, _} | rest]} ->
-            {%{word: word, seat_id: seat.id}, passed ++ rest}
-
-          {_all, []} ->
-            {%{word: word}, remaining}
-        end
-      end)
-
-    origins
-  end
-
-  defp written_seat_bridges(state) do
-    for seat <- page_seats(state), Map.has_key?(state.bridges, seat.id) do
-      {seat, state.bridges[seat.id]}
-    end
-  end
-
-  defp next_bookends_chosen?(state) do
-    page_full_table(state.page, state.full_table) or chosen_furthest(state) != nil
+    Bookends.carry(bridges, state.verdict, page_full_table(state.page, state.full_table))
   end
 
   defp bookend_chips(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
 
   defp bookend_chips(state, _phase) do
-    words = state.bookends || []
-    origins = pad_origins(state.bookend_origins, length(words))
-
-    Enum.zip(words, origins)
-    |> Enum.map(fn {word, origin} ->
-      seat_id = origin[:seat_id] || origin["seat_id"]
-      give = origin[:give] || origin["give"]
-      show_mask? = state.attempt > 1 and is_binary(seat_id)
-
-      %{
-        word: word,
-        seat_id: seat_id,
-        give: give,
-        mask: if(show_mask?, do: Map.get(state.masks || %{}, seat_id))
-      }
-    end)
-  end
-
-  defp pad_origins(origins, count) when is_list(origins) and length(origins) >= count,
-    do: Enum.take(origins, count)
-
-  defp pad_origins(origins, count) when is_list(origins) do
-    origins ++ List.duplicate(%{}, count - length(origins))
-  end
-
-  defp pad_origins(_, count), do: List.duplicate(%{}, count)
-
-  defp page_origins(nil), do: nil
-
-  defp page_origins(page) when is_map(page) do
-    page[:bookend_origins] || page["bookend_origins"] ||
-      page[:bookend_gives] || page["bookend_gives"] ||
-      Enum.map(page[:bookends] || page["bookends"] || [], fn _ -> %{} end)
+    Bookends.chips(
+      state.bookends || [],
+      state.bookend_origins || [],
+      state.attempt,
+      state.masks || %{}
+    )
   end
 
   defp origins_from(_state, nil, bookends), do: Enum.map(bookends, fn _ -> %{} end)
@@ -1135,16 +1078,6 @@ defmodule Thereish.Game do
 
   defp origins_from(_state, _from, bookends), do: Enum.map(bookends, fn _ -> %{} end)
 
-  # The two words the Assayer named, but only if the roster can account for both
-  # of them: they are about to be Bookends, and a Bookend nobody wrote is a Page
-  # the table was never asked to play. A paraphrase is no choice at all, so the
-  # game falls back and says it fell back.
-  defp chosen_furthest(%{verdict: %{graded?: true, furthest: [_, _] = furthest}} = state) do
-    if furthest_view(state, furthest), do: furthest
-  end
-
-  defp chosen_furthest(_state), do: nil
-
   # What the Assayer said, in the shape every screen and the book read it in.
   # The number goes through the Ladder here so that nothing downstream has to
   # know which rung a grade is on.
@@ -1157,25 +1090,23 @@ defmodule Thereish.Game do
     })
   end
 
-  # The furthest two, said the way the reveal says them: the word and whose it
-  # is. Each is claimed from the roster and taken out of it, so a table that
-  # wrote one word twice does not read as one player disagreeing with
-  # themselves, and a word the roster cannot account for is no pair at all.
-  defp furthest_view(_state, nil), do: nil
+  # The furthest two a graded Verdict named, said the way the reveal says them:
+  # the word and whose it is. Each is claimed from the roster once
+  # (`Bookends.claim/2`), so a table that wrote one word twice does not read as
+  # one player disagreeing with themselves, and a word the roster cannot account
+  # for, such as a paraphrase, is no pair at all.
+  defp furthest_view(state, %{graded?: true, furthest: [_, _] = furthest}) do
+    bridges = bridges_view(state, state.bridges)
+    claimed = Bookends.claim(furthest, bridges)
 
-  defp furthest_view(state, furthest) do
-    {views, _unclaimed} =
-      Enum.map_reduce(furthest, bridges_view(state, state.bridges), &claim_bridge/2)
-
-    if Enum.all?(views), do: views
-  end
-
-  defp claim_bridge(word, unclaimed) do
-    case Enum.split_while(unclaimed, &(&1.bridge != word)) do
-      {passed, [claimed | rest]} -> {claimed, passed ++ rest}
-      {_all, []} -> {nil, unclaimed}
+    if Enum.all?(claimed, & &1.seat_id) do
+      Enum.map(claimed, fn %{seat_id: seat_id} ->
+        Enum.find(bridges, &(&1.seat_id == seat_id))
+      end)
     end
   end
+
+  defp furthest_view(_state, _verdict), do: nil
 
   defp bridges_view(state, bridges) do
     for seat <- state.seats, Map.has_key?(bridges, seat.id) do

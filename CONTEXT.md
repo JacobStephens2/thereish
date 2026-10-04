@@ -117,7 +117,7 @@ A setting or state the Room keeps across Pages rather than any one Page keeping 
 _Avoid_: settings, config, preferences, switches
 
 **Bookends**:
-The words — or two-word phrases — an Attempt shows, two or more; each player writes the Bridge whose meaning spans all of them. On a Page's first Attempt they are the Author's, each drawn from a different Give and chosen to stand far apart; on every Attempt after a miss they are the Bridges carried forward. How many there are is the Room's rule: two, or one per Seat at a Full table.
+The words — or two-word phrases — an Attempt shows, two or more; each player writes the Bridge whose meaning spans all of them. On a Page's first Attempt they are the Author's, each drawn from a different Give and chosen to stand far apart; on every Attempt after a miss they are the Bridges carried forward. How many there are is the Room's rule: two, or one per Seat at a Full table. Which Bridges a miss carries forward, and whose each one is, is one rule, read the same at the table and in the Chronicle.
 _Avoid_: anchors (the earlier name), clues, prompt (collides with the model-prompt sense), pair, cue
 
 **Full table**:
