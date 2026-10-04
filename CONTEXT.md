@@ -100,6 +100,10 @@ _Avoid_: library, catalog, playlist, pool, house book, house loop (the loops are
 What the Speaker is playing for a Room right now: this Page's Track, its Vamp, a held-over Track, or a Repertoire draw.
 _Avoid_: now playing (that is the Stage's label for it), soundtrack, audio state, music state
 
+**Cue**:
+A sound moment a screen plays because the Room's view changed: a Page's music, the Beat, a sting at the reveal, the ending, the Prologue, a stale Voice clip stopped, or the Stage's commit tick. Decided by Foley from the Room's view, and only played where the Speaker is, except the Stage's commit tick.
+_Avoid_: event, push, sound effect, trigger
+
 **House**:
 An Occupancy that plays a shuffle from the Repertoire rather than this Page's Track. Not a verdict on the Track.
 _Avoid_: house loop (the loops are Repertoire members), "house loop only" (the earlier switch)
