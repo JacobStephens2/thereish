@@ -5,6 +5,7 @@ defmodule Thereish.Experiments.SummarizeTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.ExperimentOutcome
   alias Thereish.Chronicle.PageView
   alias Thereish.Experiments
@@ -149,7 +150,7 @@ defmodule Thereish.Experiments.SummarizeTest do
         outcomes: outcomes,
         fairness_taps: [%{page_id: "P001", label: "fair"}],
         overrules: [%{page_id: "P001"}],
-        views: [%PageView{id: "P001", document: %{}, fairness_taps: [], overrules: []}]
+        views: [%PageView{id: "P001", document: %Document{}, fairness_taps: [], overrules: []}]
       }
 
       assert summarize("author_model", with_feedback) == summarize("author_model", rows)
@@ -168,7 +169,7 @@ defmodule Thereish.Experiments.SummarizeTest do
       views = [
         %{
           id: "page-1",
-          document: %{"id" => "doc-1"},
+          document: %Document{identifier: "doc-1"},
           fairness_taps: [
             opinion("page-1", "melissa", "fair"),
             opinion("page-1", "jacob", "too_harsh")
@@ -177,19 +178,19 @@ defmodule Thereish.Experiments.SummarizeTest do
         },
         %{
           id: "page-2",
-          document: %{"id" => "doc-2"},
+          document: %Document{identifier: "doc-2"},
           fairness_taps: [opinion("page-2", "melissa", "fair")],
           overrules: []
         },
         %{
           id: "page-3",
-          document: %{"id" => "doc-3"},
+          document: %Document{identifier: "doc-3"},
           fairness_taps: [opinion("page-3", "melissa", "too_kind")],
           overrules: [%{id: 1}, %{id: 2}]
         },
         %{
           id: "page-4",
-          document: %{"id" => "doc-4"},
+          document: %Document{identifier: "doc-4"},
           fairness_taps: [opinion("page-4", "melissa", "fair")],
           overrules: [%{id: 3}]
         }

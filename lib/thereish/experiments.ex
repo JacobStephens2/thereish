@@ -328,7 +328,7 @@ defmodule Thereish.Experiments do
           deep_converged: boolean() | nil
         }
   def page_arm(page_arms, %Page{} = page) do
-    page_ident = to_string(page.document["id"] || page.document[:id] || page.id)
+    page_ident = to_string(page.document.identifier || page.id)
 
     of_page? = fn row ->
       row.page_id == page.id or
@@ -662,7 +662,7 @@ defmodule Thereish.Experiments do
       |> MapSet.new()
 
     Enum.filter(views, fn view ->
-      to_string(view.id) in identifiers or to_string(view.document["id"]) in identifiers
+      to_string(view.id) in identifiers or to_string(view.document.identifier) in identifiers
     end)
   end
 
