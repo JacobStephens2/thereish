@@ -436,6 +436,28 @@ defmodule Thereish.Chronicle.PageViewTest do
 
       assert [%{carried: ["beacon", "cairn"]}] = view.attempts
     end
+
+    test "as the first two Bridges when the furthest pair is a paraphrase, as at the table" do
+      view =
+        project(
+          page(
+            document: %{"bookends" => ["lantern", "harbour"], "full_table" => false},
+            attempts: [
+              attempt(1,
+                bridges: [
+                  bridge(@mara, "beacon", 0),
+                  bridge(@jacob, "cairn", 1),
+                  bridge("ada", "lamp", 2),
+                  bridge("sam", "seagull", 3)
+                ],
+                verdicts: [verdict(furthest: ["beacons", "seagull"])]
+              )
+            ]
+          )
+        )
+
+      assert [%{carried: ["beacon", "cairn"]}] = view.attempts
+    end
   end
 
   describe "project/2 dresses Bookends as chips" do
@@ -509,9 +531,15 @@ defmodule Thereish.Chronicle.PageViewTest do
       assert [_first, %{bookend_chips: chips}] = view.attempts
 
       assert chips == [
-               %{word: "stone", seat_id: @mara, mask: mask("mara")},
-               %{word: "stone", seat_id: @jacob, mask: mask("jacob")},
-               %{word: "moss", mask: nil}
+               %{
+                 word: "stone",
+                 seat_id: @mara,
+                 seat_name: nil,
+                 give: nil,
+                 mask: mask("mara")
+               },
+               %{word: "stone", seat_id: @jacob, seat_name: nil, give: nil, mask: mask("jacob")},
+               %{word: "moss", seat_id: nil, seat_name: nil, give: nil, mask: nil}
              ]
     end
   end
