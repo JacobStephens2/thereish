@@ -15,7 +15,7 @@ defmodule Thereish.StewardTest do
   about hedging rather than about the wording.
 
   The Precedent is the Steward's, not the live adapter's, so the tests of it ask
-  `Thereish.Steward.assay/1`: with the live adapter where they watch what the
+  `Thereish.Steward.assay/2`: with the live adapter where they watch what the
   provider was asked, and with the Fake where they only need the rule.
   """
   # Which model answers, how often, and how patiently is application
@@ -373,9 +373,16 @@ defmodule Thereish.StewardTest do
         player_bridges: [
           %{player: "Jacob", bridge: "beacon"},
           %{player: "Melissa", bridge: "cairn"}
-        ],
-        prior_quips: ["Jacob brought the lighthouse, Melissa brought the dock."]
+        ]
       }
+
+      chronicle = [
+        %{
+          attempts: [
+            %{verdicts: [%{quip: "Jacob brought the lighthouse, Melissa brought the dock."}]}
+          ]
+        }
+      ]
 
       recorded(fn conn, body ->
         [%{"content" => user}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
@@ -391,12 +398,12 @@ defmodule Thereish.StewardTest do
         end
       end)
 
-      assert {:ok, _first} = Steward.assay(request)
+      assert {:ok, _first} = Steward.assay(request, chronicle: chronicle)
       assert_receive {:verdict_user, graded_user}
       assert graded_user =~ "Jacob brought the lighthouse, Melissa brought the dock."
       assert graded_user =~ ~r/constructions already used/i
 
-      assert {:ok, second} = Steward.assay(request)
+      assert {:ok, second} = Steward.assay(request, chronicle: chronicle)
       assert second.meta.precedent_hit == true
       assert_receive {:quip_user, quip_user}
       assert quip_user =~ "Jacob brought the lighthouse, Melissa brought the dock."
@@ -773,6 +780,38 @@ defmodule Thereish.StewardTest do
       assert verdict.meta.cost_usd == 0.0
       assert verdict.meta.precedent_hit == true
       assert verdict.meta.latency_ms < 200
+    end
+  end
+
+  describe "the Assayer's prior Quips are composed in front of the seam" do
+    defp quipped_page(quips) do
+      %{
+        attempts:
+          Enum.map(quips, fn quip -> %{number: 1, bridges: [], verdicts: [%{quip: quip}]} end)
+      }
+    end
+
+    test "from the Room's Page views and this Page's earlier Attempts" do
+      fake(assay_capture: self())
+
+      request =
+        @pair
+        |> Map.put(:earlier_attempts, [%{number: 1, bookends: [], bridges: [], quip: "sixth"}])
+        |> Map.put(:prior_quips, ["a caller's Quip, replaced"])
+
+      chronicle = [quipped_page(["first", "second", "third"]), quipped_page(["fourth", "fifth"])]
+
+      assert {:ok, _verdict} = Steward.assay(request, chronicle: chronicle)
+      assert_receive {:assay, sent}
+      assert sent.prior_quips == ["second", "third", "fourth", "fifth", "sixth"]
+    end
+
+    test "as a Room with no Pages when no chronicle is passed" do
+      fake(assay_capture: self())
+
+      assert {:ok, _verdict} = Steward.assay(@pair)
+      assert_receive {:assay, sent}
+      assert sent.prior_quips == []
     end
   end
 
