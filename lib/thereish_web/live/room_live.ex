@@ -67,10 +67,7 @@ defmodule ThereishWeb.RoomLive do
   end
 
   def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
-    barred =
-      (socket.assigns.room &&
-         (Map.get(socket.assigns.room, :barred_words) ||
-            Map.get(socket.assigns.room, :bookends))) || []
+    barred = (socket.assigns.room && socket.assigns.room.barred_words) || []
 
     trimmed = String.trim(bridge)
 
@@ -293,13 +290,6 @@ defmodule ThereishWeb.RoomLive do
   defp message(:pool_exhausted), do: "That's every Page for tonight."
   defp message(_), do: "Something went wrong. Try again."
 
-  defp can_overrule?(nil, _seat), do: false
-  defp can_overrule?(%{reveal: nil}, _seat), do: false
-  defp can_overrule?(%{overrule: %{pending?: true}}, _seat), do: false
-
-  defp can_overrule?(%{reveal: %{overruled?: true}}, _seat), do: false
-  defp can_overrule?(_room, _seat), do: true
-
   defp playing_phase?(nil), do: false
   defp playing_phase?(room), do: room.phase not in [:waiting, :giving]
 
@@ -380,7 +370,7 @@ defmodule ThereishWeb.RoomLive do
       </div>
 
       <form
-        :if={@seat && !@room[:late?] && @room.phase == :giving && @room.your_give == nil}
+        :if={may?(@room, :give)}
         id="setting-form"
         data-role="setting-form"
         phx-submit="submit_give"
@@ -479,7 +469,7 @@ defmodule ThereishWeb.RoomLive do
       <.bookends :if={@seat} room={@room} />
 
       <form
-        :if={@seat && !@room[:late?] && @room.phase == :bridging && @room.your_bridge == nil}
+        :if={may?(@room, :bridge)}
         id="bridge-form"
         data-role="bridge-form"
         phx-change="validate_bridge"
@@ -514,10 +504,10 @@ defmodule ThereishWeb.RoomLive do
         mode={if @stage_present? and not (@room && @room.speaker?), do: :quiet, else: :phone}
       />
 
-      <.overrule_banner room={@room} seat={@seat} />
+      <.overrule_banner room={@room} />
 
       <div
-        :if={@seat && !@room[:late?] && can_overrule?(@room, @seat)}
+        :if={may?(@room, :propose_overrule)}
         class="flex justify-center"
       >
         <.button phx-click="propose_overrule" data-role="propose-overrule">
@@ -526,7 +516,7 @@ defmodule ThereishWeb.RoomLive do
       </div>
 
       <div
-        :if={@seat && !@room[:late?] && @room.phase == :reveal}
+        :if={may?(@room, :advance)}
         class="flex flex-col items-center gap-2 border-t border-base-300 pt-6"
       >
         <.carry_forward room={@room} />
@@ -543,7 +533,7 @@ defmodule ThereishWeb.RoomLive do
 
       <.ending room={@room} seat={@seat} mode={:phone} />
 
-      <div :if={@seat && @room.phase == :closed} class="flex flex-col items-center gap-2">
+      <div :if={may?(@room, :next_page)} class="flex flex-col items-center gap-2">
         <.reveal_hold room={@room} />
         <p :if={@page_error} data-role="page-error" class="text-sm text-error">{@page_error}</p>
         <.button

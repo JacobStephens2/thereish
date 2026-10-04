@@ -2512,4 +2512,197 @@ defmodule Thereish.GameTest do
       assert Enum.map(chips, & &1.mask) == [mask_m, mask_j]
     end
   end
+
+  describe "what each viewer may do (#199)" do
+    @actions [
+      :give,
+      :bridge,
+      :propose_overrule,
+      :vote_overrule,
+      :tap_fairness,
+      :advance,
+      :tap_bookends,
+      :next_page
+    ]
+
+    @viewers ["seat-Mara", "seat-Jacob", "seat-Ada", "seat-nobody", nil]
+
+    defp give(state, name, give) do
+      {:ok, state, _effects} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-" <> name, give: give}})
+
+      state
+    end
+
+    # Mara and Jacob play the Page; Ada sits down once it is written, so she
+    # watches it from a Seat. Every stop along the way, by name.
+    defp page_states do
+      empty = Game.init(seat_limit: 6, seats: [seat("Mara")])
+      giving = Game.init(seat_limit: 6, seats: [seat("Mara"), seat("Jacob")])
+      one_give = give(giving, "Mara", "lighthouse")
+      both_gave = give(one_give, "Jacob", "candle")
+      {:ok, writing, _} = Game.apply(both_gave, {:start_page, %{seat_id: "seat-Jacob"}})
+
+      {:ok, written, []} =
+        Game.apply(writing, {:page_written, %{bookends: ["ocean", "lantern"]}})
+
+      {:ok, bridging, []} = Game.apply(written, {:seat_joined, seat("Ada")})
+      {:ok, one_bridge, []} = commit(bridging, "Mara", "coast")
+      {:ok, assaying, effects} = commit(one_bridge, "Jacob", "harbour")
+      reveal = grade(assaying, effects, 41)
+
+      {:ok, ungraded, _} = Game.apply(assaying, {:verdict_unavailable, %{}})
+
+      {:ok, proposed, []} =
+        Game.apply(reveal, {:overrule_proposed, %{seat_id: "seat-Mara", closeness: 60}})
+
+      {:ok, overruled, _} = Game.apply(proposed, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+      {:ok, ungraded_proposed, []} =
+        Game.apply(ungraded, {:overrule_proposed, %{seat_id: "seat-Mara", closeness: 60}})
+
+      {:ok, ungraded_overruled, _} =
+        Game.apply(ungraded_proposed, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+      second_attempt = again(reveal)
+      {closed, _effects} = attempt(second_attempt, [{"Mara", "beam"}, {"Jacob", "beam"}], 95)
+
+      %{
+        waiting: empty,
+        giving: giving,
+        one_give: one_give,
+        writing: writing,
+        bridging: bridging,
+        one_bridge: one_bridge,
+        assaying: assaying,
+        reveal: reveal,
+        ungraded: ungraded,
+        proposed: proposed,
+        overruled: overruled,
+        ungraded_overruled: ungraded_overruled,
+        second_attempt: second_attempt,
+        closed: closed
+      }
+    end
+
+    defp may(state, viewer), do: Game.view(state, viewer).may
+
+    defp allowed(state, viewer) do
+      may = may(state, viewer)
+      for action <- @actions, may[action], do: action
+    end
+
+    # A valid event of each action: whatever input it carries is input the Game
+    # accepts, so only the viewer's standing can turn it away.
+    defp valid_events(:give, seat_id),
+      do: [{:give_committed, %{seat_id: seat_id, give: "starlight"}}]
+
+    defp valid_events(:bridge, seat_id),
+      do: [{:bridge_committed, %{seat_id: seat_id, bridge: "quill"}}]
+
+    defp valid_events(:propose_overrule, seat_id),
+      do: [{:overrule_proposed, %{seat_id: seat_id}}]
+
+    defp valid_events(:vote_overrule, seat_id),
+      do: [
+        {:overrule_agreed, %{seat_id: seat_id}},
+        {:overrule_declined, %{seat_id: seat_id}}
+      ]
+
+    defp valid_events(:tap_fairness, seat_id),
+      do: [{:fairness_tapped, %{seat_id: seat_id, label: "fair"}}]
+
+    defp valid_events(:advance, seat_id), do: [{:attempt_advanced, %{seat_id: seat_id}}]
+
+    defp valid_events(:tap_bookends, seat_id),
+      do: [{:bookends_tapped, %{seat_id: seat_id, label: "great"}}]
+
+    defp valid_events(:next_page, seat_id), do: [{:next_page, %{seat_id: seat_id}}]
+
+    test "a viewer who holds no Seat may do nothing, in any Phase" do
+      for {name, state} <- page_states() do
+        assert allowed(state, nil) == [], "#{name}: #{inspect(may(state, nil))}"
+        assert Map.keys(may(state, nil)) |> Enum.sort() == Enum.sort(@actions)
+      end
+    end
+
+    test "a seated viewer may do what the Phase is for" do
+      states = page_states()
+
+      assert allowed(states.waiting, "seat-Mara") == []
+      assert allowed(states.giving, "seat-Mara") == [:give]
+      assert allowed(states.one_give, "seat-Mara") == []
+      assert allowed(states.one_give, "seat-Jacob") == [:give]
+      assert allowed(states.writing, "seat-Mara") == []
+      assert allowed(states.bridging, "seat-Mara") == [:bridge]
+      assert allowed(states.one_bridge, "seat-Mara") == []
+      assert allowed(states.one_bridge, "seat-Jacob") == [:bridge]
+      assert allowed(states.assaying, "seat-Mara") == []
+
+      assert allowed(states.reveal, "seat-Mara") ==
+               [:propose_overrule, :tap_fairness, :advance]
+
+      assert allowed(states.ungraded, "seat-Mara") == [:propose_overrule, :advance]
+      assert allowed(states.proposed, "seat-Mara") == [:vote_overrule, :tap_fairness, :advance]
+      assert allowed(states.proposed, "seat-Jacob") == [:vote_overrule, :tap_fairness, :advance]
+      assert allowed(states.overruled, "seat-Mara") == [:tap_fairness, :advance]
+      assert allowed(states.second_attempt, "seat-Mara") == [:bridge]
+
+      assert allowed(states.closed, "seat-Mara") ==
+               [:propose_overrule, :tap_fairness, :tap_bookends, :next_page]
+    end
+
+    test "an overrule of an ungraded Attempt can be rated, as the Game accepts the tap" do
+      states = page_states()
+
+      assert Game.view(states.ungraded_overruled, nil).phase in [:reveal, :closed]
+      assert may(states.ungraded_overruled, "seat-Mara").tap_fairness
+    end
+
+    test "a late Seat watches this Page and may only end it" do
+      states = page_states()
+
+      for name <- [:bridging, :one_bridge, :assaying, :reveal, :proposed, :second_attempt] do
+        assert allowed(Map.fetch!(states, name), "seat-Ada") == [], "#{name}"
+      end
+
+      assert allowed(states.closed, "seat-Ada") == [:tap_bookends, :next_page]
+    end
+
+    test "every answer in `may` is the answer apply/2 gives a valid event" do
+      for {name, state} <- page_states(), viewer <- @viewers, action <- @actions do
+        may = may(state, viewer)[action]
+
+        for event <- valid_events(action, viewer) do
+          accepted? = match?({:ok, _state, _effects}, Game.apply(state, event))
+
+          assert may == accepted?,
+                 "#{name}, #{inspect(viewer)}, #{inspect(event)}: may #{may}, accepted #{accepted?}"
+        end
+      end
+    end
+
+    test "first_revealed? turns on with the Page's first reveal and stays on for the Page" do
+      states = page_states()
+
+      for name <- [:waiting, :giving, :one_give, :writing, :bridging, :one_bridge, :assaying],
+          viewer <- @viewers do
+        refute Game.view(Map.fetch!(states, name), viewer).first_revealed?, "#{name}"
+      end
+
+      for name <- [:reveal, :ungraded, :proposed, :overruled, :second_attempt, :closed],
+          viewer <- @viewers do
+        assert Game.view(Map.fetch!(states, name), viewer).first_revealed?, "#{name}"
+      end
+    end
+
+    test "the Gives and the Masks go public on first_revealed?" do
+      states = page_states()
+
+      for {_name, state} <- states do
+        view = Game.view(state, nil)
+        assert view.first_revealed? == (view.gives != nil)
+      end
+    end
+  end
 end

@@ -471,7 +471,7 @@ defmodule ThereishWeb.RoomComponents do
 
       <div
         :if={
-          @mode == :stage and first_reveal_happened?(@room) and @room.phase != :closed and
+          @mode == :stage and @room[:first_revealed?] == true and @room.phase != :closed and
             is_list(@room[:seats]) and @room[:seats] != []
         }
         data-role="stage-masks"
@@ -509,13 +509,13 @@ defmodule ThereishWeb.RoomComponents do
       </div>
 
       <.fairness_controls
-        :if={@mode in [:phone, :quiet] && @seat && !@room[:late?] && @room.reveal.closeness}
+        :if={@mode in [:phone, :quiet] && may?(@room, :tap_fairness)}
         room={@room}
         seat={@seat}
       />
 
       <div
-        :if={(@room[:closed] || @room.phase == :closed) && gives_list(@room) != []}
+        :if={(@room[:closed] || @room.phase == :closed) && @room.reveal[:gives] not in [nil, []]}
         data-role="gives"
         class={[
           "flex flex-col items-center w-full",
@@ -525,7 +525,7 @@ defmodule ThereishWeb.RoomComponents do
         <.caption>Gives</.caption>
         <div class="flex flex-wrap items-stretch justify-center gap-3 sm:gap-4 w-full">
           <div
-            :for={give <- gives_list(@room)}
+            :for={give <- @room.reveal.gives}
             data-role="give"
             data-seat={give[:seat_id]}
             class={[
@@ -676,7 +676,6 @@ defmodule ThereishWeb.RoomComponents do
   end
 
   attr :room, :map, required: true
-  attr :seat, :map, default: nil
 
   @doc """
   The overrule banner: visible on both phones and the stage while a proposal is
@@ -689,12 +688,15 @@ defmodule ThereishWeb.RoomComponents do
       data-role="overrule-banner"
       class="flex flex-col items-center gap-2 rounded-lg border border-primary/30 bg-base-200/50 p-4 text-center"
     >
-      <p :if={@seat && !@room[:late?] && @room.overrule.you_proposed?} data-role="overrule-pending">
+      <p
+        :if={may?(@room, :vote_overrule) && @room.overrule.you_proposed?}
+        data-role="overrule-pending"
+      >
         You proposed an overrule. Waiting for everyone to agree.
       </p>
 
       <div
-        :if={@seat && !@room[:late?] && !@room.overrule.you_agreed?}
+        :if={may?(@room, :vote_overrule) && !@room.overrule.you_agreed?}
         data-role="overrule-vote"
         class="flex flex-col items-center gap-3"
       >
@@ -714,7 +716,7 @@ defmodule ThereishWeb.RoomComponents do
 
       <p
         :if={
-          @seat && !@room[:late?] && @room.overrule.you_agreed? &&
+          may?(@room, :vote_overrule) && @room.overrule.you_agreed? &&
             !@room.overrule.you_proposed?
         }
         data-role="overrule-pending"
@@ -722,7 +724,7 @@ defmodule ThereishWeb.RoomComponents do
         You agreed. Waiting for everyone to agree.
       </p>
 
-      <p :if={is_nil(@seat) or @room[:late?]} data-role="overrule-pending" class="opacity-80">
+      <p :if={!may?(@room, :vote_overrule)} data-role="overrule-pending" class="opacity-80">
         <span class="font-semibold">{@room.overrule.proposer_name}</span>
         proposed an overrule. Waiting for the Room to agree.
       </p>
@@ -836,7 +838,7 @@ defmodule ThereishWeb.RoomComponents do
       </ol>
 
       <div
-        :if={@mode == :phone && @seat}
+        :if={@mode == :phone && may?(@room, :tap_bookends)}
         data-role="bookends-controls"
         class="flex flex-col items-center gap-2 pt-2"
       >
@@ -927,6 +929,13 @@ defmodule ThereishWeb.RoomComponents do
   the reveal read as a page still in progress.
   """
   def mid_page?(room), do: room.phase in [:bridging, :assaying]
+
+  @doc """
+  Whether the Game would take `action` from this screen's viewer right now, as
+  `Thereish.Game.view/2` put it in `may`. A screen with no Room yet may do
+  nothing.
+  """
+  def may?(room, action), do: get_in(room, [:may, action]) == true
 
   # The rules name a rung; nobody says "deep_meld" out loud.
   defp band(nil), do: ""
@@ -1362,34 +1371,16 @@ defmodule ThereishWeb.RoomComponents do
     """
   end
 
-  defp first_reveal_happened?(room) do
-    room[:phase] in [:reveal, :closed, :revealed] or
-      (is_list(room[:played]) and room.played != [])
-  end
-
-  defp gives_list(room) do
-    cond do
-      is_map(room[:reveal]) and is_list(room.reveal[:gives]) ->
-        room.reveal.gives
-
-      is_list(room[:gives]) ->
-        room.gives
-
-      true ->
-        []
-    end
-  end
-
   def now_playing_text(nil), do: nil
 
   def now_playing_text(room) do
     cond do
       to_string(room[:music]) == "off" and
-          room[:phase] in [:bridging, :assaying, :revealed, :closed] ->
+          room[:phase] in [:bridging, :assaying, :reveal, :closed] ->
         "Music is off"
 
       room[:playing] && room.playing[:kind] in ["track", "vamp"] ->
-        if first_reveal_happened?(room) and room.playing[:title] do
+        if room[:first_revealed?] and room.playing[:title] do
           "Now playing: #{room.playing.title} (written for this Page)"
         else
           "Now playing: written for this Page"
