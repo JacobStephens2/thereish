@@ -19,7 +19,7 @@ defmodule Thereish.Steward.Digest do
 
   @doc """
   The Chronicle as the Author reads it before writing Bookends, and as the
-  Scribe reads a Room's history before naming the next one.
+  Scribe reads each earlier Room's Chronicle before naming the next one.
 
   Recaps stay out. What a callback is allowed to touch is the Chronicle and
   nothing else: tonight's candy cane may turn up in next month's recap, and it
@@ -102,7 +102,7 @@ defmodule Thereish.Steward.Digest do
         ["  Attempt #{attempt.number}: #{bridges}. Verdict: Ungraded"]
 
       [single] ->
-        ["  Attempt #{attempt.number}: #{bridges}. Verdict: #{grade(single, reader)}"]
+        ["  Attempt #{attempt.number}: #{bridges}. Verdict: #{verdict(single, reader)}"]
 
       # An attempt written before ADR-0010, when the Assayer answered one pair at
       # a time. The book is append-only, so those rows are still read out the way
@@ -110,19 +110,19 @@ defmodule Thereish.Steward.Digest do
       multiple ->
         pair_lines =
           Enum.map(multiple, fn verdict ->
-            "    Pair [#{Enum.join(verdict.bridges, " / ")}]: #{grade(verdict, reader)}"
+            "    Pair [#{Enum.join(verdict.bridges, " / ")}]: #{verdict(verdict, reader)}"
           end)
 
         ["  Attempt #{attempt.number}: #{bridges}." | pair_lines]
     end
   end
 
-  defp grade(verdict, :author) do
+  defp verdict(verdict, :author) do
     band = (verdict.band && " (#{verdict.band})") || ""
     "#{verdict.closeness}#{band}#{reasoning(verdict)}"
   end
 
-  defp grade(verdict, :scribe), do: "#{verdict.band || "graded"}#{reasoning(verdict)}"
+  defp verdict(verdict, :scribe), do: "#{verdict.band || "graded"}#{reasoning(verdict)}"
 
   defp reasoning(verdict), do: (verdict.reasoning && " — #{verdict.reasoning}") || ""
 
