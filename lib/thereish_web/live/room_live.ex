@@ -21,7 +21,6 @@ defmodule ThereishWeb.RoomLive do
 
   import ThereishWeb.RoomComponents
 
-  alias Thereish.Mask
   alias Thereish.Rooms
   alias Thereish.Rooms.Code
   alias Thereish.Rooms.Seat
@@ -293,10 +292,8 @@ defmodule ThereishWeb.RoomLive do
 
   defp chronicle_path(slug), do: ~p"/r/#{slug}/chronicle"
 
-  defp find_seat_colour(room, seat_id) do
-    seat = Enum.find(room[:seats] || [], &(&1.id == seat_id))
-    (seat && seat[:colour]) || "currentColor"
-  end
+  # This phone's own entry in the Room's Seats, which carries its Mask unredacted.
+  defp your_seat(room), do: Enum.find(room[:seats] || [], & &1.you?)
 
   @impl true
   def render(assigns) do
@@ -398,23 +395,8 @@ defmodule ThereishWeb.RoomLive do
         class="flex flex-col items-center gap-1 text-center"
       >
         <p class="text-xs uppercase tracking-widest font-semibold text-primary">Your Give</p>
-        <div
-          :if={Mask.url(@room[:your_mask])}
-          data-role="your-mask"
-          class="my-2"
-        >
-          <img
-            src={Mask.url(@room.your_mask)}
-            alt="Your Mask"
-            class="size-24 rounded-xl shadow-md object-cover border border-base-300"
-          />
-        </div>
-        <div
-          :if={@room[:your_mask] == :dot}
-          data-role="your-mask-dot"
-          class="my-2 size-5 rounded-full"
-          style={"background-color: #{find_seat_colour(@room, @seat.id)}"}
-        >
+        <div :if={your_seat(@room)[:mask]} data-role="your-mask" class="my-2">
+          <.seat_mask seat={your_seat(@room)} size={:xl} />
         </div>
         <p class="text-xl font-semibold">{@room.your_give}</p>
         <p class="text-sm opacity-60">

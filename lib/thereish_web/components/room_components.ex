@@ -101,42 +101,7 @@ defmodule ThereishWeb.RoomComponents do
         if(@mode == :stage, do: "gap-1.5", else: "gap-2 text-lg")
       ]}
     >
-      <%= if Mask.url(@seat[:mask]) do %>
-        <img
-          src={Mask.url(@seat.mask)}
-          alt={@seat.name}
-          data-role="seat-mask"
-          class={[
-            "rounded object-cover border border-base-300",
-            if(@mode == :stage, do: "size-3.5", else: "size-5")
-          ]}
-        />
-      <% else %>
-        <%= if @seat[:mask] == :face_down do %>
-          <span
-            data-role="mask-face-down"
-            data-seat={@seat.id}
-            class={[
-              "rounded border flex items-center justify-center text-[10px] opacity-80",
-              if(@mode == :stage, do: "size-3", else: "size-4")
-            ]}
-            style={"border-color: #{@seat[:colour] || "var(--color-primary, currentColor)"}; color: #{@seat[:colour] || "var(--color-primary, currentColor)"}; background-color: color-mix(in oklab, #{@seat[:colour] || "var(--color-primary, currentColor)"} 15%, transparent);"}
-            title="Mask face down"
-          >
-            🂠
-          </span>
-        <% else %>
-          <span
-            data-role="seat-colour-dot"
-            class={[
-              "rounded-full",
-              if(@mode == :stage, do: "size-1.5", else: "size-2")
-            ]}
-            style={"background-color: #{@seat[:colour] || "var(--color-primary, currentColor)"}"}
-            aria-hidden="true"
-          ></span>
-        <% end %>
-      <% end %>
+      <.seat_mask seat={@seat} size={if @mode == :stage, do: :xs, else: :sm} />
       <span class={if @mode == :stage, do: "font-medium", else: ""}>
         {@seat.name}
       </span>
@@ -164,6 +129,102 @@ defmodule ThereishWeb.RoomComponents do
     </li>
     """
   end
+
+  @doc """
+  A Seat's Mask, drawn the one way every Room screen draws it.
+
+  The Seat comes from `Thereish.Game.view/2`, which has already decided which
+  Mask this viewer may see. There are three looks: the picture once it is
+  drawn, the card face down when the Seat's Give has landed before the first
+  reveal, and the Seat's colour dot otherwise (`:dot` or no Mask yet).
+
+  `:xs` and `:sm` are badge sizes and draw a bare dot. From `:md` up every look
+  fills the same square, so a row of Masks lines up whichever look each Seat
+  wears; `:xl` is the one Mask on its own card, and its dot stays bare.
+  """
+  attr :seat, :map, required: true, doc: "a Seat from Thereish.Game.view/2"
+  attr :size, :atom, required: true, values: [:xs, :sm, :md, :lg, :xl]
+
+  def seat_mask(assigns) do
+    assigns =
+      assign(assigns,
+        url: Mask.url(assigns.seat[:mask]),
+        colour: seat_colour(assigns.seat)
+      )
+
+    ~H"""
+    <%= cond do %>
+      <% @url -> %>
+        <img
+          src={@url}
+          alt={@seat.name}
+          data-role="seat-mask"
+          class={["object-cover", picture_class(@size)]}
+          style={"--seat-color: #{@colour}"}
+        />
+      <% @seat[:mask] == :face_down -> %>
+        <span
+          data-role="mask-face-down"
+          data-seat={@seat.id}
+          class={["flex items-center justify-center opacity-80", face_down_class(@size)]}
+          style={"--seat-color: #{@colour}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 15%, transparent); color: var(--seat-color);"}
+          title="Mask face down"
+        >
+          🂠
+        </span>
+      <% @size in [:md, :lg] -> %>
+        <span
+          class={["flex items-center justify-center", tile_class(@size)]}
+          style={"--seat-color: #{@colour}"}
+        >
+          <.colour_dot colour={@colour} class="size-6 shadow-sm" />
+        </span>
+      <% true -> %>
+        <.colour_dot colour={@colour} class={dot_class(@size)} />
+    <% end %>
+    """
+  end
+
+  @doc """
+  The colour a Seat wears on the Room screens, falling back to the theme's
+  primary colour for a Seat that has none.
+  """
+  def seat_colour(seat), do: seat[:colour] || "var(--color-primary, currentColor)"
+
+  attr :colour, :string, required: true
+  attr :class, :string, required: true
+
+  defp colour_dot(assigns) do
+    ~H"""
+    <span
+      data-role="seat-colour-dot"
+      class={["rounded-full", @class]}
+      style={"background-color: #{@colour}"}
+      aria-hidden="true"
+    ></span>
+    """
+  end
+
+  defp picture_class(:xs), do: "size-3.5 rounded border border-base-300"
+  defp picture_class(:sm), do: "size-5 rounded border border-base-300"
+  defp picture_class(:md), do: "size-14 rounded-lg border border-base-300 shadow-sm"
+  defp picture_class(:lg), do: "size-16 rounded-xl border-2 border-(--seat-color) shadow-md"
+  defp picture_class(:xl), do: "size-24 rounded-xl border border-base-300 shadow-md"
+
+  defp face_down_class(:xs), do: "size-3 rounded border text-[10px]"
+  defp face_down_class(:sm), do: "size-4 rounded border text-[10px]"
+  defp face_down_class(:md), do: "size-14 rounded-xl border-2 text-2xl shadow-sm"
+  defp face_down_class(:lg), do: "size-16 rounded-xl border-2 text-2xl shadow-md"
+  defp face_down_class(:xl), do: "size-24 rounded-xl border-2 text-4xl shadow-md"
+
+  defp tile_class(:md), do: "size-14"
+
+  defp tile_class(:lg),
+    do: "size-16 rounded-xl border-2 border-(--seat-color) bg-base-200 shadow-md"
+
+  defp dot_class(:xs), do: "size-1.5"
+  defp dot_class(:sm), do: "size-2"
+  defp dot_class(:xl), do: "size-5"
 
   attr :room, :map, required: true
   attr :mode, :atom, default: :phone
@@ -484,27 +545,7 @@ defmodule ThereishWeb.RoomComponents do
           data-seat={seat.id}
           class="flex flex-col items-center gap-1"
         >
-          <%= if Mask.url(seat[:mask]) do %>
-            <img
-              src={Mask.url(seat.mask)}
-              alt={seat.name}
-              data-role="seat-mask"
-              class="size-16 rounded-xl object-cover border-2 shadow-md"
-              style={"border-color: #{seat[:colour] || "var(--color-primary, currentColor)"};"}
-            />
-          <% else %>
-            <div
-              class="size-16 rounded-xl border-2 flex items-center justify-center shadow-md bg-base-200"
-              style={"border-color: #{seat[:colour] || "var(--color-primary, currentColor)"};"}
-            >
-              <span
-                data-role="seat-colour-dot"
-                class="size-6 rounded-full"
-                style={"background-color: #{seat[:colour] || "var(--color-primary, currentColor)"}"}
-                aria-hidden="true"
-              ></span>
-            </div>
-          <% end %>
+          <.seat_mask seat={seat} size={:lg} />
           <span class="text-xs font-semibold opacity-75">{seat.name}</span>
         </div>
       </div>
