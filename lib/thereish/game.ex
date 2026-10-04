@@ -49,6 +49,7 @@ defmodule Thereish.Game do
   import Kernel, except: [apply: 2]
 
   alias Thereish.Bookends
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.Opinion
   alias Thereish.Ladder
@@ -82,8 +83,6 @@ defmodule Thereish.Game do
           required(:id) => String.t(),
           required(:name) => String.t()
         }
-  @type page :: %{id: String.t(), bookends: [String.t()]}
-
   @typedoc """
   What the Assayer said about one Attempt's Bridges, read together, or that it
   could not say (ADR-0010).
@@ -121,7 +120,7 @@ defmodule Thereish.Game do
   @type t :: %__MODULE__{
           seat_limit: pos_integer(),
           seats: [seat()],
-          page: page() | nil,
+          page: Document.t() | nil,
           bookends: [String.t()] | nil,
           attempt: pos_integer(),
           gives: %{String.t() => String.t()},
@@ -177,7 +176,7 @@ defmodule Thereish.Game do
              }}
           | {:verdict_unavailable, %{optional(:meta) => map()}}
           | {:attempt_advanced, %{seat_id: String.t()}}
-          | {:page_started, %{seat_id: String.t(), page: page()}}
+          | {:page_started, %{seat_id: String.t(), page: Document.t()}}
           | {:next_page, %{seat_id: String.t()}}
           | {:overrule_proposed,
              %{
@@ -259,25 +258,20 @@ defmodule Thereish.Game do
         nil
       end
 
-    full_table =
-      cond do
-        Keyword.has_key?(opts, :full_table) -> Keyword.get(opts, :full_table)
-        is_map(page) -> page_full_table(page, true)
-        true -> true
-      end
+    full_table = Keyword.get_lazy(opts, :full_table, fn -> page_full_table(page, true) end)
 
     %__MODULE__{
       seat_limit: seat_limit,
       seats: seats,
       page: page,
-      bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
+      bookends: page && page.bookends,
       gives: %{},
       last_gives: %{},
       author_failure: nil,
       page_seat_ids: page_seat_ids,
       masks: %{},
       full_table: full_table == true,
-      bookend_origins: Bookends.origins(page)
+      bookend_origins: page && page.origins
     }
   end
 
@@ -443,14 +437,14 @@ defmodule Thereish.Game do
         {:error, :not_writing}
 
       true ->
-        origins = origins_from(state, attrs[:from] || attrs["from"], bookends)
+        origins = origins_from(state, attrs[:from], bookends)
 
-        page = %{
+        page = %Document{
           bookends: bookends,
-          bookend_origins: origins,
+          origins: origins,
           gives: state.gives,
           meta: meta,
-          full_table: page_full_table(attrs, state.full_table)
+          full_table: Map.get(attrs, :full_table, state.full_table) != false
         }
 
         {:ok,
@@ -603,15 +597,15 @@ defmodule Thereish.Game do
     end
   end
 
-  def apply(%__MODULE__{} = state, {:page_started, %{seat_id: seat_id, page: page}}) do
+  def apply(%__MODULE__{} = state, {:page_started, %{seat_id: seat_id, page: %Document{} = page}}) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- closed_page(state) do
       {:ok,
        %{
          state
          | page: page,
-           bookends: page && (Map.get(page, :bookends) || Map.get(page, "bookends")),
-           bookend_origins: Bookends.origins(page),
+           bookends: page.bookends,
+           bookend_origins: page.origins,
            attempt: 1,
            bridges: %{},
            verdict: nil,
@@ -631,16 +625,16 @@ defmodule Thereish.Game do
       if label_str not in ["flat", "fine", "great"] do
         {:error, :invalid_label}
       else
-        meta = (state.page && state.page[:meta]) || %{}
+        meta = (state.page && state.page.meta) || %{}
         arm = meta[:arm] || meta["arm"]
-        bookends = (state.page && state.page[:bookends]) || state.bookends
+        bookends = (state.page && state.page.bookends) || state.bookends
 
         # Which Chronicle Page this is the Room's to say, once it is written.
         tap_effect_data = %{
           seat_id: seat_id,
           label: label_str,
           bookends: bookends,
-          gives: (state.page && state.page[:gives]) || state.gives,
+          gives: (state.page && state.page.gives) || state.gives,
           author_meta: meta,
           arm: arm
         }
@@ -721,9 +715,6 @@ defmodule Thereish.Game do
       open_seats: state.seat_limit - length(state.seats),
       bookends: bookends(state, phase),
       bookend_chips: bookend_chips(state, phase),
-      page_give: state.page && (state.page[:give] || state.page["give"]),
-      page_chapter: state.page && (state.page[:chapter] || state.page["chapter"]),
-      page_theme: state.page && (state.page[:theme] || state.page["theme"]),
       your_give: Map.get(state.gives, viewer),
       your_last_give: Map.get(state.last_gives, viewer),
       your_mask: if(viewer, do: Map.get(state.masks || %{}, viewer)),
@@ -797,17 +788,12 @@ defmodule Thereish.Game do
   defp bookend_count(%{full_table: false}, _seats), do: 2
   defp bookend_count(_state, seats), do: length(seats)
 
-  # A Page keeps the rule it was written under. Omitted or missing (Pages from
-  # before the rule, or a Room that has not written one yet) reads as the
-  # Room's current rule, default on.
-  defp page_full_table(attrs, default) when is_map(attrs) do
-    case Map.get(attrs, :full_table, Map.get(attrs, "full_table", default)) do
-      false -> false
-      _ -> true
-    end
-  end
+  # A Page keeps the rule it was written under. A Room that has not written
+  # one yet, or a Page from before the rule, reads as the Room's current rule.
+  defp page_full_table(%Document{full_table: full_table}, _default) when is_boolean(full_table),
+    do: full_table
 
-  defp page_full_table(_, default), do: default == true
+  defp page_full_table(_page, default), do: default == true
 
   # The last Bridge in is the moment the Page turns: the Assayer is asked once,
   # about every Bridge together, and the beat starts alongside rather than
@@ -876,29 +862,13 @@ defmodule Thereish.Game do
       is_nil(state.page) ->
         []
 
-      gives = state.page[:gives] || state.page["gives"] ->
-        case gives do
-          list when is_list(list) ->
-            list
-
-          map when is_map(map) ->
-            Enum.map(page_seats(state), fn seat ->
-              %{name: seat.name, give: map[seat.id] || map[seat.name]}
-            end)
-
-          _ ->
-            []
-        end
-
-      give = state.page[:give] || state.page["give"] ->
-        if is_binary(give) and give != "" do
-          [%{give: give}]
-        else
-          []
-        end
+      map_size(state.page.gives) == 0 and is_binary(state.page.give) and state.page.give != "" ->
+        [%{give: state.page.give}]
 
       true ->
-        []
+        Enum.map(page_seats(state), fn seat ->
+          %{name: seat.name, give: state.page.gives[seat.id] || state.page.gives[seat.name]}
+        end)
     end
   end
 
@@ -1053,7 +1023,7 @@ defmodule Thereish.Game do
     )
   end
 
-  defp origins_from(_state, nil, bookends), do: Enum.map(bookends, fn _ -> %{} end)
+  defp origins_from(_state, nil, bookends), do: Enum.map(bookends, &unknown_origin/1)
 
   defp origins_from(state, from, bookends) when is_list(from) do
     by_name =
@@ -1065,7 +1035,7 @@ defmodule Thereish.Game do
     |> Enum.map(fn {word, name} ->
       case Map.get(by_name, name |> to_string() |> String.trim() |> String.downcase()) do
         nil ->
-          %{word: word}
+          unknown_origin(word)
 
         seat ->
           %{
@@ -1078,7 +1048,9 @@ defmodule Thereish.Game do
     end)
   end
 
-  defp origins_from(_state, _from, bookends), do: Enum.map(bookends, fn _ -> %{} end)
+  defp origins_from(_state, _from, bookends), do: Enum.map(bookends, &unknown_origin/1)
+
+  defp unknown_origin(word), do: %{word: word, seat_id: nil, seat_name: nil, give: nil}
 
   # What the Assayer said, in the shape every screen and the book read it in.
   # The number goes through the Ladder here so that nothing downstream has to
@@ -1154,7 +1126,7 @@ defmodule Thereish.Game do
           %Entry.Give{seat_id: seat.id, text: state.gives[seat.id] || ""}
         end),
       masks: state.masks || %{},
-      author_meta: state.page && (state.page[:meta] || state.page["meta"]),
+      author_meta: state.page && state.page.meta,
       closed_because: closed_because(state),
       melded?: melded?(state),
       closeness: headline(state),

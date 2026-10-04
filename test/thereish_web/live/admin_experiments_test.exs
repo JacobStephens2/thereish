@@ -165,7 +165,7 @@ defmodule ThereishWeb.AdminExperimentsTest do
         page_identifier: page.id,
         seat_id: ctx.mara.id,
         label: "great",
-        bookends: page.document["bookends"],
+        bookends: page.document.bookends,
         arm: "flash"
       })
 

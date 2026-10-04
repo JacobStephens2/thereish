@@ -8,6 +8,7 @@ defmodule Thereish.Rooms.PacingTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Chronicle.Document
   alias Thereish.Game
   alias Thereish.Ladder
   alias Thereish.Rooms.Pacing
@@ -21,7 +22,7 @@ defmodule Thereish.Rooms.PacingTest do
     author: [still_writing: 5_000, deadline: 8_000]
   }
 
-  @page %{id: "test-page", bookends: ["lantern", "harbour"]}
+  @page %Document{bookends: ["lantern", "harbour"]}
 
   @verdict {:verdict_received,
             %{

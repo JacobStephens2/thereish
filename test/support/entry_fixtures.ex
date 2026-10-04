@@ -9,6 +9,7 @@ defmodule Thereish.EntryFixtures do
   than writing an empty column.
   """
 
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.Entry
 
   @doc """
@@ -18,7 +19,7 @@ defmodule Thereish.EntryFixtures do
     attrs = Map.new(attrs)
 
     defaults = %{
-      page: %{bookends: ["lantern", "harbour"]},
+      page: %Document{bookends: ["lantern", "harbour"]},
       closed_because: :meld,
       melded?: true,
       closeness: 80,

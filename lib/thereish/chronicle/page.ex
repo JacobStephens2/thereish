@@ -4,9 +4,9 @@ defmodule Thereish.Chronicle.Page do
   number the players were shown when it did.
 
   Written once, when the Page closes, and never touched again. `document` is the
-  Page as the Author wrote it — Bookends today, more once there is an Author —
-  kept as JSONB so that a contract which is still growing does not need a
-  migration every time it does (ADR-0003).
+  Page as it was written at the table, a `Thereish.Chronicle.Document`, kept as
+  JSONB so that a contract which is still growing does not need a migration
+  every time it does (ADR-0003).
   """
   use Ecto.Schema
 
@@ -16,7 +16,7 @@ defmodule Thereish.Chronicle.Page do
   @foreign_key_type :binary_id
 
   schema "chronicle_pages" do
-    field :document, :map
+    field :document, Thereish.Chronicle.Document
     field :author_meta, :map
     field :music_meta, Thereish.Foley.Track
     field :vamp_meta, Thereish.Foley.Vamp
