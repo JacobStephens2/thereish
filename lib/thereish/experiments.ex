@@ -94,12 +94,12 @@ defmodule Thereish.Experiments do
 
   @doc """
   Assigns the next Page in a Room its Author-model arm, strictly alternating
-  Flash and Astra from the Room's past assignments, records the assignment
+  Flash and Astra from the Room's past assignment rows, records its row
   blind, and answers it as the Page's Assignment.
 
-  An assignment that cannot be read or written is logged and the Page plays
-  under the default Arm, Flash, with no row: a lost assignment must not stop
-  the Author being asked.
+  When no row can be read or written, that is logged and the Page plays under
+  the default Arm, Flash, with no row: a lost row must not stop the Author
+  being asked.
   """
   @spec assign(Ecto.UUID.t() | String.t()) :: Assignment.t()
   def assign(room_id_or_slug) do
@@ -150,7 +150,7 @@ defmodule Thereish.Experiments do
 
     closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
 
-    result =
+    outcome =
       %ExperimentOutcome{}
       |> ExperimentOutcome.changeset(%{
         room_id: room_id,
@@ -169,9 +169,10 @@ defmodule Thereish.Experiments do
       })
       |> Repo.insert()
 
-    link_assignment(room_id, assignment, page)
+    # A Page with no outcome links no row.
+    with {:ok, _} <- outcome, do: link_assignment(room_id, assignment, page)
 
-    result
+    outcome
   end
 
   defp link_assignment(_room_id, %Assignment{id: nil}, _page), do: :ok

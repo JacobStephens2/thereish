@@ -6,7 +6,7 @@ defmodule Thereish.Experiments.Assignment do
 
   The Room carries it with the Page until the Page's outcome is recorded, and
   reads nothing from it but the Arm, which is the Author's job. A Page whose
-  assignment could not be recorded carries the default Arm and no id, and
+  Assignment could not be recorded carries the default Arm and no id, and
   links no row.
   """
 

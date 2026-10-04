@@ -2,7 +2,7 @@ defmodule Thereish.Chronicle.Entry do
   @moduledoc """
   One closed Page as the Room hands it to the Chronicle: its Gives, Attempts,
   Bridges and Verdicts, the times Pacing recorded, the music Foley played and
-  the Page's experiment Assignment. Built when the Page closes and written once (ADR-0003).
+  the Page's Assignment. Built when the Page closes and written once (ADR-0003).
 
   The Game builds it from its own state, and leaves nil what it cannot know:
   it keeps no clock and knows no Foley or experiment. Pacing stamps the times,

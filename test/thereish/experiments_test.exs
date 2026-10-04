@@ -211,6 +211,20 @@ defmodule Thereish.ExperimentsTest do
       assert length(ExperimentFixtures.bookends_taps(ctx.room.id)) == 3
     end
 
+    test "is recorded under the Arm of the Assignment it carries", ctx do
+      assignment = %Assignment{id: nil, experiment_id: "author_model", arm: :astra}
+
+      assert {:ok, tap} =
+               Experiments.record_bookends_tap(ctx.room.id, %{
+                 page_identifier: "P001",
+                 seat_id: ctx.melissa.id,
+                 label: "fine",
+                 assignment: assignment
+               })
+
+      assert tap.arm == "astra"
+    end
+
     test "finds its outcome by the Page's id", ctx do
       {page, outcome} = record_outcome(ctx.room, assignment: Experiments.assign(ctx.room.id))
 

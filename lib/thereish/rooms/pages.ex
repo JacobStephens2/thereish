@@ -36,7 +36,7 @@ defmodule Thereish.Rooms.Pages do
 
   ## The Assignment
 
-  The experiment Assignment of the Page in play is kept here too. New Gives
+  The Assignment of the Page in play is kept here too. New Gives
   keep it, so an abandoned Author request and the Page written after it share
   one Assignment; a turned Page clears it.
 
