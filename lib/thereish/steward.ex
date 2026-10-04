@@ -429,41 +429,11 @@ defmodule Thereish.Steward do
   end
 
   @doc """
-  Assigns experiment arm for a Page, strictly alternating arms within the room (:flash then :astra).
-  Records the assignment blind in the experiment tables.
+  Assigns the next Page in a Room its experiment arm. A/B assignment lives
+  behind the Steward; `Thereish.Experiments` keeps the rows.
   """
-  @spec assign_arm(Ecto.UUID.t() | String.t(), map() | String.t() | integer() | nil) ::
-          :flash | :astra
-  def assign_arm(room_id, page) do
-    past_assignments = Thereish.Chronicle.experiment_assignments(room_id, "author_model")
-    past_arms = Enum.map(past_assignments, & &1.arm)
-    arm = Thereish.Experiments.assign_arm(past_arms)
-
-    page_identifier =
-      cond do
-        is_map(page) ->
-          page[:id] || page["id"] || page[:number] || "page-#{length(past_arms) + 1}"
-
-        is_binary(page) or is_integer(page) ->
-          to_string(page)
-
-        true ->
-          "page-#{length(past_arms) + 1}"
-      end
-
-    _ =
-      Thereish.Chronicle.record_experiment_assignment(room_id, %{
-        page_identifier: to_string(page_identifier),
-        experiment_id: "author_model",
-        arm: to_string(arm),
-        chapter: "table",
-        assigned_at: DateTime.utc_now()
-      })
-
-    arm
-  rescue
-    _ -> :flash
-  end
+  @spec assign_arm(Ecto.UUID.t() | String.t()) :: :flash | :astra
+  def assign_arm(room_id), do: Thereish.Experiments.assign(room_id)
 
   @doc """
   Rewrites the precedent for these Bridges with the players' ruling.
