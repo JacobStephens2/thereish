@@ -26,9 +26,27 @@ defmodule Thereish.Steward do
   written between them, read together and answered once (ADR-0010). A table of
   four is one request rather than six, and the reveal it feeds is one number
   rather than six.
+
+  ## In front of the seam
+
+  The rules the game depends on whichever adapter is answering sit here, in
+  front of the seam, and the adapters answer only the provider act: a grade, a
+  Quip, a title.
+
+  - **The Precedent.** The grade shown is the precedent (ADR-0006). `assay/1`
+    reads `Thereish.Steward.Precedent` before asking the adapter, and writes the
+    adapter's grade down on a miss. A hit is the cached grade with a fresh Quip
+    from the adapter's `quip/1`, or the cached Quip if the fresh one fails or is
+    late. `overrule/3` writes the players' ruling under the same key.
+  - **The title fallback.** A Track always gets a title. When the adapter's
+    `title_track/2` answers an error, `title_track/2` answers the title made
+    from the Gives.
   """
 
   require Logger
+
+  alias Thereish.Steward.Precedent
+  alias Thereish.Steward.Title
 
   @typedoc "The Bookends, and every Bridge written between them, in roster order."
   @type request :: %{bookends: [String.t()], bridges: [String.t()]}
@@ -83,6 +101,8 @@ defmodule Thereish.Steward do
         }
 
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
+  @callback quip(request()) ::
+              {:ok, %{quip: String.t(), meta: %{cost_usd: number() | nil}}} | {:error, term()}
   @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
   @callback forge(map() | String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
@@ -99,12 +119,34 @@ defmodule Thereish.Steward do
   @doc """
   Titles one instrumental Track from its Gives, answering %{title: title, meta: meta}.
 
-  Measured here so latency provenance is kept by the seam.
+  Measured here so latency provenance is kept by the seam. A Track always gets a
+  title: when the Scribe cannot write one, whichever adapter is answering, the
+  title is the one made from the Gives.
   """
   @spec title_track([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   def title_track(gives, opts \\ []) do
     gives = Enum.map(gives, &Thereish.Steward.Author.give_text/1)
-    measure_call(fn -> adapter().title_track(gives, opts) end)
+
+    measure_call(fn ->
+      case adapter().title_track(gives, opts) do
+        {:ok, answer} -> {:ok, answer}
+        {:error, reason} -> {:ok, fallback_title(gives, reason)}
+      end
+    end)
+  end
+
+  defp fallback_title(gives, reason) do
+    Logger.warning("Scribe title failed (#{inspect(reason)}), falling back")
+
+    %{
+      title: Title.fallback(gives),
+      meta: %{
+        model: role(:scribe, :title).model,
+        cost_usd: 0.0,
+        attempts: 1,
+        fallback: true
+      }
+    }
   end
 
   @doc """
@@ -462,10 +504,58 @@ defmodule Thereish.Steward do
   def assay(request) do
     started = System.monotonic_time(:millisecond)
 
-    case adapter().assay(request) do
+    case precedented(request) do
       {:ok, verdict} -> {:ok, timed(verdict, System.monotonic_time(:millisecond) - started)}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # The grade the players are shown is the precedent (ADR-0006), whichever
+  # adapter is answering, so the Precedent is read and written here rather than
+  # inside one of them. A miss is graded by the adapter and written down; a hit
+  # is the cached grade with a fresh Quip.
+  defp precedented(request) do
+    {model, prompt_version} = precedent_key()
+
+    case Precedent.get(model, prompt_version, request) do
+      {:ok, cached} ->
+        {:ok, fresh_quip_or_cached(request, cached)}
+
+      :miss ->
+        with {:ok, verdict} <- adapter().assay(request) do
+          Precedent.put(model, prompt_version, request, verdict)
+          {:ok, verdict}
+        end
+    end
+  end
+
+  # The fresh Quip is a provider act, so the adapter writes it; whether the
+  # players hear it or the cached one is the Steward's call. It has to land
+  # inside the reveal's beat, so a Quip that errors, crashes or is late is the
+  # cached one, which cost nothing.
+  defp fresh_quip_or_cached(request, cached) do
+    role = role(:assayer)
+    timeout = min(Map.get(role, :quip_timeout_ms, 2_000), Map.get(role, :timeout_ms, 2_000))
+    task = Task.Supervisor.async_nolink(Thereish.Steward.Tasks, fn -> adapter().quip(request) end)
+
+    {quip, cost_usd} =
+      case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+        {:ok, {:ok, %{quip: quip, meta: meta}}} -> {quip, meta.cost_usd}
+        _fallback -> {cached.quip, 0.0}
+      end
+
+    %{
+      cached
+      | quip: quip,
+        meta: Map.merge(cached.meta, %{precedent_hit: true, cost_usd: cost_usd})
+    }
+  end
+
+  # The one place the Precedent's key is made, because an overrule written
+  # under a key the assay never reads would be a ruling nobody is shown.
+  defp precedent_key do
+    role = role(:assayer)
+    {role.model, Map.get(role, :prompt_version, Thereish.Steward.Assay.version())}
   end
 
   @doc """
@@ -488,10 +578,9 @@ defmodule Thereish.Steward do
   end
 
   def overrule(bookends, bridges, ruling) when is_list(bookends) and is_list(bridges) do
-    role = role(:assayer)
-    prompt_version = Map.get(role, :prompt_version, Thereish.Steward.Assay.version())
+    {model, prompt_version} = precedent_key()
 
-    Thereish.Steward.Precedent.overrule(role.model, prompt_version, bookends, bridges, ruling)
+    Precedent.overrule(model, prompt_version, bookends, bridges, ruling)
   end
 
   @doc """
