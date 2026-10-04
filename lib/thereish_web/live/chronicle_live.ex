@@ -14,6 +14,7 @@ defmodule ThereishWeb.ChronicleLive do
 
   alias Thereish.Admin
   alias Thereish.Chronicle
+  alias Thereish.Mask
   alias Thereish.Repo
   alias Thereish.Rooms
   alias Thereish.Rooms.Room
@@ -208,8 +209,8 @@ defmodule ThereishWeb.ChronicleLive do
                   class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
                 >
                   <.enlargeable_mask
-                    :if={is_map(g[:mask]) and (g.mask[:url] || g.mask["url"])}
-                    url={g.mask[:url] || g.mask["url"]}
+                    :if={Mask.url(g[:mask])}
+                    url={Mask.url(g[:mask])}
                     alt={"Mask for " <> g.seat_name}
                     seat_id={g.seat_id}
                     class="h-4 w-4 rounded-full object-cover"
@@ -246,10 +247,7 @@ defmodule ThereishWeb.ChronicleLive do
 
           <!-- Masks if present -->
           <div
-            :if={
-              is_map(page[:masks]) and map_size(page.masks) > 0 and
-                Enum.any?(page.masks, fn {_, m} -> is_map(m) and (m[:url] || m["url"]) end)
-            }
+            :if={is_map(page[:masks]) and Enum.any?(page.masks, fn {_, m} -> Mask.url(m) end)}
             data-role="page-masks"
             class="flex items-center gap-3 rounded-lg bg-base-200/50 p-3"
           >
@@ -257,8 +255,8 @@ defmodule ThereishWeb.ChronicleLive do
             <div class="flex flex-wrap items-center gap-2">
               <.enlargeable_mask
                 :for={{seat_id, mask} <- page.masks}
-                :if={is_map(mask) and (mask[:url] || mask["url"])}
-                url={mask[:url] || mask["url"]}
+                :if={Mask.url(mask)}
+                url={Mask.url(mask)}
                 alt="Mask"
                 seat_id={seat_id}
                 class="h-8 w-8 rounded-md border border-base-300 object-cover shadow-sm"

@@ -34,6 +34,7 @@ defmodule Thereish.Rooms.Server do
   alias Thereish.Foley.Occupancy
   alias Thereish.Foley.Voice
   alias Thereish.Game
+  alias Thereish.Mask
   alias Thereish.Rooms.Pacing
   alias Thereish.Rooms.Pages
   alias Thereish.Rooms.Room
@@ -437,13 +438,7 @@ defmodule Thereish.Rooms.Server do
   # A Mask for the Gives in play is the Game's to accept, whatever it is. One
   # for Gives already past only adds something if it was drawn. Either way,
   # Pages decides which Chronicle Page it lands on.
-  def handle_info({:mask_landed, seat_id, giving_ref, result}, state) do
-    mask =
-      case result do
-        {:ok, mask} when is_map(mask) -> Map.delete(mask, :bytes)
-        _ -> :dot
-      end
-
+  def handle_info({:mask_landed, seat_id, giving_ref, mask}, state) do
     cond do
       giving_ref == Pages.giving(state.pages) ->
         case Game.apply(state.game, {:mask_landed, %{seat_id: seat_id, mask: mask}}) do
@@ -455,7 +450,7 @@ defmodule Thereish.Rooms.Server do
             {:noreply, state}
         end
 
-      is_map(mask) ->
+      match?(%Mask{}, mask) ->
         {state, wrote?} = run_pages(state, &Pages.write(&1, giving_ref, {:mask, seat_id, mask}))
         if wrote?, do: broadcast(state.room.slug)
         {:noreply, state}
@@ -884,29 +879,8 @@ defmodule Thereish.Rooms.Server do
     colour = Game.seat_colour(state.game, seat_id)
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      try do
-        case Steward.draw(give, colour, size: 512) do
-          {:ok, mask_data} ->
-            mask = Map.delete(mask_data, :bytes)
-            send(room, {:mask_landed, seat_id, giving_ref, {:ok, mask}})
-
-          {:error, reason} ->
-            Logger.warning(
-              "Limner draw failed for seat #{seat_id}: #{inspect(reason, limit: 40)}"
-            )
-
-            send(room, {:mask_landed, seat_id, giving_ref, {:error, reason}})
-        end
-      rescue
-        error ->
-          Logger.warning("Limner draw crashed for seat #{seat_id}: #{Exception.message(error)}")
-
-          send(room, {:mask_landed, seat_id, giving_ref, {:error, error}})
-      catch
-        :exit, reason ->
-          Logger.warning("Limner draw exited for seat #{seat_id}: #{inspect(reason, limit: 20)}")
-          send(room, {:mask_landed, seat_id, giving_ref, {:error, {:exit, reason}}})
-      end
+      Logger.metadata(seat_id: seat_id)
+      send(room, {:mask_landed, seat_id, giving_ref, Mask.draw(give, colour)})
     end)
 
     state

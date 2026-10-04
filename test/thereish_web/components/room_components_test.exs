@@ -5,6 +5,8 @@ defmodule ThereishWeb.RoomComponentsTest do
   import Phoenix.LiveViewTest
   import ThereishWeb.RoomComponents
 
+  alias Thereish.Mask
+
   describe "assaying component (the beat)" do
     test "the 2.5s beat is visibly a beat, not a spinner" do
       room = %{
@@ -937,8 +939,8 @@ defmodule ThereishWeb.RoomComponentsTest do
       room = %{
         bookends: ["cairn", "beacon"],
         bookend_chips: [
-          %{word: "cairn", mask: %{url: "/media/masks/m.png"}, seat_id: "s1"},
-          %{word: "beacon", mask: %{url: "/media/masks/j.png"}, seat_id: "s2"}
+          %{word: "cairn", mask: %Mask{url: "/media/masks/m.png", meta: %{}}, seat_id: "s1"},
+          %{word: "beacon", mask: %Mask{url: "/media/masks/j.png", meta: %{}}, seat_id: "s2"}
         ]
       }
 
@@ -1170,13 +1172,13 @@ defmodule ThereishWeb.RoomComponentsTest do
               seat_id: "s1",
               name: "Melissa",
               text: "lighthouse",
-              mask: %{url: "/media/masks/mask-melissa.png"}
+              mask: %Mask{url: "/media/masks/mask-melissa.png", meta: %{}}
             },
             %{
               seat_id: "s2",
               name: "Jacob",
               text: "candle",
-              mask: %{url: "/media/masks/mask-jacob.png"}
+              mask: %Mask{url: "/media/masks/mask-jacob.png", meta: %{}}
             }
           ]
         }
