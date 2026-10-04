@@ -1,7 +1,8 @@
 defmodule Thereish.Rooms.Pacing do
   @moduledoc """
   The Room's rules about time: the Beat before a reveal, the hold after it,
-  and how long the Author and the Assayer are waited on.
+  how long the Author and the Assayer are waited on, and when each part of a
+  Page happened.
 
   It is a pure reducer in the shape of the Game. The Room tells it what
   happened and when, and gets back a new Pacing and a list of effects to
@@ -17,6 +18,19 @@ defmodule Thereish.Rooms.Pacing do
       `elapsed(pacing, name, token, now)` after `ms` milliseconds
     * `{:apply, events}` — apply these Game events, in order
     * `:broadcast` — what every screen says about the wait has changed
+
+  ## When each part of a Page happened
+
+  The Chronicle records when the Page opened, when each Give arrived, and when
+  each Attempt started, went to the Assayer, was revealed and was advanced.
+  Pacing writes each one down at the phase edge it names, in `moved/4`, and
+  never writes the same one twice. `stamp/2` hands them to the closing Page's
+  entry; new Gives and a turned Page forget them.
+
+  A Page opens when it is on screen, not when the Room process booted. The
+  difference is everyone typing their names, which is not the ten to fifteen
+  minutes a Page is supposed to take, and it is this time the couch-night
+  measurement reads.
 
   ## It owns time, and the rules do not
 
@@ -60,6 +74,7 @@ defmodule Thereish.Rooms.Pacing do
   rule lives in `elapsed/4` and nowhere else.
   """
 
+  alias Thereish.Chronicle.Timing
   alias Thereish.Game
 
   defstruct durations: nil,
@@ -68,7 +83,9 @@ defmodule Thereish.Rooms.Pacing do
             held: [],
             assayer: nil,
             author: nil,
-            hold: nil
+            hold: nil,
+            opened_at: nil,
+            times: %{gives: %{}, attempts: %{}}
 
   @typedoc "A moment, on the monotonic clock (`ms`) and the wall clock (`at`)."
   @type now :: %{ms: integer(), at: DateTime.t()}
@@ -84,6 +101,8 @@ defmodule Thereish.Rooms.Pacing do
           author: [still_writing: pos_integer(), deadline: pos_integer()]
         }
 
+  @attempt_times [:started_at, :assaying_started_at, :revealed_at, :advanced_at]
+
   @type name :: :beat | :assayer | :author | :hold
   @type token :: non_neg_integer()
 
@@ -94,7 +113,12 @@ defmodule Thereish.Rooms.Pacing do
           held: [Game.event()],
           assayer: %{step: :grading | :slow, token: token()} | nil,
           author: %{ref: reference(), step: :writing | :still_writing, token: token()} | nil,
-          hold: %{revealed_ms: integer(), token: token() | nil} | nil
+          hold: %{revealed_ms: integer(), token: token() | nil} | nil,
+          opened_at: DateTime.t() | nil,
+          times: %{
+            gives: %{String.t() => DateTime.t()},
+            attempts: %{pos_integer() => %{atom() => DateTime.t()}}
+          }
         }
 
   @typedoc """
@@ -118,13 +142,19 @@ defmodule Thereish.Rooms.Pacing do
   def new(durations), do: %__MODULE__{durations: durations}
 
   @doc """
-  The Game moved from `old_game` to `new_game` at `now`. A reveal, closing or
-  not, arms the hold; leaving the reveal clears it.
+  The Game moved from `old_game` to `new_game` at `now`. Leaving waiting opens
+  the Page, and each phase edge records the time it names. A reveal, closing
+  or not, arms the hold; leaving the reveal clears it.
   """
   @spec moved(t(), Game.t(), Game.t(), now()) :: {t(), [effect()]}
   def moved(%__MODULE__{} = pacing, old_game, new_game, now) do
     old_phase = Game.phase(old_game)
     new_phase = Game.phase(new_game)
+
+    pacing =
+      pacing
+      |> open_page(new_phase, now)
+      |> record_times(old_game, new_game, {old_phase, new_phase}, now)
 
     cond do
       old_phase == :assaying and revealed?(new_phase) -> hold(pacing, now)
@@ -179,9 +209,47 @@ defmodule Thereish.Rooms.Pacing do
 
   def author_answered(%__MODULE__{}, _ref), do: :stale
 
-  @doc "The Gives were reset: the Author is no longer waited on."
+  @doc """
+  The Gives were reset: the Author is no longer waited on, and the Page's
+  opened time and occurrence times are forgotten.
+  """
   @spec gives_reset(t()) :: t()
-  def gives_reset(%__MODULE__{} = pacing), do: %{pacing | author: nil}
+  def gives_reset(%__MODULE__{} = pacing), do: forget_page(pacing)
+
+  @doc """
+  The Page was turned: the Author is no longer waited on, and the closed
+  Page's opened time and occurrence times are forgotten.
+  """
+  @spec page_turned(t()) :: t()
+  def page_turned(%__MODULE__{} = pacing), do: forget_page(pacing)
+
+  @doc """
+  The closing Page's Chronicle `entry`, with when each part of it happened:
+  each Give's `arrived_at`, each Attempt's `started_at`, `assaying_started_at`,
+  `revealed_at` and `advanced_at`, and the entry's own `revealed_at` and
+  `opened_at`. A time never recorded is `nil`.
+  """
+  @spec stamp(t(), map()) :: map()
+  def stamp(%__MODULE__{times: times} = pacing, entry) do
+    gives =
+      Enum.map(entry[:gives] || [], fn give ->
+        seat_id = give[:seat_id] || give["seat_id"]
+        Map.put(give, :arrived_at, Map.get(times.gives, seat_id))
+      end)
+
+    attempts =
+      Enum.map(entry.attempts, fn attempt ->
+        recorded = Map.get(times.attempts, attempt.number, %{})
+
+        Enum.reduce(@attempt_times, attempt, &Map.put(&2, &1, recorded[&1]))
+      end)
+
+    entry
+    |> Map.put(:gives, gives)
+    |> Map.put(:attempts, attempts)
+    |> Map.put(:revealed_at, Timing.last_revealed(attempts))
+    |> Map.put(:opened_at, pacing.opened_at)
+  end
 
   @doc """
   A timer armed as `name` with `token` fired at `now`. A token Pacing no longer
@@ -261,6 +329,59 @@ defmodule Thereish.Rooms.Pacing do
   end
 
   defp revealed?(phase), do: phase in [:reveal, :closed]
+
+  defp forget_page(pacing) do
+    %{pacing | author: nil, opened_at: nil, times: %{gives: %{}, attempts: %{}}}
+  end
+
+  defp open_page(%{opened_at: nil} = pacing, phase, now) when phase != :waiting do
+    %{pacing | opened_at: now.at}
+  end
+
+  defp open_page(pacing, _phase, _now), do: pacing
+
+  # Each edge names the times it records. A Give is recorded when its Seat
+  # first appears among the Gives; coming back to giving from elsewhere starts
+  # the Gives' times over.
+  defp record_times(pacing, old_game, new_game, edge, now) do
+    times = pacing.times
+
+    gives =
+      case edge do
+        {old_phase, :giving} when old_phase != :giving -> %{}
+        _edge -> times.gives
+      end
+
+    gives =
+      (Map.keys(new_game.gives) -- Map.keys(old_game.gives))
+      |> Enum.reduce(gives, &Map.put_new(&2, &1, now.at))
+
+    attempts =
+      case edge do
+        {:bridging, :assaying} ->
+          put_attempt(times.attempts, new_game.attempt, :assaying_started_at, now)
+
+        {:assaying, phase} when phase in [:reveal, :closed] ->
+          put_attempt(times.attempts, new_game.attempt, :revealed_at, now)
+
+        {:reveal, :bridging} ->
+          times.attempts
+          |> put_attempt(old_game.attempt, :advanced_at, now)
+          |> put_attempt(new_game.attempt, :started_at, now)
+
+        {:writing, :bridging} ->
+          put_attempt(times.attempts, new_game.attempt, :started_at, now)
+
+        _edge ->
+          times.attempts
+      end
+
+    %{pacing | times: %{gives: gives, attempts: attempts}}
+  end
+
+  defp put_attempt(attempts, number, field, now) do
+    Map.update(attempts, number, %{field => now.at}, &Map.put_new(&1, field, now.at))
+  end
 
   # A hold of zero is no hold worth a timer, but the reveal's moment is still
   # kept, so `may_advance/2` judges it the same way either way.

@@ -9,6 +9,7 @@ defmodule Thereish.Rooms.PacingTest do
   use ExUnit.Case, async: true
 
   alias Thereish.Game
+  alias Thereish.Ladder
   alias Thereish.Rooms.Pacing
 
   @durations %{
@@ -345,6 +346,207 @@ defmodule Thereish.Rooms.PacingTest do
       assert timers(effects) == []
       assert :ok = Pacing.may_advance(pacing, at(0))
       assert view(pacing, game, at(0)).can_advance?
+    end
+  end
+
+  describe "when each part of a Page happened" do
+    # A Room with one Seat taken, waiting for its second.
+    defp waiting, do: Game.init(seat_limit: 2, seats: [seat("Mara")])
+
+    # Plays `steps`, each an event and the moment it happened, telling Pacing
+    # of every move. Answers the last Game and the effects the Game asked for.
+    defp drive(pacing, game, steps) do
+      Enum.reduce(steps, {pacing, game, []}, fn {event, ms}, {pacing, game, _effects} ->
+        {:ok, moved, effects} = Game.apply(game, event)
+        {pacing, _pacing_effects} = Pacing.moved(pacing, game, moved, at(ms))
+        {pacing, moved, effects}
+      end)
+    end
+
+    defp give(name, ms), do: {{:give_committed, %{seat_id: "seat-" <> name, give: name}}, ms}
+
+    defp bridge(name, word, ms),
+      do: {{:bridge_committed, %{seat_id: "seat-" <> name, bridge: word}}, ms}
+
+    @to_giving [{{:seat_joined, %{id: "seat-Jacob", name: "Jacob"}}, 1_000}]
+    @written [{{:page_written, %{bookends: ["lantern", "harbour"]}}, 4_000}]
+
+    # Both Seats Give, at 2 s and 3 s, and the Author writes the Page at 4 s.
+    defp written, do: @to_giving ++ [give("Mara", 2_000), give("Jacob", 3_000)] ++ @written
+
+    # A Page played from an empty table to a closing reveal on its second
+    # Attempt: a miss revealed at 9 s, advanced at 20 s, a meld at 29 s.
+    defp closed_page(pacing \\ pacing()) do
+      drive(
+        pacing,
+        waiting(),
+        written() ++
+          [bridge("Mara", "cairn", 5_000), bridge("Jacob", "beacon", 6_000)] ++
+          [{graded(0), 9_000}, {{:attempt_advanced, %{seat_id: "seat-Mara"}}, 20_000}] ++
+          [bridge("Mara", "stone", 21_000), bridge("Jacob", "stone", 22_000)] ++
+          [{graded(Ladder.meld_threshold()), 29_000}]
+      )
+    end
+
+    defp chronicle_entry(effects) do
+      [entry] = for {:chronicle, entry} <- effects, do: entry
+      entry
+    end
+
+    defp attempt_times(attempt),
+      do: Map.take(attempt, [:started_at, :assaying_started_at, :revealed_at, :advanced_at])
+
+    defp opened_at(pacing), do: Pacing.stamp(pacing, %{gives: [], attempts: []}).opened_at
+
+    test "the Page opened when it left waiting, not when the Room started" do
+      game = waiting()
+      {pacing, []} = Pacing.moved(pacing(), game, game, at(0))
+      assert opened_at(pacing) == nil
+
+      {pacing, _game, _effects} = drive(pacing, game, @to_giving)
+
+      assert opened_at(pacing) == at(1_000).at
+    end
+
+    test "the opened time is kept however many moves follow" do
+      {pacing, _game, _effects} = closed_page()
+
+      assert opened_at(pacing) == at(1_000).at
+    end
+
+    test "a closed Page's entry is stamped with when each part of it happened" do
+      {pacing, _game, effects} = closed_page()
+
+      entry = Pacing.stamp(pacing, chronicle_entry(effects))
+
+      assert entry.opened_at == at(1_000).at
+      assert entry.revealed_at == at(29_000).at
+
+      assert Map.new(entry.gives, &{&1.seat_id, &1.arrived_at}) == %{
+               "seat-Mara" => at(2_000).at,
+               "seat-Jacob" => at(3_000).at
+             }
+
+      assert [first, second] = Enum.sort_by(entry.attempts, & &1.number)
+
+      assert attempt_times(first) ==
+               %{
+                 started_at: at(4_000).at,
+                 assaying_started_at: at(6_000).at,
+                 revealed_at: at(9_000).at,
+                 advanced_at: at(20_000).at
+               }
+
+      assert attempt_times(second) ==
+               %{
+                 started_at: at(20_000).at,
+                 assaying_started_at: at(22_000).at,
+                 revealed_at: at(29_000).at,
+                 advanced_at: nil
+               }
+    end
+
+    test "a time already recorded is not overwritten" do
+      {pacing, writing, _effects} =
+        drive(pacing(), waiting(), @to_giving ++ [give("Mara", 2_000), give("Jacob", 3_000)])
+
+      [{event, _ms}] = @written
+      bridging = play(writing, event)
+      {pacing, []} = Pacing.moved(pacing, writing, bridging, at(4_000))
+
+      {pacing, []} = Pacing.moved(pacing, waiting(), writing, at(50_000))
+      {pacing, []} = Pacing.moved(pacing, writing, bridging, at(60_000))
+
+      entry =
+        Pacing.stamp(pacing, %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]})
+
+      assert entry.opened_at == at(1_000).at
+      assert [%{arrived_at: arrived}] = entry.gives
+      assert arrived == at(2_000).at
+      assert [%{started_at: started}] = entry.attempts
+      assert started == at(4_000).at
+    end
+
+    test "coming back to giving starts the Gives' times over" do
+      {pacing, writing, _effects} =
+        drive(pacing(), waiting(), @to_giving ++ [give("Mara", 2_000), give("Jacob", 3_000)])
+
+      {pacing, _giving, _effects} =
+        drive(pacing, writing, [
+          {{:gives_reset, %{seat_id: "seat-Mara"}}, 5_000},
+          give("Mara", 7_000)
+        ])
+
+      entry =
+        Pacing.stamp(pacing, %{
+          gives: [%{seat_id: "seat-Mara"}, %{seat_id: "seat-Jacob"}],
+          attempts: []
+        })
+
+      assert Map.new(entry.gives, &{&1.seat_id, &1.arrived_at}) == %{
+               "seat-Mara" => at(7_000).at,
+               "seat-Jacob" => nil
+             }
+    end
+
+    test "a Page with no recorded times is stamped with none" do
+      entry =
+        Pacing.stamp(pacing(), %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]})
+
+      assert entry.opened_at == nil
+      assert entry.revealed_at == nil
+      assert [%{arrived_at: nil}] = entry.gives
+
+      assert [%{started_at: nil, assaying_started_at: nil, revealed_at: nil, advanced_at: nil}] =
+               entry.attempts
+    end
+
+    test "new Gives forget the opened time and the occurrence times" do
+      {pacing, _game, _effects} = drive(pacing(), waiting(), written())
+
+      pacing = Pacing.gives_reset(pacing)
+
+      assert Pacing.stamp(pacing, %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]}) ==
+               %{
+                 gives: [%{seat_id: "seat-Mara", arrived_at: nil}],
+                 attempts: [
+                   %{
+                     number: 1,
+                     started_at: nil,
+                     assaying_started_at: nil,
+                     revealed_at: nil,
+                     advanced_at: nil
+                   }
+                 ],
+                 revealed_at: nil,
+                 opened_at: nil
+               }
+    end
+
+    test "turning the Page forgets the times and stands the Author down" do
+      {pacing, _effects} = Pacing.author_asked(pacing(), make_ref(), at(0))
+      {pacing, _game, _effects} = closed_page(pacing)
+
+      pacing = Pacing.page_turned(pacing)
+
+      assert view(pacing).author_step == nil
+
+      entry =
+        Pacing.stamp(pacing, %{gives: [%{seat_id: "seat-Mara"}], attempts: [%{number: 1}]})
+
+      assert entry.opened_at == nil
+      assert [%{arrived_at: nil}] = entry.gives
+      assert [%{started_at: nil, revealed_at: nil}] = entry.attempts
+    end
+
+    test "the next Page opens from its own moment" do
+      {pacing, game, _effects} = closed_page()
+      pacing = Pacing.page_turned(pacing)
+
+      turned = play(game, {:next_page, %{seat_id: "seat-Mara"}})
+      {pacing, []} = Pacing.moved(pacing, game, turned, at(40_000))
+
+      assert opened_at(pacing) == at(40_000).at
     end
   end
 
