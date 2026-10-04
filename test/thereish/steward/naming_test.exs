@@ -18,6 +18,32 @@ defmodule Thereish.Steward.NamingTest do
     """
   ]
 
+  # The same Room as `@digests`, as the Page views Room creation hands over.
+  @rooms [
+    [
+      %{
+        bookends: ["candy", "cane"],
+        gives: [],
+        give: nil,
+        melded: true,
+        closeness: 88,
+        attempts: [
+          %{
+            number: 2,
+            bridges: [
+              %{seat_name: "Jacob", bridge: "hook"},
+              %{seat_name: "Melissa", bridge: "hook"}
+            ],
+            verdicts: [%{bridges: ["hook", "hook"], closeness: 88, band: "meld", reasoning: nil}]
+          }
+        ],
+        overrules: [],
+        corrections: [],
+        recap: nil
+      }
+    ]
+  ]
+
   defp naming_response(word, quip \\ nil) do
     data = if quip, do: %{"word" => word, "quip" => quip}, else: %{"word" => word}
     response(Jason.encode!(data))
@@ -171,7 +197,7 @@ defmodule Thereish.Steward.NamingTest do
         Req.Test.json(conn, naming_response("CANE"))
       end)
 
-      assert {:error, :timeout} = Steward.name_room(@digests, ["couch"])
+      assert {:error, :timeout} = Steward.name_room(@rooms, ["couch"])
     end
 
     test "a provider error is returned as error rather than crashing" do
@@ -179,7 +205,7 @@ defmodule Thereish.Steward.NamingTest do
         Req.Test.transport_error(conn, :econnrefused)
       end)
 
-      assert {:error, _reason} = Steward.name_room(@digests, ["couch"])
+      assert {:error, _reason} = Steward.name_room(@rooms, ["couch"])
     end
 
     test "no history makes no model call and returns :no_history" do
@@ -188,6 +214,21 @@ defmodule Thereish.Steward.NamingTest do
       end)
 
       assert Steward.name_room([], ["couch"]) == {:error, :no_history}
+      assert Steward.name_room([[], []], ["couch"]) == {:error, :no_history}
+    end
+
+    test "each Room with history is read the way the Author reads it" do
+      test = self()
+
+      recorded(fn conn, body ->
+        send(test, {:asked, Enum.map_join(body["messages"], "\n", & &1["content"])})
+        Req.Test.json(conn, naming_response("CANE"))
+      end)
+
+      assert {:ok, %{word: "cane"}} = Steward.name_room([[] | @rooms], ["couch"])
+
+      assert_received {:asked, prompt}
+      assert prompt =~ String.trim(hd(@digests))
     end
 
     test "the naming schema gains quip" do

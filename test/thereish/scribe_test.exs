@@ -262,22 +262,6 @@ defmodule Thereish.ScribeTest do
     end
   end
 
-  describe "what the Scribe reads and what the Author does not" do
-    test "the Scribe's digest carries the recaps it has already written", ctx do
-      play(ctx, "cairn", "cairns")
-      recap = await_recap(ctx.slug)
-
-      assert Chronicle.scribe_digest(room_id(ctx.slug)) =~ recap.recap
-    end
-
-    test "the Author's digest does not", ctx do
-      play(ctx, "cairn", "cairns")
-      recap = await_recap(ctx.slug)
-
-      refute Chronicle.digest(room_id(ctx.slug)) =~ recap.recap
-    end
-  end
-
   describe "the Markdown export" do
     test "carries the recap and round-trips it", ctx do
       play(ctx, "cairn", "cairns")

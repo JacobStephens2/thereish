@@ -210,13 +210,30 @@ defmodule Thereish.StewardSmokeTest do
       ]
     }
 
-    digest = """
-    Page 1 (candy · cane) [Give: Christmas] — Melded on attempt 2 (closeness: 88, meld)
-      Attempt 2: Jacob bridged "hook", Melissa bridged "hook". Verdict: 88 (meld)
-      Recap: Both of them wrote hook, and neither would say why.
-    """
+    earlier = [
+      %{
+        bookends: ["candy", "cane"],
+        gives: [],
+        give: "Christmas",
+        melded: true,
+        closeness: 88,
+        attempts: [
+          %{
+            number: 2,
+            bridges: [
+              %{seat_name: "Jacob", bridge: "hook"},
+              %{seat_name: "Melissa", bridge: "hook"}
+            ],
+            verdicts: [%{bridges: ["hook", "hook"], closeness: 88, band: "meld", reasoning: nil}]
+          }
+        ],
+        overrules: [],
+        corrections: [],
+        recap: %{recap: "Both of them wrote hook, and neither would say why.", callback: nil}
+      }
+    ]
 
-    {:ok, recap} = Steward.recap(page, digest)
+    {:ok, recap} = Steward.recap(page, earlier)
 
     # It got past both gates, which is the whole claim: a real model's real
     # paragraph is prose the couch would be shown.
@@ -260,17 +277,35 @@ defmodule Thereish.StewardSmokeTest do
     assert result.meta.cost_usd > 0
   end
 
-  test "the Scribe names a Room from a real digest once by hand" do
+  test "the Scribe names a Room from a real history once by hand" do
     alias Thereish.Steward.Legality
 
-    digest = """
-    Page 1 (candy · cane) — Melded on attempt 2 (closeness: 88, meld)
-      Attempt 2: Jacob bridged "hook", Melissa bridged "hook". Verdict: 88 (meld)
-    """
+    room = [
+      %{
+        bookends: ["candy", "cane"],
+        gives: [],
+        give: nil,
+        melded: true,
+        closeness: 88,
+        attempts: [
+          %{
+            number: 2,
+            bridges: [
+              %{seat_name: "Jacob", bridge: "hook"},
+              %{seat_name: "Melissa", bridge: "hook"}
+            ],
+            verdicts: [%{bridges: ["hook", "hook"], closeness: 88, band: "meld", reasoning: nil}]
+          }
+        ],
+        overrules: [],
+        corrections: [],
+        recap: nil
+      }
+    ]
 
     taken = ["couch", "flak"]
 
-    {:ok, %{word: code}} = Steward.name_room([digest], taken)
+    {:ok, %{word: code}} = Steward.name_room([room], taken)
 
     assert is_binary(code)
     assert String.length(code) == 4
