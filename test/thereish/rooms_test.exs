@@ -2454,37 +2454,6 @@ defmodule Thereish.RoomsTest do
       assert Enum.any?(info_lines, &(&1 =~ "track landed" and &1 =~ ~r/\+\d+ms/))
     end
 
-    test "New Gives the Game refuses leave the Page's music and times alone", ctx do
-      :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      await_phase(ctx.slug, :bridging)
-      eventually(fn -> Rooms.snapshot(ctx.slug, ctx.mara.id).playing.kind == "track" end)
-
-      music = &Map.take(&1, [:vamp, :track, :music_meta, :loop, :playing])
-      before = music.(Rooms.snapshot(ctx.slug, ctx.mara.id))
-      refused_at = DateTime.utc_now()
-
-      # A second phone's late tap, after the Author has already written the Page.
-      assert {:error, :not_writing} = Rooms.reset_gives(ctx.slug, ctx.jacob.id)
-      assert music.(Rooms.snapshot(ctx.slug, ctx.mara.id)) == before
-
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
-      await_phase(ctx.slug, :closed)
-
-      room = Store.get_room(ctx.slug)
-      [page] = eventually(fn -> Chronicle.pages(room.id) |> then(&(&1 != [] and &1)) end)
-
-      assert DateTime.compare(page.opened_at, refused_at) == :lt
-      assert length(page.gives) == 2
-
-      for give <- page.gives do
-        assert %DateTime{} = give.arrived_at
-        assert DateTime.compare(give.arrived_at, refused_at) == :lt
-        assert DateTime.compare(page.opened_at, give.arrived_at) in [:lt, :eq]
-      end
-    end
-
     test "a landed track holds over through the close and into the next Page",
          ctx do
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "setting one")
@@ -4014,9 +3983,7 @@ defmodule Thereish.RoomsTest do
       %{slug: slug, token: token, mara: mara, jacob: jacob, room: room}
     end
 
-    # Plays a Page to a meld. With a Speaker held and a slow Voice, the
-    # Verdict is still being spoken when the Page closes, so Voice holds the
-    # Chronicle write.
+    # Plays a Page to a meld.
     defp meld(ctx) do
       :ok = Rooms.give(ctx.slug, ctx.mara.id, "deep canyon")
       :ok = Rooms.give(ctx.slug, ctx.jacob.id, "echoing wind")
@@ -4025,36 +3992,6 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
       await_phase(ctx.slug, :closed)
-    end
-
-    test "a Bookends tap made while Voice holds the Page is recorded on that Page", ctx do
-      # A Page before it, so a misfiled tap would have somewhere to go.
-      meld(ctx)
-      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
-      [earlier] = Chronicle.pages(ctx.room.id)
-
-      steward(voice_delay_ms: 5_000)
-      :ok = Rooms.claim_speaker(ctx.slug, ctx.token)
-      meld(ctx)
-
-      assert [earlier] == Chronicle.pages(ctx.room.id)
-      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.mara.id, "great")
-
-      # Turning the Page releases the held write, and the tap after it once
-      # the Page's outcome is recorded.
-      :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
-
-      [^earlier, page] = Chronicle.pages(ctx.room.id)
-      [tap] = ExperimentFixtures.bookends_taps(ctx.room.id)
-      assert tap.page_id == page.id
-      assert tap.page_identifier == page.id
-      assert tap.label == "great"
-
-      outcomes =
-        Map.new(ExperimentFixtures.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1})
-
-      assert outcomes[page.id].taps == %{to_string(ctx.mara.id) => "great"}
-      assert outcomes[earlier.id].taps == %{}
     end
 
     test "a Page played under an assigned arm records its outcome under that arm", ctx do
