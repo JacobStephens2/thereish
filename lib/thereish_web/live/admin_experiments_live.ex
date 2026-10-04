@@ -74,7 +74,7 @@ defmodule ThereishWeb.AdminExperimentsLive do
     rooms =
       Enum.flat_map(Chronicle.experiment_rooms(), fn room ->
         Enum.map(Chronicle.room_experiment_ids(room.id), fn experiment_id ->
-          unblinded = Chronicle.experiment_unblinded?(room.id, experiment_id)
+          unblinded = Thereish.Experiments.unblinded?(room.id, experiment_id)
 
           %{
             room: room,
