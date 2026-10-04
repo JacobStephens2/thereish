@@ -437,6 +437,12 @@ defmodule Thereish.Chronicle.PageViewTest do
       assert [%{carried: ["beacon", "cairn"]}] = view.attempts
     end
 
+    test "as nothing when the Attempt never reached a Verdict" do
+      view = project(page(closed_because: "abandoned", attempts: [attempt(1, verdicts: [])]))
+
+      assert [%{carried: nil}] = view.attempts
+    end
+
     test "as the first two Bridges when the furthest pair is a paraphrase, as at the table" do
       view =
         project(

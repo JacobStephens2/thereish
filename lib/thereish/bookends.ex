@@ -41,7 +41,7 @@ defmodule Thereish.Bookends do
           seat_id: term() | nil,
           seat_name: String.t() | nil,
           give: String.t() | nil,
-          mask: Mask.t() | nil
+          mask: Mask.t() | :dot | nil
         }
 
   @doc """
@@ -130,7 +130,8 @@ defmodule Thereish.Bookends do
   wears a Mask. A later chip names the Seat whose Bridge it carried and wears
   that Seat's Mask from `masks` when there is one.
   """
-  @spec chips([String.t()], [map()], pos_integer(), %{optional(term()) => Mask.t()}) :: [chip()]
+  @spec chips([String.t()], [map()], pos_integer(), %{optional(term()) => Mask.t() | :dot}) ::
+          [chip()]
   def chips(words, origins, attempt_number, masks) do
     padded = Stream.concat(origins, Stream.repeatedly(fn -> %{} end))
 
