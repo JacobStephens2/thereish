@@ -734,19 +734,19 @@ defmodule Thereish.Steward do
   (`hume_api_key`). An empty string counts as absent, and an absent credential
   is `nil` in `settings` and its environment variable is in `missing`.
   """
-  @spec provider(atom(), atom() | nil, module() | nil) :: %{
+  @spec provider(role :: atom(), job :: atom() | nil, override :: module() | nil) :: %{
           module: module(),
           name: String.t(),
           settings: map(),
           missing: [String.t()]
         }
-  def provider(name, job \\ nil, override \\ nil) do
-    settings = if job, do: role(name, job), else: role(name)
+  def provider(role, job \\ nil, override \\ nil) do
+    settings = if job, do: role(role, job), else: role(role)
 
     module =
       override || settings[:provider] ||
         raise ArgumentError,
-              "no provider configured for #{inspect(Enum.reject([name, job], &is_nil/1))}"
+              "no provider configured for #{inspect(Enum.reject([role, job], &is_nil/1))}"
 
     provider_name = module |> Module.split() |> List.last() |> Macro.underscore()
 
