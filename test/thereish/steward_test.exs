@@ -41,9 +41,9 @@ defmodule Thereish.StewardTest do
   @pair %{bookends: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
 
   # The table's ruling on @pair, recorded the way the Room records one: in a
-  # Room of its own, proposed by one of its Seats. `table` overrides what the
-  # table said.
-  defp overrule(table) do
+  # Room of its own, proposed by one of its Seats. `said` overrides what the
+  # Seats ruled.
+  defp overrule(said) do
     {:ok, room} = Store.insert_room("overrule-#{System.unique_integer([:positive])}", 2)
     {:ok, seat} = Store.insert_seat(room.id, Ecto.UUID.generate(), "Mara", "device-mara")
 
@@ -61,7 +61,7 @@ defmodule Thereish.StewardTest do
           couple_reasoning: "Overruled jointly across all Seats. Recorded as precedent.",
           couple_quip: "House law."
         },
-        table
+        said
       )
 
     {room.id, Steward.overrule(room.id, ruling)}

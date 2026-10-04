@@ -462,13 +462,7 @@ defmodule Thereish.Game do
 
   def apply(%__MODULE__{} = state, {:overrule_proposed, %{seat_id: seat_id} = attrs}) do
     with :ok <- may_propose_overrule(state, seat_id) do
-      proposal =
-        case Map.fetch(attrs, :closeness) do
-          {:ok, closeness} -> Overrule.propose(seat_id, closeness)
-          :error -> Overrule.propose(seat_id)
-        end
-
-      resolve_overrule(state, proposal)
+      resolve_overrule(state, Overrule.propose(seat_id, Map.get(attrs, :closeness)))
     end
   end
 
@@ -1045,14 +1039,14 @@ defmodule Thereish.Game do
   defp rule_overrule(state, proposal) do
     previously_closed? = phase(state) == :closed
 
-    {ruled, ruling} =
+    {verdict, ruling} =
       Overrule.rule(proposal, verdict(state), %{
         number: attempt_number(state),
         bookends: attempt_bookends(state),
         bridges: written_bridges(state)
       })
 
-    state = state |> put_attempt(:verdict, ruled) |> put_attempt(:overrule, nil)
+    state = state |> put_attempt(:verdict, verdict) |> put_attempt(:overrule, nil)
 
     effects =
       if phase(state) == :closed and not previously_closed? do
