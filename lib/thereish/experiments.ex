@@ -5,22 +5,24 @@ defmodule Thereish.Experiments do
   The live Experiment is the Author model, Flash against Astra: each Page in a
   Room is assigned the next Arm in strict alternation when the Author is asked
   for it. Bait against plain, ADR-0004's misdirection test, is retired, and its
-  rows stay readable. Arm labels are blinded during play on stage and phones so
-  neither player can play the label.
+  rows stay readable.
 
-  Each Experiment declares its outcomes and its sample (20 Pages) up front.
-  It stays blinded in a Room until the admin deliberately unblinds it there,
-  which is refused until that sample of completed-Page outcomes is recorded.
+  This module owns the harness: the Experiments' definitions, each declaring
+  its outcomes and its sample (20 Pages) up front; a Page's assignment; a
+  closed Page's outcome recorded from its Entry; a Bookends tap synced onto
+  its Page's outcome; each Experiment's blinded progress toward its sample;
+  its unblinding, which the admin asks for deliberately and which is refused
+  until the sample is recorded; the admin's `overview/0`; and the readout.
+
+  It also owns Page blinding. Arm labels stay hidden during play on stage and
+  phones, and in the Chronicle, so neither player can play the label: the
+  Chronicle's Page views take their experiment fields from `page_arms/1` and
+  `page_arm/2`, which show an Arm only once its Experiment is unblinded in
+  the Room.
+
   The readout is qualitative (streaks, preferences, attempts, closing bands
   and trap convergence) rather than p-values, because the sample is two
-  people.
-
-  The harness's rows are written and read here: a Page's assignment, a closed
-  Page's outcome recorded from its Entry, a Bookends tap synced onto its
-  Page's outcome, and an unblinding. `overview/0` gives the admin each Room's
-  Experiments, their progress and, once unblinded, their readout.
-
-  The readout's arithmetic is the pure `summarize/2`, tested without a
+  people. Its arithmetic is the pure `summarize/2`, tested without a
   database. Like the Chronicle, the rows are tested against real Postgres
   through the Ecto sandbox.
   """
@@ -85,15 +87,12 @@ defmodule Thereish.Experiments do
   def definition(@author_model_id), do: @author_model_experiment
   def definition(_), do: @author_model_experiment
 
-  @doc """
-  The experiment an arm belongs to: `flash` and `astra` are the Author-model
-  experiment, and any other arm is Bait against plain.
-  """
-  @spec experiment_id_for_arm(atom()) :: String.t()
-  def experiment_id_for_arm(arm) when arm in @author_model_arms,
+  # The Experiment an Arm belongs to: `flash` and `astra` are the Author-model
+  # Experiment, and any other Arm is Bait against plain.
+  defp experiment_id_for_arm(arm) when arm in @author_model_arms,
     do: @author_model_experiment.id
 
-  def experiment_id_for_arm(_arm), do: @first_experiment.id
+  defp experiment_id_for_arm(_arm), do: @first_experiment.id
 
   @doc """
   The arm a Page plays under when it has none of its own: Flash.
@@ -311,21 +310,15 @@ defmodule Thereish.Experiments do
     |> Repo.all()
   end
 
-  @doc """
-  Returns all unblindings for a Room, oldest first, of one experiment or of
-  every experiment.
-  """
-  @spec unblindings(Ecto.UUID.t() | String.t(), String.t() | nil) ::
-          [ExperimentUnblinding.t()]
-  def unblindings(room_id_or_slug, experiment_id \\ nil) do
-    room_id = resolve_room_id(room_id_or_slug)
-
+  # The ids of the Experiments unblinded in a Room.
+  defp unblinded_experiment_ids(room_id) do
     from(u in ExperimentUnblinding,
       where: u.room_id == ^room_id,
-      order_by: [asc: u.unblinded_at, asc: u.id]
+      distinct: true,
+      select: u.experiment_id
     )
-    |> of_experiment(experiment_id)
     |> Repo.all()
+    |> MapSet.new()
   end
 
   @doc """
@@ -339,6 +332,70 @@ defmodule Thereish.Experiments do
     from(u in ExperimentUnblinding, where: u.room_id == ^room_id)
     |> of_experiment(experiment_id)
     |> Repo.exists?()
+  end
+
+  @typedoc "A Room's experiment rows, loaded once by `page_arms/1` for `page_arm/2`."
+  @opaque page_arms :: %{
+            assignments: [ExperimentAssignment.t()],
+            outcomes: [ExperimentOutcome.t()],
+            unblinded: MapSet.t(String.t())
+          }
+
+  @doc """
+  Loads a Room's assignments, outcomes and unblinded experiments once, for
+  `page_arm/2` to read each of its Pages from.
+  """
+  @spec page_arms(Ecto.UUID.t() | String.t()) :: page_arms()
+  def page_arms(room_id_or_slug) do
+    room_id = resolve_room_id(room_id_or_slug)
+
+    %{
+      assignments: assignments(room_id),
+      outcomes: outcomes(room_id),
+      unblinded: unblinded_experiment_ids(room_id)
+    }
+  end
+
+  @doc """
+  One Page view's experiment fields, read from its Room's `page_arms/1`.
+
+  A Page's assignment and outcome are matched by its id or by its document's
+  own id. Its experiment is that of its assignment, else of its outcome, else
+  Bait against plain. Its arm, trap convergence and deep convergence stay nil
+  until that experiment is unblinded in the Room.
+  """
+  @spec page_arm(page_arms(), Page.t()) :: %{
+          experiment_id: String.t(),
+          experiment_unblinded: boolean(),
+          arm: String.t() | nil,
+          trap_converged: boolean() | nil,
+          deep_converged: boolean() | nil
+        }
+  def page_arm(page_arms, %Page{} = page) do
+    page_ident = to_string(page.document["id"] || page.document[:id] || page.id)
+
+    of_page? = fn row ->
+      row.page_id == page.id or
+        (row.room_id == page.room_id and to_string(row.page_identifier) == page_ident)
+    end
+
+    assignment = Enum.find(page_arms.assignments, of_page?)
+    outcome = Enum.find(page_arms.outcomes, of_page?)
+
+    experiment_id =
+      (assignment && assignment.experiment_id) || (outcome && outcome.experiment_id) ||
+        @bait_against_plain_id
+
+    unblinded? = MapSet.member?(page_arms.unblinded, experiment_id)
+    revealed_outcome = if unblinded?, do: outcome
+
+    %{
+      experiment_id: experiment_id,
+      experiment_unblinded: unblinded?,
+      arm: if(unblinded?, do: (assignment && assignment.arm) || (outcome && outcome.arm)),
+      trap_converged: revealed_outcome && revealed_outcome.trap_converged,
+      deep_converged: revealed_outcome && revealed_outcome.deep_converged
+    }
   end
 
   defp of_experiment(query, nil), do: query
