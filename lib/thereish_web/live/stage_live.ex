@@ -124,7 +124,7 @@ defmodule ThereishWeb.StageLive do
 
     socket
     |> assign(:room, new_room)
-    |> ThereishWeb.Foley.push_cues(old_room, new_room, :stage)
+    |> ThereishWeb.Foley.play_cues(old_room, new_room, :stage)
   end
 
   defp join_url(slug), do: url(~p"/r/#{slug}")
