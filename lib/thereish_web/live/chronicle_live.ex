@@ -216,14 +216,8 @@ defmodule ThereishWeb.ChronicleLive do
                     seat_id={g.seat_id}
                     class="h-4 w-4 rounded-full object-cover"
                   />
-                  <span>Give ({g.seat_name}): {g.text}</span>
-                </span>
-                <span
-                  :if={page.gives == [] and page.give}
-                  data-role="give-tag"
-                  class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
-                >
-                  Give: {page.give}
+                  <span :if={g.seat_name}>Give ({g.seat_name}): {g.text}</span>
+                  <span :if={!g.seat_name}>Give: {g.text}</span>
                 </span>
               </div>
               <p class="text-xs opacity-50">
@@ -246,27 +240,26 @@ defmodule ThereishWeb.ChronicleLive do
             </div>
           </div>
 
-          <!-- Masks if present -->
+          <!-- Masks whose Seat gave nothing on this Page -->
           <div
-            :if={is_map(page.masks) and Enum.any?(page.masks, fn {_, m} -> Mask.url(m) end)}
+            :if={page.masks_without_give != []}
             data-role="page-masks"
             class="flex items-center gap-3 rounded-lg bg-base-200/50 p-3"
           >
             <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Masks</span>
             <div class="flex flex-wrap items-center gap-2">
               <.enlargeable_mask
-                :for={{seat_id, mask} <- page.masks}
-                :if={Mask.url(mask)}
-                url={Mask.url(mask)}
+                :for={m <- page.masks_without_give}
+                url={Mask.url(m.mask)}
                 alt="Mask"
-                seat_id={seat_id}
+                seat_id={m.seat_id}
                 class="h-8 w-8 rounded-md border border-base-300 object-cover shadow-sm"
               />
             </div>
           </div>
 
           <.chronicle_audio
-            :if={track = page_track(page)}
+            :if={track = page.track}
             role="track"
             label="Track"
             name={track.title}
@@ -275,7 +268,7 @@ defmodule ThereishWeb.ChronicleLive do
           />
 
           <.chronicle_audio
-            :if={vamp = page_vamp(page)}
+            :if={vamp = page.vamp}
             role="vamp"
             label="Vamp"
             name="the short piece"
@@ -575,9 +568,6 @@ defmodule ThereishWeb.ChronicleLive do
     </button>
     """
   end
-
-  defp page_track(page), do: Chronicle.page_track(page)
-  defp page_vamp(page), do: Chronicle.page_vamp(page)
 
   attr :role, :string, required: true
   attr :label, :string, required: true

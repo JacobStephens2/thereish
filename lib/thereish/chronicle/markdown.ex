@@ -46,16 +46,10 @@ defmodule Thereish.Chronicle.Markdown do
     closeness_str = if page.closeness, do: "#{page.closeness} / 100", else: "None"
 
     give_lines =
-      cond do
-        page.gives != [] ->
-          Enum.map(page.gives, fn g -> "- Give (#{g.seat_name}): #{g.text}" end)
-
-        page.give ->
-          ["- Give: #{page.give}"]
-
-        true ->
-          []
-      end
+      Enum.map(page.gives, fn
+        %{seat_name: nil} = g -> "- Give: #{g.text}"
+        g -> "- Give (#{g.seat_name}): #{g.text}"
+      end)
 
     experiment_lines =
       cond do
@@ -72,37 +66,13 @@ defmodule Thereish.Chronicle.Markdown do
           []
       end
 
-    track_lines =
-      case Chronicle.page_track(page) do
-        %{title: title} ->
-          ["- Track: #{title}"]
-
-        _ ->
-          []
-      end
-
-    vamp_lines =
-      case Chronicle.page_vamp(page) do
-        %{path: path} when is_binary(path) and path != "" ->
-          ["- Vamp: the short piece"]
-
-        _ ->
-          []
-      end
+    track_lines = if page.track, do: ["- Track: #{page.track.title}"], else: []
+    vamp_lines = if page.vamp, do: ["- Vamp: the short piece"], else: []
 
     mask_lines =
-      cond do
-        page.gives != [] ->
-          for g <- page.gives, url = Mask.url(g.mask), do: "- Mask (#{g.seat_name}): #{url}"
-
-        is_map(page.masks) and map_size(page.masks) > 0 ->
-          for {seat_id, mask} <- page.masks,
-              url = Mask.url(mask),
-              do: "- Mask (#{seat_id}): #{url}"
-
-        true ->
-          []
-      end
+      for(g <- page.gives, url = Mask.url(g.mask), do: "- Mask (#{g.seat_name}): #{url}") ++
+        for m <- page.masks_without_give,
+            do: "- Mask (#{m.seat_name || m.seat_id}): #{Mask.url(m.mask)}"
 
     rule_lines =
       case page.full_table do
