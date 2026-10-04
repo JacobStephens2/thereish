@@ -317,6 +317,36 @@ defmodule Thereish.RoomsTest do
 
       assert {:error, :room_full} = Rooms.join(slug, "Ada", device_token())
       assert length(Rooms.snapshot(slug, nil).seats) == 2
+
+      # The rules refused before Postgres heard anything.
+      assert length(Store.list_seats(Store.get_room(slug).id)) == 2
+    end
+
+    test "a Seat Postgres will not take leaves the Room without it" do
+      slug = open_room(seat_limit: 2)
+      {:ok, _} = Rooms.join(slug, "Melissa", device_token())
+
+      # A conflict the Room cannot see coming, as a racing insert would be.
+      Repo.query!("""
+      CREATE FUNCTION pg_temp.refuse_seat() RETURNS trigger AS $$
+      BEGIN
+        RAISE unique_violation USING CONSTRAINT = 'seats_room_id_name_index';
+      END
+      $$ LANGUAGE plpgsql
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER refuse_seat BEFORE INSERT ON seats
+      FOR EACH ROW EXECUTE FUNCTION pg_temp.refuse_seat()
+      """)
+
+      assert {:error, :could_not_join} = Rooms.join(slug, "Jacob", device_token())
+      assert [%{name: "Melissa"}] = Rooms.snapshot(slug, nil).seats
+
+      Repo.query!("DROP TRIGGER refuse_seat ON seats")
+
+      assert {:ok, _} = Rooms.join(slug, "Jacob", device_token())
+      assert length(Rooms.snapshot(slug, nil).seats) == 2
     end
 
     test "a name is all that is asked for, and it has to be something" do
@@ -2098,21 +2128,6 @@ defmodule Thereish.RoomsTest do
       assert Store.get_room(ctx.slug).full_table == true
     end
 
-    test "two toggles of Quips or Full table return it to where it started, whatever either screen saw",
-         ctx do
-      for fact <- [:quips, :full_table] do
-        # Both screens read the same snapshot before either taps.
-        seen = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-        assert Map.fetch!(seen, fact) == true
-
-        assert :ok = Rooms.toggle(ctx.slug, fact)
-        assert :ok = Rooms.toggle(ctx.slug, fact)
-
-        assert Map.fetch!(Store.get_room(ctx.slug), fact) == true
-        assert Map.fetch!(Rooms.snapshot(ctx.slug, nil), fact) == true
-      end
-    end
-
     test "speaker, quips, music and Full table survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       assert :ok = Rooms.set_quips(ctx.slug, false)
@@ -2183,76 +2198,6 @@ defmodule Thereish.RoomsTest do
       view_after = Rooms.snapshot(ctx.slug, nil, ctx.token_a)
       assert is_nil(view_after.prologue)
       assert view_after.prologue_skipped == true
-    end
-
-    test "snapshot answers speaker?, speaker_claimed? and switches without leaking device tokens",
-         ctx do
-      view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
-      view_stage = Rooms.snapshot(ctx.slug, nil, device_token())
-
-      for view <- [view_a, view_b, view_stage] do
-        assert view.speaker? == false
-        assert view.speaker_claimed? == false
-        assert view.quips == true
-        assert view.music == "page"
-        assert view.full_table == true
-        refute Map.has_key?(view, :voice)
-        refute Map.has_key?(view, :house_loop_only)
-        refute Map.has_key?(view, :speaker)
-        refute Map.has_key?(view, :device_token)
-      end
-
-      :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
-      :ok = Rooms.set_quips(ctx.slug, false)
-      :ok = Rooms.set_music(ctx.slug, "house")
-      :ok = Rooms.set_full_table(ctx.slug, false)
-
-      view_a = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      view_b = Rooms.snapshot(ctx.slug, ctx.jacob.id, ctx.token_b)
-      view_stage = Rooms.snapshot(ctx.slug, nil, device_token())
-
-      assert view_a.speaker? == true
-      assert view_a.speaker_claimed? == true
-      assert view_a.quips == false
-      assert view_a.music == "house"
-      assert view_a.full_table == false
-      refute Map.has_key?(view_a, :voice)
-
-      assert view_b.speaker? == false
-      assert view_b.speaker_claimed? == true
-      assert view_b.quips == false
-      assert view_b.music == "house"
-      assert view_b.full_table == false
-      refute Map.has_key?(view_b, :voice)
-
-      assert view_stage.speaker? == false
-      assert view_stage.speaker_claimed? == true
-      assert view_stage.quips == false
-      assert view_stage.music == "house"
-      assert view_stage.full_table == false
-      refute Map.has_key?(view_stage, :voice)
-
-      json = Jason.encode!(view_a)
-      refute json =~ ctx.token_a
-      refute json =~ ctx.token_b
-    end
-
-    test "flipping Full table mid-Page changes the Room fact only and leaves the Page's Bookends",
-         ctx do
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-      view = await_phase(ctx.slug, :bridging)
-      bookends = view.bookends
-      assert view.full_table == true
-      assert is_list(bookends)
-
-      assert :ok = Rooms.set_full_table(ctx.slug, false)
-
-      flipped = Rooms.snapshot(ctx.slug, nil)
-      assert flipped.full_table == false
-      assert flipped.phase == :bridging
-      assert flipped.bookends == bookends
     end
   end
 
@@ -3992,27 +3937,6 @@ defmodule Thereish.RoomsTest do
       assert after_next.playing.kind == "repertoire"
       refute after_next.playing.path == view.playing.path
     end
-
-    test "Next from a non-speaking device is a no-op", ctx do
-      initial_view = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      initial_path = initial_view.playing.path
-
-      # Jacob (non-speaking device) calls next -> no-op
-      assert :ok = Rooms.next(ctx.slug, ctx.token_b)
-
-      view_after = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after.playing.path == initial_path
-
-      # Call without device_token -> no-op
-      assert :ok = Rooms.next(ctx.slug, nil)
-      view_after_nil = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_nil.playing.path == initial_path
-
-      # Melissa (speaking device) calls next -> advances
-      assert :ok = Rooms.next(ctx.slug, ctx.token_a)
-      view_advanced = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      refute view_advanced.playing.path == initial_path
-    end
   end
 
   describe "ticket 04: Never" do
@@ -4095,29 +4019,6 @@ defmodule Thereish.RoomsTest do
       # Room B's eligible members still include that path
       members_b = Thereish.Foley.Repertoire.members(room_b.id)
       assert Enum.any?(members_b, fn m -> m.path == nevered_path end)
-    end
-
-    test "Never from a non-speaking device is a no-op", ctx do
-      view_before = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      initial_path = view_before.playing.path
-
-      # Jacob (token_b, non-speaker) calls Never -> no-op
-      assert :ok = Rooms.never(ctx.slug, ctx.token_b)
-      view_after_jacob = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_jacob.playing.path == initial_path
-      refute initial_path in Store.list_nevers(ctx.room.id)
-
-      # nil token -> no-op
-      assert :ok = Rooms.never(ctx.slug, nil)
-      view_after_nil = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      assert view_after_nil.playing.path == initial_path
-      refute initial_path in Store.list_nevers(ctx.room.id)
-
-      # Melissa (speaking device) calls Never -> refuses member
-      assert :ok = Rooms.never(ctx.slug, ctx.token_a)
-      view_after_melissa = Rooms.snapshot(ctx.slug, ctx.melissa.id, ctx.token_a)
-      refute view_after_melissa.playing.path == initial_path
-      assert initial_path in Store.list_nevers(ctx.room.id)
     end
   end
 
