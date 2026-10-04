@@ -15,6 +15,7 @@ defmodule Thereish.ChronicleTest do
 
   alias Thereish.Chronicle
   alias Thereish.Chronicle.Entry
+  alias Thereish.Chronicle.Spend
   alias Thereish.Experiments
   alias Thereish.Foley.Track
   alias Thereish.Foley.Vamp
@@ -514,8 +515,7 @@ defmodule Thereish.ChronicleTest do
       assert markdown =~ "corrected bridge from \"cairns\" to \"cairn\""
       assert markdown =~ "Phone autocorrect"
       assert markdown =~ "Spend: "
-      spend = Chronicle.spend(room.id)
-      assert String.ends_with?(String.trim(markdown), Chronicle.spend_line(spend))
+      assert String.ends_with?(String.trim(markdown), Spend.line(Spend.room(room.id)))
 
       # Round-trip parse back from Markdown
       assert {:ok, parsed_evening} = Chronicle.from_markdown(markdown)
@@ -1474,346 +1474,6 @@ defmodule Thereish.ChronicleTest do
     end
   end
 
-  describe "spend (ticket 09)" do
-    test "spend/1 for a Room with no pages returns zeros", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-      spend = Chronicle.spend(room.id)
-
-      assert Decimal.equal?(spend.total_usd, 0)
-      assert spend.calls_count == 0
-      assert spend.unpriced_count == 0
-      assert spend.by_role.author.calls_count == 0
-      assert spend.by_role.assayer.calls_count == 0
-      assert spend.by_role.scribe.calls_count == 0
-      assert spend.by_model == %{}
-      assert Chronicle.spend_line(spend) =~ "Spend: $0.0000"
-    end
-
-    test "spend/1 computes totals, by role, and by model from fixture rows including unpriced calls",
-         ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      entry =
-        entry(
-          page: %{bookends: ["desert", "oasis"]},
-          author_meta: %{
-            model: "gemini-3.8-flash",
-            cost_usd: 0.0002
-          },
-          closeness: 90,
-          attempts: [
-            %{
-              bookends: ["desert", "oasis"],
-              closeness: 90,
-              bridges: [
-                %{seat_id: ctx.mara.id, bridge: "water"},
-                %{seat_id: ctx.jacob.id, bridge: "water"}
-              ],
-              verdicts: [
-                %{
-                  seat_ids: [ctx.mara.id, ctx.jacob.id],
-                  bridges: ["water", "water"],
-                  closeness: 90,
-                  reasoning: "Both said water.",
-                  quip: "Water in the sand.",
-                  meta: %{
-                    model: "gemini-3.8-flash",
-                    cost_usd: 0.0015,
-                    prompt_version: "assay-3",
-                    latency_ms: 120
-                  }
-                },
-                %{
-                  seat_ids: [ctx.mara.id, ctx.jacob.id],
-                  bridges: ["water", "water"],
-                  graded?: false,
-                  closeness: nil,
-                  band: nil,
-                  reasoning: nil,
-                  quip: nil,
-                  meta: %{
-                    model: "gemini-3.8-flash",
-                    cost_usd: nil,
-                    prompt_version: "assay-3",
-                    latency_ms: nil
-                  }
-                }
-              ]
-            }
-          ]
-        )
-
-      assert {:ok, page} = Chronicle.write(room.id, entry)
-
-      # Add a recap for this page
-      {:ok, _recap} =
-        Chronicle.record_recap(room.id, %{
-          page_id: page.id,
-          recap: "A trek through dunes to an oasis.",
-          callback: nil,
-          model: "claude-fable-5-1",
-          cost_usd: 0.0025,
-          prompt_version: "recap-2",
-          latency_ms: 2500,
-          attempts: 1
-        })
-
-      # Test querying by ID and by slug
-      spend = Chronicle.spend(room.id)
-      assert spend == Chronicle.spend(ctx.slug)
-
-      assert Decimal.equal?(spend.total_usd, Decimal.new("0.0042"))
-      assert spend.calls_count == 4
-      assert spend.unpriced_count == 1
-
-      # By role
-      assert spend.by_role.author.calls_count == 1
-      assert Decimal.equal?(spend.by_role.author.total_usd, Decimal.new("0.0002"))
-      assert spend.by_role.author.unpriced_count == 0
-
-      assert spend.by_role.assayer.calls_count == 2
-      assert Decimal.equal?(spend.by_role.assayer.total_usd, Decimal.new("0.0015"))
-      assert spend.by_role.assayer.unpriced_count == 1
-
-      assert spend.by_role.scribe.calls_count == 1
-      assert Decimal.equal?(spend.by_role.scribe.total_usd, Decimal.new("0.0025"))
-      assert spend.by_role.scribe.unpriced_count == 0
-      assert spend.by_role.scribe.by_model["claude-fable-5-1"].calls_count == 1
-
-      # By model
-      assert spend.by_model["gemini-3.8-flash"].calls_count == 3
-      assert Decimal.equal?(spend.by_model["gemini-3.8-flash"].total_usd, Decimal.new("0.0017"))
-      assert spend.by_model["gemini-3.8-flash"].unpriced_count == 1
-
-      assert spend.by_model["claude-fable-5-1"].calls_count == 1
-      assert Decimal.equal?(spend.by_model["claude-fable-5-1"].total_usd, Decimal.new("0.0025"))
-      assert spend.by_model["claude-fable-5-1"].unpriced_count == 0
-
-      # Spend line format
-      line = Chronicle.spend_line(spend)
-      assert line =~ "Spend: $0.0042"
-      assert line =~ "4 calls"
-      assert line =~ "1 unpriced"
-      assert line =~ "Author $0.0002"
-      assert line =~ "Assayer $0.0015"
-      assert line =~ "Scribe $0.0025"
-      assert line =~ "Foley $0.0000"
-      assert line =~ "Limner $0.0000"
-    end
-
-    test "spend includes Foley from page music_meta", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      entry =
-        entry(
-          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-          music_meta: %Track{
-            path: "/media/tracks/a.mp3",
-            meta: %{"provider" => "mureka", "model" => "mureka-v1", "cost_usd" => 0.0400}
-          }
-        )
-
-      assert {:ok, _page} = Chronicle.write(room.id, entry)
-
-      spend = Chronicle.spend(room.id)
-      assert spend.by_role.foley.calls_count == 1
-      assert Decimal.equal?(spend.by_role.foley.total_usd, Decimal.new("0.0400"))
-      assert spend.by_role.foley.by_model["mureka-v1"].calls_count == 1
-
-      line = Chronicle.spend_line(spend)
-      assert line =~ "Foley $0.0400"
-    end
-
-    test "spend includes Foley from page vamp_meta beside the Track", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      entry =
-        entry(
-          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-          music_meta: %Track{
-            path: "/media/tracks/a.mp3",
-            meta: %{"provider" => "mureka", "model" => "mureka-v1", "cost_usd" => 0.0400}
-          },
-          vamp_meta: %Vamp{
-            path: "/media/vamps/oasis-vamp.mp3",
-            meta: %{
-              "provider" => "eleven_labs",
-              "model" => "eleven_text_to_sound_v2",
-              "cost_usd" => 0.0120
-            }
-          }
-        )
-
-      assert {:ok, _page} = Chronicle.write(room.id, entry)
-
-      spend = Chronicle.spend(room.id)
-      assert spend.by_role.foley.calls_count == 2
-      assert Decimal.equal?(spend.by_role.foley.total_usd, Decimal.new("0.0520"))
-      assert spend.by_role.foley.by_model["mureka-v1"].calls_count == 1
-      assert spend.by_role.foley.by_model["eleven_text_to_sound_v2"].calls_count == 1
-
-      line = Chronicle.spend_line(spend)
-      assert line =~ "Foley $0.0520"
-    end
-
-    test "spend counts a zero-cost voice failure as a Foley call", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      entry =
-        entry(
-          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-          attempts: [
-            %{
-              bridges: [
-                %{seat_id: ctx.mara.id, bridge: "water"},
-                %{seat_id: ctx.jacob.id, bridge: "water"}
-              ],
-              verdicts: [
-                %{
-                  seat_ids: [ctx.mara.id, ctx.jacob.id],
-                  bridges: ["water", "water"],
-                  meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010},
-                  voice_meta: %{
-                    "provider" => "fake",
-                    "voice" => "fake-voice",
-                    "cost_usd" => 0.0,
-                    "failure" => "voice_unavailable"
-                  }
-                }
-              ]
-            }
-          ]
-        )
-
-      assert {:ok, _page} = Chronicle.write(room.id, entry)
-
-      spend = Chronicle.spend(room.id)
-      assert spend.by_role.foley.calls_count == 1
-      assert Decimal.equal?(spend.by_role.foley.total_usd, Decimal.new("0.0000"))
-      assert spend.by_role.foley.unpriced_count == 0
-      assert spend.by_role.foley.by_model["fake-voice"].calls_count == 1
-
-      assert Decimal.equal?(
-               spend.by_role.foley.by_model["fake-voice"].total_usd,
-               Decimal.new("0.0000")
-             )
-
-      line = Chronicle.spend_line(spend)
-      assert line =~ "Foley $0.0000"
-    end
-
-    test "spend/0 computes all-Rooms answer with per-Room breakdown across multiple rooms", ctx do
-      room1 = Repo.get_by!(Room, slug: ctx.slug)
-
-      entry1 =
-        entry(
-          author_meta: %{model: "gemini-3.8-flash", cost_usd: 0.0002},
-          attempts: [
-            %{
-              bridges: [
-                %{seat_id: ctx.mara.id, bridge: "water"},
-                %{seat_id: ctx.jacob.id, bridge: "water"}
-              ],
-              verdicts: [
-                %{
-                  seat_ids: [ctx.mara.id, ctx.jacob.id],
-                  bridges: ["water", "water"],
-                  meta: %{model: "gemini-3.8-flash", cost_usd: 0.0010}
-                }
-              ]
-            }
-          ]
-        )
-
-      assert {:ok, page1} = Chronicle.write(room1.id, entry1)
-
-      {:ok, _recap1} =
-        Chronicle.record_recap(room1.id, %{
-          page_id: page1.id,
-          recap: "A trek through dunes to an oasis.",
-          model: "claude-fable-5-1",
-          cost_usd: 0.0030
-        })
-
-      # Create a second room with an unpriced author call
-      slug2 = open_room()
-      room2 = Repo.get_by!(Room, slug: slug2)
-      {:ok, seat_a} = Rooms.join(slug2, "Alice", device_token())
-      {:ok, seat_b} = Rooms.join(slug2, "Bob", device_token())
-
-      entry2 =
-        entry(
-          author_meta: %{model: "gemini-3.8-flash", cost_usd: nil},
-          attempts: [
-            %{
-              bridges: [
-                %{seat_id: seat_a.id, bridge: "sky"},
-                %{seat_id: seat_b.id, bridge: "sky"}
-              ],
-              verdicts: [
-                %{
-                  seat_ids: [seat_a.id, seat_b.id],
-                  bridges: ["sky", "sky"],
-                  meta: %{model: "gemini-3.8-flash", cost_usd: 0.0005}
-                }
-              ]
-            }
-          ]
-        )
-
-      assert {:ok, _page2} = Chronicle.write(room2.id, entry2)
-
-      # Call spend() for all rooms
-      all_spend = Chronicle.spend()
-
-      # Total should be room1 (0.0002 + 0.0010 + 0.0030 = 0.0042) + room2 (0.0005) = 0.0047
-      assert Decimal.equal?(all_spend.total_usd, Decimal.new("0.0047"))
-      assert all_spend.calls_count == 5
-      assert all_spend.unpriced_count == 1
-
-      # By role
-      assert Decimal.equal?(all_spend.by_role.author.total_usd, Decimal.new("0.0002"))
-      assert all_spend.by_role.author.calls_count == 2
-      assert all_spend.by_role.author.unpriced_count == 1
-
-      assert Decimal.equal?(all_spend.by_role.assayer.total_usd, Decimal.new("0.0015"))
-      assert all_spend.by_role.assayer.calls_count == 2
-      assert all_spend.by_role.assayer.unpriced_count == 0
-
-      assert Decimal.equal?(all_spend.by_role.scribe.total_usd, Decimal.new("0.0030"))
-      assert all_spend.by_role.scribe.calls_count == 1
-
-      # Per-room breakdown
-      assert is_list(all_spend.rooms)
-      room1_spend = Enum.find(all_spend.rooms, &(&1.room_id == room1.id))
-      room2_spend = Enum.find(all_spend.rooms, &(&1.room_id == room2.id))
-
-      assert room1_spend != nil
-      assert Decimal.equal?(room1_spend.total_usd, Decimal.new("0.0042"))
-      assert room1_spend.calls_count == 3
-      assert room1_spend.unpriced_count == 0
-
-      assert room2_spend != nil
-      assert Decimal.equal?(room2_spend.total_usd, Decimal.new("0.0005"))
-      assert room2_spend.calls_count == 2
-      assert room2_spend.unpriced_count == 1
-    end
-
-    test "pages without author_meta do not count as Author calls or unpriced calls", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-      # Write a page with no author_meta (e.g. pre-written seed or human page)
-      entry = entry(page: %{bookends: ["left", "right"]}, closeness: 85, attempts: [])
-
-      assert {:ok, _page} = Chronicle.write(room.id, entry)
-
-      spend = Chronicle.spend(room.id)
-      assert spend.calls_count == 0
-      assert spend.unpriced_count == 0
-      assert spend.by_role.author.calls_count == 0
-      assert spend.by_role.author.unpriced_count == 0
-    end
-  end
-
   describe "masks in Chronicle (ticket 16)" do
     test "Chronicle.write persists masks_meta and page_views includes masks and give masks",
          ctx do
@@ -1853,7 +1513,7 @@ defmodule Thereish.ChronicleTest do
       entry = entry(masks: %{ctx.mara.id => :dot})
 
       assert {:ok, page} = Chronicle.write(room.id, entry)
-      assert Chronicle.spend(room.id).by_role.limner.calls_count == 0
+      assert Spend.room(room.id).by_role.limner.calls_count == 0
 
       updated_masks = %{
         ctx.mara.id => %Mask{
@@ -1866,12 +1526,12 @@ defmodule Thereish.ChronicleTest do
 
       assert updated_page.masks_meta[ctx.mara.id].url == "/media/masks/mask-late.png"
 
-      spend = Chronicle.spend(room.id)
+      spend = Spend.room(room.id)
       assert spend.by_role.limner.calls_count == 1
       assert Decimal.equal?(spend.by_role.limner.total_usd, Decimal.new("0.0400"))
       assert spend.by_role.limner.by_model["imagen-3"].calls_count == 1
 
-      line = Chronicle.spend_line(spend)
+      line = Spend.line(spend)
       assert line =~ "Limner $0.0400"
     end
 
