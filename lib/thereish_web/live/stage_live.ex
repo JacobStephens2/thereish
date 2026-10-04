@@ -228,11 +228,7 @@ defmodule ThereishWeb.StageLive do
               Waiting for Gives: {@room.gives_in} of {length(@room.seats)}
             </p>
             <div data-role="stage-cards" class="flex items-center justify-center gap-4 mt-2">
-              <div
-                :for={seat <- @room[:seats] || []}
-                :if={seat[:mask] == :face_down}
-                title={"#{seat.name}'s Give landed"}
-              >
+              <div :for={seat <- @room[:seats] || []} :if={seat[:mask] == :face_down}>
                 <span class="sr-only">{seat.name}</span>
                 <.seat_mask seat={seat} size={:md} />
               </div>
