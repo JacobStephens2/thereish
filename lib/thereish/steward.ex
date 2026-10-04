@@ -290,7 +290,7 @@ defmodule Thereish.Steward do
   defp format_voice_error(reason), do: inspect(reason)
 
   @doc """
-  Says why the Author could not write, in the words the Game shows the table.
+  Says why the Author could not write, in the words the Game shows the players.
   """
   @spec author_failure(term()) :: String.t()
   def author_failure({:max_tokens, _}), do: "too broad or complex"
@@ -379,19 +379,20 @@ defmodule Thereish.Steward do
 
   @doc """
   Runs `call` under the Steward's task supervisor and sends the caller
-  `reply.(answer)` exactly once, for the calls nobody waits on.
+  `to_message.(answer)` exactly once, for the calls nobody waits on.
 
   The answer is whatever `call` returned. A call that raises answers
   `{:error, exception}`, and one that exits or throws answers
   `{:error, {kind, reason}}`, so a crash reaches the caller as a failure it has
-  a rule for rather than as silence.
+  a rule for rather than as silence. `to_message` runs outside that guard, so it
+  must answer a message for every answer.
   """
   @spec answer_later((-> term()), (term() -> term())) :: DynamicSupervisor.on_start_child()
-  def answer_later(call, reply) do
+  def answer_later(call, to_message) do
     caller = self()
 
     Task.Supervisor.start_child(Thereish.Steward.Tasks, fn ->
-      send(caller, reply.(answer(call)))
+      send(caller, to_message.(answer(call)))
     end)
   end
 
