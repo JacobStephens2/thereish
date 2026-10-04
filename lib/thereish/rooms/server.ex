@@ -600,6 +600,9 @@ defmodule Thereish.Rooms.Server do
   # and a Page that closed while the write was still in flight elsewhere would
   # be a Page that could go missing.
   #
+  # The Entry takes the Page's experiment arm here, at the close, so a held
+  # write still records the arm the Page was played under.
+  #
   # Foley for the closing Verdict may still be in flight when this effect
   # runs. ADR-0003 forbids updating the Verdict row, so Voice decides whether
   # the write waits for that result; it comes back as a :commit_chronicle
@@ -611,7 +614,8 @@ defmodule Thereish.Rooms.Server do
   defp perform({:chronicle, entry}, state) do
     entry =
       entry
-      |> Map.merge(Occupancy.chronicle_meta(state.occupancy, state.room.music))
+      |> struct!(Occupancy.chronicle_meta(state.occupancy, state.room.music))
+      |> struct!(arm: Pages.arm(state.pages) || :flash)
       |> then(&Pacing.stamp(state.pacing, &1))
 
     state
@@ -1075,10 +1079,9 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp commit_chronicle(entry, state) do
-    {:ok, page} = Chronicle.write(state.room.id, entry, entry.opened_at)
+    {:ok, page} = Chronicle.write(state.room.id, entry)
 
-    arm = (entry.author_meta && entry.author_meta["arm"]) || Pages.arm(state.pages) || :flash
-    _ = Chronicle.record_page_outcome(state.room.id, page, entry, arm)
+    _ = Chronicle.record_page_outcome(state.room.id, page, entry)
 
     Scribe.write_about(state.room, page)
 
