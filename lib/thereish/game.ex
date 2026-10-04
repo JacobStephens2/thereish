@@ -29,6 +29,11 @@ defmodule Thereish.Game do
   miss is the rest of that rule. After `attempt_cap/0` tries the Page closes
   unmelded, and a Meld closes it the moment it lands.
 
+  The Game has a current Attempt (`Thereish.Game.Attempt`) exactly when it has
+  a Page, a Game built by `init/1` with a Page included. Everything that starts
+  over with an Attempt lives in that one value, and opening one is the only way
+  to start it over.
+
   ## Phase is derived, never stored
 
   Where a Page has got to is a question about the state rather than a field in
@@ -52,6 +57,7 @@ defmodule Thereish.Game do
   alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.Opinion
+  alias Thereish.Game.Attempt
   alias Thereish.Ladder
   alias Thereish.Mask
 
@@ -60,23 +66,15 @@ defmodule Thereish.Game do
     :seat_limit,
     :seats,
     :page,
-    :bookends,
-    attempt: 1,
+    :attempt,
     gives: %{},
     last_gives: %{},
     author_failure: nil,
-    bridges: %{},
-    verdict: nil,
-    furthest: nil,
     played: [],
-    overrule: nil,
-    overrules: [],
-    fairness_taps: %{},
     bookends_taps: %{},
     page_seat_ids: nil,
     masks: %{},
-    full_table: true,
-    bookend_origins: nil
+    full_table: true
   ]
 
   @type seat :: %{
@@ -108,36 +106,23 @@ defmodule Thereish.Game do
           meta: map()
         }
 
-  @typedoc "One attempt as it was played, kept so the Chronicle can have it."
-  @type attempt :: %{
-          optional(:furthest) => [String.t()] | nil,
-          number: pos_integer(),
-          bookends: [String.t()],
-          bridges: %{String.t() => String.t()},
-          verdict: verdict() | nil
-        }
-
+  @typedoc """
+  `attempt` is the Attempt being played and `played` the ones this Page already
+  played, kept whole so the Chronicle can have them.
+  """
   @type t :: %__MODULE__{
           seat_limit: pos_integer(),
           seats: [seat()],
           page: Document.t() | nil,
-          bookends: [String.t()] | nil,
-          attempt: pos_integer(),
+          attempt: Attempt.t() | nil,
           gives: %{String.t() => String.t()},
           last_gives: %{String.t() => String.t()},
           author_failure: term(),
-          bridges: %{String.t() => String.t()},
-          verdict: verdict() | nil,
-          furthest: [String.t()] | nil,
-          played: [attempt()],
-          overrule: map() | nil,
-          overrules: [map()],
-          fairness_taps: %{String.t() => String.t()},
+          played: [Attempt.t()],
           bookends_taps: %{String.t() => String.t()},
           page_seat_ids: [String.t()] | nil,
           masks: %{String.t() => Mask.t() | :dot},
-          full_table: boolean(),
-          bookend_origins: [map()] | nil
+          full_table: boolean()
         }
 
   @type viewer :: String.t() | nil
@@ -176,7 +161,6 @@ defmodule Thereish.Game do
              }}
           | {:verdict_unavailable, %{optional(:meta) => map()}}
           | {:attempt_advanced, %{seat_id: String.t()}}
-          | {:page_started, %{seat_id: String.t(), page: Document.t()}}
           | {:next_page, %{seat_id: String.t()}}
           | {:overrule_proposed,
              %{
@@ -270,14 +254,13 @@ defmodule Thereish.Game do
       seat_limit: seat_limit,
       seats: seats,
       page: page,
-      bookends: page && page.bookends,
+      attempt: first_attempt(page),
       gives: %{},
       last_gives: %{},
       author_failure: nil,
       page_seat_ids: page_seat_ids,
       masks: %{},
-      full_table: full_table == true,
-      bookend_origins: page && page.origins
+      full_table: full_table == true
     }
   end
 
@@ -443,32 +426,15 @@ defmodule Thereish.Game do
         {:error, :not_writing}
 
       true ->
-        origins = origins_from(state, attrs[:from], bookends)
-
         page = %Document{
           bookends: bookends,
-          origins: origins,
+          origins: origins_from(state, attrs[:from], bookends),
           gives: state.gives,
           meta: meta,
           full_table: Map.get(attrs, :full_table, state.full_table) != false
         }
 
-        {:ok,
-         %{
-           state
-           | page: page,
-             bookends: bookends,
-             bookend_origins: origins,
-             attempt: 1,
-             bridges: %{},
-             verdict: nil,
-             played: [],
-             overrule: nil,
-             overrules: [],
-             fairness_taps: %{},
-             bookends_taps: %{},
-             author_failure: nil
-         }, []}
+        {:ok, reset_page(state, page), []}
     end
   end
 
@@ -516,7 +482,7 @@ defmodule Thereish.Game do
         {:error, :bridge_required}
       else
         case Thereish.Steward.Legality.check_bridge(bridge, barred_words(state)) do
-          :ok -> committed(%{state | bridges: Map.put(state.bridges, seat_id, bridge)})
+          :ok -> committed(put_attempt(state, :bridges, Map.put(bridges(state), seat_id, bridge)))
           {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
         end
       end
@@ -549,78 +515,41 @@ defmodule Thereish.Game do
     closeness = Map.get(attrs, :closeness, Ladder.meld_threshold())
 
     with :ok <- may_propose_overrule(state, seat_id) do
-      proposed_state = %{
-        state
-        | overrule: %{
-            proposer_id: seat_id,
-            closeness: closeness,
-            agreed: MapSet.new([seat_id])
-          }
-      }
+      agreed = MapSet.new([seat_id])
+      proposal = %{proposer_id: seat_id, closeness: closeness, agreed: agreed}
 
-      resolve_overrule_unanimity(proposed_state, proposed_state.overrule.agreed)
+      resolve_overrule_unanimity(put_attempt(state, :overrule, proposal), agreed)
     end
   end
 
   def apply(%__MODULE__{} = state, {:overrule_agreed, %{seat_id: seat_id}}) do
     with :ok <- may_vote_overrule(state, seat_id) do
-      agreed = MapSet.put(state.overrule.agreed, seat_id)
-      state = %{state | overrule: %{state.overrule | agreed: agreed}}
+      proposal = overrule(state)
+      agreed = MapSet.put(proposal.agreed, seat_id)
+      state = put_attempt(state, :overrule, %{proposal | agreed: agreed})
       resolve_overrule_unanimity(state, agreed)
     end
   end
 
   def apply(%__MODULE__{} = state, {:overrule_declined, %{seat_id: seat_id}}) do
     with :ok <- may_vote_overrule(state, seat_id) do
-      {:ok, %{state | overrule: nil}, []}
+      {:ok, put_attempt(state, :overrule, nil), []}
     end
   end
 
   def apply(%__MODULE__{} = state, {:fairness_tapped, %{seat_id: seat_id, label: label}}) do
     with {:ok, opinion} <- opinion_at_reveal(state, seat_id, label) do
-      fairness_taps = Map.put(state.fairness_taps || %{}, seat_id, opinion.label)
-      {:ok, %{state | fairness_taps: fairness_taps}, [{:fairness_tap, opinion}]}
+      opinions = Map.put(opinions(state), seat_id, opinion.label)
+      {:ok, put_attempt(state, :opinions, opinions), [{:fairness_tap, opinion}]}
     end
   end
 
   def apply(%__MODULE__{} = state, {:attempt_advanced, %{seat_id: seat_id}}) do
     with :ok <- may_advance(state, seat_id) do
       %{carried: carried} = carry(state)
+      next = Attempt.open(state.attempt.number + 1, Enum.map(carried, & &1.word), carried)
 
-      {:ok,
-       %{
-         state
-         | bookends: Enum.map(carried, & &1.word),
-           bookend_origins: carried,
-           attempt: state.attempt + 1,
-           bridges: %{},
-           verdict: nil,
-           furthest: nil,
-           played: state.played ++ [this_attempt(state)],
-           overrule: nil,
-           fairness_taps: %{}
-       }, []}
-    end
-  end
-
-  def apply(%__MODULE__{} = state, {:page_started, %{seat_id: seat_id, page: %Document{} = page}}) do
-    with :ok <- taken_by_a_seat(state, seat_id),
-         :ok <- closed_page(state) do
-      {:ok,
-       %{
-         state
-         | page: page,
-           bookends: page.bookends,
-           bookend_origins: page.origins,
-           attempt: 1,
-           bridges: %{},
-           verdict: nil,
-           furthest: nil,
-           played: [],
-           overrule: nil,
-           overrules: [],
-           fairness_taps: %{}
-       }, []}
+      {:ok, %{state | attempt: next, played: state.played ++ [state.attempt]}, []}
     end
   end
 
@@ -633,7 +562,7 @@ defmodule Thereish.Game do
       else
         meta = (state.page && state.page.meta) || %{}
         arm = meta[:arm] || meta["arm"]
-        bookends = (state.page && state.page.bookends) || state.bookends
+        bookends = (state.page && state.page.bookends) || attempt_bookends(state)
 
         # Which Chronicle Page this is the Room's to say, once it is written.
         tap_effect_data = %{
@@ -656,30 +585,44 @@ defmodule Thereish.Game do
   def apply(%__MODULE__{} = state, {:next_page, %{seat_id: seat_id}}) do
     with :ok <- may_next_page(state, seat_id) do
       last_gives = Map.merge(state.last_gives || %{}, state.gives || %{})
+      state = reset_page(state, nil)
 
-      {:ok,
-       %{
-         state
-         | page: nil,
-           bookends: nil,
-           bookend_origins: nil,
-           attempt: 1,
-           gives: %{},
-           last_gives: last_gives,
-           bridges: %{},
-           verdict: nil,
-           furthest: nil,
-           played: [],
-           overrule: nil,
-           overrules: [],
-           fairness_taps: %{},
-           bookends_taps: %{},
-           author_failure: nil,
-           page_seat_ids: nil,
-           masks: %{}
-       }, []}
+      {:ok, %{state | gives: %{}, last_gives: last_gives, page_seat_ids: nil, masks: %{}}, []}
     end
   end
+
+  # What every Page starts over, whether it is being written or the last one
+  # is being put away: its Attempts, its Bookends taps and the Author's failure.
+  defp reset_page(state, page) do
+    %{
+      state
+      | page: page,
+        attempt: first_attempt(page),
+        played: [],
+        bookends_taps: %{},
+        author_failure: nil
+    }
+  end
+
+  defp first_attempt(nil), do: nil
+  defp first_attempt(%Document{} = page), do: Attempt.open(1, page.bookends, page.origins)
+
+  defp put_attempt(state, field, value),
+    do: %{state | attempt: Map.replace!(state.attempt, field, value)}
+
+  # The current Attempt's fields, read as an Attempt with nothing in it when
+  # no Page is open.
+  defp bridges(%{attempt: nil}), do: %{}
+  defp bridges(%{attempt: attempt}), do: attempt.bridges
+
+  defp verdict(%{attempt: nil}), do: nil
+  defp verdict(%{attempt: attempt}), do: attempt.verdict
+
+  defp overrule(%{attempt: nil}), do: nil
+  defp overrule(%{attempt: attempt}), do: attempt.overrule
+
+  defp opinions(%{attempt: nil}), do: %{}
+  defp opinions(%{attempt: attempt}), do: attempt.opinions
 
   @doc """
   Projects what one viewer may see: a Seat by its id, or `nil` for a viewer that
@@ -703,7 +646,7 @@ defmodule Thereish.Game do
   @spec view(t(), viewer()) :: map()
   def view(%__MODULE__{} = state, viewer) do
     phase = phase(state)
-    fairness_taps = state.fairness_taps || %{}
+    opinions = opinions(state)
 
     viewer_late? =
       state.page_seat_ids != nil and viewer != nil and viewer not in state.page_seat_ids
@@ -726,8 +669,8 @@ defmodule Thereish.Game do
       your_mask: if(viewer, do: Map.get(state.masks || %{}, viewer)),
       gives_in: map_size(state.gives),
       author_failure: state.author_failure,
-      your_bridge: Map.get(state.bridges, viewer),
-      attempt: %{number: state.attempt, of: attempt_cap()},
+      your_bridge: Map.get(bridges(state), viewer),
+      attempt: %{number: attempt_number(state), of: attempt_cap()},
       reveal: reveal(state, phase, viewer),
       # What the next attempt will hang between, so the tap that starts it can
       # say so. The carry-forward is the point of a miss; a button that named
@@ -741,8 +684,8 @@ defmodule Thereish.Game do
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
-      your_tap: Map.get(fairness_taps, viewer),
-      fairness_taps: fairness_taps,
+      your_tap: Map.get(opinions, viewer),
+      fairness_taps: opinions,
       your_bookends_tap: Map.get(state.bookends_taps || %{}, viewer),
       bookends_taps: state.bookends_taps || %{},
       barred_words: if(phase != :waiting, do: barred_words(state)),
@@ -758,18 +701,28 @@ defmodule Thereish.Game do
   """
   @spec barred_words(t()) :: [String.t()]
   def barred_words(%__MODULE__{} = state) do
-    past_bookends = Enum.flat_map(state.played, fn a -> a[:bookends] || a.bookends || [] end)
-
-    past_bridges =
-      Enum.flat_map(state.played, fn a -> Map.values(a[:bridges] || a.bridges || %{}) end)
-
-    current_bookends = state.bookends || []
+    past_bookends = Enum.flat_map(state.played, & &1.bookends)
+    past_bridges = Enum.flat_map(state.played, &Map.values(&1.bridges))
+    current_bookends = attempt_bookends(state) || []
 
     (current_bookends ++ past_bookends ++ past_bridges)
     |> Enum.map(&to_string/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
   end
+
+  @doc """
+  The number of the Attempt being played, or 1 when no Page is open, so a
+  Room waiting for its Page counts from the first Attempt.
+  """
+  @spec attempt_number(t()) :: pos_integer()
+  def attempt_number(%__MODULE__{attempt: nil}), do: 1
+  def attempt_number(%__MODULE__{attempt: attempt}), do: attempt.number
+
+  @doc "The Bookends of the Attempt being played, or nil when no Page is open."
+  @spec attempt_bookends(t()) :: [String.t()] | nil
+  def attempt_bookends(%__MODULE__{attempt: nil}), do: nil
+  def attempt_bookends(%__MODULE__{attempt: attempt}), do: attempt.bookends
 
   defp page_seats(state) do
     if state.page_seat_ids do
@@ -816,7 +769,7 @@ defmodule Thereish.Game do
   # the two words on screen is a player with a head start on the one still
   # typing their name.
   defp bookends(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
-  defp bookends(state, _phase), do: state.bookends
+  defp bookends(state, _phase), do: attempt_bookends(state)
 
   # The Bridges go in roster order, the order the reveal puts them in, so that
   # the sentence the Assayer writes, the joke it makes and the two words it
@@ -831,24 +784,22 @@ defmodule Thereish.Game do
 
     seat_bridges =
       Enum.map(seats, fn seat ->
-        %{name: seat.name, bridge: state.bridges[seat.id]}
+        %{name: seat.name, bridge: bridges(state)[seat.id]}
       end)
 
     %{
-      bookends: state.bookends,
+      bookends: attempt_bookends(state),
       bridges: written_bridges(state),
       seat_bridges: seat_bridges,
       player_bridges: seat_bridges,
       earlier_attempts:
         Enum.map(state.played, fn attempt ->
-          attempt_bridges = attempt[:bridges] || attempt.bridges || %{}
-
           %{
-            number: attempt[:number] || attempt.number,
-            bookends: attempt[:bookends] || attempt.bookends,
+            number: attempt.number,
+            bookends: attempt.bookends,
             bridges:
               Enum.map(seats, fn seat ->
-                %{name: seat.name, bridge: Map.get(attempt_bridges, seat.id)}
+                %{name: seat.name, bridge: Map.get(attempt.bridges, seat.id)}
               end),
             quip: attempt_quip(attempt)
           }
@@ -879,17 +830,17 @@ defmodule Thereish.Game do
   end
 
   # Every Bridge of this attempt, in roster order.
-  defp written_bridges(state), do: Enum.map(page_seats(state), &state.bridges[&1.id])
+  defp written_bridges(state), do: Enum.map(page_seats(state), &bridges(state)[&1.id])
 
   # The revealed Attempt as an Opinion reads it. An overrule keeps the
   # Assayer's grade as the Verdict's `original_closeness`.
   defp graded_attempt(state) do
-    verdict = state.verdict
+    verdict = verdict(state)
     meta = verdict.meta || %{}
 
     %{
-      attempt_number: state.attempt,
-      bookends: state.bookends,
+      attempt_number: attempt_number(state),
+      bookends: attempt_bookends(state),
       bridges: written_bridges(state),
       participant_ids: for(seat <- page_seats(state), committed?(state, seat.id), do: seat.id),
       closeness: verdict.closeness,
@@ -904,9 +855,9 @@ defmodule Thereish.Game do
   # must not be able to change a number the players are already looking at.
   defp record(state, verdict) do
     cond do
-      state.verdict != nil -> {:ok, state, []}
+      verdict(state) != nil -> {:ok, state, []}
       phase(state) != :assaying -> {:error, :no_verdict_expected}
-      true -> graded(%{state | verdict: verdict})
+      true -> graded(put_attempt(state, :verdict, verdict))
     end
   end
 
@@ -931,8 +882,8 @@ defmodule Thereish.Game do
           if state.page_seat_ids, do: length(state.page_seat_ids), else: length(state.seats)
 
         cond do
-          map_size(state.bridges) < seat_count -> :bridging
-          state.verdict == nil -> :assaying
+          map_size(bridges(state)) < seat_count -> :bridging
+          verdict(state) == nil -> :assaying
           over?(state) -> :closed
           true -> :reveal
         end
@@ -954,7 +905,7 @@ defmodule Thereish.Game do
   # Both ways a Page ends. A Meld ends it the moment it lands, so that landing it
   # is the last thing that happens rather than one more rung; spending the last
   # attempt ends it too, and that is an ending rather than a failure.
-  defp over?(state), do: melded?(state) or state.attempt >= attempt_cap()
+  defp over?(state), do: melded?(state) or attempt_number(state) >= attempt_cap()
 
   defp melded?(state) do
     state |> headline() |> Ladder.read() |> Map.fetch!(:melded?)
@@ -964,7 +915,8 @@ defmodule Thereish.Game do
 
   defp closed(_state, phase) when phase != :closed, do: nil
 
-  defp closed(state, _phase), do: %{because: closed_because(state), attempt: state.attempt}
+  defp closed(state, _phase),
+    do: %{because: closed_because(state), attempt: attempt_number(state)}
 
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
   # and the two words that landed furthest apart, named inside the same Verdict
@@ -972,12 +924,12 @@ defmodule Thereish.Game do
   defp reveal(state, phase, _viewer) when phase in [:reveal, :closed] do
     gives = gives_view(state)
 
-    state.verdict
+    verdict(state)
     |> verdict_view()
     |> Map.delete(:reasoning)
     |> Map.merge(%{
-      bridges: bridges_view(state, state.bridges),
-      furthest: furthest_view(state, state.verdict),
+      bridges: bridges_view(state, bridges(state)),
+      furthest: furthest_view(state, verdict(state)),
       gives: gives
     })
   end
@@ -997,9 +949,7 @@ defmodule Thereish.Game do
 
   # The Page's number is the Verdict's, and an Attempt the Assayer could not
   # grade has no number rather than a zero: "we don't know" is not "you missed".
-  defp headline(%{verdict: %{graded?: true, closeness: closeness}}), do: closeness
-
-  defp headline(_state), do: nil
+  defp headline(state), do: attempt_closeness(state.attempt)
 
   # Carry-forward reads the Page's rule (ADR-0016), which `Bookends.carry/3`
   # owns: at a Full table every Seat's Bridge, in roster order; off, the two the
@@ -1011,20 +961,20 @@ defmodule Thereish.Game do
   # attempt is a Page with one word twice rather than a crash.
   defp carry(state) do
     bridges =
-      for seat <- page_seats(state), Map.has_key?(state.bridges, seat.id) do
-        %{seat_id: seat.id, bridge: state.bridges[seat.id]}
+      for seat <- page_seats(state), Map.has_key?(bridges(state), seat.id) do
+        %{seat_id: seat.id, bridge: bridges(state)[seat.id]}
       end
 
-    Bookends.carry(bridges, state.verdict, page_full_table(state.page, state.full_table))
+    Bookends.carry(bridges, verdict(state), page_full_table(state.page, state.full_table))
   end
 
   defp bookend_chips(_state, phase) when phase in [:waiting, :giving, :writing], do: nil
 
   defp bookend_chips(state, _phase) do
     Bookends.chips(
-      state.bookends || [],
-      state.bookend_origins || [],
-      state.attempt,
+      attempt_bookends(state) || [],
+      state.attempt.origins,
+      attempt_number(state),
       state.masks || %{}
     )
   end
@@ -1076,7 +1026,7 @@ defmodule Thereish.Game do
   # one player disagreeing with themselves, and a word the roster cannot account
   # for, such as a paraphrase, is no pair at all.
   defp furthest_view(state, %{graded?: true, furthest: [_, _] = furthest}) do
-    bridges = bridges_view(state, state.bridges)
+    bridges = bridges_view(state, bridges(state))
     claimed = Bookends.claim(furthest, bridges)
 
     if Enum.all?(claimed, & &1.seat_id) do
@@ -1107,23 +1057,13 @@ defmodule Thereish.Game do
 
   defp attempt_closeness(_attempt), do: nil
 
-  defp this_attempt(state) do
-    %{
-      number: state.attempt,
-      bookends: state.bookends,
-      bridges: state.bridges,
-      verdict: state.verdict,
-      furthest: state.furthest
-    }
-  end
-
   # The whole Page as it was played, for the Room to write down. Everything the
   # Chronicle keeps about a Page is here, including the attempts that were
   # already over when this one closed. It is built from the Game's state and
   # not from what any screen shows, so a change to a view cannot change what
   # the Chronicle stores.
   defp chronicle(state) do
-    attempts = state.played ++ [this_attempt(state)]
+    attempts = state.played ++ [state.attempt]
 
     %Entry{
       page: state.page,
@@ -1140,9 +1080,11 @@ defmodule Thereish.Game do
     }
   end
 
-  defp overrule_view(%{overrule: nil}, _viewer), do: nil
+  defp overrule_view(state, viewer), do: overrule_view(state, overrule(state), viewer)
 
-  defp overrule_view(%{overrule: overrule} = state, viewer) do
+  defp overrule_view(_state, nil, _viewer), do: nil
+
+  defp overrule_view(state, overrule, viewer) do
     proposer = find_seat(state, overrule.proposer_id)
 
     %{
@@ -1157,7 +1099,7 @@ defmodule Thereish.Game do
   end
 
   defp already_overruled?(state, _seat_id) do
-    state.verdict != nil and Map.get(state.verdict, :overruled?, false)
+    verdict(state) != nil and Map.get(verdict(state), :overruled?, false)
   end
 
   defp resolve_overrule_unanimity(state, agreed) do
@@ -1173,10 +1115,10 @@ defmodule Thereish.Game do
   defp agree_overrule(state) do
     apply_agreed_overrule(
       state,
-      state.verdict,
+      verdict(state),
       "Overruled jointly across all Seats. Recorded as precedent.",
       written_bridges(state),
-      fn s, new_verdict -> %{s | verdict: new_verdict} end
+      &put_attempt(&1, :verdict, &2)
     )
   end
 
@@ -1189,7 +1131,7 @@ defmodule Thereish.Game do
        ) do
     previously_closed? = phase(state) == :closed
 
-    %{proposer_id: proposer_id, closeness: couple_closeness} = state.overrule
+    %{proposer_id: proposer_id, closeness: couple_closeness} = overrule(state)
     couple_quip = "House law."
 
     new_verdict =
@@ -1205,9 +1147,9 @@ defmodule Thereish.Game do
       })
 
     overrule_effect_data = %{
-      attempt_number: state.attempt,
+      attempt_number: attempt_number(state),
       proposer_seat_id: proposer_id,
-      bookends: state.bookends,
+      bookends: attempt_bookends(state),
       bridges: bridges,
       machine_closeness: original_verdict.closeness,
       machine_reasoning: original_verdict.reasoning,
@@ -1217,9 +1159,8 @@ defmodule Thereish.Game do
       couple_quip: couple_quip
     }
 
-    overrules = state.overrules ++ [overrule_effect_data]
     state = update_verdict_fn.(state, new_verdict)
-    state = %{state | overrule: nil, overrules: overrules}
+    state = put_attempt(state, :overrule, nil)
 
     effects = [{:overrule, overrule_effect_data}]
 
@@ -1365,7 +1306,7 @@ defmodule Thereish.Game do
          :ok <- playing_page_seat(state, seat_id),
          :ok <- verdict_revealed(state) do
       cond do
-        state.overrule != nil -> {:error, :proposal_pending}
+        overrule(state) != nil -> {:error, :proposal_pending}
         already_overruled?(state, seat_id) -> {:error, :already_overruled}
         true -> :ok
       end
@@ -1375,7 +1316,7 @@ defmodule Thereish.Game do
   defp may_vote_overrule(state, seat_id) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- playing_page_seat(state, seat_id) do
-      if state.overrule == nil, do: {:error, :no_proposal_pending}, else: :ok
+      if overrule(state) == nil, do: {:error, :no_proposal_pending}, else: :ok
     end
   end
 
@@ -1420,7 +1361,7 @@ defmodule Thereish.Game do
   defp first_revealed?(state), do: phase(state) in [:reveal, :closed] or state.played != []
 
   defp verdict_revealed(state) do
-    if phase(state) in [:reveal, :closed] and state.verdict != nil,
+    if phase(state) in [:reveal, :closed] and verdict(state) != nil,
       do: :ok,
       else: {:error, :not_revealed}
   end
@@ -1449,7 +1390,7 @@ defmodule Thereish.Game do
     if phase(state) == :closed, do: :ok, else: {:error, :page_open}
   end
 
-  defp committed?(state, seat_id), do: Map.has_key?(state.bridges, seat_id)
+  defp committed?(state, seat_id), do: Map.has_key?(bridges(state), seat_id)
 
   defp find_seat(state, seat_id), do: Enum.find(state.seats, &(&1.id == seat_id))
 

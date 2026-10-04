@@ -651,9 +651,9 @@ defmodule Thereish.Rooms.Play do
   # The Room's and the Game's facts Voice is told on each call.
   defp voice_table(play) do
     %{
-      attempt: play.game.attempt,
+      attempt: Game.attempt_number(play.game),
       phase: Game.phase(play.game),
-      bookends: play.game.bookends,
+      bookends: Game.attempt_bookends(play.game),
       speaker?: Facts.speaker_claimed?(play.facts),
       quips?: play.facts.quips == true
     }
