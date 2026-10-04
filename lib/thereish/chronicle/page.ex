@@ -20,7 +20,7 @@ defmodule Thereish.Chronicle.Page do
     field :author_meta, :map
     field :music_meta, :map
     field :vamp_meta, :map
-    field :masks_meta, :map
+    field :masks_meta, {:map, Thereish.Mask}
     field :closed_because, :string
     field :melded, :boolean
     field :closeness, :integer

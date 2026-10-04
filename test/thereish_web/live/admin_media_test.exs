@@ -9,6 +9,7 @@ defmodule ThereishWeb.AdminMediaTest do
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.Mask
   alias Thereish.Repo
   alias Thereish.Rooms
   alias Thereish.Rooms.Room
@@ -156,8 +157,8 @@ defmodule ThereishWeb.AdminMediaTest do
         entry(
           page: %{bookends: ["desert", "oasis"]},
           masks: %{
-            ctx.mara.id => %{url: historical},
-            ctx.jacob.id => %{url: current}
+            ctx.mara.id => %Mask{url: historical, meta: %{}},
+            ctx.jacob.id => %Mask{url: current, meta: %{}}
           }
         )
       )
@@ -245,7 +246,7 @@ defmodule ThereishWeb.AdminMediaTest do
           page: %{bookends: ["lantern", "harbour"]},
           music_meta: %{path: "/media/tracks/gone-harbour.mp3", title: "Gone Harbour"},
           vamp_meta: %{path: "/media/vamps/gone-vamp.mp3", loop: true},
-          masks: %{ctx.mara.id => %{url: "/media/masks/gone-mask.png"}}
+          masks: %{ctx.mara.id => %Mask{url: "/media/masks/gone-mask.png", meta: %{}}}
         )
       )
 

@@ -13,6 +13,7 @@ defmodule Thereish.GameTest do
   alias Thereish.Chronicle.Entry
   alias Thereish.Game
   alias Thereish.Ladder
+  alias Thereish.Mask
 
   @page %{id: "test-page", bookends: ["lantern", "harbour"]}
 
@@ -1888,7 +1889,7 @@ defmodule Thereish.GameTest do
     end
 
     test "mask_landed records a Mask on the state and rejects unknown seat", %{state: state} do
-      mask = %{url: "/media/masks/mask-1.png", prompt: "A small square Mask."}
+      mask = %Mask{url: "/media/masks/mask-1.png", meta: %{prompt: "A small square Mask."}}
 
       assert {:ok, new_state, []} =
                Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: mask}})
@@ -1905,7 +1906,7 @@ defmodule Thereish.GameTest do
       {:ok, state, []} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
 
-      mask = %{url: "/media/masks/mask-mara.png"}
+      mask = %Mask{url: "/media/masks/mask-mara.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: mask}})
@@ -1953,7 +1954,7 @@ defmodule Thereish.GameTest do
 
       assert Game.view(state, "seat-Mara").your_mask == :dot
 
-      late_mask = %{url: "/media/masks/mask-late.png"}
+      late_mask = %Mask{url: "/media/masks/mask-late.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: late_mask}})
@@ -1971,8 +1972,8 @@ defmodule Thereish.GameTest do
       {:ok, state, _} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
 
-      mask_m = %{url: "/media/masks/m.png"}
-      mask_j = %{url: "/media/masks/j.png"}
+      mask_m = %Mask{url: "/media/masks/m.png", meta: %{}}
+      mask_j = %Mask{url: "/media/masks/j.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: mask_m}})
@@ -2019,7 +2020,7 @@ defmodule Thereish.GameTest do
       {:ok, state, _} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
 
-      mask = %{url: "/media/masks/m.png"}
+      mask = %Mask{url: "/media/masks/m.png", meta: %{}}
       {:ok, state, []} = Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: mask}})
 
       assert state.masks["seat-Mara"] == mask
@@ -2058,8 +2059,8 @@ defmodule Thereish.GameTest do
       {:ok, state, _} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
 
-      mask_m = %{url: "/media/masks/m.png"}
-      mask_j = %{url: "/media/masks/j.png"}
+      mask_m = %Mask{url: "/media/masks/m.png", meta: %{}}
+      mask_j = %Mask{url: "/media/masks/j.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: mask_m}})
@@ -2172,7 +2173,7 @@ defmodule Thereish.GameTest do
       {:ok, state, []} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
 
-      mask_m = %{url: "/media/masks/mask-mara.png"}
+      mask_m = %Mask{url: "/media/masks/mask-mara.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: mask_m}})
@@ -2195,7 +2196,7 @@ defmodule Thereish.GameTest do
       {:ok, state, _} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
 
-      mask_j = %{url: "/media/masks/mask-jacob.png"}
+      mask_j = %Mask{url: "/media/masks/mask-jacob.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Jacob", mask: mask_j}})
@@ -2477,7 +2478,7 @@ defmodule Thereish.GameTest do
       {:ok, state, _} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
 
-      mask_m = %{url: "/media/masks/mask-mara.png"}
+      mask_m = %Mask{url: "/media/masks/mask-mara.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Mara", mask: mask_m}})
@@ -2485,7 +2486,7 @@ defmodule Thereish.GameTest do
       {:ok, state, _} =
         Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
 
-      mask_j = %{url: "/media/masks/mask-jacob.png"}
+      mask_j = %Mask{url: "/media/masks/mask-jacob.png", meta: %{}}
 
       {:ok, state, []} =
         Game.apply(state, {:mask_landed, %{seat_id: "seat-Jacob", mask: mask_j}})
