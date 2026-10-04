@@ -24,6 +24,12 @@ defmodule Thereish.Rooms.Server do
   Page happened are rules about time, and they live in
   `Thereish.Rooms.Pacing`. This process tells Pacing what happened and when,
   and performs what it asks: a timer, some Game events, a broadcast.
+
+  ## Room facts are Facts'
+
+  Who holds the Speaker, Quips, Full table, the music setting and the Prologue
+  are decided by `Thereish.Rooms.Facts`. This process persists the
+  attributes it returns, then carries out its effects.
   """
   use GenServer, restart: :permanent
 
@@ -35,9 +41,9 @@ defmodule Thereish.Rooms.Server do
   alias Thereish.Foley.Voice
   alias Thereish.Game
   alias Thereish.Mask
+  alias Thereish.Rooms.Facts
   alias Thereish.Rooms.Pacing
   alias Thereish.Rooms.Pages
-  alias Thereish.Rooms.Room
   alias Thereish.Rooms.Seat
   alias Thereish.Rooms.Store
   alias Thereish.Scribe
@@ -72,7 +78,7 @@ defmodule Thereish.Rooms.Server do
         pages: Pages.new(),
         occupancy: Occupancy.new(Thereish.Foley.Repertoire.members(room.id)),
         voice: Voice.new(),
-        prologue: nil
+        facts: Facts.new(room)
       }
 
       # A Room that comes back with every Seat taken is a Page already open, so
@@ -225,124 +231,8 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  def handle_call({:claim_speaker, device_token}, _from, state) do
-    if state.room.speaker == device_token do
-      {:reply, :ok, state}
-    else
-      case Store.update_room(state.room, %{speaker: device_token}) do
-        {:ok, room} ->
-          state = %{state | room: room}
-          broadcast(state.room.slug)
-
-          {:reply, :ok, voice(state, &Voice.speaker_claimed(&1, voice_table(state)))}
-
-        {:error, reason} ->
-          {:reply, {:error, reason}, state}
-      end
-    end
-  end
-
-  def handle_call({:start_sound, device_token}, _from, state) do
-    case Store.update_room(state.room, %{speaker: device_token}) do
-      {:ok, room} ->
-        state = %{state | room: room}
-
-        state =
-          if not has_chronicle?(state) and not state.room.prologue_skipped and
-               is_nil(state.prologue) do
-            %{state | prologue: Thereish.Foley.Prologue.draw_take()}
-          else
-            state
-          end
-
-        broadcast(state.room.slug)
-
-        {:reply, :ok, voice(state, &Voice.speaker_claimed(&1, voice_table(state)))}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
-  end
-
-  def handle_call(:skip_prologue, _from, state) do
-    case Store.update_room(state.room, %{prologue_skipped: true}) do
-      {:ok, room} ->
-        state = %{state | room: room, prologue: nil}
-        broadcast(state.room.slug)
-        {:reply, :ok, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
-  end
-
-  def handle_call(:play_prologue, _from, state) do
-    state = %{state | prologue: Thereish.Foley.Prologue.draw_take()}
-    broadcast(state.room.slug)
-    {:reply, :ok, state}
-  end
-
-  def handle_call({:release_speaker, device_token}, _from, state) do
-    if is_nil(device_token) or state.room.speaker == device_token do
-      if is_nil(state.room.speaker) do
-        {:reply, :ok, state}
-      else
-        case Store.update_room(state.room, %{speaker: nil}) do
-          {:ok, room} ->
-            state = %{state | room: room}
-            broadcast(state.room.slug)
-            {:reply, :ok, state}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
-      end
-    else
-      {:reply, :ok, state}
-    end
-  end
-
-  def handle_call({:set_quips, enabled}, _from, state) do
-    case Store.update_room(state.room, %{quips: enabled}) do
-      {:ok, room} ->
-        state = %{state | room: room}
-        broadcast(state.room.slug)
-        {:reply, :ok, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
-  end
-
-  def handle_call({:set_full_table, enabled}, _from, state) do
-    case Store.update_room(state.room, %{full_table: enabled}) do
-      {:ok, room} ->
-        game = %{state.game | full_table: enabled == true}
-        state = %{state | room: room, game: game}
-        broadcast(state.room.slug)
-        {:reply, :ok, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
-  end
-
-  def handle_call({:set_music, music}, _from, state) do
-    music = to_string(music)
-
-    if music in Room.music_modes() do
-      case Store.update_room(state.room, %{music: music}) do
-        {:ok, room} ->
-          state = occupy_quietly(%{state | room: room}, &Occupancy.music_changed(&1, music))
-          broadcast(state.room.slug)
-          {:reply, :ok, state}
-
-        {:error, reason} ->
-          {:reply, {:error, reason}, state}
-      end
-    else
-      {:reply, {:error, :bad_music_setting}, state}
-    end
+  def handle_call({:room_fact, command}, _from, state) do
+    room_fact(state, with_chronicle(command, state))
   end
 
   def handle_call({:next, device_token}, _from, state) do
@@ -363,33 +253,19 @@ defmodule Thereish.Rooms.Server do
   end
 
   # The snapshot answers how long the Assayer has been thinking, plus the
-  # Room facts (speaker?, speaker_claimed?, quips, music, Full table) for the
-  # requesting viewer's device token. Device tokens never leave the Room.
+  # Room facts for the requesting viewer's device token. Device tokens never
+  # leave the Room.
   def handle_call({:snapshot, viewer}, from, state) do
     handle_call({:snapshot, viewer, nil}, from, state)
   end
 
   def handle_call({:snapshot, viewer, device_token}, _from, state) do
-    speaker? =
-      not is_nil(state.room.speaker) and not is_nil(device_token) and
-        state.room.speaker == device_token
-
-    speaker_claimed? = not is_nil(state.room.speaker)
-
     view =
       state.game
       |> Game.view(viewer)
       |> Map.merge(Pacing.view(state.pacing, state.game, now()))
-      |> Map.put(:speaker?, speaker?)
-      |> Map.put(:speaker_claimed?, speaker_claimed?)
-      |> Map.put(:quips, state.room.quips)
-      |> Map.put(:full_table, state.room.full_table)
-      |> Map.put(:music, state.room.music)
-      |> Map.put(:quip, state.room.quip)
+      |> Map.merge(Facts.view(state.facts, device_token))
       |> Map.merge(Occupancy.view(state.occupancy, table(state)))
-      |> Map.put(:prologue_skipped, state.room.prologue_skipped)
-      |> Map.put(:prologue, state[:prologue])
-      |> Map.put(:prologue_script, Thereish.Foley.Prologue.script())
       |> Map.put(:has_chronicle?, has_chronicle?(state))
 
     {:reply, view, state}
@@ -466,7 +342,7 @@ defmodule Thereish.Rooms.Server do
        bookends: result.bookends,
        from: result[:from],
        meta: result.meta,
-       full_table: state.room.full_table
+       full_table: state.facts.full_table
      }}
   end
 
@@ -525,7 +401,7 @@ defmodule Thereish.Rooms.Server do
   # Next or Never, which only the device holding the Speaker may press. Any
   # other device's press is ignored rather than refused.
   defp speaker_pressed(state, device_token, press) do
-    if speaking_device?(state, device_token) do
+    if Facts.holds_speaker?(state.facts, device_token) do
       case press.(state.occupancy, table(state)) do
         {:ok, occupancy, effects} ->
           {state, _wrote?} = perform_occupancy_effects(state, occupancy, effects)
@@ -540,10 +416,39 @@ defmodule Thereish.Rooms.Server do
     end
   end
 
-  defp speaking_device?(state, device_token) do
-    not is_nil(state.room.speaker) and not is_nil(device_token) and
-      state.room.speaker == device_token
+  # Every Room-fact request runs here. Facts decides; the write lands before
+  # anything else happens, so a failed write leaves the Room as it was. The
+  # broadcast goes out before the effects, so a screen hears :room_changed
+  # before any Voice message the claim releases.
+  defp room_fact(state, command) do
+    with {:ok, facts, attrs, effects} <- Facts.apply(state.facts, command),
+         {:ok, room} <- persist_facts(state.room, attrs) do
+      if facts != state.facts, do: broadcast(state.room.slug)
+
+      state = Enum.reduce(effects, %{state | room: room, facts: facts}, &perform_fact_effect/2)
+      {:reply, :ok, state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
   end
+
+  # Whether the Room has a Chronicle is a read only the Stage's tap needs.
+  defp with_chronicle({:start_sound, device_token}, state),
+    do: {:start_sound, device_token, has_chronicle?(state)}
+
+  defp with_chronicle(command, _state), do: command
+
+  defp persist_facts(room, attrs) when attrs == %{}, do: {:ok, room}
+  defp persist_facts(room, attrs), do: Store.update_room(room, attrs)
+
+  defp perform_fact_effect(:speaker_claimed, state),
+    do: voice(state, &Voice.speaker_claimed(&1, voice_table(state)))
+
+  defp perform_fact_effect({:music_changed, music}, state),
+    do: occupy_quietly(state, &Occupancy.music_changed(&1, music))
+
+  defp perform_fact_effect({:full_table_changed, enabled}, state),
+    do: %{state | game: Game.set_full_table(state.game, enabled)}
 
   defp advance(state, game, effects) do
     old_game = state.game
@@ -581,7 +486,7 @@ defmodule Thereish.Rooms.Server do
   defp perform({:chronicle, entry}, state) do
     entry =
       entry
-      |> struct!(Occupancy.chronicle_meta(state.occupancy, state.room.music))
+      |> struct!(Occupancy.chronicle_meta(state.occupancy, state.facts.music))
       |> struct!(arm: Pages.arm(state.pages) || Experiments.default_arm())
       |> then(&Pacing.stamp(state.pacing, &1))
 
@@ -642,7 +547,7 @@ defmodule Thereish.Rooms.Server do
       |> Map.update!(:pages, &Pages.page_opened(&1, page_ref, arm))
       |> pace(&Pacing.author_asked(&1, ref, now()))
       |> occupy_quietly(
-        &Occupancy.page_opened(&1, page_ref, gives, cached, gives_landed_at, state.room.music)
+        &Occupancy.page_opened(&1, page_ref, gives, cached, gives_landed_at, state.facts.music)
       )
 
     Steward.answer_later(
@@ -815,7 +720,7 @@ defmodule Thereish.Rooms.Server do
 
   # The Room's facts Occupancy is told on each call rather than keeping a copy.
   defp table(state) do
-    %{music: state.room.music, closed?: closed?(state)}
+    %{music: state.facts.music, closed?: closed?(state)}
   end
 
   defp closed?(state), do: Game.phase(state.game) == :closed
@@ -951,17 +856,13 @@ defmodule Thereish.Rooms.Server do
       attempt: state.game.attempt,
       phase: Game.phase(state.game),
       bookends: state.game.bookends,
-      speaker?: speaker?(state),
-      quips?: state.room.quips == true
+      speaker?: Facts.speaker_claimed?(state.facts),
+      quips?: state.facts.quips == true
     }
   end
 
   defp speak_line(attempt, kind, line) do
     Steward.answer_later(fn -> Steward.speak(line) end, &{:voice_spoken, attempt, kind, &1})
-  end
-
-  defp speaker?(state) do
-    not is_nil(state.room.speaker) and state.room.speaker != ""
   end
 
   defp commit_chronicle(entry, state) do

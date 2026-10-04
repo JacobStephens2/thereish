@@ -196,14 +196,12 @@ defmodule ThereishWeb.RoomLive do
   end
 
   def handle_event("toggle_quips", _params, socket) do
-    current = Map.get(socket.assigns.room, :quips, true)
-    Rooms.set_quips(socket.assigns.slug, !current)
+    Rooms.toggle(socket.assigns.slug, :quips)
     {:noreply, resync(socket)}
   end
 
   def handle_event("toggle_full_table", _params, socket) do
-    current = Map.get(socket.assigns.room, :full_table, true)
-    Rooms.set_full_table(socket.assigns.slug, !current)
+    Rooms.toggle(socket.assigns.slug, :full_table)
     {:noreply, resync(socket)}
   end
 
