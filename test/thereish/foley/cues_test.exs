@@ -7,6 +7,7 @@ defmodule Thereish.Foley.CuesTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Experiments.Assignment
   alias Thereish.Foley.Cues
   alias Thereish.Rooms.Play
   alias Thereish.Rooms.Room
@@ -25,6 +26,7 @@ defmodule Thereish.Foley.CuesTest do
   @seats [%{id: "melissa", name: "Melissa"}, %{id: "jacob", name: "Jacob"}]
   # The device whose screen hears the Cues.
   @speaker "speaker-token"
+  @assignment %Assignment{id: nil, experiment_id: "author_model", arm: :flash}
 
   defp new do
     room = %Room{slug: "test", seat_limit: length(@seats)}
@@ -48,7 +50,9 @@ defmodule Thereish.Foley.CuesTest do
     end)
   end
 
-  defp answer({:open_page, request, arm}), do: {:page_opened, request, arm || :flash, nil}
+  defp answer({:open_page, request, assignment}),
+    do: {:page_opened, request, assignment || @assignment, nil}
+
   defp answer({:look_up_track, page_ref, _gives}), do: {:track_looked_up, page_ref, nil}
   defp answer({:write_chronicle, _entry}), do: {:chronicle_written, Ecto.UUID.generate()}
   defp answer(_effect), do: nil

@@ -223,10 +223,10 @@ defmodule Thereish.Rooms.Server do
     state
   end
 
-  defp perform({:open_page, request, arm}, state, now) do
-    arm = arm || Steward.assign_arm(state.room.id)
+  defp perform({:open_page, request, assignment}, state, now) do
+    assignment = assignment || Steward.assign_arm(state.room.id)
     cached = cached_track(Enum.map(request.gives, & &1.text))
-    follow_up(state, {:page_opened, request, arm, cached}, now)
+    follow_up(state, {:page_opened, request, assignment, cached}, now)
   end
 
   defp perform({:ask_author, ref, request, arm}, state, _now) do
