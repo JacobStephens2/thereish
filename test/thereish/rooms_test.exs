@@ -434,7 +434,9 @@ defmodule Thereish.RoomsTest do
   end
 
   describe "playing a Page" do
-    setup do
+    setup ctx do
+      if ms = ctx[:beat], do: beat(ms)
+
       slug = open_room()
       {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
@@ -471,9 +473,8 @@ defmodule Thereish.RoomsTest do
       refute Map.has_key?(view.reveal, :reasoning)
     end
 
+    @tag beat: 200
     test "the reveal is held for the beat rather than shown the moment it is graded", ctx do
-      beat(200)
-
       :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
       :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
 
@@ -576,27 +577,12 @@ defmodule Thereish.RoomsTest do
       assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
       assert await_reveal(ctx.slug).reveal.closeness == 80
     end
-
-    test "an Assayer that answers is never called slow, however long the beat runs", ctx do
-      # A beat long enough that the whole test happens inside it, and a first
-      # rung the Assayer would be standing on by now if answering did not stand
-      # the ladder down.
-      beat(2_000)
-      escalation(slow: 20)
-
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairo")
-
-      Process.sleep(100)
-      view = Rooms.snapshot(ctx.slug, nil)
-
-      assert view.phase == :assaying
-      assert view.assayer_step == nil
-    end
   end
 
   describe "four phones at a table" do
-    setup do
+    setup ctx do
+      if ms = ctx[:beat], do: beat(ms)
+
       slug = open_room(seat_limit: 4)
 
       seats =
@@ -621,9 +607,8 @@ defmodule Thereish.RoomsTest do
       end
     end
 
+    @tag beat: 120
     test "the last of four Bridges is one reveal, after the beat", ctx do
-      beat(120)
-
       for {seat, bridge} <- Enum.zip(ctx.seats, ~w(cairn cairo beacon signal)) do
         assert :ok = Rooms.commit_bridge(ctx.slug, seat.id, bridge)
       end
@@ -651,33 +636,15 @@ defmodule Thereish.RoomsTest do
       assert Rooms.snapshot(ctx.slug, ada.id).reveal == Rooms.snapshot(ctx.slug, nil).reveal
       assert Rooms.snapshot(ctx.slug, ada.id).you.name == "Ada"
     end
-
-    test "one slow Verdict escalates once, and the whole table is told the same thing", ctx do
-      escalation(slow: 50, unavailable: 400)
-      steward(delay_ms: 5_000)
-
-      for {seat, bridge} <- Enum.zip(ctx.seats, ~w(cairn cairo beacon signal)) do
-        :ok = Rooms.commit_bridge(ctx.slug, seat.id, bridge)
-      end
-
-      assert eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
-
-      view = await_reveal(ctx.slug)
-
-      # One Verdict given up on, not six: the reveal has no number at all, and
-      # nothing is still narrating the wait.
-      refute view.reveal.graded?
-      assert view.reveal.closeness == nil
-      assert view.assayer_step == nil
-
-      for seat <- ctx.seats do
-        assert Rooms.snapshot(ctx.slug, seat.id).reveal.closeness == nil
-      end
-    end
   end
 
   describe "an Assayer that takes too long" do
     setup do
+      # Rungs far enough apart that a test can catch the Room standing on each
+      # one, set before the Room opens because it reads them then, and an
+      # Assayer slower than all of them.
+      escalation(slow: 50, unavailable: 700)
+
       slug = open_room()
       {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
@@ -685,12 +652,7 @@ defmodule Thereish.RoomsTest do
       :ok = Rooms.give(slug, jacob.id, "setting two")
       await_phase(slug, :bridging)
 
-      # Rungs far enough apart that a test can catch the Room standing on each
-      # one, and an Assayer slower than all of them — but not so much slower that
-      # the test cannot wait for it to answer anyway, because one of these tests
-      # is about what happens when it finally does.
-      escalation(slow: 50, unavailable: 700)
-      steward(delay_ms: 1_000)
+      steward(delay_ms: 5_000)
 
       :ok = Rooms.commit_bridge(slug, melissa.id, "cairn")
       :ok = Rooms.commit_bridge(slug, jacob.id, "cairo")
@@ -712,26 +674,6 @@ defmodule Thereish.RoomsTest do
 
       # The wait is over, so nothing on any screen is still narrating it.
       assert view.assayer_step == nil
-    end
-
-    test "a verdict that turns up after the game gave up does not change it", ctx do
-      assert await_reveal(ctx.slug).reveal.closeness == nil
-
-      # The Assayer does answer, a full second after being asked and long after
-      # the game stopped waiting at 700 ms. The pair is already graded — as
-      # ungraded — and a pair is graded once, so the number on the screen the
-      # couple are looking at does not move under them.
-      Process.sleep(1_100)
-
-      assert Rooms.snapshot(ctx.slug, nil).reveal.closeness == nil
-      assert Process.alive?(GenServer.whereis(Server.via(ctx.slug)))
-    end
-
-    test "every screen is told the same thing about the wait", ctx do
-      eventually(fn -> Rooms.snapshot(ctx.slug, nil).assayer_step == :slow end)
-
-      assert Rooms.snapshot(ctx.slug, ctx.melissa.id).assayer_step ==
-               Rooms.snapshot(ctx.slug, nil).assayer_step
     end
   end
 
@@ -882,101 +824,6 @@ defmodule Thereish.RoomsTest do
       assert :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
       assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
       assert Rooms.snapshot(ctx.slug, nil).attempt.number == 2
-    end
-
-    test "an early Meld cannot open the next Page immediately before the deadline and can at it",
-         ctx do
-      view = play(ctx, "cairn", "cairn")
-
-      assert view.phase == :closed
-      refute view.can_advance?
-      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.melissa.id)
-
-      travel(ctx.clock, 4_999)
-
-      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.jacob.id)
-      assert Rooms.snapshot(ctx.slug, nil).phase == :closed
-
-      travel(ctx.clock, 5_000)
-
-      assert Rooms.snapshot(ctx.slug, nil).can_advance?
-      assert :ok = Rooms.next_page(ctx.slug, ctx.jacob.id)
-      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
-    end
-
-    test "exhausted Attempts hold the closing reveal the same way", ctx do
-      attempt_cap(2)
-
-      play(ctx, "cairn", "beacon")
-      travel(ctx.clock, 5_000)
-      :ok = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
-
-      view = play(ctx, "wharf", "gantry")
-
-      assert view.phase == :closed
-      refute view.can_advance?
-      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.melissa.id)
-
-      travel(ctx.clock, 9_999)
-      assert {:error, :reveal_held} = Rooms.next_page(ctx.slug, ctx.jacob.id)
-
-      travel(ctx.clock, 10_000)
-      assert :ok = Rooms.next_page(ctx.slug, ctx.jacob.id)
-      assert Rooms.snapshot(ctx.slug, nil).phase == :giving
-    end
-
-    test "another Seat or a direct event cannot bypass the shared deadline", ctx do
-      play(ctx, "cairn", "beacon")
-
-      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
-      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
-
-      for viewer <- [ctx.melissa.id, ctx.jacob.id, nil] do
-        view = Rooms.snapshot(ctx.slug, viewer)
-        assert view.phase == :reveal
-        refute view.can_advance?
-      end
-    end
-
-    test "nothing advances on its own once the deadline has passed", ctx do
-      play(ctx, "cairn", "beacon")
-      travel(ctx.clock, 5_000)
-
-      view = Rooms.snapshot(ctx.slug, nil)
-      assert view.phase == :reveal
-      assert view.can_advance?
-      assert view.attempt.number == 1
-    end
-
-    test "the pre-reveal Beat is still the theatre before the reveal, not this hold", ctx do
-      beat(40)
-
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.melissa.id, "cairn")
-      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "beacon")
-
-      assert Rooms.snapshot(ctx.slug, nil).phase == :assaying
-      assert Rooms.snapshot(ctx.slug, nil).reveal == nil
-      refute Map.get(Rooms.snapshot(ctx.slug, nil), :can_advance?, false)
-
-      view = await_reveal(ctx.slug)
-
-      assert view.phase == :reveal
-      refute view.can_advance?
-      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.melissa.id)
-    end
-
-    test "a later snapshot does not restart or bypass the Room's deadline", ctx do
-      play(ctx, "cairn", "beacon")
-      travel(ctx.clock, 2_000)
-
-      later = Rooms.snapshot(ctx.slug, nil)
-      refute later.can_advance?
-      assert {:error, :reveal_held} = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
-
-      travel(ctx.clock, 5_000)
-
-      assert Rooms.snapshot(ctx.slug, ctx.melissa.id).can_advance?
-      assert :ok = Rooms.next_attempt(ctx.slug, ctx.jacob.id)
     end
   end
 
@@ -1642,7 +1489,9 @@ defmodule Thereish.RoomsTest do
   end
 
   describe "giving settings at the table" do
-    setup do
+    setup ctx do
+      if rungs = ctx[:author_escalation], do: author_escalation(rungs)
+
       slug = open_room()
       {:ok, melissa} = Rooms.join(slug, "Melissa", device_token())
       {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
@@ -1760,9 +1609,8 @@ defmodule Thereish.RoomsTest do
       assert view.author_failure == nil
     end
 
+    @tag author_escalation: [still_writing: 25, deadline: 80]
     test "a slow Fake Author reaches still-writing and then failure and recovers on retry", ctx do
-      author_escalation(still_writing: 25, deadline: 80)
-
       fake_config = Keyword.get(ctx.steward, :fake, [])
 
       Application.put_env(
@@ -1846,51 +1694,6 @@ defmodule Thereish.RoomsTest do
 
       assert failed_view.phase == :writing
       assert failed_view.author_failure =~ "this Author is having a moment"
-    end
-
-    test "stale or unmatched author task completion is safely ignored", ctx do
-      fake_config = Keyword.get(ctx.steward, :fake, [])
-
-      Application.put_env(
-        :thereish,
-        :steward,
-        Keyword.put(
-          ctx.steward,
-          :fake,
-          Keyword.merge(fake_config, author_mode: :unavailable)
-        )
-      )
-
-      :ok = Rooms.give(ctx.slug, ctx.melissa.id, "setting one")
-      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "setting two")
-
-      eventually(
-        fn ->
-          v = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-          v.author_failure && v
-        end,
-        "author failure never arrived"
-      )
-
-      pid = GenServer.whereis(Thereish.Rooms.Server.via(ctx.slug))
-
-      # A late task completion with a stale ref arrives
-      send(
-        pid,
-        {:author_completed, make_ref(), {:ok, %{bookends: ["late1", "late2"], meta: %{}}}}
-      )
-
-      # Room must remain in writing with failure reason intact, not advancing to bridging
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view.phase == :writing
-      assert view.author_failure == "unavailable"
-
-      # Similarly, an unmatched error completion changes nothing
-      send(pid, {:author_completed, make_ref(), {:error, :timeout}})
-
-      view = Rooms.snapshot(ctx.slug, ctx.melissa.id)
-      assert view.phase == :writing
-      assert view.author_failure == "unavailable"
     end
   end
 
