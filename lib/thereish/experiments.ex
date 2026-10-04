@@ -379,20 +379,17 @@ defmodule Thereish.Experiments do
         (row.room_id == page.room_id and to_string(row.page_identifier) == page_ident)
     end
 
-    assignment = Enum.find(page_arms.assignments, of_page?)
     outcome = Enum.find(page_arms.outcomes, of_page?)
-
-    experiment_id =
-      (assignment && assignment.experiment_id) || (outcome && outcome.experiment_id) ||
-        @bait_against_plain_id
-
+    # Every assignment and outcome names its Experiment and Arm.
+    row = Enum.find(page_arms.assignments, of_page?) || outcome
+    experiment_id = if row, do: row.experiment_id, else: @first_experiment.id
     unblinded? = MapSet.member?(page_arms.unblinded, experiment_id)
     revealed_outcome = if unblinded?, do: outcome
 
     %{
       experiment_id: experiment_id,
       experiment_unblinded: unblinded?,
-      arm: if(unblinded?, do: (assignment && assignment.arm) || (outcome && outcome.arm)),
+      arm: if(unblinded? && row, do: row.arm),
       trap_converged: revealed_outcome && revealed_outcome.trap_converged,
       deep_converged: revealed_outcome && revealed_outcome.deep_converged
     }
