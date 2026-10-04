@@ -78,7 +78,7 @@ defmodule Thereish.ExperimentsTest do
           assert Experiments.assign("no-such-room") == Experiments.default_arm()
         end)
 
-      assert log =~ "arm"
+      assert log =~ "no experiment arm could be assigned, so the Page plays under flash"
     end
   end
 
