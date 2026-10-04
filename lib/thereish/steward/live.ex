@@ -43,17 +43,17 @@ defmodule Thereish.Steward.Live do
   A grading that fails, however it fails, is `{:error, _}` here and
   `:verdict_unavailable` in the Room, and the couple are asked to make the call
   themselves. It is never a number this module made up.
+
+  Every `assay/1` here is a grade asked now. Whether the players are shown it or
+  the Precedent is `Thereish.Steward`'s call, made before this module is asked.
   """
   @behaviour Thereish.Steward
-
-  require Logger
 
   alias Thereish.Steward
   alias Thereish.Steward.Assay
   alias Thereish.Steward.Gate
   alias Thereish.Steward.Music
   alias Thereish.Steward.Naming
-  alias Thereish.Steward.Precedent
   alias Thereish.Steward.Recap
   alias Thereish.Steward.Title
   alias Thereish.Steward.TrackCache
@@ -62,18 +62,33 @@ defmodule Thereish.Steward.Live do
   @impl true
   def assay(%{bookends: _bookends} = request) do
     role = Steward.role(:assayer)
-    model = role.model
-    prompt_version = Map.get(role, :prompt_version, Assay.version())
+    items = ordering_items(request)
 
-    case Precedent.get(model, prompt_version, request) do
-      {:ok, verdict} ->
-        {:ok, fresh_quip_or_fallback(role, request, verdict)}
+    [forward, reverse] =
+      [items, Enum.reverse(items)]
+      |> Enum.map(fn ordering ->
+        Task.async(fn -> graded(role, request, ordering) end)
+      end)
+      # The grading's whole budget: one request's timeout is `timeout_ms`, and
+      # this is what all of them together, retries included, may spend before
+      # the game is told there is no verdict.
+      |> await(role.deadline_ms)
 
-      :miss ->
-        with {:ok, verdict} <- grade_live(role, request, prompt_version) do
-          Precedent.put(model, prompt_version, request, verdict)
-          {:ok, verdict}
-        end
+    with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
+      {:ok, reconciled(forward, reverse, Map.get(role, :prompt_version, Assay.version()))}
+    end
+  end
+
+  # One request and no retry, because a fresh Quip has to land inside the
+  # reveal's beat; the Steward decides what to show if it does not.
+  @impl true
+  def quip(request) do
+    role = Steward.role(:assayer) |> Map.merge(%{requests: 1, retries: 0})
+    prompt = Assay.quip_prompt(request, ordering_items(request))
+
+    case Gate.answer(role, prompt, &Assay.check_quip/1) do
+      {:ok, answer} -> {:ok, %{quip: Assay.quip(answer.json), meta: %{cost_usd: answer.cost_usd}}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -424,35 +439,17 @@ defmodule Thereish.Steward.Live do
     role = Steward.role(:scribe, :title)
     prompt = Title.prompt(gives)
 
-    case Gate.answer(role, prompt, &Title.check/1) do
-      {:ok, answer} ->
-        title = Title.title(answer.json)
-
-        {:ok,
-         %{
-           title: title,
-           meta: %{
-             model: answer.model,
-             cost_usd: answer.cost_usd,
-             latency_ms: answer.latency_ms,
-             attempts: answer.attempts
-           }
-         }}
-
-      {:error, reason} ->
-        Logger.warning("Scribe title failed (#{inspect(reason)}), falling back")
-
-        {:ok,
-         %{
-           title: Title.fallback(gives),
-           meta: %{
-             model: role.model,
-             cost_usd: 0.0,
-             latency_ms: 0,
-             attempts: 1,
-             fallback: true
-           }
-         }}
+    with {:ok, answer} <- Gate.answer(role, prompt, &Title.check/1) do
+      {:ok,
+       %{
+         title: Title.title(answer.json),
+         meta: %{
+           model: answer.model,
+           cost_usd: answer.cost_usd,
+           latency_ms: answer.latency_ms,
+           attempts: answer.attempts
+         }
+       }}
     end
   end
 
@@ -474,24 +471,6 @@ defmodule Thereish.Steward.Live do
       with :ok <- Vale.check(recap) do
         if callback, do: Vale.check(callback), else: :ok
       end
-    end
-  end
-
-  defp grade_live(role, request, prompt_version) do
-    items = ordering_items(request)
-
-    [forward, reverse] =
-      [items, Enum.reverse(items)]
-      |> Enum.map(fn ordering ->
-        Task.async(fn -> graded(role, request, ordering) end)
-      end)
-      # The grading's whole budget: one request's timeout is `timeout_ms`, and
-      # this is what all of them together, retries included, may spend before
-      # the game is told there is no verdict.
-      |> await(role.deadline_ms)
-
-    with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
-      {:ok, reconciled(forward, reverse, prompt_version)}
     end
   end
 
@@ -598,49 +577,6 @@ defmodule Thereish.Steward.Live do
         reverse: reverse.closeness,
         reasoning_reverse: reverse.reasoning
       }
-    }
-  end
-
-  defp fresh_quip_or_fallback(role, request, cached) do
-    ordering = ordering_items(request)
-    prompt = Assay.quip_prompt(request, ordering)
-    check = &Assay.check_quip/1
-
-    quip_role = Map.merge(role, %{requests: 1, retries: 0})
-
-    timeout =
-      min(
-        Map.get(quip_role, :quip_timeout_ms, 2_000),
-        Map.get(quip_role, :timeout_ms, 2_000)
-      )
-
-    start_time = System.monotonic_time(:millisecond)
-
-    task =
-      Task.Supervisor.async_nolink(Thereish.Steward.Tasks, fn ->
-        Gate.answer(quip_role, prompt, check)
-      end)
-
-    {quip, cost_usd} =
-      case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
-        {:ok, {:ok, answer}} ->
-          {Assay.quip(answer.json), answer.cost_usd}
-
-        _fallback ->
-          {cached.quip, 0.0}
-      end
-
-    latency_ms = System.monotonic_time(:millisecond) - start_time
-
-    %{
-      cached
-      | quip: quip,
-        meta:
-          Map.merge(cached.meta, %{
-            precedent_hit: true,
-            cost_usd: cost_usd,
-            latency_ms: latency_ms
-          })
     }
   end
 end

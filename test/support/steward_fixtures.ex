@@ -161,6 +161,22 @@ defmodule Thereish.StewardFixtures do
   end
 
   @doc """
+  Turns the Fake's dials for one test: how it answers, how long it takes.
+
+  Configuration is global, so a test that reaches for this cannot be async.
+  """
+  def fake(opts) do
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+
+    Application.put_env(
+      :thereish,
+      :steward,
+      Keyword.update!(steward, :fake, &Keyword.merge(&1, opts))
+    )
+  end
+
+  @doc """
   Puts the live Assayer behind the seam and takes the recorded responses out of
   its way, for the smoke tests that are meant to call somebody.
 
