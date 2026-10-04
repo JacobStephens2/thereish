@@ -19,6 +19,7 @@ defmodule Thereish.Chronicle.PageView do
   alias Thereish.Bookends
   alias Thereish.Chronicle.Attempt
   alias Thereish.Chronicle.Correction
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.FairnessTap
   alias Thereish.Chronicle.Opinion
   alias Thereish.Chronicle.Overrule
@@ -188,7 +189,7 @@ defmodule Thereish.Chronicle.PageView do
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
           room_id: Ecto.UUID.t(),
-          document: map(),
+          document: Document.t(),
           gives: [give_view()],
           masks_without_give: [mask_without_give()],
           author_meta: map() | nil,
@@ -278,8 +279,8 @@ defmodule Thereish.Chronicle.PageView do
       track: track(page.music_meta),
       vamp: vamp(page.vamp_meta),
       bookends: opening_bookends(page),
-      bookend_origins: Bookends.origins(page.document),
-      full_table: full_table(page.document),
+      bookend_origins: page.document.origins,
+      full_table: page.document.full_table,
       closed_because: page.closed_because,
       melded: page.melded,
       closeness: page.closeness,
@@ -399,8 +400,8 @@ defmodule Thereish.Chronicle.PageView do
   # A Page written before Give rows kept its one Give in its document, with no
   # Seat. It reads as that one Give, so no reader branches on a Page's vintage
   # (ADR-0003).
-  defp gives(%Page{gives: [], document: doc}) do
-    case doc["give"] || doc[:give] do
+  defp gives(%Page{gives: [], document: %Document{give: give}}) do
+    case give do
       nil -> []
       text -> [%{id: nil, seat_id: nil, seat_name: nil, text: text, order: 0, mask: nil}]
     end
@@ -439,14 +440,9 @@ defmodule Thereish.Chronicle.PageView do
     end
   end
 
-  defp opening_bookends(page) do
-    page.document["bookends"] ||
-      page.document[:bookends] ||
-      case page.attempts do
-        [first | _] -> first.bookends
-        [] -> []
-      end
-  end
+  defp opening_bookends(%Page{document: %Document{bookends: [_ | _] = bookends}}), do: bookends
+  defp opening_bookends(%Page{attempts: [first | _]}), do: first.bookends
+  defp opening_bookends(_page), do: []
 
   # The words a missed Attempt handed on: the next Attempt's Bookends when there
   # was one, else what the table's rule carries (`Bookends.carry/3`) from the
@@ -471,7 +467,7 @@ defmodule Thereish.Chronicle.PageView do
         verdict = %{graded?: first.graded, furthest: first.furthest}
 
         recorded_bridges(attempt)
-        |> Bookends.carry(verdict, full_table(page.document) == true)
+        |> Bookends.carry(verdict, page.document.full_table == true)
         |> Map.fetch!(:carried)
         |> Enum.map(& &1.word)
     end
@@ -481,16 +477,6 @@ defmodule Thereish.Chronicle.PageView do
     Enum.map(attempt.bridges || [], &%{seat_id: &1.seat_id, bridge: &1.bridge})
   end
 
-  defp full_table(doc) when is_map(doc) do
-    case Map.get(doc, "full_table", Map.get(doc, :full_table)) do
-      true -> true
-      false -> false
-      _ -> nil
-    end
-  end
-
-  defp full_table(_), do: nil
-
   # A first-Attempt chip names the Give its word came from and wears no Mask,
   # even when its origin names a Seat. A later chip claims the Bridge it carried
   # from the Attempt before, at most once per Bridge, and wears that Seat's Mask.
@@ -499,7 +485,7 @@ defmodule Thereish.Chronicle.PageView do
 
     origins =
       if attempt.number == 1 do
-        Bookends.origins(page.document)
+        page.document.origins
       else
         prev = if index > 0, do: Enum.at(page.attempts, index - 1)
         Bookends.claim(words, (prev && recorded_bridges(prev)) || [])

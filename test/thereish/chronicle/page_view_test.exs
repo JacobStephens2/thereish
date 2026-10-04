@@ -9,6 +9,7 @@ defmodule Thereish.Chronicle.PageViewTest do
   alias Thereish.Chronicle.Attempt
   alias Thereish.Chronicle.Bridge
   alias Thereish.Chronicle.Correction
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.FairnessTap
   alias Thereish.Chronicle.Give
   alias Thereish.Chronicle.Overrule
@@ -41,7 +42,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       %Page{
         id: @page_id,
         room_id: @room_id,
-        document: %{"bookends" => ["lantern", "harbour"]},
+        document: %Document{bookends: ["lantern", "harbour"]},
         closed_because: "attempts_spent",
         melded: false,
         closeness: 27,
@@ -199,7 +200,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       view =
         project(
           page(
-            document: %{"bookends" => ["lantern", "harbour"], "give" => "old setting"},
+            document: %Document{bookends: ["lantern", "harbour"], give: "old setting"},
             gives: [
               %Give{
                 id: "give",
@@ -217,19 +218,13 @@ defmodule Thereish.Chronicle.PageViewTest do
 
     test "from a legacy document with no Give rows, as one Give with no Seat" do
       view =
-        project(page(document: %{"bookends" => ["lantern", "harbour"], "give" => "a lighthouse"}))
+        project(page(document: %Document{bookends: ["lantern", "harbour"], give: "a lighthouse"}))
 
       assert [give] = view.gives
       assert give.text == "a lighthouse"
       assert give.seat_id == nil
       assert give.seat_name == nil
       assert give.mask == nil
-    end
-
-    test "from a legacy document with atom keys" do
-      view = project(page(document: %{bookends: ["lantern", "harbour"], give: "a lighthouse"}))
-
-      assert [%{text: "a lighthouse", seat_name: nil}] = view.gives
     end
   end
 
@@ -351,7 +346,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       view =
         project(
           page(
-            document: %{"bookends" => ["lantern", "harbour"], "full_table" => true},
+            document: %Document{bookends: ["lantern", "harbour"], full_table: true},
             attempts: [
               attempt(1,
                 bridges: [
@@ -372,7 +367,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       view =
         project(
           page(
-            document: %{"bookends" => ["lantern", "harbour"], "full_table" => false},
+            document: %Document{bookends: ["lantern", "harbour"], full_table: false},
             attempts: [
               attempt(1,
                 bridges: [
@@ -402,7 +397,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       view =
         project(
           page(
-            document: %{"bookends" => ["lantern", "harbour"], "full_table" => true},
+            document: %Document{bookends: ["lantern", "harbour"], full_table: true},
             attempts: [attempt(1), attempt(2, bookends: ["beacon", "cairn"])]
           )
         )
@@ -420,7 +415,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       view =
         project(
           page(
-            document: %{"bookends" => ["lantern", "harbour"], "full_table" => false},
+            document: %Document{bookends: ["lantern", "harbour"], full_table: false},
             attempts: [
               attempt(1,
                 bridges: [
@@ -447,7 +442,7 @@ defmodule Thereish.Chronicle.PageViewTest do
       view =
         project(
           page(
-            document: %{"bookends" => ["lantern", "harbour"], "full_table" => false},
+            document: %Document{bookends: ["lantern", "harbour"], full_table: false},
             attempts: [
               attempt(1,
                 bridges: [
@@ -469,24 +464,14 @@ defmodule Thereish.Chronicle.PageViewTest do
   describe "project/2 dresses Bookends as chips" do
     test "on the first Attempt, from the Gives that dealt them, wearing no Mask" do
       origins = [
-        %{
-          "word" => "lantern",
-          "give" => "setting one",
-          "seat_id" => @mara,
-          "seat_name" => "Mara"
-        },
-        %{
-          "word" => "harbour",
-          "give" => "setting two",
-          "seat_id" => @jacob,
-          "seat_name" => "Jacob"
-        }
+        %{word: "lantern", give: "setting one", seat_id: @mara, seat_name: "Mara"},
+        %{word: "harbour", give: "setting two", seat_id: @jacob, seat_name: "Jacob"}
       ]
 
       view =
         project(
           page(
-            document: %{"bookends" => ["lantern", "harbour"], "bookend_origins" => origins},
+            document: %Document{bookends: ["lantern", "harbour"], origins: origins},
             masks_meta: %{@mara => mask("mara"), @jacob => mask("jacob")}
           )
         )

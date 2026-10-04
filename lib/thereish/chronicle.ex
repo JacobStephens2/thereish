@@ -511,12 +511,9 @@ defmodule Thereish.Chronicle do
   end
 
   defp gallery_association(page) do
-    document = page.document || %{}
-    bookends = document["bookends"] || document[:bookends] || []
-
     %{
       room_slug: page.room.slug,
-      bookends: bookends
+      bookends: page.document.bookends
     }
   end
 

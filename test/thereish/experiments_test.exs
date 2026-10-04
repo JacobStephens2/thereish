@@ -7,6 +7,7 @@ defmodule Thereish.ExperimentsTest do
   import Thereish.RoomFixtures
 
   alias Thereish.Chronicle
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.ExperimentOutcome
   alias Thereish.ExperimentFixtures
   alias Thereish.Experiments
@@ -33,7 +34,10 @@ defmodule Thereish.ExperimentsTest do
   # Writes a closed Page whose document carries its own id, as the Author does.
   defp write_page(room, document_id) do
     {:ok, page} =
-      Chronicle.write(room.id, entry(page: %{id: document_id, bookends: ["lantern", "harbour"]}))
+      Chronicle.write(
+        room.id,
+        entry(page: %Document{identifier: document_id, bookends: ["lantern", "harbour"]})
+      )
 
     page
   end

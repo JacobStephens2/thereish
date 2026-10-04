@@ -200,6 +200,10 @@ _Avoid_: cost report, billing, ledger (the Spend page's subtitle aside)
 A Seat's or the admin's Too harsh / Fair / Too kind reading of one Attempt's grade, as the Assayer gave it before any overrule. Given during play at the reveal or afterwards in the Chronicle. A reviewer's latest Opinion of an Attempt replaces their earlier ones; an Opinion never changes the Verdict or the Precedent (ADR-0019).
 _Avoid_: fairness tap (the table's old name), rating, review, correction, feedback (on its own)
 
+**Document**:
+The Page as it was written at the table: its opening Bookends and where each came from, the Gives, the Author's meta, and the Full table rule it was written under. Built by the Game when the Author's Bookends land, kept with the Page in the Chronicle, and read back the same way however old the Page is.
+_Avoid_: page map, payload, JSON, page data
+
 **Entry**:
 One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the experiment arm. Built when the Page closes and written once (ADR-0003).
 _Avoid_: record, row, payload, closed-page map

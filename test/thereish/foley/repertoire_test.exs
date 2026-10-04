@@ -1,6 +1,7 @@
 defmodule Thereish.Foley.RepertoireTest do
   use Thereish.DataCase, async: true
 
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.Page
   alias Thereish.Foley.Loops
   alias Thereish.Foley.Repertoire
@@ -22,7 +23,7 @@ defmodule Thereish.Foley.RepertoireTest do
     %Page{}
     |> Page.changeset(%{
       room_id: room_id,
-      document: %{bookends: ["sun", "moon"]},
+      document: %Document{bookends: ["sun", "moon"]},
       author_meta: %{arm: "flash"},
       music_meta: %Track{path: path, title: title, meta: %{"provider" => "fake"}},
       closed_because: "meld",
@@ -112,7 +113,7 @@ defmodule Thereish.Foley.RepertoireTest do
       %Page{}
       |> Page.changeset(%{
         room_id: room.id,
-        document: %{bookends: ["sun", "moon"]},
+        document: %Document{bookends: ["sun", "moon"]},
         author_meta: %{arm: "flash"},
         music_meta: %Track{
           path: "/media/tracks/cabin.mp3",
@@ -142,7 +143,7 @@ defmodule Thereish.Foley.RepertoireTest do
       %Page{}
       |> Page.changeset(%{
         room_id: room.id,
-        document: %{bookends: ["sun", "moon"]},
+        document: %Document{bookends: ["sun", "moon"]},
         author_meta: %{arm: "flash"},
         music_meta: Track.failed(:timeout),
         closed_because: "meld",

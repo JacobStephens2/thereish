@@ -10,12 +10,13 @@ defmodule Thereish.GameTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Chronicle.Document
   alias Thereish.Chronicle.Entry
   alias Thereish.Game
   alias Thereish.Ladder
   alias Thereish.Mask
 
-  @page %{id: "test-page", bookends: ["lantern", "harbour"]}
+  @page %Document{bookends: ["lantern", "harbour"]}
 
   defp seat(name), do: %{id: "seat-" <> name, name: name}
 
@@ -144,7 +145,7 @@ defmodule Thereish.GameTest do
     Game.init(
       seat_limit: 4,
       seats: Enum.map(["Mara", "Jacob", "Ada", "Ida"], &seat/1),
-      page: Map.put(@page, :full_table, false),
+      page: %{@page | full_table: false},
       full_table: false
     )
   end
@@ -1414,7 +1415,7 @@ defmodule Thereish.GameTest do
     end
 
     test "starts a fresh Page in the same Room, with the same Seats", ctx do
-      next = %{id: "test-page-2", bookends: ["desert", "mirror"]}
+      next = %Document{bookends: ["desert", "mirror"]}
 
       assert {:ok, state, []} =
                Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Mara", page: next}})
@@ -1432,7 +1433,7 @@ defmodule Thereish.GameTest do
 
     test "cannot take a Page away from the couple in the middle of one" do
       {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}], 10)
-      next = %{id: "test-page-2", bookends: ["desert", "mirror"]}
+      next = %Document{bookends: ["desert", "mirror"]}
 
       assert {:error, :page_open} =
                Game.apply(state, {:page_started, %{seat_id: "seat-Mara", page: next}})
@@ -1442,7 +1443,7 @@ defmodule Thereish.GameTest do
     end
 
     test "is a tap only someone in the Room can make", ctx do
-      next = %{id: "test-page-2", bookends: ["desert", "mirror"]}
+      next = %Document{bookends: ["desert", "mirror"]}
 
       assert {:error, :no_such_seat} =
                Game.apply(ctx.closed, {:page_started, %{seat_id: "seat-Ada", page: next}})
@@ -2373,15 +2374,11 @@ defmodule Thereish.GameTest do
     @six_bookends ~w(lantern harbour summit ember grove spire)
     @six_bridges ~w(cairn beacon wharf signal torch lamp)
 
-    defp six_full(opts \\ []) do
-      page =
-        %{id: "six", bookends: @six_bookends, full_table: true}
-        |> Map.merge(Keyword.get(opts, :page, %{}))
-
+    defp six_full do
       Game.init(
         seat_limit: 6,
         seats: Enum.map(@six, &seat/1),
-        page: page,
+        page: %Document{bookends: @six_bookends, full_table: true},
         full_table: true
       )
     end
@@ -2390,7 +2387,7 @@ defmodule Thereish.GameTest do
       Game.init(
         seat_limit: 6,
         seats: Enum.map(@six, &seat/1),
-        page: %{id: "six", bookends: ["lantern", "harbour"], full_table: false},
+        page: %Document{bookends: ["lantern", "harbour"], full_table: false},
         full_table: false
       )
     end
@@ -2453,7 +2450,7 @@ defmodule Thereish.GameTest do
         Game.init(
           seat_limit: 8,
           seats: Enum.map(eight, &seat/1),
-          page: %{id: "eight", bookends: eight_bookends, full_table: true},
+          page: %Document{bookends: eight_bookends, full_table: true},
           full_table: true
         )
 
