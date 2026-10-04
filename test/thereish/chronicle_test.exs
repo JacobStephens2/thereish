@@ -163,10 +163,9 @@ defmodule Thereish.ChronicleTest do
       assert verdict.reverse == 91
       assert verdict.reasoning_reverse =~ "cairns"
 
-      # Markdown export and digest retain reasoning even though screens do not
+      # The Markdown export retains reasoning even though screens do not
       room = Repo.get_by!(Room, slug: ctx.slug)
       assert Chronicle.to_markdown(room.id) =~ "- Reasoning: #{verdict.reasoning}"
-      assert Chronicle.digest(room.id) =~ "Verdict: 91 (meld) — #{verdict.reasoning}"
     end
 
     test "records a verdict that never came as a verdict that never came", ctx do
@@ -539,27 +538,6 @@ defmodule Thereish.ChronicleTest do
       assert p2_a1.overrule.overruled == 85
       assert p2_a1.overrule.reasoning =~ "water in the desert"
     end
-
-    test "composes a Steward digest for feeding to models later", ctx do
-      room = Repo.get_by!(Room, slug: ctx.slug)
-
-      # Empty room returns default starting message
-      assert Steward.digest(room.id) == "Nothing yet; this is the first Page."
-      assert Chronicle.digest(room.id) == "Nothing yet; this is the first Page."
-
-      # Play a page
-      play(ctx, "cairn", "cairns")
-
-      digest = Steward.digest(room.id)
-      assert is_binary(digest)
-      assert digest =~ "Page 1 (lantern · harbour)"
-      assert digest =~ "Melded on attempt 1 (closeness: 91, meld)"
-      assert digest =~ "Mara bridged \"cairn\""
-      assert digest =~ "Jacob bridged \"cairns\""
-
-      # Also accepts room slug
-      assert Steward.digest(ctx.slug) == digest
-    end
   end
 
   describe "fairness taps and calibration export (ticket 11)" do
@@ -786,10 +764,6 @@ defmodule Thereish.ChronicleTest do
       # Round-trips in Markdown parsing:
       assert {:ok, [parsed]} = Chronicle.from_markdown(markdown)
       assert length(parsed.gives) == 2
-
-      # Appears in digest:
-      digest = Chronicle.digest(room.id)
-      assert digest =~ "[Give (Mara): #{give1}, Give (Jacob): #{give2}]"
     end
 
     test "from_markdown accepts legacy '- Anchors:' lines for backwards compatibility" do

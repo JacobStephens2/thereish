@@ -45,6 +45,7 @@ defmodule Thereish.Steward do
 
   require Logger
 
+  alias Thereish.Steward.Digest
   alias Thereish.Steward.Precedent
   alias Thereish.Steward.Title
 
@@ -398,13 +399,23 @@ defmodule Thereish.Steward do
 
   @doc """
   Asks the Scribe to name a Room with one four-letter word that nods to the
-  history in `digests` and avoids `taken_codes`, answering both word and quip.
-  """
-  @spec name_room([String.t()], [String.t()]) ::
-          {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
-  def name_room([], _taken_codes), do: {:error, :no_history}
+  history in `rooms` and avoids `taken_codes`, answering both word and quip.
 
-  def name_room(digests, taken_codes) do
+  `rooms` holds one list of Page views per earlier Room, oldest Page first. A
+  Room with no Pages has no history to nod to and is left out; when none has
+  any, the answer is `{:error, :no_history}`. Each Room is read the way the
+  Author reads it (`Thereish.Steward.Digest.author/1`).
+  """
+  @spec name_room([[map()]], [String.t()]) ::
+          {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
+  def name_room(rooms, taken_codes) do
+    case Enum.reject(rooms, &(&1 == [])) do
+      [] -> {:error, :no_history}
+      rooms -> name_from(Enum.map(rooms, &Digest.author/1), taken_codes)
+    end
+  end
+
+  defp name_from(digests, taken_codes) do
     role = role(:scribe, :naming)
 
     case await_task(role, fn -> adapter().name_room(digests, taken_codes) end) do
@@ -468,24 +479,38 @@ defmodule Thereish.Steward do
   lets the Scribe have a model that writes well rather than one that answers
   fast. An error is not a crash and not an empty paragraph: the Chronicle simply
   has no recap for that Page, which is a thing the book says out loud.
+
+  `page` is the closed Page's view and `earlier` the views of every Page the
+  Room played before it, oldest first.
   """
-  @spec recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
-  def recap(page, digest) do
+  @spec recap(map(), [map()]) :: {:ok, recap()} | {:error, term()}
+  def recap(page, earlier) do
     # Narrowed here rather than in the adapter, because what the Scribe may know
     # about a Page is the seam's rule and not one adapter's good manners: the
-    # closeness never crosses (ADR-0006).
-    adapter().recap(Thereish.Steward.Recap.readable(page), digest)
+    # closeness never crosses (ADR-0006), neither tonight's nor any earlier one.
+    adapter().recap(Thereish.Steward.Recap.readable(page), Digest.scribe(earlier))
   end
 
   @doc """
   Writes Bookends live from player settings (Gives).
 
   The request carries the count of Bookends wanted — one per Give at a Full
-  table, or two — alongside the Gives and the Chronicle digest.
+  table, or two — alongside the Gives.
+
+  The Room's Page views, oldest first, ride in as the `chronicle:` option. The
+  adapter is handed the Author's digest of them under `digest:`
+  (`Thereish.Steward.Digest.author/1`), so a Room with no Pages reads as the
+  first Page.
   """
   @spec author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   def author(request, opts \\ []) do
     started = System.monotonic_time(:millisecond)
+
+    opts =
+      case Keyword.pop(opts, :chronicle) do
+        {nil, opts} -> opts
+        {views, opts} -> Keyword.put(opts, :digest, Digest.author(views))
+      end
 
     case adapter().author(request, opts) do
       {:ok, result} -> {:ok, timed(result, System.monotonic_time(:millisecond) - started)}
@@ -774,14 +799,6 @@ defmodule Thereish.Steward do
         @default_foley_meld_cue_delay_ms
     end
   end
-
-  @doc """
-  Composes a digest of the Chronicle for feeding to models.
-
-  Computed from the event log, never stored (spec, "The Chronicle"). When the
-  Chronicle is empty, returns the default starting message.
-  """
-  defdelegate digest(room_id_or_slug), to: Thereish.Chronicle
 
   defp timed(verdict, latency_ms) do
     Map.update(verdict, :meta, %{latency_ms: latency_ms}, &Map.put(&1, :latency_ms, latency_ms))

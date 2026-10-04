@@ -32,6 +32,43 @@ defmodule Thereish.Steward.ScribeLiveTest do
     }
   end
 
+  # A Page the Room played before tonight, graded 91 and overruled to 88.
+  defp earlier do
+    %{
+      bookends: ["candy", "cane"],
+      gives: [],
+      give: nil,
+      melded: true,
+      closeness: 91,
+      attempts: [
+        %{
+          number: 1,
+          bridges: [
+            %{seat_name: "Jacob", bridge: "hook"},
+            %{seat_name: "Mara", bridge: "stripe"}
+          ],
+          verdicts: [
+            %{
+              bridges: ["hook", "stripe"],
+              closeness: 91,
+              band: "meld",
+              reasoning: "Both are the shape of the thing."
+            }
+          ]
+        }
+      ],
+      overrules: [
+        %{
+          proposer_name: "Mara",
+          couple_closeness: 88,
+          couple_reasoning: "Close, not that close."
+        }
+      ],
+      corrections: [],
+      recap: %{recap: "Jacob wrote hook and Mara wrote stripe.", callback: nil}
+    }
+  end
+
   defp answers(replies) do
     asked = Thereish.StewardFixtures.counts()
 
@@ -50,7 +87,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
       live_scribe()
       answers([written_recap(callback: "They wrote cairn last month too.")])
 
-      assert {:ok, recap} = Steward.recap(page(), "Page 1 (candy · cane) — Melded on attempt 2")
+      assert {:ok, recap} = Steward.recap(page(), [earlier()])
 
       assert recap.recap =~ "cairn"
       assert recap.callback == "They wrote cairn last month too."
@@ -65,16 +102,34 @@ defmodule Thereish.Steward.ScribeLiveTest do
       answers([written_recap(callback: "")])
 
       assert {:ok, %{callback: nil}} =
-               Steward.recap(page(), "Nothing yet; this is the first Page.")
+               Steward.recap(page(), [])
     end
 
     test "the configured effort reaches the provider request" do
       live_scribe()
       answers([written_recap(callback: "They wrote cairn last month too.")])
 
-      assert {:ok, _recap} = Steward.recap(page(), "Page 1 (candy · cane) — Melded on attempt 2")
+      assert {:ok, _recap} = Steward.recap(page(), [earlier()])
       assert_received {:asked, 1, body}
       assert body["output_config"]["effort"] == "low"
+    end
+  end
+
+  describe "what the Scribe is told" do
+    test "no earlier Page's closeness crosses in the request" do
+      live_scribe()
+      answers([written_recap(callback: "They wrote hook last month too.")])
+
+      Steward.recap(page(), [earlier()])
+
+      assert_received {:asked, 1, body}
+      user = Enum.find_value(body["messages"], &(&1["role"] == "user" && &1["content"]))
+
+      assert user =~ ~s(Jacob bridged "hook")
+      assert user =~ "Recap: Jacob wrote hook and Mara wrote stripe."
+      refute Jason.encode!(body) =~ "91"
+      refute Jason.encode!(body) =~ "88"
+      refute user =~ "closeness"
     end
   end
 
@@ -92,7 +147,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
           written_recap(recap: ~s(Jacob wrote "cairn" and Mara wrote "beacon".))
         ])
 
-      assert {:ok, recap} = Steward.recap(page(), "Nothing yet; this is the first Page.")
+      assert {:ok, recap} = Steward.recap(page(), [])
       assert recap.recap == ~s(Jacob wrote "cairn" and Mara wrote "beacon".)
       assert recap.meta.attempts == 2
 
@@ -115,7 +170,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
       ])
 
       assert {:error, {:rejected, why}} =
-               Steward.recap(page(), "Nothing yet; this is the first Page.")
+               Steward.recap(page(), [])
 
       assert why =~ "Scribe.Grandiose"
     end
@@ -124,7 +179,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
       live_scribe()
       counts = answers([written_recap(recap: "What a journey it was for cairn and beacon.")])
 
-      assert {:error, _why} = Steward.recap(page(), "Nothing yet; this is the first Page.")
+      assert {:error, _why} = Steward.recap(page(), [])
       assert Agent.get(counts, &Map.get(&1, :recap)) == 2
     end
   end
@@ -138,7 +193,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
       ])
 
       assert {:error, {:rejected, why}} =
-               Steward.recap(page(), "Nothing yet; this is the first Page.")
+               Steward.recap(page(), [])
 
       assert why =~ "words the players wrote"
     end
@@ -148,7 +203,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
       answers([written_recap(recap: ~s(Jacob wrote "cairn" and it was worth every one of 62.))])
 
       assert {:error, {:rejected, why}} =
-               Steward.recap(page(), "Nothing yet; this is the first Page.")
+               Steward.recap(page(), [])
 
       assert why =~ "number"
     end
@@ -160,7 +215,7 @@ defmodule Thereish.Steward.ScribeLiveTest do
 
       recorded_scribe(fn conn, _body -> Req.Test.transport_error(conn, :econnrefused) end)
 
-      assert {:error, _reason} = Steward.recap(page(), "Nothing yet; this is the first Page.")
+      assert {:error, _reason} = Steward.recap(page(), [])
     end
   end
 end
