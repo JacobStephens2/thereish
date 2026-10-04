@@ -1144,7 +1144,7 @@ defmodule Thereish.ChronicleTest do
       assert outcome.arm == "astra"
     end
 
-    test "files flash and astra under the Author-model experiment and any other arm under Bait",
+    test "files flash and astra under the Author-model experiment and any other arm under Bait against plain",
          %{room: room} do
       for {arm, experiment_id} <- [
             flash: "author_model",
@@ -1184,7 +1184,7 @@ defmodule Thereish.ChronicleTest do
     end
 
     test "links the Page to the oldest unlinked assignment of its experiment", %{room: room} do
-      assign = fn page_identifier, arm, experiment_id ->
+      record_assignment = fn page_identifier, arm, experiment_id ->
         {:ok, assignment} =
           Chronicle.record_experiment_assignment(room.id, %{
             page_identifier: page_identifier,
@@ -1197,9 +1197,9 @@ defmodule Thereish.ChronicleTest do
         assignment
       end
 
-      bait = assign.("P000", "bait", "bait_against_plain")
-      oldest = assign.("P001", "flash", "author_model")
-      newer = assign.("P002", "astra", "author_model")
+      bait = record_assignment.("P000", "bait", "bait_against_plain")
+      oldest = record_assignment.("P001", "flash", "author_model")
+      newer = record_assignment.("P002", "astra", "author_model")
 
       {page, _outcome} = record_outcome(room, arm: :flash)
 
