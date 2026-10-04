@@ -81,18 +81,14 @@ defmodule Thereish.Steward.Digest do
 
   defp outcome(page, _reader), do: "Unmelded after #{length(page.attempts)} attempts"
 
+  defp gives(%{gives: []}), do: ""
+
   defp gives(page) do
-    cond do
-      page.gives != [] ->
-        " [" <> Enum.map_join(page.gives, ", ", &"Give (#{&1.seat_name}): #{&1.text}") <> "]"
-
-      page.give ->
-        " [Give: #{page.give}]"
-
-      true ->
-        ""
-    end
+    " [" <> Enum.map_join(page.gives, ", ", &give/1) <> "]"
   end
+
+  defp give(%{seat_name: nil} = g), do: "Give: #{g.text}"
+  defp give(g), do: "Give (#{g.seat_name}): #{g.text}"
 
   defp attempt(attempt, reader) do
     bridges = Enum.map_join(attempt.bridges, ", ", &~s(#{&1.seat_name} bridged "#{&1.bridge}"))
