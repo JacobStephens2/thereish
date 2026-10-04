@@ -4,9 +4,10 @@ defmodule Thereish.Rooms.Facts do
   setting, whether the Prologue was skipped, the Code's Quip, and the
   Prologue take playing now.
 
-  It is a pure module in the shape of Pacing, Pages, Occupancy and Voice. The
-  Room builds it from its row, hands it each command, and gets back the new
-  facts, the attributes to persist and the effects to carry out. It touches
+  It is pure and effect-returning like Pacing, Pages, Occupancy and Voice,
+  but takes commands through one `apply/2` as the Game does. The Room builds
+  it from its row, hands it each command, and gets back the new facts, the
+  attributes to persist and the effects to carry out. It touches
   no database, process or PubSub. Every fact but the take is a column on the
   Room; the take is not persisted, so a restart forgets it.
 
@@ -32,11 +33,16 @@ defmodule Thereish.Rooms.Facts do
       rule changed
   """
 
+  import Kernel, except: [apply: 2]
+
   alias Thereish.Foley.Prologue
   alias Thereish.Rooms.Room
 
   @persisted [:speaker, :quips, :full_table, :music, :prologue_skipped]
-  @switches [:quips, :full_table]
+  @on_off [:quips, :full_table]
+
+  @doc "Whether `fact` is one of the Room facts that is only on or off."
+  defguard is_on_off(fact) when fact in @on_off
 
   defstruct speaker: nil,
             quips: true,
@@ -47,7 +53,7 @@ defmodule Thereish.Rooms.Facts do
             prologue: nil
 
   @type take :: %{reading: String.t(), text: String.t()}
-  @type switch :: :quips | :full_table
+  @type on_off :: :quips | :full_table
 
   @type t :: %__MODULE__{
           speaker: String.t() | nil,
@@ -63,8 +69,8 @@ defmodule Thereish.Rooms.Facts do
           {:claim_speaker, String.t() | nil}
           | {:start_sound, String.t() | nil, has_chronicle? :: boolean()}
           | {:release_speaker, String.t() | nil}
-          | {:set, switch(), boolean()}
-          | {:toggle, switch()}
+          | {:set, on_off(), boolean()}
+          | {:toggle, on_off()}
           | {:set_music, String.t() | atom()}
           | :skip_prologue
           | :play_prologue
@@ -111,61 +117,64 @@ defmodule Thereish.Rooms.Facts do
   @spec apply(t(), command()) :: {:ok, t(), map(), [effect()]} | {:error, :bad_music_setting}
   def apply(%__MODULE__{} = facts, {:claim_speaker, device_token}) do
     if holds_speaker?(facts, device_token) or blank?(device_token) do
-      changed(facts, facts, [])
+      outcome(facts, facts, [])
     else
-      changed(facts, %{facts | speaker: device_token}, [:speaker_claimed])
+      outcome(facts, %{facts | speaker: device_token}, [:speaker_claimed])
     end
   end
 
   def apply(%__MODULE__{} = facts, {:start_sound, device_token, has_chronicle?}) do
-    new = if blank?(device_token), do: facts, else: %{facts | speaker: device_token}
+    cond do
+      blank?(device_token) ->
+        outcome(facts, facts, [])
 
-    new =
-      if not has_chronicle? and not new.prologue_skipped and is_nil(new.prologue) do
-        %{new | prologue: Prologue.draw_take()}
-      else
-        new
-      end
+      not has_chronicle? and not facts.prologue_skipped and is_nil(facts.prologue) ->
+        new = %{facts | speaker: device_token, prologue: Prologue.draw_take()}
+        outcome(facts, new, [:speaker_claimed])
 
-    changed(facts, new, [:speaker_claimed])
+      true ->
+        outcome(facts, %{facts | speaker: device_token}, [:speaker_claimed])
+    end
   end
 
   def apply(%__MODULE__{} = facts, {:release_speaker, device_token}) do
     if speaker_claimed?(facts) and (is_nil(device_token) or holds_speaker?(facts, device_token)) do
-      changed(facts, %{facts | speaker: nil}, [])
+      outcome(facts, %{facts | speaker: nil}, [])
     else
-      changed(facts, facts, [])
+      outcome(facts, facts, [])
     end
   end
 
-  def apply(%__MODULE__{} = facts, {:set, switch, enabled})
-      when switch in @switches and is_boolean(enabled) do
-    new = Map.put(facts, switch, enabled)
-    changed(facts, new, switch_effects(switch, facts, new))
+  def apply(%__MODULE__{} = facts, {:set, fact, enabled})
+      when is_on_off(fact) and is_boolean(enabled) do
+    new = Map.put(facts, fact, enabled)
+    outcome(facts, new, on_off_effects(fact, facts, new))
   end
 
-  def apply(%__MODULE__{} = facts, {:toggle, switch}) when switch in @switches do
-    __MODULE__.apply(facts, {:set, switch, Map.fetch!(facts, switch) != true})
+  def apply(%__MODULE__{} = facts, {:toggle, fact}) when is_on_off(fact) do
+    apply(facts, {:set, fact, Map.fetch!(facts, fact) != true})
   end
 
   def apply(%__MODULE__{} = facts, {:set_music, music}) when is_binary(music) or is_atom(music) do
     music = to_string(music)
 
-    cond do
-      music not in Room.music_modes() -> {:error, :bad_music_setting}
-      music == facts.music -> changed(facts, facts, [])
-      true -> changed(facts, %{facts | music: music}, [{:music_changed, music}])
+    # Occupancy hears the setting even when it is unchanged: choosing "page"
+    # again is how a Page with no Track running asks for one.
+    if music in Room.music_modes() do
+      outcome(facts, %{facts | music: music}, [{:music_changed, music}])
+    else
+      {:error, :bad_music_setting}
     end
   end
 
   def apply(%__MODULE__{}, {:set_music, _music}), do: {:error, :bad_music_setting}
 
   def apply(%__MODULE__{} = facts, :skip_prologue) do
-    changed(facts, %{facts | prologue_skipped: true, prologue: nil}, [])
+    outcome(facts, %{facts | prologue_skipped: true, prologue: nil}, [])
   end
 
   def apply(%__MODULE__{} = facts, :play_prologue) do
-    changed(facts, %{facts | prologue: Prologue.draw_take()}, [])
+    outcome(facts, %{facts | prologue: Prologue.draw_take()}, [])
   end
 
   @doc "Whether `device_token` holds the Speaker. A nil or blank token holds nothing."
@@ -196,7 +205,7 @@ defmodule Thereish.Rooms.Facts do
 
   # The attributes to persist are the persisted facts that differ, so a
   # command that changes nothing writes nothing.
-  defp changed(old, new, effects) do
+  defp outcome(old, new, effects) do
     attrs =
       for key <- @persisted, Map.fetch!(old, key) != Map.fetch!(new, key), into: %{} do
         {key, Map.fetch!(new, key)}
@@ -205,9 +214,9 @@ defmodule Thereish.Rooms.Facts do
     {:ok, new, attrs, effects}
   end
 
-  defp switch_effects(:full_table, %{full_table: same}, %{full_table: same}), do: []
-  defp switch_effects(:full_table, _old, new), do: [{:full_table_changed, new.full_table}]
-  defp switch_effects(:quips, _old, _new), do: []
+  defp on_off_effects(:full_table, %{full_table: same}, %{full_table: same}), do: []
+  defp on_off_effects(:full_table, _old, new), do: [{:full_table_changed, new.full_table}]
+  defp on_off_effects(:quips, _old, _new), do: []
 
   defp blank?(nil), do: true
   defp blank?(value) when is_binary(value), do: String.trim(value) == ""

@@ -27,7 +27,7 @@ defmodule Thereish.Rooms.Server do
 
   ## Room facts are Facts'
 
-  Who holds the Speaker, the switches, the music setting and the Prologue
+  Who holds the Speaker, Quips, Full table, the music setting and the Prologue
   are decided by `Thereish.Rooms.Facts`. This process persists the
   attributes it returns, then carries out its effects.
   """
