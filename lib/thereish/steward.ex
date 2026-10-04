@@ -84,6 +84,11 @@ defmodule Thereish.Steward do
         }
 
   @typedoc """
+  A fresh Quip for a Precedent hit, and what writing it cost.
+  """
+  @type quip :: %{quip: String.t(), meta: %{cost_usd: number() | nil}}
+
+  @typedoc """
   A closed Page written back to the players in their own words, the line that
   reaches back to an earlier Page (or nothing, on an evening with nothing behind
   it), and what writing it took.
@@ -101,8 +106,7 @@ defmodule Thereish.Steward do
         }
 
   @callback assay(request()) :: {:ok, verdict()} | {:error, term()}
-  @callback quip(request()) ::
-              {:ok, %{quip: String.t(), meta: %{cost_usd: number() | nil}}} | {:error, term()}
+  @callback quip(request()) :: {:ok, quip()} | {:error, term()}
   @callback author(map() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback recap(map(), String.t()) :: {:ok, recap()} | {:error, term()}
   @callback forge(map() | String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
@@ -504,7 +508,7 @@ defmodule Thereish.Steward do
   def assay(request) do
     started = System.monotonic_time(:millisecond)
 
-    case precedented(request) do
+    case precedent_or_graded(request) do
       {:ok, verdict} -> {:ok, timed(verdict, System.monotonic_time(:millisecond) - started)}
       {:error, reason} -> {:error, reason}
     end
@@ -514,7 +518,7 @@ defmodule Thereish.Steward do
   # adapter is answering, so the Precedent is read and written here rather than
   # inside one of them. A miss is graded by the adapter and written down; a hit
   # is the cached grade with a fresh Quip.
-  defp precedented(request) do
+  defp precedent_or_graded(request) do
     {model, prompt_version} = precedent_key()
 
     case Precedent.get(model, prompt_version, request) do

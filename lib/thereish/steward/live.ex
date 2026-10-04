@@ -62,7 +62,21 @@ defmodule Thereish.Steward.Live do
   @impl true
   def assay(%{bookends: _bookends} = request) do
     role = Steward.role(:assayer)
-    grade_live(role, request, Map.get(role, :prompt_version, Assay.version()))
+    items = ordering_items(request)
+
+    [forward, reverse] =
+      [items, Enum.reverse(items)]
+      |> Enum.map(fn ordering ->
+        Task.async(fn -> graded(role, request, ordering) end)
+      end)
+      # The grading's whole budget: one request's timeout is `timeout_ms`, and
+      # this is what all of them together, retries included, may spend before
+      # the game is told there is no verdict.
+      |> await(role.deadline_ms)
+
+    with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
+      {:ok, reconciled(forward, reverse, Map.get(role, :prompt_version, Assay.version()))}
+    end
   end
 
   # One request and no retry, because a fresh Quip has to land inside the
@@ -457,24 +471,6 @@ defmodule Thereish.Steward.Live do
       with :ok <- Vale.check(recap) do
         if callback, do: Vale.check(callback), else: :ok
       end
-    end
-  end
-
-  defp grade_live(role, request, prompt_version) do
-    items = ordering_items(request)
-
-    [forward, reverse] =
-      [items, Enum.reverse(items)]
-      |> Enum.map(fn ordering ->
-        Task.async(fn -> graded(role, request, ordering) end)
-      end)
-      # The grading's whole budget: one request's timeout is `timeout_ms`, and
-      # this is what all of them together, retries included, may spend before
-      # the game is told there is no verdict.
-      |> await(role.deadline_ms)
-
-    with {:ok, forward} <- forward, {:ok, reverse} <- reverse do
-      {:ok, reconciled(forward, reverse, prompt_version)}
     end
   end
 
