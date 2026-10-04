@@ -2138,6 +2138,21 @@ defmodule Thereish.RoomsTest do
       assert Store.get_room(ctx.slug).full_table == true
     end
 
+    test "two toggles of the same switch return it to where it started, whatever either screen saw",
+         ctx do
+      for {switch, field} <- [quips: :quips, full_table: :full_table] do
+        # Both screens read the same snapshot before either taps.
+        seen = Rooms.snapshot(ctx.slug, ctx.mara.id, ctx.token_a)
+        assert Map.fetch!(seen, field) == true
+
+        assert :ok = Rooms.toggle(ctx.slug, switch)
+        assert :ok = Rooms.toggle(ctx.slug, switch)
+
+        assert Map.fetch!(Store.get_room(ctx.slug), field) == true
+        assert Map.fetch!(Rooms.snapshot(ctx.slug, nil), field) == true
+      end
+    end
+
     test "speaker, quips, music and Full table survive a Room process restart", ctx do
       assert :ok = Rooms.claim_speaker(ctx.slug, ctx.token_a)
       assert :ok = Rooms.set_quips(ctx.slug, false)

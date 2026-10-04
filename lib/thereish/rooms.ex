@@ -426,14 +426,15 @@ defmodule Thereish.Rooms do
   A claim from the current speaker is a no-op.
   """
   @spec claim_speaker(String.t(), String.t()) :: :ok | {:error, term()}
-  def claim_speaker(code, device_token), do: call(code, {:claim_speaker, device_token})
+  def claim_speaker(code, device_token),
+    do: call(code, {:room_fact, {:claim_speaker, device_token}})
 
   @doc """
   Starts sound on the Stage's opening tap, claiming the speaker and,
   on a Room with no Chronicle behind it, beginning the Prologue.
   """
   @spec start_sound(String.t(), String.t()) :: :ok | {:error, term()}
-  def start_sound(code, device_token), do: call(code, {:start_sound, device_token})
+  def start_sound(code, device_token), do: call(code, {:room_fact, {:start_sound, device_token}})
 
   @doc """
   Releases the speaker.
@@ -441,27 +442,38 @@ defmodule Thereish.Rooms do
   Releasing with a token other than the current speaker is a no-op.
   """
   @spec release_speaker(String.t(), String.t() | nil) :: :ok | {:error, term()}
-  def release_speaker(code, device_token \\ nil), do: call(code, {:release_speaker, device_token})
+  def release_speaker(code, device_token \\ nil),
+    do: call(code, {:room_fact, {:release_speaker, device_token}})
 
   @doc "Sets the quips on/off switch."
   @spec set_quips(String.t(), boolean()) :: :ok | {:error, term()}
-  def set_quips(code, enabled), do: call(code, {:set_quips, enabled})
+  def set_quips(code, enabled) when is_boolean(enabled),
+    do: call(code, {:room_fact, {:set, :quips, enabled}})
 
   @doc "Sets the Full table on/off switch."
   @spec set_full_table(String.t(), boolean()) :: :ok | {:error, term()}
-  def set_full_table(code, enabled), do: call(code, {:set_full_table, enabled})
+  def set_full_table(code, enabled) when is_boolean(enabled),
+    do: call(code, {:room_fact, {:set, :full_table, enabled}})
+
+  @doc """
+  Flips the Quips or Full table switch from the Room's own value, so two
+  devices tapping at once land where they started rather than cancelling out.
+  """
+  @spec toggle(String.t(), :quips | :full_table) :: :ok | {:error, term()}
+  def toggle(code, switch) when switch in [:quips, :full_table],
+    do: call(code, {:room_fact, {:toggle, switch}})
 
   @doc "Skips the Prologue for this Room, remembering the skip as a Room fact."
   @spec skip_prologue(String.t()) :: :ok | {:error, term()}
-  def skip_prologue(code), do: call(code, :skip_prologue)
+  def skip_prologue(code), do: call(code, {:room_fact, :skip_prologue})
 
   @doc "Plays the Prologue on demand for this Room."
   @spec play_prologue(String.t()) :: :ok | {:error, term()}
-  def play_prologue(code), do: call(code, :play_prologue)
+  def play_prologue(code), do: call(code, {:room_fact, :play_prologue})
 
   @doc "Sets the music switch: 'off', 'house', or 'page'."
   @spec set_music(String.t(), String.t() | atom()) :: :ok | {:error, term()}
-  def set_music(code, music), do: call(code, {:set_music, music})
+  def set_music(code, music), do: call(code, {:room_fact, {:set_music, music}})
 
   @doc """
   Skips the current wait music (Repertoire draw or holdover) and advances the deal.
