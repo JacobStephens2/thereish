@@ -32,8 +32,6 @@ defmodule ThereishWeb.SpendLiveTest do
       {:ok, melissa} = Rooms.join(slug1, "Melissa", device_token())
       {:ok, jacob} = Rooms.join(slug1, "Jacob", device_token())
 
-      now = DateTime.utc_now()
-
       entry1 =
         entry(%{
           page: %Document{bookends: ["desert", "oasis"]},
