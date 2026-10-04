@@ -1760,8 +1760,12 @@ defmodule Thereish.GameTest do
                     why: "Distant worlds."
                   },
                   arm: :flash
-                }}
+                } = tap}
              ] = effects
+
+      # Which Chronicle Page it is on is the Room's to say.
+      refute Map.has_key?(tap, :page_id)
+      refute Map.has_key?(tap, :page_identifier)
 
       assert Game.view(tapped, "seat-Melissa").your_bookends_tap == "great"
       assert Game.view(tapped, "seat-Melissa").bookends_taps == %{"seat-Melissa" => "great"}
