@@ -1,16 +1,40 @@
 # Thereish
 
-I want to make a game which plays with meaning. Maybe it could even use an LLM
-somehow. I want it more than anything else to be fun.
-
-That note became **Thereish**: a couch word game for two phones and a laptop —
-two to six phones, when friends come round — with a machine author-scribe. It
-runs at **https://thereish.app**. Success is measured one way: My wife likes it.
+**Thereish is a realtime couch word game for two to six players**, built with
+Elixir, Phoenix LiveView and Postgres. Everyone uses a phone to write the word
+or phrase that bridges two far-apart meanings; a language model grades how
+close the table came and writes the reveal's quip. A laptop can show the reveal
+for everyone. No accounts, nothing to install.
 
 <a href="https://thereish.app/game"><img src="docs/media/thereish.gif" width="640" alt="One Page on the Stage: longship and defibrillator miss at 14, then oars and rowing meld at 94."></a>
 
 What it is, for someone who has not played: **https://thereish.app/game**.
 How and why it was built: [The machine grades. It never rules.](https://stephens.page/blog/the-machine-grades-it-never-rules/)
+
+## Engineering highlights
+
+- **Pure game rules, realtime rooms.** `lib/thereish/game.ex` owns the rules as
+  a reducer with no timers, sockets or model calls. Room processes coordinate
+  play; Phoenix LiveView renders the phones and shared Stage.
+- **One interface for model work.** The Steward covers writing, grading,
+  recaps and media generation, with configured providers for live play and a
+  fake adapter for tests.
+- **Repeatable verdicts with human control.** A cache keys grades by model,
+  prompt version and normalized inputs. A joint player overrule changes the
+  precedent; the Chronicle records what the players saw.
+- **Measured model comparisons.** The current Author comparison alternates
+  Flash and Astra within each Room, hides arm labels during play and records
+  outcomes for a qualitative readout. Model-call metadata tracks latency and
+  reported cost.
+
+## Why I built it
+
+I want to make a game which plays with meaning. Maybe it could even use an LLM
+somehow. I want it more than anything else to be fun.
+
+That note became Thereish: a game for two phones and a laptop, expanding to
+six players when friends come round. Success is measured one way: My wife
+likes it.
 
 ## How a Page goes
 
@@ -66,7 +90,8 @@ Scribe's prose before the couple do (design law 14).
   the settled decisions, the fourteen design laws, three playtests
 - `CONTEXT.md` — the glossary: Room, Code, Seat, Page, Give, Bookends, Bridge,
   Attempt, Verdict, Meld, Chronicle, and the words each one avoids
-- `docs/adr/` — the twelve settled decisions, and what each one replaced
+- `docs/adr/` — the architecture decisions, their trade-offs and what each
+  one replaced
 - `docs/research/` — the reading behind the laws: LLM referees in word games,
   why group word games fail at two, model selection for a 2.5-second beat,
   name clearance
@@ -76,7 +101,7 @@ Scribe's prose before the couple do (design law 14).
 
 ## The code
 
-Few deep modules and boring data. The rules fit in one file.
+The Game keeps the rules in pure modules; Rooms coordinate their effects.
 
 - `lib/thereish/game.ex` — the rules as a pure reducer: build state, apply an
   event, project what one Seat may see. No timers, no sockets, no models.
@@ -87,8 +112,9 @@ Few deep modules and boring data. The rules fit in one file.
   OpenAI, Mureka, ElevenLabs, Hume), plus `Fake`, which every test grades against
 - `lib/thereish/chronicle/` — the record's Ecto schemas; the log is the version
   history
-- `lib/thereish/experiments.ex` — the A/B harness: per-Page assignment, blinded
-  labels, outcomes written to the Chronicle, a qualitative readout
+- `lib/thereish/experiments.ex` — the model-comparison harness: alternating
+  Author arms within each Room, blinded labels, outcomes written to the
+  Chronicle and a qualitative readout
 - `lib/thereish/scribe.ex`, `foley/`, `notice.ex`, `umami.ex` — after-play
   writing, sound, the operator's email, page views
 - `lib/thereish_web/live/` — the door (`/`), `/new`, the Room (`/r/CODE`), its

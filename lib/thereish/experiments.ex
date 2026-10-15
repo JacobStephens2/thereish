@@ -1,11 +1,12 @@
 defmodule Thereish.Experiments do
   @moduledoc """
-  The A/B experiment harness (ticket 13, ADR-0004).
+  Experiment definitions, alternating Author assignments and qualitative readouts.
 
   The live Experiment is the Author model, Flash against Astra: each Page in a
   Room is assigned the next Arm in strict alternation when the Author is asked
-  for it. Bait against plain, ADR-0004's misdirection test, is retired, and its
-  rows stay readable.
+  for it, starting with Flash. Assignment is deterministic, with no randomization
+  or Chapter stratification. Bait against plain, ADR-0004's misdirection test,
+  is retired, and its rows stay readable.
 
   This module owns the harness: the Experiments' definitions, each declaring
   its outcomes and its sample (20 Pages) up front; a Page's Assignment; a

@@ -1,14 +1,17 @@
 defmodule Thereish.Steward.Live do
   @moduledoc """
-  The Assayer with a real model behind it.
+  The live adapter for the Author, Assayer, Scribe, Foley and Limner.
 
-  It is one of the two adapters that satisfy `Thereish.Steward`, and the game
-  cannot tell it from the other one: the Steward hands it an Attempt's Bridges in
-  one ordering and gets back a closeness, a sentence, the two words furthest
-  apart, and a joke. Everything that makes a live grade different from a fake
-  one — a provider, identical requests, a validator, a price — is spent here and
-  mentioned nowhere else. Asking for both orderings, the deadline on the pair,
-  and reconciling them into one Verdict are the Steward's, in front of the seam.
+  It implements `Thereish.Steward` alongside `Thereish.Steward.Fake`, routing
+  writing, grading and media jobs to the configured providers through their
+  supporting modules. The same interface supplies Bookends, grades, Quips,
+  Recaps, naming, music, voice, effects and images in live play and tests.
+
+  The Steward handles precedent caching, asking for both orderings, the
+  deadline on the pair and reconciling them into one Verdict in front of this
+  adapter. Here the Assayer grades one ordering at a time, the Scribe's Recaps
+  pass through Vale, and media jobs use their configured providers and caches.
+  The hedging policy below applies to each Assayer ordering.
 
   ## Hedging, because the tail is the network
 

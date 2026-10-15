@@ -1,14 +1,16 @@
 defmodule Thereish.Steward do
   @moduledoc """
-  The one seam through which the game talks to language models.
+  The one seam through which the game asks models to write, grade and make media.
 
-  Nothing else in the codebase knows a provider exists. Model choice, per-role
-  effort, hedging, caching, and schema validation all end up behind here; today
-  the only role that has crossed it is the Assayer, and exactly two adapters
-  satisfy it — `Thereish.Steward.Live`, which talks to a provider, and
-  `Thereish.Steward.Fake`, which every test that is not a hand-run smoke test
-  grades against. Two adapters is what makes this a seam rather than a
-  hypothesis.
+  The Author, Assayer, Scribe, Foley and Limner use this interface for Bookends,
+  verdicts, Recaps, naming, music, voice, effects and images. Callers ask for
+  those jobs through `Thereish.Steward`. The Steward owns shared policies such
+  as precedent caching, grading both orderings and title fallbacks; the adapters
+  and their supporting modules handle provider calls and schema validation.
+
+  `Thereish.Steward.Live` routes work to the configured providers.
+  `Thereish.Steward.Fake` supplies controllable responses for tests, including
+  delays and failures, without making provider calls.
 
   Which adapter is in use is configuration, so a test and the couch differ by a
   setting rather than by a code path:
@@ -22,10 +24,11 @@ defmodule Thereish.Steward do
       config :thereish, :steward,
         roles: [assayer: [provider: ..., model: ..., effort: ...]]
 
-  An assay is asked for one Attempt at a time: the Bookends, and every Bridge
-  written between them, read together and answered once (ADR-0010). A table of
-  four is one request rather than six, and the reveal it feeds is one number
-  rather than six.
+  An assay is asked for one Attempt at a time: the Bookends and every Bridge
+  written between them, read together as one set (ADR-0010). A table of four
+  gets one Verdict rather than six pairwise Verdicts. The Steward handles
+  precedent caching and both orderings behind that single assay call; the
+  live adapter hedges provider requests for each ordering.
 
   ## In front of the seam
 

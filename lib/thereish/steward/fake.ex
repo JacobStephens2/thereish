@@ -1,10 +1,16 @@
 defmodule Thereish.Steward.Fake do
   @moduledoc """
-  An Assayer with no model behind it: the same verdict for the same Bridges,
-  every time, at whatever speed the caller asked for.
+  The test adapter for the Author, Assayer, Scribe, Foley and Limner.
 
-  It grades on the letters two Bridges share from the front, which is not a
-  measure of meaning and is not trying to be. It is a **dial**: a test that
+  It supplies configurable writing and grading responses plus fixtures for
+  naming, music, voice, effects and images, without making provider calls.
+  Tests can request delays and failure modes through the same Steward
+  interface used by live play.
+
+  The fake Assayer returns the same grade for the same Bridges, every time,
+  at whatever speed the caller asked for. It grades on the letters two Bridges
+  share from the front, which is not a measure of meaning and is not trying to
+  be. It is a **dial**: a test that
   wants a Meld writes "cairn" and "cairo", one that wants a miss writes "cairn"
   and "beacon", and neither has to know anything about a model. Every test that
   is not a hand-run smoke test grades against this, so the numbers a test asserts
@@ -42,7 +48,7 @@ defmodule Thereish.Steward.Fake do
   same two dials, so a test that wants the Steward to fall back on the cached
   Quip sets `mode: :unavailable` or a `delay_ms` past the Quip's timeout.
 
-  ## The other two roles
+  ## Author and Scribe controls
 
   The Author and the Scribe have the same dials under the same names —
   `author_mode`, `author_delay_ms`, `recap_mode`, `recap_delay_ms` — and the
