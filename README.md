@@ -160,4 +160,7 @@ a clean, pushed `master`, and `bin/keys-to-server` carries the keys over. Spend
 is visible at `/spend` and at the foot of each Room's Chronicle. See
 `docs/deploy.md`.
 
-The ENABLE word list in `priv/wordlists/` is public domain; see `NOTICE`.
+## License
+
+MIT; see `LICENSE`. The ENABLE word list in `priv/wordlists/` is public domain,
+and the vendored agent skills are MIT; see `NOTICE`.
