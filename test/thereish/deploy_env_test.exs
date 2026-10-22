@@ -37,17 +37,40 @@ defmodule Thereish.DeployEnvTest do
     assert content =~ "every Seat will wear a colour dot"
   end
 
-  test "deploy/deploy.sh makes the media volume writable by the app user" do
-    content = File.read!(@deploy_sh)
+  test "deploy/deploy.sh owns the media directory as nobody at mode 0755 on every run" do
+    lines = command_lines(@deploy_sh)
 
-    assert content =~ "media"
-    assert content =~ "chmod"
+    assert Enum.any?(lines, &owns_media_as_nobody?(&1, "${ROOT}/media"))
+    assert Enum.any?(lines, &modes_media_0755?(&1, "${ROOT}/media"))
+    refute Enum.any?(lines, &(&1 =~ "0777"))
   end
 
-  test "deploy/provision.sh chmods the media directory even if it already exists" do
-    content = File.read!(@provision_sh)
+  test "deploy/provision.sh owns the media directory as nobody at mode 0755 even if it already exists" do
+    lines = command_lines(@provision_sh)
 
-    assert content =~ ~s(sudo install -d -m 0777 "${APP_DIR}/media")
-    assert content =~ ~s(sudo chmod 0777 "${APP_DIR}/media")
+    assert Enum.any?(lines, &owns_media_as_nobody?(&1, "${APP_DIR}/media"))
+    assert Enum.any?(lines, &modes_media_0755?(&1, "${APP_DIR}/media"))
+    refute Enum.any?(lines, &(&1 =~ "0777"))
+  end
+
+  # Command text only. A comment that names nobody and 0755 is not the deploy.
+  defp command_lines(path) do
+    path
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.reject(&(&1 =~ ~r/^\s*#/))
+    |> Enum.map(&String.replace(&1, ~r/\s+#.*$/, ""))
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp owns_media_as_nobody?(line, dir) do
+    String.contains?(line, "chown") and String.contains?(line, "nobody") and
+      String.contains?(line, dir)
+  end
+
+  defp modes_media_0755?(line, dir) do
+    String.contains?(line, "chmod") and String.contains?(line, "0755") and
+      String.contains?(line, dir)
   end
 end

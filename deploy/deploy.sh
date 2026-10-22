@@ -10,12 +10,19 @@ cd "$ROOT"
 
 COMPOSE="docker compose -f docker-compose.app.yml"
 
-echo "==> Ensuring media volume is writable"
+echo "==> Ensuring media volume is owned by the release user"
 # Ticket 73 mounts ./media into the container so Tracks and Masks survive
-# deploys. The app runs as nobody; a root-owned 0755 directory makes
-# TrackCache.store raise eacces and every Page stays on the Repertoire.
-install -d -m 0777 "${ROOT}/media"
-chmod 0777 "${ROOT}/media" || sudo chmod 0777 "${ROOT}/media"
+# deploys. The release runs as nobody. On every run, including when the
+# directory already exists, own it as nobody at 0755. install -d tries to
+# chmod an existing directory and aborts when it cannot, so a missing
+# directory is created first and the chown and chmod always run. Left
+# owned by root at 0755, TrackCache.store raises eacces and the Page stays
+# on the Repertoire.
+if [ ! -d "${ROOT}/media" ]; then
+  sudo install -d -m 0755 "${ROOT}/media"
+fi
+sudo chown nobody:nogroup "${ROOT}/media"
+sudo chmod 0755 "${ROOT}/media"
 
 echo "==> Building release image"
 ${COMPOSE} build
