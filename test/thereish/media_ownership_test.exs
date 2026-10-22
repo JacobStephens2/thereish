@@ -168,6 +168,32 @@ defmodule Thereish.MediaOwnershipTest do
     assert status == 0, output
   end
 
+  test "owns a descendant chain deeper than the interpreter recursion limit", %{
+    media: media,
+    nobody: {uid, gid}
+  } do
+    {leaf_out, 0} =
+      System.cmd("python3", [
+        "-c",
+        """
+        import os, sys
+        path = sys.argv[1]
+        for _ in range(1200):
+            path = os.path.join(path, "d")
+            os.mkdir(path)
+        print(path)
+        """,
+        media
+      ])
+
+    leaf = String.trim(leaf_out)
+
+    {output, status} = System.cmd("bash", [@script, media], stderr_to_stdout: true)
+    assert status == 0, output
+    assert owner(leaf) == {uid, gid}
+    assert Bitwise.band(perm(leaf), 0o002) == 0
+  end
+
   defp nobody_ids do
     {uid_out, 0} = System.cmd("id", ["-u", "nobody"])
     {group_out, 0} = System.cmd("getent", ["group", "nogroup"])

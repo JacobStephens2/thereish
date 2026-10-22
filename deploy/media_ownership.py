@@ -12,6 +12,7 @@ import errno
 import grp
 import os
 import pwd
+import resource
 import stat
 import sys
 
@@ -59,19 +60,75 @@ def main(argv):
     return 0
 
 
-def own_descendants(parent, uid, gid):
-    for name in os.listdir(parent):
+def _ensure_nofile(needed):
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft >= needed:
+        return
+    resource.setrlimit(resource.RLIMIT_NOFILE, (needed, max(hard, needed)))
+
+
+def _open_child(name, parent, depth):
+    try:
+        return os.open(name, _FLAGS, dir_fd=parent)
+    except OSError as exc:
+        if exc.errno not in (errno.EMFILE, errno.ENFILE):
+            return None
+        # A deep chain holds one descriptor per level. Raising the limit
+        # lets the privileged walk finish instead of stopping early.
+        _ensure_nofile(depth + 128)
         try:
-            child = os.open(name, _FLAGS, dir_fd=parent)
-        except OSError:
-            continue
-        try:
-            info = os.fstat(child)
-            os.fchown(child, uid, gid)
-            os.fchmod(child, stat.S_IMODE(info.st_mode) & ~0o002)
-            own_descendants(child, uid, gid)
-        finally:
-            os.close(child)
+            return os.open(name, _FLAGS, dir_fd=parent)
+        except OSError as retry:
+            if retry.errno in (errno.EMFILE, errno.ENFILE):
+                raise
+            return None
+
+
+def _listdir(fd, depth):
+    try:
+        return os.listdir(fd)
+    except OSError as exc:
+        if exc.errno not in (errno.EMFILE, errno.ENFILE):
+            raise
+        _ensure_nofile(depth + 128)
+        return os.listdir(fd)
+
+
+def own_descendants(root, uid, gid):
+    # Explicit stack: one Python frame per directory aborts at the
+    # interpreter recursion limit and leaves the rest of the tree unowned.
+    # sudo's default soft limit is 1024, below a chain an attacker can mkdir.
+    _soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    _ensure_nofile(hard)
+    frames = [[root, None, 0, False]]
+    try:
+        while frames:
+            fd, names, index, close = frames[-1]
+            if names is None:
+                frames[-1][1] = _listdir(fd, len(frames))
+                continue
+            if index >= len(names):
+                frames.pop()
+                if close:
+                    os.close(fd)
+                continue
+            frames[-1][2] = index + 1
+            child = _open_child(names[index], fd, len(frames))
+            if child is None:
+                continue
+            try:
+                info = os.fstat(child)
+                os.fchown(child, uid, gid)
+                os.fchmod(child, stat.S_IMODE(info.st_mode) & ~0o002)
+            except Exception:
+                os.close(child)
+                raise
+            frames.append([child, None, 0, True])
+    finally:
+        while frames:
+            fd, _names, _index, close = frames.pop()
+            if close:
+                os.close(fd)
 
 
 if __name__ == "__main__":
