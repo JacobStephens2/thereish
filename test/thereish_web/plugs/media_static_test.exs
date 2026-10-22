@@ -31,16 +31,39 @@ defmodule ThereishWeb.Plugs.MediaStaticTest do
 
   test "sends a file only when it stays inside the media directory" do
     climbed = request("/media/../secret.txt")
+    assert climbed.halted
+    assert climbed.status == 404
     refute climbed.resp_body == "outside-bytes"
-    refute climbed.halted
 
     linked = request("/media/tracks/leak.mp3")
+    assert linked.halted
+    assert linked.status == 404
     refute linked.resp_body == "outside-bytes"
-    refute linked.halted
+
+    missing = request("/media/tracks/missing.mp3")
+    assert missing.halted
+    assert missing.status == 404
+
+    bare = request("/media")
+    assert bare.halted
+    assert bare.status == 404
 
     kept = request("/media/tracks/kept.mp3")
+    assert kept.halted
     assert kept.status == 200
     assert kept.resp_body == "inside-bytes"
+  end
+
+  test "keeps media in the static paths" do
+    assert "media" in ThereishWeb.static_paths()
+  end
+
+  test "leaves a path outside the /media prefix for the rest of the pipeline" do
+    admin = request("/admin/media")
+    refute admin.halted
+
+    other = request("/median")
+    refute other.halted
   end
 
   defp request(path) do
