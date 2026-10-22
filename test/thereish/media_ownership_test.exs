@@ -73,13 +73,14 @@ defmodule Thereish.MediaOwnershipTest do
     assert perm(media) == 0o755
   end
 
-  test "removes the extended ACL from each directory it opens and leaves the mode bits",
+  test "removes the extended ACL from each directory it opens and from a regular file, and leaves the mode bits",
        %{media: media, tracks: tracks, song: song, nobody: {uid, gid}} do
     user = current_user()
     assert user not in ["root", "nobody"]
 
     # group:: is r-x while the mode's group class stays rwx, so rebuilding
-    # the mode from the base ACL entries would not leave 0775.
+    # the mode from the base ACL entries would not leave 0775. On the file,
+    # group:: is r-- and the mode stays 0666; rebuilding would leave 0646.
     {output, status} =
       System.cmd("setfacl", ["-m", "u:#{user}:rwx,g::r-x", "--", tracks], stderr_to_stdout: true)
 
@@ -89,7 +90,11 @@ defmodule Thereish.MediaOwnershipTest do
     grant_named_user(media, user, "rwx")
     File.chmod!(media, 0o777)
     grant_default_user(media, user, "rwx")
-    grant_named_user(song, user, "rw")
+
+    {output, status} =
+      System.cmd("setfacl", ["-m", "u:#{user}:rw,g::r--", "--", song], stderr_to_stdout: true)
+
+    assert status == 0, output
     File.chmod!(song, 0o666)
 
     assert perm(tracks) == 0o777
@@ -97,6 +102,8 @@ defmodule Thereish.MediaOwnershipTest do
     assert extended_acl?(tracks)
     assert extended_acl?(media)
     assert extended_acl?(song)
+    song_owner = owner(song)
+    assert song_owner != {uid, gid}
 
     {output, status} = System.cmd("bash", [@script, media], stderr_to_stdout: true)
     assert status == 0, output
@@ -116,9 +123,9 @@ defmodule Thereish.MediaOwnershipTest do
     assert status == 0, output
     refute extended_acl?(later)
 
-    assert extended_acl?(song)
+    refute extended_acl?(song)
     assert perm(song) == 0o666
-    assert owner(song) != {uid, gid}
+    assert owner(song) == song_owner
   end
 
   test "does not follow a symlink out of the media volume", %{media: media} do
@@ -136,10 +143,13 @@ defmodule Thereish.MediaOwnershipTest do
     grant_named_user(hidden, user, "rwx")
     grant_default_user(outside, user, "rwx")
     grant_default_user(hidden, user, "rwx")
+    grant_named_user(secret, user, "rw")
+    File.chmod!(secret, 0o666)
     File.chmod!(outside, 0o777)
     File.chmod!(hidden, 0o777)
     File.ln_s!(outside, Path.join(media, "escape"))
     File.ln_s!(secret, Path.join(media, "tracks/leak.mp3"))
+    assert extended_acl?(secret)
 
     outside_owner = owner(outside)
     hidden_owner = owner(hidden)
@@ -158,6 +168,7 @@ defmodule Thereish.MediaOwnershipTest do
     assert default_acl?(hidden)
     assert owner(secret) == secret_owner
     assert perm(secret) == 0o666
+    assert extended_acl?(secret)
     assert File.lstat!(Path.join(media, "escape")).type == :symlink
     assert File.lstat!(Path.join(media, "tracks/leak.mp3")).type == :symlink
   end

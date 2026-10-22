@@ -4,9 +4,10 @@
 The directory itself becomes nobody:nogroup and mode 0755. Each real
 descendant directory becomes nobody:nogroup and loses other-write. The
 extended ACL is removed from each directory opened, and the mode bits
-stay as this walk set them. A symlink is not a directory: opening with
-O_NOFOLLOW | O_DIRECTORY fails, and fchown, fchmod, and the ACL removal
-apply to the directory that was opened, so replacing that path with a
+stay as this walk set them. Each regular file loses the same two ACL
+attributes and keeps its owner and mode. A symlink is not opened.
+O_NOFOLLOW fails for a link, and fchown, fchmod, and the ACL removal
+apply only to the inode that was opened, so replacing a path with a
 link cannot retarget the change.
 """
 
@@ -21,6 +22,10 @@ import stat
 import sys
 
 _FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+# Opened from the parent descriptor. O_NOFOLLOW refuses a symlink that
+# replaced the file. O_NONBLOCK keeps a fifo that won that race from
+# blocking the walk. The descriptor is only used to drop ACL xattrs.
+_FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
 # Access ACL (named users and groups) and the default ACL directories
 # hand to children. setfacl -b removes both, then rebuilds the mode.
 _ACL_XATTRS = (b"system.posix_acl_access", b"system.posix_acl_default")
@@ -73,13 +78,7 @@ def main(argv):
     return 0
 
 
-def _own_opened_dir(fd, uid, gid, mode):
-    os.fchown(fd, uid, gid)
-    os.fchmod(fd, mode)
-    # fchmod rewrites the mask and leaves named entries. Dropping these
-    # xattrs removes the extended ACL and, on Linux, leaves the mode bits
-    # just written. setfacl -b would rebuild the mode from the base group
-    # entry instead.
+def _drop_acl_xattrs(fd):
     for name in _ACL_XATTRS:
         if _libc.fremovexattr(fd, name) == 0:
             continue
@@ -89,6 +88,51 @@ def _own_opened_dir(fd, uid, gid, mode):
         raise OSError(err, os.strerror(err), name.decode())
 
 
+def _own_opened_dir(fd, uid, gid, mode):
+    os.fchown(fd, uid, gid)
+    os.fchmod(fd, mode)
+    # fchmod rewrites the mask and leaves named entries. Dropping these
+    # xattrs removes the extended ACL and, on Linux, leaves the mode bits
+    # just written. setfacl -b would rebuild the mode from the base group
+    # entry instead.
+    _drop_acl_xattrs(fd)
+
+
+def _strip_regular_file(name, parent, depth):
+    # lstat, not open: a symlink is never opened. The open below is only
+    # for a name that was a regular file, and O_NOFOLLOW still applies
+    # if that name is replaced before the open.
+    try:
+        info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    except OSError as exc:
+        if exc.errno == errno.ENOENT:
+            return
+        raise
+    if not stat.S_ISREG(info.st_mode):
+        return
+    fd = _open_regular(name, parent, depth)
+    if fd is None:
+        return
+    try:
+        # Owner and mode stay. Only the ACL xattrs are removed, and only
+        # if this descriptor is still a regular file.
+        if stat.S_ISREG(os.fstat(fd).st_mode):
+            _drop_acl_xattrs(fd)
+    finally:
+        os.close(fd)
+
+
+def _open_regular(name, parent, depth):
+    fd, exc = _open_at(name, parent, _FILE_FLAGS, depth)
+    if fd is not None:
+        return fd
+    # The name changed under us: a symlink, a missing file, or a non-file.
+    # Anything else would leave the ACL in place without saying so.
+    if exc.errno in (errno.ELOOP, errno.ENOENT, errno.ENOTDIR, errno.ENXIO):
+        return None
+    raise exc
+
+
 def _ensure_nofile(needed):
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     if soft >= needed:
@@ -96,21 +140,21 @@ def _ensure_nofile(needed):
     resource.setrlimit(resource.RLIMIT_NOFILE, (needed, max(hard, needed)))
 
 
-def _open_child(name, parent, depth):
+def _open_at(name, parent, flags, depth):
     try:
-        return os.open(name, _FLAGS, dir_fd=parent)
+        return os.open(name, flags, dir_fd=parent), None
     except OSError as exc:
         if exc.errno not in (errno.EMFILE, errno.ENFILE):
-            return None
+            return None, exc
         # A deep chain holds one descriptor per level. Raising the limit
         # lets the privileged walk finish instead of stopping early.
         _ensure_nofile(depth + 128)
         try:
-            return os.open(name, _FLAGS, dir_fd=parent)
+            return os.open(name, flags, dir_fd=parent), None
         except OSError as retry:
             if retry.errno in (errno.EMFILE, errno.ENFILE):
                 raise
-            return None
+            return None, retry
 
 
 def _listdir(fd, depth):
@@ -142,8 +186,9 @@ def own_descendants(root, uid, gid):
                     os.close(fd)
                 continue
             frames[-1][2] = index + 1
-            child = _open_child(names[index], fd, len(frames))
+            child, _exc = _open_at(names[index], fd, _FLAGS, len(frames))
             if child is None:
+                _strip_regular_file(names[index], fd, len(frames))
                 continue
             try:
                 info = os.fstat(child)
