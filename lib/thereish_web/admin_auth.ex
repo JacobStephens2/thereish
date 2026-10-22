@@ -35,14 +35,9 @@ defmodule ThereishWeb.AdminAuth do
     socket = assign_admin(socket, session)
 
     if socket.assigns.current_admin do
-      {:cont, socket}
+      {:cont, recheck_admin_on_event(socket, session)}
     else
-      socket =
-        socket
-        |> Phoenix.LiveView.put_flash(:error, "Sign in to continue.")
-        |> Phoenix.LiveView.redirect(to: ~p"/admin/sign-in")
-
-      {:halt, socket}
+      {:halt, deny_admin(socket)}
     end
   end
 
@@ -74,14 +69,41 @@ defmodule ThereishWeb.AdminAuth do
     end)
   end
 
-  defp assign_admin(socket, session) do
-    Phoenix.Component.assign_new(socket, :current_admin, fn ->
-      case session do
-        %{"admin_token" => token} -> Admin.get_identity_by_session_token(token)
-        _ -> nil
+  defp recheck_admin_on_event(socket, session) do
+    Phoenix.LiveView.attach_hook(socket, :recheck_admin, :handle_event, fn _event,
+                                                                           _params,
+                                                                           socket ->
+      socket = refresh_admin(socket, session)
+
+      if socket.assigns.current_admin do
+        {:cont, socket}
+      else
+        {:halt, deny_admin(socket)}
       end
     end)
   end
+
+  defp deny_admin(socket) do
+    socket
+    |> Phoenix.LiveView.put_flash(:error, "Sign in to continue.")
+    |> Phoenix.LiveView.redirect(to: ~p"/admin/sign-in")
+  end
+
+  defp assign_admin(socket, session) do
+    Phoenix.Component.assign_new(socket, :current_admin, fn ->
+      identity_from_session(session)
+    end)
+  end
+
+  defp refresh_admin(socket, session) do
+    Phoenix.Component.assign(socket, :current_admin, identity_from_session(session))
+  end
+
+  defp identity_from_session(%{"admin_token" => token}) do
+    Admin.get_identity_by_session_token(token)
+  end
+
+  defp identity_from_session(_session), do: nil
 
   defp maybe_store_return_to(%{method: "GET"} = conn) do
     put_session(conn, "admin_return_to", current_path(conn))

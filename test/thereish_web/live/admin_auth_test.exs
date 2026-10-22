@@ -103,6 +103,53 @@ defmodule ThereishWeb.AdminAuthTest do
       refute_email_sent()
     end
 
+    test "a reset link that no longer resolves does not save a password", %{conn: conn} do
+      {:ok, request, _html} = live(conn, ~p"/admin/reset-password")
+
+      request
+      |> form("#reset-request-form", %{email: admin_email()})
+      |> render_submit()
+
+      token = reset_token_from_mailbox()
+      {:ok, reset, _html} = live(conn, ~p"/admin/reset-password/#{token}")
+
+      assert {:ok, _} =
+               Thereish.Admin.reset_password(identity(), %{
+                 "password" => @password,
+                 "password_confirmation" => @password
+               })
+
+      other = "a-different-password"
+
+      assert {:error, {:redirect, %{to: "/admin/reset-password"}}} =
+               reset
+               |> form("#reset-form", %{
+                 "identity" => %{
+                   "password" => other,
+                   "password_confirmation" => other
+                 }
+               })
+               |> render_submit()
+
+      refute Thereish.Admin.get_identity_by_email_and_password(admin_email(), other)
+      assert Thereish.Admin.get_identity_by_email_and_password(admin_email(), @password)
+    end
+
+    test "a signed-in operator LiveView does not run an event after the session token is gone",
+         %{conn: conn} do
+      conn = log_in_admin(conn)
+      token = get_session(conn, "admin_token")
+      {:ok, view, _html} = live(conn, ~p"/admin/experiments")
+
+      :ok = Thereish.Admin.delete_session_token(token)
+
+      assert {:error, {:redirect, %{to: "/admin/sign-in"}}} =
+               render_click(view, "unblind_experiment", %{
+                 "room-id" => Ecto.UUID.generate(),
+                 "experiment-id" => "bait_against_plain"
+               })
+    end
+
     test "signing in keeps the device token that finds a Seat", %{conn: conn} do
       identity_with_password(@password)
       conn = Plug.Test.init_test_session(conn, %{"device_token" => "keep-this-device"})

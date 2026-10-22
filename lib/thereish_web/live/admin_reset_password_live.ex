@@ -13,7 +13,6 @@ defmodule ThereishWeb.AdminResetPasswordLive do
        socket
        |> assign(:page_title, "Set password")
        |> assign(:robots, "noindex")
-       |> assign(:identity, identity)
        |> assign(:token, token)
        |> assign(:form, to_form(Admin.change_password(identity), as: :identity))}
     else
@@ -49,15 +48,24 @@ defmodule ThereishWeb.AdminResetPasswordLive do
   end
 
   def handle_event("reset", %{"identity" => params}, socket) do
-    case Admin.reset_password(socket.assigns.identity, params) do
-      {:ok, _identity} ->
+    case Admin.get_identity_by_reset_password_token(socket.assigns.token) do
+      nil ->
         {:noreply,
          socket
-         |> put_flash(:info, "Password set. Sign in.")
-         |> redirect(to: ~p"/admin/sign-in")}
+         |> put_flash(:error, "Reset link is invalid or it has expired.")
+         |> redirect(to: ~p"/admin/reset-password")}
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset, as: :identity))}
+      identity ->
+        case Admin.reset_password(identity, params) do
+          {:ok, _identity} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Password set. Sign in.")
+             |> redirect(to: ~p"/admin/sign-in")}
+
+          {:error, changeset} ->
+            {:noreply, assign(socket, :form, to_form(changeset, as: :identity))}
+        end
     end
   end
 
