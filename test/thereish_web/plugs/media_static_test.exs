@@ -66,6 +66,66 @@ defmodule ThereishWeb.Plugs.MediaStaticTest do
     refute other.halted
   end
 
+  test "halts a /media path whose extra slashes Plug.Static would ignore" do
+    parent =
+      Path.join(System.tmp_dir!(), "thereish-media-prefix-#{System.unique_integer([:positive])}")
+
+    static_root = Path.join(parent, "static")
+    media = Path.join(static_root, "media")
+    secret = Path.join(parent, "secret.txt")
+    File.mkdir_p!(media)
+    File.write!(secret, "outside-bytes")
+    File.ln_s!(secret, Path.join(media, "leak-out.txt"))
+
+    static_opts =
+      Plug.Static.init(
+        at: "/",
+        from: static_root,
+        gzip: false,
+        only: ThereishWeb.static_paths(),
+        raise_on_missing_only: false
+      )
+
+    build = fn path ->
+      base = Plug.Test.conn(:get, "/placeholder")
+
+      segments =
+        for segment <- :binary.split(path, "/", [:global]), segment != "", do: segment
+
+      %{base | request_path: path, path_info: segments}
+    end
+
+    pipeline = fn path ->
+      conn = ThereishWeb.Plugs.MediaStatic.call(build.(path), [])
+
+      if conn.halted do
+        conn
+      else
+        Plug.Static.call(conn, static_opts)
+      end
+    end
+
+    on_exit(fn -> File.rm_rf!(parent) end)
+
+    served = pipeline.("//media/leak-out.txt")
+    assert served.halted
+    assert served.status == 404
+    refute served.resp_body == "outside-bytes"
+
+    deeper = pipeline.("///media/leak-out.txt")
+    assert deeper.halted
+    assert deeper.status == 404
+    refute deeper.resp_body == "outside-bytes"
+
+    missing = pipeline.("//media/missing.txt")
+    assert missing.halted
+    assert missing.status == 404
+
+    bare = pipeline.("//media")
+    assert bare.halted
+    assert bare.status == 404
+  end
+
   defp request(path) do
     :get
     |> Plug.Test.conn(path)

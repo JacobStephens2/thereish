@@ -21,9 +21,8 @@ defmodule ThereishWeb.Endpoint do
     longpoll: [connect_info: [:peer_data, session: @session_options]]
 
   # MediaStatic halts the /media prefix before Plug.Static, including when it
-  # sends no file. "media" stays in static_paths: in dev, raise_on_missing_only
-  # is true, and a file that still lives under priv/static would raise if it
-  # were removed.
+  # sends no file, so Plug.Static does not serve that prefix. "media" stays in
+  # static_paths. Removing it is not this fix.
   plug ThereishWeb.Plugs.MediaStatic
 
   # Serve at "/" the static files from "priv/static" directory.
