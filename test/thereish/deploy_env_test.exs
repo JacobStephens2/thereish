@@ -39,7 +39,7 @@ defmodule Thereish.DeployEnvTest do
   end
 
   test "deploy/deploy.sh runs media ownership on the media directory" do
-    lines = command_lines(@deploy_sh)
+    lines = directive_lines(@deploy_sh)
 
     assert Enum.any?(lines, &calls_media_ownership?(&1, "${ROOT}/media"))
     refute Enum.any?(lines, &String.contains?(&1, "chown"))
@@ -57,7 +57,7 @@ defmodule Thereish.DeployEnvTest do
   end
 
   test "deploy/provision.sh runs media ownership on the media directory" do
-    lines = command_lines(@provision_sh)
+    lines = directive_lines(@provision_sh)
 
     assert Enum.any?(lines, &calls_media_ownership?(&1, "${APP_DIR}/media"))
     refute Enum.any?(lines, &String.contains?(&1, "chown"))
@@ -65,8 +65,6 @@ defmodule Thereish.DeployEnvTest do
   end
 
   # Command text only. A comment that names nobody and 0755 is not the deploy.
-  defp command_lines(path), do: directive_lines(path)
-
   defp directive_lines(path) do
     path
     |> File.read!()

@@ -4,8 +4,9 @@ defmodule ThereishWeb.Plugs.ForwardedAddress do
   trusted proxy hop, and leaves every other peer alone.
 
   The hop is loopback, or the bridge gateway that dials the published app port.
-  The rest of the bridge subnet is not that hop: any other peer keeps its own
-  address. `RemoteIp` reads only `X-Forwarded-For`,
+  A dual-stack listener reports that same IPv4 hop as an IPv4-mapped address,
+  and that form is still the hop. The rest of the bridge subnet is not: any
+  other peer keeps its own address. `RemoteIp` reads only `X-Forwarded-For`,
   which the proxy has already replaced with the browser that connected.
   """
   @behaviour Plug
@@ -59,6 +60,13 @@ defmodule ThereishWeb.Plugs.ForwardedAddress do
 
   defp trusted_hop?({127, _, _, _}), do: true
   defp trusted_hop?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+
+  # Prod listens on `::` with `ipv6_v6only` left false, so an IPv4 peer arrives
+  # as `::ffff:a.b.c.d`. That is the same hop, not a different one.
+  defp trusted_hop?({0, 0, 0, 0, 0, 65535, hi, lo}) do
+    <<a, b, c, d>> = <<hi::16, lo::16>>
+    trusted_hop?({a, b, c, d})
+  end
 
   defp trusted_hop?(ip) when is_tuple(ip),
     do: ip == Application.get_env(:thereish, :bridge_gateway)

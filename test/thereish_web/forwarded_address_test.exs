@@ -32,6 +32,37 @@ defmodule ThereishWeb.ForwardedAddressTest do
     assert conn.remote_ip == @browser
   end
 
+  test "an ipv4-mapped bridge gateway is rewritten to the forwarded browser", %{conn: conn} do
+    mapped_gateway = {0, 0, 0, 0, 0, 65535, 44049, 1}
+
+    conn =
+      %{conn | remote_ip: mapped_gateway}
+      |> put_req_header("x-forwarded-for", "203.0.113.5")
+      |> get(~p"/new")
+
+    assert conn.remote_ip == {203, 0, 113, 5}
+  end
+
+  test "ipv4-mapped loopback is rewritten to the forwarded browser address", %{conn: conn} do
+    conn =
+      %{conn | remote_ip: {0, 0, 0, 0, 0, 65535, 32512, 1}}
+      |> put_req_header("x-forwarded-for", "203.0.113.5")
+      |> get(~p"/new")
+
+    assert conn.remote_ip == @browser
+  end
+
+  test "an ipv4-mapped address on the bridge subnet keeps its own address", %{conn: conn} do
+    mapped_neighbor = {0, 0, 0, 0, 0, 65535, 44049, 50}
+
+    conn =
+      %{conn | remote_ip: mapped_neighbor}
+      |> put_req_header("x-forwarded-for", "203.0.113.5")
+      |> get(~p"/new")
+
+    assert conn.remote_ip == mapped_neighbor
+  end
+
   test "another address on the bridge subnet keeps its own address", %{conn: conn} do
     conn =
       %{conn | remote_ip: @bridge_neighbor}
