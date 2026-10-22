@@ -73,6 +73,44 @@ defmodule Thereish.MediaOwnershipTest do
     assert perm(media) == 0o755
   end
 
+  test "removes the extended ACL from each directory it opens and leaves the mode bits",
+       %{media: media, tracks: tracks, song: song, nobody: {uid, gid}} do
+    user = current_user()
+    assert user not in ["root", "nobody"]
+
+    # group:: is r-x while the mode's group class stays rwx, so rebuilding
+    # the mode from the base ACL entries would not leave 0775.
+    grant_named_user(tracks, user, "rwx", "r-x")
+    File.chmod!(tracks, 0o777)
+    grant_named_user(media, user, "rwx")
+    File.chmod!(media, 0o777)
+    grant_named_user(song, user, "rw")
+    File.chmod!(song, 0o666)
+
+    assert perm(tracks) == 0o777
+    assert perm(media) == 0o777
+    assert extended_acl?(tracks)
+    assert extended_acl?(media)
+    assert extended_acl?(song)
+
+    {output, status} = System.cmd("bash", [@script, media], stderr_to_stdout: true)
+    assert status == 0, output
+
+    assert {uid, gid} == owner(tracks)
+    assert {uid, gid} == owner(media)
+    assert perm(tracks) == 0o775
+    assert perm(media) == 0o755
+    refute extended_acl?(tracks)
+    refute extended_acl?(media)
+
+    assert {:error, :eacces} = File.write(Path.join(tracks, "planted.txt"), "x")
+    assert {:error, :eacces} = File.write(Path.join(media, "planted.txt"), "x")
+
+    assert extended_acl?(song)
+    assert perm(song) == 0o666
+    assert owner(song) != {uid, gid}
+  end
+
   test "does not follow a symlink out of the media volume", %{media: media} do
     parent = Path.dirname(media)
     outside = Path.join(parent, "outside")
@@ -83,6 +121,11 @@ defmodule Thereish.MediaOwnershipTest do
     File.chmod!(outside, 0o777)
     File.chmod!(hidden, 0o777)
     File.chmod!(secret, 0o666)
+    user = current_user()
+    grant_named_user(outside, user, "rwx")
+    grant_named_user(hidden, user, "rwx")
+    File.chmod!(outside, 0o777)
+    File.chmod!(hidden, 0o777)
     File.ln_s!(outside, Path.join(media, "escape"))
     File.ln_s!(secret, Path.join(media, "tracks/leak.mp3"))
 
@@ -95,8 +138,10 @@ defmodule Thereish.MediaOwnershipTest do
 
     assert owner(outside) == outside_owner
     assert perm(outside) == 0o777
+    assert extended_acl?(outside)
     assert owner(hidden) == hidden_owner
     assert perm(hidden) == 0o777
+    assert extended_acl?(hidden)
     assert owner(secret) == secret_owner
     assert perm(secret) == 0o666
     assert File.lstat!(Path.join(media, "escape")).type == :symlink
@@ -192,6 +237,41 @@ defmodule Thereish.MediaOwnershipTest do
     assert status == 0, output
     assert owner(leaf) == {uid, gid}
     assert Bitwise.band(perm(leaf), 0o002) == 0
+  end
+
+  defp current_user do
+    {out, 0} = System.cmd("id", ["-un"])
+    String.trim(out)
+  end
+
+  defp grant_named_user(path, user, perms, group \\ nil) do
+    spec =
+      if group do
+        "u:#{user}:#{perms},g::#{group}"
+      else
+        "u:#{user}:#{perms}"
+      end
+
+    {output, status} = System.cmd("setfacl", ["-m", spec, "--", path], stderr_to_stdout: true)
+    assert status == 0, output
+  end
+
+  defp extended_acl?(path) do
+    {out, 0} = System.cmd("getfacl", ["-c", "-p", "--", path])
+
+    out
+    |> String.split("\n", trim: true)
+    |> Enum.any?(fn line ->
+      named_user_entry?(line) or named_group_entry?(line) or String.starts_with?(line, "mask:")
+    end)
+  end
+
+  defp named_user_entry?(line) do
+    String.starts_with?(line, "user:") and not String.starts_with?(line, "user::")
+  end
+
+  defp named_group_entry?(line) do
+    String.starts_with?(line, "group:") and not String.starts_with?(line, "group::")
   end
 
   defp nobody_ids do

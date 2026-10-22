@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Own the media volume as nobody:nogroup. The directory itself is mode 0755.
-# Descendant directories get that owner too and lose other-write. Symlinks
-# are not followed. Sourced by deploy/deploy.sh and deploy/provision.sh.
+# Descendant directories get that owner too and lose other-write. Each
+# directory opened loses its extended ACL, and the mode bits stay as the
+# walk set them. Symlinks are not followed. Sourced by deploy/deploy.sh
+# and deploy/provision.sh.
 
 ensure_media_ownership() {
   local media="$1"
