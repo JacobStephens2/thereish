@@ -39,6 +39,53 @@ defmodule ThereishWeb.EndpointTest do
     assert headers_map["content-type"] =~ "audio/mpeg"
   end
 
+  test "the endpoint does not serve a /media path that leaves the media directory" do
+    static_media =
+      :code.priv_dir(:thereish)
+      |> to_string()
+      |> Path.join("static/media")
+      |> Path.expand()
+
+    secret =
+      Path.join(
+        System.tmp_dir!(),
+        "thereish-media-outside-#{System.unique_integer([:positive])}.txt"
+      )
+
+    File.write!(secret, "outside-bytes")
+    created_dir = not File.dir?(static_media)
+    File.mkdir_p!(static_media)
+    link = Path.join(static_media, "leak-out.txt")
+    File.rm(link)
+    File.ln_s!(secret, link)
+
+    previous = Application.get_env(:thereish, :media_dir)
+    Application.put_env(:thereish, :media_dir, static_media)
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:thereish, :media_dir, previous)
+      else
+        Application.delete_env(:thereish, :media_dir)
+      end
+
+      File.rm(link)
+      File.rm(secret)
+
+      if created_dir do
+        File.rmdir(static_media)
+      end
+    end)
+
+    url = String.to_charlist(ThereishWeb.Endpoint.url() <> "/media/leak-out.txt")
+
+    assert {:ok, {{_version, status, _reason}, _headers, body}} =
+             :httpc.request(:get, {url, []}, [], [])
+
+    assert status == 404
+    refute to_string(body) == "outside-bytes"
+  end
+
   test "the endpoint serves mask files over real HTTP" do
     test_dir = Thereish.Steward.TrackCache.media_dir()
     masks_dir = Path.join(test_dir, "masks")

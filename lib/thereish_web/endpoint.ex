@@ -20,6 +20,11 @@ defmodule ThereishWeb.Endpoint do
     websocket: [connect_info: [:peer_data, session: @session_options]],
     longpoll: [connect_info: [:peer_data, session: @session_options]]
 
+  # MediaStatic halts the /media prefix before Plug.Static, including when it
+  # sends no file, so Plug.Static does not serve that prefix. "media" stays in
+  # static_paths. Removing it is not this fix.
+  plug ThereishWeb.Plugs.MediaStatic
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),
@@ -31,8 +36,6 @@ defmodule ThereishWeb.Endpoint do
     gzip: not code_reloading?,
     only: ThereishWeb.static_paths(),
     raise_on_missing_only: code_reloading?
-
-  plug ThereishWeb.Plugs.MediaStatic
 
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
