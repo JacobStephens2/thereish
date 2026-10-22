@@ -27,6 +27,13 @@ if config_env() != :test do
     http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 end
 
+# Inside the app container the default route is the bridge gateway that dials
+# the published port. That hop may name the browser. The host's own default
+# route is not that hop, and the rest of the bridge subnet is not either.
+if gateway = ThereishWeb.Plugs.ForwardedAddress.discover_bridge_gateway() do
+  config :thereish, :bridge_gateway, gateway
+end
+
 # The Assayer's key, in every environment that has one. It is set here rather
 # than read where it is used so that a key is configuration like the model and
 # the effort are, and so that nothing goes looking at the environment in the

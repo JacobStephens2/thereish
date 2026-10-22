@@ -33,6 +33,11 @@ test_port =
       end
   end
 
+# The suite does not run in the app container, so it cannot learn the bridge
+# gateway from the container's default route. The forwarded-address cases use
+# this hop: docker0's gateway, and not the rest of 172.17.0.0/16.
+config :thereish, :bridge_gateway, {172, 17, 0, 1}
+
 config :thereish, ThereishWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: test_port],
   url: [host: "localhost", port: test_port],

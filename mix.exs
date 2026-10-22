@@ -73,6 +73,7 @@ defmodule Thereish.MixProject do
       {:jsv, "~> 0.11"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
+      {:remote_ip, "~> 1.2"},
       {:stemmer, "~> 1.2"},
       {:expletive, "~> 0.1.6"},
       {:swoosh, "~> 1.16"},

@@ -16,7 +16,53 @@ defmodule ThereishWeb.FrontLiveTest do
 
   defp type_code(view, code), do: view |> form("form", %{"code" => code}) |> render_submit()
 
+  # The page request arrives from the bridge gateway and is rewritten to the
+  # browser. The LiveView socket's peer stays that gateway. `peer_data` is the
+  # socket peer; `remote_ip` is the connection address the plugs see.
+  @proxy_hop {172, 17, 0, 1}
+
   defp phone_at(slug), do: build_conn() |> get(~p"/r/#{slug}")
+
+  defp browser_behind_proxy(forwarded) do
+    proxy_hop(build_conn(), @proxy_hop, forwarded)
+  end
+
+  defp same_browser(conn, forwarded) do
+    conn
+    |> recycle()
+    |> proxy_hop(@proxy_hop, forwarded)
+  end
+
+  defp direct_browser(ip, forwarded) do
+    proxy_hop(build_conn(), ip, forwarded)
+  end
+
+  defp proxy_hop(conn, ip, forwarded) do
+    conn
+    |> Map.replace!(:remote_ip, ip)
+    |> Plug.Test.put_peer_data(%{address: ip, port: 40_000, ssl_cert: nil})
+    |> put_req_header("x-forwarded-for", forwarded)
+    |> Map.update!(:private, &Map.put(&1, :phoenix_recycled, true))
+    |> get(~p"/new")
+  end
+
+  defp limit_room_creation(per_device, per_address) do
+    prev_config = Application.get_env(:thereish, :room_creation_rate_limit)
+
+    Application.put_env(:thereish, :room_creation_rate_limit,
+      per_device: per_device,
+      per_address: per_address,
+      window_seconds: 3600
+    )
+
+    on_exit(fn ->
+      if prev_config,
+        do: Application.put_env(:thereish, :room_creation_rate_limit, prev_config),
+        else: Application.delete_env(:thereish, :room_creation_rate_limit)
+    end)
+
+    Thereish.Rooms.RateLimit.reset()
+  end
 
   defp join(view, name),
     do: view |> form("form[phx-submit=join]", %{"name" => name}) |> render_submit()
@@ -291,21 +337,7 @@ defmodule ThereishWeb.FrontLiveTest do
     end
 
     test "room creation is refused with 'Give it a minute' when rate limited per device" do
-      prev_config = Application.get_env(:thereish, :room_creation_rate_limit)
-
-      Application.put_env(:thereish, :room_creation_rate_limit,
-        per_device: 2,
-        per_address: 100,
-        window_seconds: 3600
-      )
-
-      on_exit(fn ->
-        if prev_config,
-          do: Application.put_env(:thereish, :room_creation_rate_limit, prev_config),
-          else: Application.delete_env(:thereish, :room_creation_rate_limit)
-      end)
-
-      Thereish.Rooms.RateLimit.reset()
+      limit_room_creation(2, 100)
 
       phone = build_conn() |> get(~p"/new")
       {:ok, new1, _} = live(phone)
@@ -321,21 +353,7 @@ defmodule ThereishWeb.FrontLiveTest do
     end
 
     test "room creation is refused with 'Give it a minute' when rate limited per remote address" do
-      prev_config = Application.get_env(:thereish, :room_creation_rate_limit)
-
-      Application.put_env(:thereish, :room_creation_rate_limit,
-        per_device: 100,
-        per_address: 2,
-        window_seconds: 3600
-      )
-
-      on_exit(fn ->
-        if prev_config,
-          do: Application.put_env(:thereish, :room_creation_rate_limit, prev_config),
-          else: Application.delete_env(:thereish, :room_creation_rate_limit)
-      end)
-
-      Thereish.Rooms.RateLimit.reset()
+      limit_room_creation(100, 2)
 
       phone1 = build_conn() |> get(~p"/new")
       {:ok, new1, _} = live(phone1)
@@ -348,6 +366,68 @@ defmodule ThereishWeb.FrontLiveTest do
       html = new2 |> form("form") |> render_submit()
       assert html =~ "Give it a minute"
       assert has_element?(new2, "[data-role=error]", "Give it a minute")
+    end
+
+    test "two browsers behind the proxy are charged separately, not as the socket peer" do
+      limit_room_creation(100, 2)
+
+      phone_a = browser_behind_proxy("203.0.113.10")
+      {:ok, new_a, _} = live(phone_a)
+      {:error, {:live_redirect, %{to: to_a}}} = new_a |> form("form") |> render_submit()
+      "/r/" <> code_a = to_a
+      on_exit(fn -> stop_room(code_a) end)
+
+      phone_b = browser_behind_proxy("203.0.113.11")
+      {:ok, new_b, _} = live(phone_b)
+      {:error, {:live_redirect, %{to: to_b}}} = new_b |> form("form") |> render_submit()
+      "/r/" <> code_b = to_b
+      on_exit(fn -> stop_room(code_b) end)
+
+      phone_a = same_browser(phone_a, "203.0.113.10")
+      {:ok, again_a, _} = live(phone_a)
+      html_a = again_a |> form("form") |> render_submit()
+      assert html_a =~ "Give it a minute"
+
+      phone_b = same_browser(phone_b, "203.0.113.11")
+      {:ok, again_b, _} = live(phone_b)
+      html_b = again_b |> form("form") |> render_submit()
+      assert html_b =~ "Give it a minute"
+    end
+
+    test "a peer that is not the trusted hop is charged its own address" do
+      limit_room_creation(100, 2)
+
+      stranger = direct_browser({203, 0, 113, 9}, "198.51.100.4")
+      {:ok, first, _} = live(stranger)
+      {:error, {:live_redirect, %{to: to}}} = first |> form("form") |> render_submit()
+      "/r/" <> code = to
+      on_exit(fn -> stop_room(code) end)
+
+      stranger = direct_browser({203, 0, 113, 9}, "198.51.100.50")
+      {:ok, second, _} = live(stranger)
+      html = second |> form("form") |> render_submit()
+      assert html =~ "Give it a minute"
+
+      forwarded = browser_behind_proxy("198.51.100.4")
+      {:ok, browser, _} = live(forwarded)
+      {:error, {:live_redirect, %{to: forwarded_to}}} = browser |> form("form") |> render_submit()
+      "/r/" <> forwarded_code = forwarded_to
+      on_exit(fn -> stop_room(forwarded_code) end)
+    end
+
+    test "two browsers whose peer is the mapped bridge gateway are charged separately" do
+      mapped = {0, 0, 0, 0, 0, 65535, 44049, 1}
+      limit_room_creation(100, 2)
+
+      phone_a = proxy_hop(build_conn(), mapped, "203.0.113.10")
+      {:ok, new_a, _} = live(phone_a)
+      assert {:error, {:live_redirect, %{to: to_a}}} = new_a |> form("form") |> render_submit()
+      "/r/" <> code_a = to_a
+      on_exit(fn -> stop_room(code_a) end)
+
+      phone_b = proxy_hop(build_conn(), mapped, "203.0.113.11")
+      {:ok, new_b, _} = live(phone_b)
+      assert {:error, {:live_redirect, %{to: _to_b}}} = new_b |> form("form") |> render_submit()
     end
   end
 

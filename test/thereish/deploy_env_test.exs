@@ -5,6 +5,7 @@ defmodule Thereish.DeployEnvTest do
   @compose_app_yml Path.expand("../../docker-compose.app.yml", __DIR__)
   @deploy_sh Path.expand("../../deploy/deploy.sh", __DIR__)
   @provision_sh Path.expand("../../deploy/provision.sh", __DIR__)
+  @proxy_conf Path.expand("../../deploy/apache/proxy.conf", __DIR__)
 
   @bin_deploy Path.expand("../../bin/deploy", __DIR__)
 
@@ -38,15 +39,25 @@ defmodule Thereish.DeployEnvTest do
   end
 
   test "deploy/deploy.sh runs media ownership on the media directory" do
-    lines = command_lines(@deploy_sh)
+    lines = directive_lines(@deploy_sh)
 
     assert Enum.any?(lines, &calls_media_ownership?(&1, "${ROOT}/media"))
     refute Enum.any?(lines, &String.contains?(&1, "chown"))
     refute Enum.any?(lines, &(&1 =~ "0777"))
   end
 
+  test "the proxy sets X-Forwarded-For to the browser and drops a value the request already carried" do
+    lines = directive_lines(@proxy_conf)
+
+    assert "ProxyAddHeaders Off" in lines
+    assert "RequestHeader unset X-Forwarded-For early" in lines
+    assert "RequestHeader set X-Forwarded-For expr=%{REMOTE_ADDR}" in lines
+    assert "RequestHeader set X-Forwarded-Proto expr=%{REQUEST_SCHEME}" in lines
+    assert Enum.any?(lines, &String.contains?(&1, "upgrade=websocket"))
+  end
+
   test "deploy/provision.sh runs media ownership on the media directory" do
-    lines = command_lines(@provision_sh)
+    lines = directive_lines(@provision_sh)
 
     assert Enum.any?(lines, &calls_media_ownership?(&1, "${APP_DIR}/media"))
     refute Enum.any?(lines, &String.contains?(&1, "chown"))
@@ -54,7 +65,7 @@ defmodule Thereish.DeployEnvTest do
   end
 
   # Command text only. A comment that names nobody and 0755 is not the deploy.
-  defp command_lines(path) do
+  defp directive_lines(path) do
     path
     |> File.read!()
     |> String.split("\n")

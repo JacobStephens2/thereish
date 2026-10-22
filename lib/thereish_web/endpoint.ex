@@ -61,5 +61,10 @@ defmodule ThereishWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+
+  # Room creation is charged per browser. The proxy hop's X-Forwarded-For is
+  # that browser; any other peer keeps the address on its own socket.
+  plug ThereishWeb.Plugs.ForwardedAddress
+
   plug ThereishWeb.Router
 end
