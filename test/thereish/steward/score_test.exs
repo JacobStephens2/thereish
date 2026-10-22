@@ -114,10 +114,12 @@ defmodule Thereish.Steward.ScoreTest do
         meta: %{"provider" => "mureka", "cost_usd" => 0.04}
       })
 
-      # No Req.Test.stub set up for Mureka - if it calls Mureka, it will crash
+      # No Req.Test.stub set up for Mureka - if it calls Mureka, it will crash.
+      # The row has no title. A stored Track is still the answer, not a generation.
       assert {:ok, track} = Live.score(@gives)
       assert track.path == "/media/tracks/already-cached.mp3"
       assert track.duration == 150
+      assert track.title == nil
     end
 
     test "cache miss calls Mureka with house prefix, n: 1, downloads to media dir, and caches" do
