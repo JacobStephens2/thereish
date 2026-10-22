@@ -37,6 +37,7 @@ defmodule ThereishWeb.ChronicleLive do
      |> assign(:seat, seat)
      |> assign(:device_token, device_token)
      |> assign(:current_admin, admin_from_session(session))
+     |> recheck_admin_before_opinion(session)
      |> assign(:enlarged_mask, nil)
      |> load_pages()}
   end
@@ -131,6 +132,24 @@ defmodule ThereishWeb.ChronicleLive do
         :error -> nil
       end
     end
+  end
+
+  # The identity from mount still authorizes after the token is deleted.
+  # This page stays readable, so only the Opinion event resolves the token again.
+  defp recheck_admin_before_opinion(socket, session) do
+    Phoenix.LiveView.attach_hook(socket, :recheck_admin_opinion, :handle_event, fn
+      "admin_review", _params, socket ->
+        socket = assign(socket, :current_admin, admin_from_session(session))
+
+        if socket.assigns.current_admin do
+          {:cont, socket}
+        else
+          {:halt, socket}
+        end
+
+      _event, _params, socket ->
+        {:cont, socket}
+    end)
   end
 
   defp admin_from_session(%{"admin_token" => token}) when is_binary(token) do

@@ -985,6 +985,26 @@ defmodule ThereishWeb.ChronicleLiveTest do
       assert tap.label == "too_kind"
     end
 
+    test "an admin Opinion is not recorded once the connection's session token is gone", ctx do
+      play(ctx, "cairn", "cairns")
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      conn = log_in_admin(build_conn())
+      token = get_session(conn, "admin_token")
+      {:ok, view, _html} = live(conn, ~p"/r/#{ctx.slug}/chronicle")
+
+      assert has_element?(view, "[data-role=admin-review-controls]")
+
+      :ok = Thereish.Admin.delete_session_token(token)
+
+      view
+      |> element(~s([data-role=admin-review-controls] [data-role=tap-too-kind]))
+      |> render_click()
+
+      assert Chronicle.fairness_taps(room.id) == []
+      refute has_element?(view, "[data-role=admin-review]")
+    end
+
     test "an overruled Attempt can be reviewed without changing the Verdict or Precedent" do
       slug = open_room()
       mara_token = device_token()
