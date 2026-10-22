@@ -61,9 +61,42 @@ defmodule Thereish.Foley.OccupancyTest do
       assert meta == %{"provider" => "fake", "title_cost_usd" => 0.0}
     end
 
-    test "a cache row with no title is a miss" do
-      {_occ, effects} = opened(make_ref(), occupancy(), Map.put(@cached, :title, nil))
-      assert :enqueue_track in kinds(effects)
+    test "a stored Track with no title plays, asks for a title, and does not enqueue a score or start a Vamp" do
+      ref = make_ref()
+      stored = Map.put(@cached, :title, nil)
+      {occ, effects} = opened(ref, occupancy(), stored)
+
+      assert {:start_title, ref, @gives} in effects
+      refute :enqueue_track in kinds(effects)
+      refute :start_vamp in kinds(effects)
+      assert logged(effects) == ["cache hit"]
+
+      view = Occupancy.view(occ, table())
+      assert view.track == stored
+      assert view.vamp == nil
+      assert view.playing == %{path: stored.path, title: "Track", kind: "track"}
+
+      assert %Track{path: "/media/cached.mp3", title: nil, meta: meta} = view.music_meta
+      refute Map.has_key?(meta, "title_cost_usd")
+
+      {occ, effects} =
+        Occupancy.arrived(
+          occ,
+          ref,
+          {:title, {:ok, %{title: "Salt Road", meta: %{cost_usd: 0.002}}}},
+          false
+        )
+
+      assert {:cache_track, @gives, %{path: "/media/cached.mp3", title: "Salt Road"}} =
+               List.keyfind(effects, :cache_track, 0)
+
+      refute :enqueue_track in kinds(effects)
+      refute :start_vamp in kinds(effects)
+
+      view = Occupancy.view(occ, table())
+      assert view.playing == %{path: stored.path, title: "Salt Road", kind: "track"}
+      assert view.track.title == "Salt Road"
+      assert %Track{title: "Salt Road", meta: %{"title_cost_usd" => 0.002}} = view.music_meta
     end
 
     test "a cache miss asks for a Vamp, the Track and a title, and plays the draw meanwhile" do
@@ -374,6 +407,26 @@ defmodule Thereish.Foley.OccupancyTest do
       {occ, effects} = Occupancy.track_looked_up(occ, ref, @cached)
       assert logged(effects) == ["cache hit"]
       assert Occupancy.view(occ, table()).playing.kind == "track"
+    end
+
+    test "to page plays a stored Track with no title and asks only for that title" do
+      ref = make_ref()
+      {occ, _} = opened(ref, occupancy(), nil, "off")
+      stored = Map.put(@cached, :title, nil)
+
+      {occ, [{:look_up_track, ^ref, @gives}]} = Occupancy.music_changed(occ, "page")
+      {occ, effects} = Occupancy.track_looked_up(occ, ref, stored)
+
+      assert {:start_title, ref, @gives} in effects
+      refute :enqueue_track in kinds(effects)
+      refute :start_vamp in kinds(effects)
+      assert logged(effects) == ["cache hit"]
+
+      assert Occupancy.view(occ, table()).playing == %{
+               path: stored.path,
+               title: "Track",
+               kind: "track"
+             }
     end
 
     test "to page starts nothing while the Page's Track work is already running" do

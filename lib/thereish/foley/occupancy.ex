@@ -108,8 +108,9 @@ defmodule Thereish.Foley.Occupancy do
 
   @doc """
   A Page opened from these Gives. `cached` is the TrackCache's answer for them,
-  or nil. Under "page" a titled cache hit plays at once; otherwise Vamp, Track
-  and title work is asked for. A Track still playing holds over.
+  or nil. Under "page" a stored Track plays at once. A title is asked for only
+  when that Track has none. With nothing stored, Vamp, Track and title work is
+  asked for. A Track still playing holds over.
   """
   @spec page_opened(t(), page_ref(), gives(), map() | nil, integer(), String.t()) ::
           {t(), [effect()]}
@@ -167,8 +168,9 @@ defmodule Thereish.Foley.Occupancy do
 
   @doc """
   The TrackCache answered a `{:look_up_track, ...}` effect with `cached`, or
-  nil. A titled hit plays at once; otherwise Track work starts. An answer for
-  a Page no longer current, or arriving once work is running, starts nothing.
+  nil. A stored Track plays at once, and a title is asked for only when it has
+  none; with nothing stored, Track work starts. An answer for a Page no longer
+  current, or arriving once work is running, starts nothing.
   """
   @spec track_looked_up(t(), page_ref(), map() | nil) :: {t(), [effect()]}
   def track_looked_up(%__MODULE__{} = occ, page_ref, cached) do
@@ -340,39 +342,45 @@ defmodule Thereish.Foley.Occupancy do
 
   # -- the Page's own Track ---------------------------------------------------
 
-  defp start_track_work(occ, cached) do
-    case cached do
-      %{title: title} = cached when not is_nil(title) ->
-        music_meta = Track.landed(cached, title, %{})
+  defp start_track_work(occ, %{path: path} = cached) when is_binary(path) and path != "" do
+    title = cached[:title]
+    music_meta = Track.landed(cached, title, %{})
+    title_missing? = is_nil(title)
 
-        occ = %{
-          occ
-          | track: cached,
-            track_page_ref: occ.page_ref,
-            title: title,
-            music_meta: music_meta,
-            vamp: nil,
-            vamp_meta: nil,
-            vamp_running?: false,
-            track_running?: false,
-            title_running?: false
-        }
+    occ = %{
+      occ
+      | track: cached,
+        track_page_ref: occ.page_ref,
+        title: title,
+        music_meta: music_meta,
+        vamp: nil,
+        vamp_meta: nil,
+        vamp_running?: false,
+        track_running?: false,
+        title_running?: title_missing?
+    }
 
-        {occ, [log(occ, occ.page_ref, "cache hit")]}
+    effects = [log(occ, occ.page_ref, "cache hit")]
 
-      _ ->
-        %{page_ref: ref, gives: gives, gives_landed_at: landed_at} = occ
-
-        {%{occ | vamp_running?: true, track_running?: true, title_running?: true},
-         [
-           log(occ, ref, "cache miss"),
-           log(occ, ref, "vamp started"),
-           {:start_vamp, ref, gives},
-           log(occ, ref, "score queued"),
-           {:enqueue_track, ref, gives, landed_at},
-           {:start_title, ref, gives}
-         ]}
+    if title_missing? do
+      {occ, effects ++ [{:start_title, occ.page_ref, occ.gives}]}
+    else
+      {occ, effects}
     end
+  end
+
+  defp start_track_work(occ, _cached) do
+    %{page_ref: ref, gives: gives, gives_landed_at: landed_at} = occ
+
+    {%{occ | vamp_running?: true, track_running?: true, title_running?: true},
+     [
+       log(occ, ref, "cache miss"),
+       log(occ, ref, "vamp started"),
+       {:start_vamp, ref, gives},
+       log(occ, ref, "score queued"),
+       {:enqueue_track, ref, gives, landed_at},
+       {:start_title, ref, gives}
+     ]}
   end
 
   # This Page's Track is on the Speaker, titled, and kept for the same Gives.
