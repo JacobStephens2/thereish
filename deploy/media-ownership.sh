@@ -1,24 +1,33 @@
 #!/usr/bin/env bash
-# Descendant directories of the media volume. Own each one as nobody:nogroup
-# and clear other-write. The walk does not follow symlinks, so a link planted
-# in the volume cannot retarget chown or chmod onto a path outside it.
-# Sourced by deploy/deploy.sh and deploy/provision.sh.
+# Own the media volume as nobody:nogroup. The directory itself is mode 0755.
+# Descendant directories get that owner too and lose other-write. Symlinks
+# are not followed. Sourced by deploy/deploy.sh and deploy/provision.sh.
 
-ensure_media_descendant_ownership() {
+ensure_media_ownership() {
   local media="$1"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-  if [ -z "${media}" ] || [ -L "${media}" ] || [ ! -d "${media}" ]; then
-    echo "ensure_media_descendant_ownership: ${media:-media directory} is not a real directory" >&2
+  if [ -z "${media}" ]; then
+    echo "ensure_media_ownership: media directory required" >&2
     return 1
   fi
 
-  # -P is find's default: do not follow symlinks. -type d skips links.
-  # chown --no-dereference will not change the target if a path is a link.
-  # chmod would follow a link named on its command line, so it only sees
-  # the directories find classified as real directories.
-  sudo find -P "${media}" -mindepth 1 -type d \
-    -exec chown --no-dereference nobody:nogroup -- {} + \
-    -exec chmod o-w -- {} +
+  # A symlink is not the volume. Leave it untouched and let the deploy
+  # continue. chown and chmod on the path would follow the link.
+  if [ -L "${media}" ]; then
+    echo "ensure_media_ownership: ${media} is a symlink, leaving it untouched" >&2
+    return 0
+  fi
+
+  if [ ! -e "${media}" ]; then
+    sudo install -d -m 0755 "${media}"
+  elif [ ! -d "${media}" ]; then
+    echo "ensure_media_ownership: ${media} is not a real directory" >&2
+    return 1
+  fi
+
+  sudo python3 "${script_dir}/media_ownership.py" "${media}"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
@@ -27,5 +36,5 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     echo "usage: deploy/media-ownership.sh MEDIA_DIR" >&2
     exit 1
   fi
-  ensure_media_descendant_ownership "$1"
+  ensure_media_ownership "$1"
 fi

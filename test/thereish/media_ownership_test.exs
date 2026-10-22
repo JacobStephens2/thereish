@@ -32,7 +32,7 @@ defmodule Thereish.MediaOwnershipTest do
     File.chmod!(masks, 0o755)
     File.chmod!(awkward, 0o707)
     File.chmod!(song, 0o666)
-    File.chmod!(media, 0o755)
+    File.chmod!(media, 0o777)
 
     %{
       media: media,
@@ -69,8 +69,8 @@ defmodule Thereish.MediaOwnershipTest do
 
     assert owner(song) != {uid, gid}
     assert perm(song) == 0o666
+    assert owner(media) == {uid, gid}
     assert perm(media) == 0o755
-    assert owner(media) != {uid, gid}
   end
 
   test "does not follow a symlink out of the media volume", %{media: media} do
@@ -118,11 +118,54 @@ defmodule Thereish.MediaOwnershipTest do
 
     {output, status} = System.cmd("bash", [@script, link], stderr_to_stdout: true)
 
-    assert status != 0, output
+    assert status == 0, output
     assert owner(outside) == outside_owner
     assert perm(outside) == 0o777
     assert owner(hidden) == hidden_owner
     assert perm(hidden) == 0o777
+  end
+
+  test "a directory replaced by a symlink during the walk is not chowned" do
+    code = """
+    import os, stat, subprocess, tempfile, threading, ctypes, ctypes.util, sys
+    libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+    libc.inotify_init1.restype = ctypes.c_int
+    libc.inotify_add_watch.restype = ctypes.c_int
+    base = tempfile.mkdtemp(prefix="ownrace-")
+    media = os.path.join(base, "media")
+    outside = os.path.join(base, "outside")
+    nested = os.path.join(media, "tracks", "nested")
+    os.makedirs(os.path.join(nested, "deep"))
+    os.makedirs(os.path.join(outside, "deep"))
+    os.chmod(media, 0o755)
+    for p in (os.path.join(media, "tracks"), nested, os.path.join(nested, "deep"), outside, os.path.join(outside, "deep")):
+        os.chmod(p, 0o777)
+    def snap(p):
+        st = os.lstat(p)
+        return (stat.S_IMODE(st.st_mode), st.st_uid, st.st_gid)
+    before = {p: snap(p) for p in (outside, os.path.join(outside, "deep"))}
+    fd = libc.inotify_init1(0x80000)
+    if libc.inotify_add_watch(fd, nested.encode(), 0x20) < 0:
+        sys.exit("inotify_add_watch failed")
+    def swap():
+        os.read(fd, 4096)
+        # The parent may already be nobody and not other-writable. The swap
+        # still has to win, or this test never exercises the replacement.
+        subprocess.run(["sudo", "mv", nested, nested + ".real"], check=True)
+        subprocess.run(["sudo", "ln", "-s", outside, nested], check=True)
+    thread = threading.Thread(target=swap, daemon=True)
+    thread.start()
+    subprocess.run(["bash", sys.argv[1], media], check=False)
+    thread.join(timeout=5)
+    bad = any(snap(p) != before[p] for p in before)
+    swapped = os.path.islink(nested) and os.path.isdir(nested + ".real")
+    subprocess.run(["sudo", "rm", "-rf", "--", base], check=False)
+    if bad or not swapped or thread.is_alive():
+        sys.exit(1)
+    """
+
+    {output, status} = System.cmd("python3", ["-c", code, @script], stderr_to_stdout: true)
+    assert status == 0, output
   end
 
   defp nobody_ids do

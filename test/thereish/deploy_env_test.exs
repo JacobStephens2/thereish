@@ -37,32 +37,20 @@ defmodule Thereish.DeployEnvTest do
     assert content =~ "every Seat will wear a colour dot"
   end
 
-  test "deploy/deploy.sh owns the media directory as nobody at mode 0755 on every run" do
+  test "deploy/deploy.sh runs media ownership on the media directory" do
     lines = command_lines(@deploy_sh)
 
-    assert Enum.any?(lines, &owns_media_as_nobody?(&1, "${ROOT}/media"))
-    assert Enum.any?(lines, &modes_media_0755?(&1, "${ROOT}/media"))
+    assert Enum.any?(lines, &calls_media_ownership?(&1, "${ROOT}/media"))
+    refute Enum.any?(lines, &String.contains?(&1, "chown"))
     refute Enum.any?(lines, &(&1 =~ "0777"))
   end
 
-  test "deploy/provision.sh owns the media directory as nobody at mode 0755 even if it already exists" do
+  test "deploy/provision.sh runs media ownership on the media directory" do
     lines = command_lines(@provision_sh)
 
-    assert Enum.any?(lines, &owns_media_as_nobody?(&1, "${APP_DIR}/media"))
-    assert Enum.any?(lines, &modes_media_0755?(&1, "${APP_DIR}/media"))
+    assert Enum.any?(lines, &calls_media_ownership?(&1, "${APP_DIR}/media"))
+    refute Enum.any?(lines, &String.contains?(&1, "chown"))
     refute Enum.any?(lines, &(&1 =~ "0777"))
-  end
-
-  test "deploy/deploy.sh owns descendant media directories without following symlinks" do
-    lines = command_lines(@deploy_sh)
-
-    assert Enum.any?(lines, &walks_media_descendants?(&1, "${ROOT}/media"))
-  end
-
-  test "deploy/provision.sh owns descendant media directories without following symlinks" do
-    lines = command_lines(@provision_sh)
-
-    assert Enum.any?(lines, &walks_media_descendants?(&1, "${APP_DIR}/media"))
   end
 
   # Command text only. A comment that names nobody and 0755 is not the deploy.
@@ -76,18 +64,7 @@ defmodule Thereish.DeployEnvTest do
     |> Enum.reject(&(&1 == ""))
   end
 
-  defp owns_media_as_nobody?(line, dir) do
-    String.contains?(line, "chown") and String.contains?(line, "nobody") and
-      String.contains?(line, dir)
-  end
-
-  defp modes_media_0755?(line, dir) do
-    String.contains?(line, "chmod") and String.contains?(line, "0755") and
-      String.contains?(line, dir)
-  end
-
-  defp walks_media_descendants?(line, dir) do
-    String.contains?(line, "ensure_media_descendant_ownership") and
-      String.contains?(line, dir)
+  defp calls_media_ownership?(line, dir) do
+    String.contains?(line, "ensure_media_ownership") and String.contains?(line, dir)
   end
 end
