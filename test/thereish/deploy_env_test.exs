@@ -53,6 +53,18 @@ defmodule Thereish.DeployEnvTest do
     refute Enum.any?(lines, &(&1 =~ "0777"))
   end
 
+  test "deploy/deploy.sh owns descendant media directories without following symlinks" do
+    lines = command_lines(@deploy_sh)
+
+    assert Enum.any?(lines, &walks_media_descendants?(&1, "${ROOT}/media"))
+  end
+
+  test "deploy/provision.sh owns descendant media directories without following symlinks" do
+    lines = command_lines(@provision_sh)
+
+    assert Enum.any?(lines, &walks_media_descendants?(&1, "${APP_DIR}/media"))
+  end
+
   # Command text only. A comment that names nobody and 0755 is not the deploy.
   defp command_lines(path) do
     path
@@ -71,6 +83,11 @@ defmodule Thereish.DeployEnvTest do
 
   defp modes_media_0755?(line, dir) do
     String.contains?(line, "chmod") and String.contains?(line, "0755") and
+      String.contains?(line, dir)
+  end
+
+  defp walks_media_descendants?(line, dir) do
+    String.contains?(line, "ensure_media_descendant_ownership") and
       String.contains?(line, dir)
   end
 end

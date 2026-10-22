@@ -17,12 +17,16 @@ echo "==> Ensuring media volume is owned by the release user"
 # chmod an existing directory and aborts when it cannot, so a missing
 # directory is created first and the chown and chmod always run. Left
 # owned by root at 0755, TrackCache.store raises eacces and the Page stays
-# on the Repertoire.
+# on the Repertoire. Descendant directories are chowned to nobody:nogroup
+# as well, and lose other-write. The walk does not follow symlinks.
 if [ ! -d "${ROOT}/media" ]; then
   sudo install -d -m 0755 "${ROOT}/media"
 fi
 sudo chown nobody:nogroup "${ROOT}/media"
 sudo chmod 0755 "${ROOT}/media"
+# shellcheck source=media-ownership.sh
+source "${ROOT}/deploy/media-ownership.sh"
+ensure_media_descendant_ownership "${ROOT}/media"
 
 echo "==> Building release image"
 ${COMPOSE} build
