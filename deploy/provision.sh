@@ -81,9 +81,15 @@ ENV
 fi
 
 say "Media directory"
-sudo install -d -m 0777 "${APP_DIR}/media"
-sudo chmod 0777 "${APP_DIR}/media"
-echo "ensured ${APP_DIR}/media exists and is world-writable"
+# On every run, including when the directory already exists. The release
+# runs as nobody. Left owned by root at 0755, TrackCache.store raises
+# eacces and the Page stays on the Repertoire.
+if [ ! -d "${APP_DIR}/media" ]; then
+  sudo install -d -m 0755 "${APP_DIR}/media"
+fi
+sudo chown nobody:nogroup "${APP_DIR}/media"
+sudo chmod 0755 "${APP_DIR}/media"
+echo "ensured ${APP_DIR}/media is owned by nobody at mode 0755"
 
 say "Apache proxy fragment"
 # Always synced, because this is the file that changes. Both the :80 vhost and
