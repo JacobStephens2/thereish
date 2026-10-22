@@ -2,12 +2,16 @@
 """Own a media directory without following symlinks.
 
 The directory itself becomes nobody:nogroup and mode 0755. Each real
-descendant directory becomes nobody:nogroup and loses other-write. A
-symlink is not a directory: opening with O_NOFOLLOW | O_DIRECTORY fails,
-and fchown/fchmod apply to the directory that was opened, so replacing
-that path with a link cannot retarget the change.
+descendant directory becomes nobody:nogroup and loses other-write. The
+extended ACL is removed from each directory opened, and the mode bits
+stay as this walk set them. A symlink is not a directory: opening with
+O_NOFOLLOW | O_DIRECTORY fails, and fchown, fchmod, and the ACL removal
+apply to the directory that was opened, so replacing that path with a
+link cannot retarget the change.
 """
 
+import ctypes
+import ctypes.util
 import errno
 import grp
 import os
@@ -17,6 +21,16 @@ import stat
 import sys
 
 _FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+# Access ACL (named users and groups) and the default ACL directories
+# hand to children. setfacl -b removes both, then rebuilds the mode.
+_ACL_XATTRS = (b"system.posix_acl_access", b"system.posix_acl_default")
+
+# fremovexattr on the open descriptor. os.removexattr takes a path and
+# would re-resolve the name, which is the swap these descriptors exist
+# to avoid. Not every interpreter exposes os.fremovexattr.
+_libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+_libc.fremovexattr.argtypes = (ctypes.c_int, ctypes.c_char_p)
+_libc.fremovexattr.restype = ctypes.c_int
 
 
 def main(argv):
@@ -52,12 +66,27 @@ def main(argv):
         sys.exit(f"media ownership: {media}: {exc}")
 
     try:
-        os.fchown(root, uid, gid)
-        os.fchmod(root, 0o755)
+        _own_opened_dir(root, uid, gid, 0o755)
         own_descendants(root, uid, gid)
     finally:
         os.close(root)
     return 0
+
+
+def _own_opened_dir(fd, uid, gid, mode):
+    os.fchown(fd, uid, gid)
+    os.fchmod(fd, mode)
+    # fchmod rewrites the mask and leaves named entries. Dropping these
+    # xattrs removes the extended ACL and, on Linux, leaves the mode bits
+    # just written. setfacl -b would rebuild the mode from the base group
+    # entry instead.
+    for name in _ACL_XATTRS:
+        if _libc.fremovexattr(fd, name) == 0:
+            continue
+        err = ctypes.get_errno()
+        if err in (errno.ENODATA, errno.ENOTSUP, errno.EOPNOTSUPP):
+            continue
+        raise OSError(err, os.strerror(err), name.decode())
 
 
 def _ensure_nofile(needed):
@@ -118,8 +147,9 @@ def own_descendants(root, uid, gid):
                 continue
             try:
                 info = os.fstat(child)
-                os.fchown(child, uid, gid)
-                os.fchmod(child, stat.S_IMODE(info.st_mode) & ~0o002)
+                _own_opened_dir(
+                    child, uid, gid, stat.S_IMODE(info.st_mode) & ~0o002
+                )
             except Exception:
                 os.close(child)
                 raise
