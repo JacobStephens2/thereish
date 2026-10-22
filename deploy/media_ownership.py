@@ -6,9 +6,10 @@ descendant directory becomes nobody:nogroup and loses other-write. The
 extended ACL is removed from each directory opened, and the mode bits
 stay as this walk set them. Each regular file loses the same two ACL
 attributes and keeps its owner and mode. A symlink is not opened.
-O_NOFOLLOW fails for a link, and fchown, fchmod, and the ACL removal
-apply only to the inode that was opened, so replacing a path with a
-link cannot retarget the change.
+O_NOFOLLOW fails for a symlink. A hard link shares its inode with every
+other name, so a link count above one is not modified in place: that
+directory entry is replaced with a new inode that keeps the owner, mode,
+and bytes.
 """
 
 import ctypes
@@ -114,10 +115,16 @@ def _strip_regular_file(name, parent, depth):
     if fd is None:
         return
     try:
-        # Owner and mode stay. Only the ACL xattrs are removed, and only
-        # if this descriptor is still a regular file.
-        if stat.S_ISREG(os.fstat(fd).st_mode):
+        # Owner and mode stay. Only an inode whose sole name is this entry
+        # is updated in place. Another link can sit outside the volume, and
+        # fremovexattr on this descriptor would change that inode too.
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return
+        if st.st_nlink == 1:
             _drop_acl_xattrs(fd)
+        elif st.st_nlink > 1:
+            _detach_shared_file(name, parent, fd, st, depth)
     finally:
         os.close(fd)
 
@@ -133,6 +140,73 @@ def _open_regular(name, parent, depth):
     raise exc
 
 
+def _detach_shared_file(name, parent, src, st, depth):
+    tmp, fd = _create_private(parent, depth)
+    try:
+        _copy_all(src, fd)
+        # fchown clears set-id bits. fchmod puts the original mode back,
+        # then the ACL drop leaves those bits in place on Linux.
+        os.fchown(fd, st.st_uid, st.st_gid)
+        os.fchmod(fd, stat.S_IMODE(st.st_mode))
+        _drop_acl_xattrs(fd)
+        os.fsync(fd)
+        if not _same_inode(name, parent, st, depth):
+            return
+        os.rename(tmp, name, src_dir_fd=parent, dst_dir_fd=parent)
+        tmp = None
+    finally:
+        os.close(fd)
+        if tmp is not None:
+            try:
+                os.unlink(tmp, dir_fd=parent)
+            except OSError:
+                pass
+
+
+def _create_private(parent, depth):
+    flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_WRONLY
+    last = None
+    for _ in range(8):
+        tmp = f".media-own-{os.getpid()}-{os.urandom(8).hex()}"
+        fd, exc = _open_at(tmp, parent, flags, depth, 0o600)
+        if fd is not None:
+            return tmp, fd
+        last = exc
+        if exc.errno != errno.EEXIST:
+            raise exc
+    raise last
+
+
+def _same_inode(name, parent, st, depth):
+    fd, exc = _open_at(name, parent, _FILE_FLAGS, depth)
+    if fd is None:
+        if exc.errno in (errno.ELOOP, errno.ENOENT, errno.ENOTDIR, errno.ENXIO):
+            return False
+        raise exc
+    try:
+        now = os.fstat(fd)
+    finally:
+        os.close(fd)
+    return (
+        stat.S_ISREG(now.st_mode)
+        and now.st_dev == st.st_dev
+        and now.st_ino == st.st_ino
+    )
+
+
+def _copy_all(src, dst):
+    while True:
+        chunk = os.read(src, 1024 * 1024)
+        if not chunk:
+            return
+        offset = 0
+        while offset < len(chunk):
+            wrote = os.write(dst, chunk[offset:])
+            if wrote <= 0:
+                raise OSError(errno.EIO, "short write while detaching a shared media file")
+            offset += wrote
+
+
 def _ensure_nofile(needed):
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     if soft >= needed:
@@ -140,9 +214,9 @@ def _ensure_nofile(needed):
     resource.setrlimit(resource.RLIMIT_NOFILE, (needed, max(hard, needed)))
 
 
-def _open_at(name, parent, flags, depth):
+def _open_at(name, parent, flags, depth, mode=0o777):
     try:
-        return os.open(name, flags, dir_fd=parent), None
+        return os.open(name, flags, mode, dir_fd=parent), None
     except OSError as exc:
         if exc.errno not in (errno.EMFILE, errno.ENFILE):
             return None, exc
@@ -150,7 +224,7 @@ def _open_at(name, parent, flags, depth):
         # lets the privileged walk finish instead of stopping early.
         _ensure_nofile(depth + 128)
         try:
-            return os.open(name, flags, dir_fd=parent), None
+            return os.open(name, flags, mode, dir_fd=parent), None
         except OSError as retry:
             if retry.errno in (errno.EMFILE, errno.ENFILE):
                 raise

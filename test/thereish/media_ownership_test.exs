@@ -103,6 +103,7 @@ defmodule Thereish.MediaOwnershipTest do
     assert extended_acl?(media)
     assert extended_acl?(song)
     song_owner = owner(song)
+    song_inode = inode(song)
     assert song_owner != {uid, gid}
 
     {output, status} = System.cmd("bash", [@script, media], stderr_to_stdout: true)
@@ -126,6 +127,7 @@ defmodule Thereish.MediaOwnershipTest do
     refute extended_acl?(song)
     assert perm(song) == 0o666
     assert owner(song) == song_owner
+    assert inode(song) == song_inode
   end
 
   test "does not follow a symlink out of the media volume", %{media: media} do
@@ -171,6 +173,100 @@ defmodule Thereish.MediaOwnershipTest do
     assert extended_acl?(secret)
     assert File.lstat!(Path.join(media, "escape")).type == :symlink
     assert File.lstat!(Path.join(media, "tracks/leak.mp3")).type == :symlink
+  end
+
+  test "does not strip the ACL of an inode hard-linked from outside the media volume",
+       %{media: media} do
+    parent = Path.dirname(media)
+    outside = Path.join(parent, "outside-hard.txt")
+    inside = Path.join(media, "tracks/linked.mp3")
+    File.write!(outside, "secret-bytes")
+    user = current_user()
+    assert user not in ["root", "nobody"]
+
+    {output, status} =
+      System.cmd("sudo", ["chown", "nobody:nogroup", "--", outside], stderr_to_stdout: true)
+
+    assert status == 0, output
+
+    {output, status} =
+      System.cmd(
+        "sudo",
+        ["setfacl", "-m", "u:#{user}:rw,g::---", "--", outside],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+
+    {output, status} =
+      System.cmd("sudo", ["chmod", "0666", "--", outside], stderr_to_stdout: true)
+
+    assert status == 0, output
+
+    # Read and write are enough to create the hard link. Changing the ACL is not.
+    {_output, status} = System.cmd("setfacl", ["-b", "--", outside], stderr_to_stdout: true)
+    assert status != 0
+
+    File.ln!(outside, inside)
+
+    before = %{
+      acl: acl_listing(outside),
+      owner: owner(outside),
+      perm: perm(outside),
+      inode: inode(outside)
+    }
+
+    assert extended_acl?(outside)
+    assert inode(inside) == before.inode
+
+    {output, status} = System.cmd("bash", [@script, media], stderr_to_stdout: true)
+    assert status == 0, output
+
+    assert acl_listing(outside) == before.acl
+    assert owner(outside) == before.owner
+    assert perm(outside) == before.perm
+    assert inode(outside) == before.inode
+    assert File.read!(outside) == "secret-bytes"
+
+    refute extended_acl?(inside)
+    assert owner(inside) == before.owner
+    assert perm(inside) == before.perm
+    assert inode(inside) != before.inode
+    assert File.read!(inside) == "secret-bytes"
+  end
+
+  test "drops the extended ACL on each name of a hard-linked regular file", %{media: media} do
+    left = Path.join(media, "tracks/left.mp3")
+    right = Path.join(media, "tracks/right.mp3")
+    File.write!(left, "same-bytes")
+    File.ln!(left, right)
+    user = current_user()
+
+    {output, status} =
+      System.cmd(
+        "setfacl",
+        ["-m", "u:#{user}:rw,g::r--", "--", left],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+    File.chmod!(left, 0o666)
+    before_owner = owner(left)
+
+    assert extended_acl?(left)
+    assert inode(left) == inode(right)
+
+    {output, status} = System.cmd("bash", [@script, media], stderr_to_stdout: true)
+    assert status == 0, output
+
+    refute extended_acl?(left)
+    refute extended_acl?(right)
+    assert owner(left) == before_owner
+    assert owner(right) == before_owner
+    assert perm(left) == 0o666
+    assert perm(right) == 0o666
+    assert File.read!(left) == "same-bytes"
+    assert File.read!(right) == "same-bytes"
   end
 
   test "does not walk a media path that is a symlink", %{media: media} do
@@ -286,6 +382,13 @@ defmodule Thereish.MediaOwnershipTest do
 
     assert status == 0, output
   end
+
+  defp acl_listing(path) do
+    {out, 0} = System.cmd("getfacl", ["-c", "-p", "--", path])
+    String.trim(out)
+  end
+
+  defp inode(path), do: File.lstat!(path).inode
 
   defp extended_acl?(path) do
     {out, 0} = System.cmd("getfacl", ["-c", "-p", "--", path])
