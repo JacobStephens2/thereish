@@ -16,7 +16,7 @@ defmodule ThereishWeb.NewRoomLive do
     {:ok,
      socket
      |> assign(:device_token, DeviceToken.from_session(session))
-     |> assign(:remote_address, remote_address(socket, session))
+     |> assign(:remote_address, remote_address(session))
      |> assign(:error, nil)}
   end
 
@@ -40,16 +40,14 @@ defmodule ThereishWeb.NewRoomLive do
     end
   end
 
-  defp remote_address(socket, session) do
-    case get_connect_info(socket, :peer_data) do
-      %{address: address} when is_tuple(address) ->
-        address |> :inet.ntoa() |> to_string()
-
-      _ ->
-        Map.get(session, "remote_ip")
+  # The socket peer is the proxy hop. The address on the session is the one
+  # that hop forwarded, written when the page was requested. Charging the
+  # peer would bill every browser behind the proxy as one address.
+  defp remote_address(session) do
+    case Map.get(session, "remote_ip") do
+      address when is_binary(address) and address != "" -> address
+      _ -> nil
     end
-  rescue
-    _ -> Map.get(session, "remote_ip")
   end
 
   @impl true
