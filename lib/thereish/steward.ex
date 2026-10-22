@@ -350,6 +350,9 @@ defmodule Thereish.Steward do
   def author_failure({:max_tokens, _}), do: "too broad or complex"
   def author_failure(:refused), do: "content declined"
   def author_failure({:refusal, msg}), do: "declined: #{msg}"
+  # The validator's reason stays with the gate, quoted back to the model.
+  # Players see a fixed line, never that reason.
+  def author_failure({:rejected, _why}), do: "answer rejected"
   def author_failure(%Req.TransportError{reason: :timeout}), do: "timed out"
   def author_failure(%{reason: :timeout}), do: "timed out"
   def author_failure(:timeout), do: "timed out"
