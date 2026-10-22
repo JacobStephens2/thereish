@@ -1345,6 +1345,8 @@ defmodule Thereish.StewardTest do
             {{:max_tokens, 4096}, "too broad or complex"},
             {:refused, "content declined"},
             {{:refusal, "not that"}, "declined: not that"},
+            {{:rejected, "schema: bookends must be a list of exactly 2 items"},
+             "answer rejected"},
             {%Req.TransportError{reason: :timeout}, "timed out"},
             {%{reason: :timeout}, "timed out"},
             {:timeout, "timed out"},
