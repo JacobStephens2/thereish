@@ -84,11 +84,9 @@ say "Media directory"
 # On every run, including when the directory already exists. The release
 # runs as nobody. Left owned by root at 0755, TrackCache.store raises
 # eacces and the Page stays on the Repertoire.
-if [ ! -d "${APP_DIR}/media" ]; then
-  sudo install -d -m 0755 "${APP_DIR}/media"
-fi
-sudo chown nobody:nogroup "${APP_DIR}/media"
-sudo chmod 0755 "${APP_DIR}/media"
+# shellcheck source=media-ownership.sh
+source "${SCRIPT_DIR}/media-ownership.sh"
+ensure_media_ownership "${APP_DIR}/media"
 echo "ensured ${APP_DIR}/media is owned by nobody at mode 0755"
 
 say "Apache proxy fragment"
