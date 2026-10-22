@@ -80,10 +80,15 @@ defmodule Thereish.MediaOwnershipTest do
 
     # group:: is r-x while the mode's group class stays rwx, so rebuilding
     # the mode from the base ACL entries would not leave 0775.
-    grant_named_user(tracks, user, "rwx", "r-x")
+    {output, status} =
+      System.cmd("setfacl", ["-m", "u:#{user}:rwx,g::r-x", "--", tracks], stderr_to_stdout: true)
+
+    assert status == 0, output
     File.chmod!(tracks, 0o777)
+    grant_default_user(tracks, user, "rwx")
     grant_named_user(media, user, "rwx")
     File.chmod!(media, 0o777)
+    grant_default_user(media, user, "rwx")
     grant_named_user(song, user, "rw")
     File.chmod!(song, 0o666)
 
@@ -106,6 +111,11 @@ defmodule Thereish.MediaOwnershipTest do
     assert {:error, :eacces} = File.write(Path.join(tracks, "planted.txt"), "x")
     assert {:error, :eacces} = File.write(Path.join(media, "planted.txt"), "x")
 
+    later = Path.join(tracks, "later")
+    {output, status} = System.cmd("sudo", ["mkdir", "--", later], stderr_to_stdout: true)
+    assert status == 0, output
+    refute extended_acl?(later)
+
     assert extended_acl?(song)
     assert perm(song) == 0o666
     assert owner(song) != {uid, gid}
@@ -124,6 +134,8 @@ defmodule Thereish.MediaOwnershipTest do
     user = current_user()
     grant_named_user(outside, user, "rwx")
     grant_named_user(hidden, user, "rwx")
+    grant_default_user(outside, user, "rwx")
+    grant_default_user(hidden, user, "rwx")
     File.chmod!(outside, 0o777)
     File.chmod!(hidden, 0o777)
     File.ln_s!(outside, Path.join(media, "escape"))
@@ -139,9 +151,11 @@ defmodule Thereish.MediaOwnershipTest do
     assert owner(outside) == outside_owner
     assert perm(outside) == 0o777
     assert extended_acl?(outside)
+    assert default_acl?(outside)
     assert owner(hidden) == hidden_owner
     assert perm(hidden) == 0o777
     assert extended_acl?(hidden)
+    assert default_acl?(hidden)
     assert owner(secret) == secret_owner
     assert perm(secret) == 0o666
     assert File.lstat!(Path.join(media, "escape")).type == :symlink
@@ -244,15 +258,21 @@ defmodule Thereish.MediaOwnershipTest do
     String.trim(out)
   end
 
-  defp grant_named_user(path, user, perms, group \\ nil) do
-    spec =
-      if group do
-        "u:#{user}:#{perms},g::#{group}"
-      else
-        "u:#{user}:#{perms}"
-      end
+  defp grant_named_user(path, user, perms) do
+    {output, status} =
+      System.cmd("setfacl", ["-m", "u:#{user}:#{perms}", "--", path], stderr_to_stdout: true)
 
-    {output, status} = System.cmd("setfacl", ["-m", spec, "--", path], stderr_to_stdout: true)
+    assert status == 0, output
+  end
+
+  defp grant_default_user(path, user, perms) do
+    {output, status} =
+      System.cmd(
+        "setfacl",
+        ["-d", "-m", "u:#{user}:#{perms}", "--", path],
+        stderr_to_stdout: true
+      )
+
     assert status == 0, output
   end
 
@@ -262,8 +282,14 @@ defmodule Thereish.MediaOwnershipTest do
     out
     |> String.split("\n", trim: true)
     |> Enum.any?(fn line ->
-      named_user_entry?(line) or named_group_entry?(line) or String.starts_with?(line, "mask:")
+      named_user_entry?(line) or named_group_entry?(line) or String.starts_with?(line, "mask:") or
+        String.starts_with?(line, "default:")
     end)
+  end
+
+  defp default_acl?(path) do
+    {out, 0} = System.cmd("getfacl", ["-c", "-p", "--", path])
+    out |> String.split("\n", trim: true) |> Enum.any?(&String.starts_with?(&1, "default:"))
   end
 
   defp named_user_entry?(line) do

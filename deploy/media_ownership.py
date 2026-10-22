@@ -21,7 +21,9 @@ import stat
 import sys
 
 _FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
-_ACL_ACCESS = b"system.posix_acl_access"
+# Access ACL (named users and groups) and the default ACL directories
+# hand to children. setfacl -b removes both, then rebuilds the mode.
+_ACL_XATTRS = (b"system.posix_acl_access", b"system.posix_acl_default")
 
 # fremovexattr on the open descriptor. os.removexattr takes a path and
 # would re-resolve the name, which is the swap these descriptors exist
@@ -74,16 +76,17 @@ def main(argv):
 def _own_opened_dir(fd, uid, gid, mode):
     os.fchown(fd, uid, gid)
     os.fchmod(fd, mode)
-    # fchmod rewrites the mask and leaves named entries. Dropping the access
-    # ACL xattr removes those entries and, on Linux, leaves the mode bits
+    # fchmod rewrites the mask and leaves named entries. Dropping these
+    # xattrs removes the extended ACL and, on Linux, leaves the mode bits
     # just written. setfacl -b would rebuild the mode from the base group
     # entry instead.
-    if _libc.fremovexattr(fd, _ACL_ACCESS) == 0:
-        return
-    err = ctypes.get_errno()
-    if err in (errno.ENODATA, errno.ENOTSUP, errno.EOPNOTSUPP):
-        return
-    raise OSError(err, os.strerror(err), "system.posix_acl_access")
+    for name in _ACL_XATTRS:
+        if _libc.fremovexattr(fd, name) == 0:
+            continue
+        err = ctypes.get_errno()
+        if err in (errno.ENODATA, errno.ENOTSUP, errno.EOPNOTSUPP):
+            continue
+        raise OSError(err, os.strerror(err), name.decode())
 
 
 def _ensure_nofile(needed):
