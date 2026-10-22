@@ -2023,7 +2023,7 @@ defmodule Thereish.GameTest do
 
       assert state.masks["seat-Mara"] == mask
 
-      # On gives_reset
+      {:ok, state, []} = Game.apply(state, {:author_failed, %{reason: "timed out"}})
       {:ok, reset_state, []} = Game.apply(state, {:gives_reset, %{seat_id: "seat-Mara"}})
       assert reset_state.masks == %{}
 
@@ -2507,6 +2507,79 @@ defmodule Thereish.GameTest do
     end
   end
 
+  describe "Try again and New Gives for one set of Gives" do
+    defp writing(opts) do
+      state =
+        Game.init([seat_limit: 2, seats: [seat("Mara"), seat("Jacob")]] ++ opts)
+
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "lighthouse"}})
+
+      {:ok, state, [_author]} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "candle"}})
+
+      state
+    end
+
+    defp fail(state), do: Game.apply(state, {:author_failed, %{reason: "timed out"}})
+
+    test "a configured allowance of two is shared, and the next Page restores it" do
+      {:ok, failed, []} = fail(writing(author_retry_allowance: 2))
+      assert Game.view(failed, "seat-Mara").may.retry_author
+
+      {:ok, once, [{:author, _}]} =
+        Game.apply(failed, {:author_retried, %{seat_id: "seat-Mara"}})
+
+      {:ok, failed, []} = fail(once)
+      assert Game.view(failed, "seat-Jacob").may.retry_author
+
+      {:ok, twice, [{:author, _}]} =
+        Game.apply(failed, {:author_retried, %{seat_id: "seat-Jacob"}})
+
+      {:ok, spent, []} = fail(twice)
+      refute Game.view(spent, "seat-Mara").may.retry_author
+
+      assert {:error, :retries_spent} =
+               Game.apply(spent, {:author_retried, %{seat_id: "seat-Mara"}})
+
+      {:ok, written, []} =
+        Game.apply(spent, {:page_written, %{bookends: ["cliff", "wax"]}})
+
+      {:ok, written, _} =
+        Game.apply(written, {:bridge_committed, %{seat_id: "seat-Mara", bridge: "cairn"}})
+
+      {:ok, written, _} =
+        Game.apply(written, {:bridge_committed, %{seat_id: "seat-Jacob", bridge: "cairn"}})
+
+      {:ok, melded, _} =
+        Game.apply(written, {:verdict_received, verdict_fields(95, ["cairn", "cairn"])})
+
+      {:ok, turned, []} = Game.apply(melded, {:next_page, %{seat_id: "seat-Mara"}})
+      {:ok, again, []} = fail(writing_from(turned))
+      assert Game.view(again, "seat-Jacob").may.retry_author
+    end
+
+    defp writing_from(state) do
+      {:ok, state, []} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Mara", give: "harbour"}})
+
+      {:ok, state, [_author]} =
+        Game.apply(state, {:give_committed, %{seat_id: "seat-Jacob", give: "lantern"}})
+
+      state
+    end
+
+    defp verdict_fields(closeness, furthest) do
+      %{
+        closeness: closeness,
+        reasoning: "because",
+        quip: "a quip",
+        furthest: furthest,
+        meta: %{}
+      }
+    end
+  end
+
   describe "what each viewer may do (#199)" do
     @actions [
       :give,
@@ -2540,6 +2613,8 @@ defmodule Thereish.GameTest do
       both_gave = give(one_give, "Jacob", "candle")
       {:ok, writing, _} = Game.apply(both_gave, {:start_page, %{seat_id: "seat-Jacob"}})
       {:ok, failed, []} = Game.apply(writing, {:author_failed, %{reason: "too vague"}})
+      {:ok, retried, _} = Game.apply(failed, {:author_retried, %{seat_id: "seat-Mara"}})
+      {:ok, spent, []} = Game.apply(retried, {:author_failed, %{reason: "too vague"}})
 
       {:ok, written, []} =
         Game.apply(writing, {:page_written, %{bookends: ["ocean", "lantern"]}})
@@ -2572,6 +2647,7 @@ defmodule Thereish.GameTest do
         both_gave: both_gave,
         writing: writing,
         failed: failed,
+        spent: spent,
         bridging: bridging,
         one_bridge: one_bridge,
         assaying: assaying,
@@ -2637,8 +2713,10 @@ defmodule Thereish.GameTest do
       assert allowed(states.one_give, "seat-Mara") == []
       assert allowed(states.one_give, "seat-Jacob") == [:give]
       assert allowed(states.both_gave, "seat-Mara") == [:start_page]
-      assert allowed(states.writing, "seat-Mara") == [:reset_gives]
+      assert allowed(states.writing, "seat-Mara") == []
       assert allowed(states.failed, "seat-Jacob") == [:retry_author, :reset_gives]
+      assert allowed(states.spent, "seat-Mara") == [:reset_gives]
+      assert allowed(states.spent, "seat-Jacob") == [:reset_gives]
       assert allowed(states.bridging, "seat-Mara") == [:bridge]
       assert allowed(states.one_bridge, "seat-Mara") == []
       assert allowed(states.one_bridge, "seat-Jacob") == [:bridge]
@@ -2667,13 +2745,24 @@ defmodule Thereish.GameTest do
       assert may(states.both_gave, "seat-Jacob").start_page
     end
 
-    test "Try again waits for the Author to fail, and New Gives is open while the Page is written" do
+    test "Try again and New Gives wait for the Author to fail, and Try again is once" do
       states = page_states()
 
       refute may(states.writing, "seat-Mara").retry_author
+      refute may(states.writing, "seat-Mara").reset_gives
       assert may(states.failed, "seat-Mara").retry_author
-      assert may(states.writing, "seat-Mara").reset_gives
       assert may(states.failed, "seat-Mara").reset_gives
+      refute may(states.spent, "seat-Mara").retry_author
+      refute may(states.spent, "seat-Jacob").retry_author
+      assert may(states.spent, "seat-Jacob").reset_gives
+
+      assert {:error, :not_failed} =
+               Game.apply(states.writing, {:gives_reset, %{seat_id: "seat-Mara"}})
+
+      writing = Game.view(states.writing, "seat-Mara")
+      assert writing.phase == :writing
+      assert writing.gives_in == 2
+      assert writing.your_give == "lighthouse"
 
       for name <- [:giving, :both_gave, :bridging, :reveal, :closed] do
         state = Map.fetch!(states, name)

@@ -476,8 +476,10 @@ defmodule Thereish.Rooms.PacingTest do
       {pacing, writing, _effects} =
         drive(pacing(), waiting(), @to_giving ++ [give("Mara", 2_000), give("Jacob", 3_000)])
 
+      # New Gives waits until the Author has failed. The times still start over.
       {pacing, _giving, _effects} =
         drive(pacing, writing, [
+          {{:author_failed, %{reason: "timed out"}}, 4_000},
           {{:gives_reset, %{seat_id: "seat-Mara"}}, 5_000},
           give("Mara", 7_000)
         ])

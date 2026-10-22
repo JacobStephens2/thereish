@@ -24,8 +24,9 @@ defmodule Thereish.Rooms.Play do
       `{:chronicle_written, page_id}` still binds that Page and releases what
       was held for it.
     * A reset of Gives reaches Pacing, Occupancy and Pages only once the Game
-      accepts it, so a late tap after the Author has written the Page leaves
-      that Page's music and times alone.
+      accepts it, so a tap while the Author is still writing, or a late tap
+      after the Author has written the Page, leaves that wait, that music and
+      those times alone.
     * The Entry closing a Page carries Occupancy's music for the Room's music
       setting, the Page's Assignment and Pacing's times. Pages then holds
       results for it, and Voice decides whether it is written now or once the
@@ -176,7 +177,13 @@ defmodule Thereish.Rooms.Play do
           now: Pacing.now()
         }) :: t()
   def new(%{room: %Room{} = room, seats: seats}, %{members: members, durations: durations} = opts) do
-    game = Game.init(seat_limit: room.seat_limit, seats: seats, full_table: room.full_table)
+    game =
+      Game.init(
+        seat_limit: room.seat_limit,
+        seats: seats,
+        full_table: room.full_table,
+        author_retry_allowance: author_retry_allowance(durations)
+      )
 
     # Moving from a Game to itself crosses no phase edge, so asks for nothing.
     {pacing, []} = Pacing.moved(Pacing.new(durations), game, game, opts.now)
@@ -248,9 +255,9 @@ defmodule Thereish.Rooms.Play do
     end
   end
 
-  # Nothing is reset until the Game accepts it: a late tap from a second
-  # phone, after the Author has already written the Page, must leave that
-  # Page's music and times alone.
+  # Nothing is reset until the Game accepts it. A tap while the Author is
+  # still writing, or a late tap after the Page is written, must leave that
+  # wait, that music and those times alone.
   def apply(%__MODULE__{} = play, {:reset_gives, seat_id}, now) do
     with {:ok, game, effects} <- Game.apply(play.game, {:gives_reset, %{seat_id: seat_id}}) do
       play = %{
@@ -650,6 +657,13 @@ defmodule Thereish.Rooms.Play do
 
     {%{play | voice: voice}, effects}
   end
+
+  # The Try again allowance travels with the Author's escalation times.
+  # A missing count is one ask for the Gives.
+  defp author_retry_allowance(%{author: author}) when is_list(author),
+    do: Keyword.get(author, :retries, 1)
+
+  defp author_retry_allowance(_durations), do: 1
 
   # The Room's and the Game's facts Voice is told on each call.
   defp voice_table(play) do

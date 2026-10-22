@@ -1804,6 +1804,52 @@ defmodule ThereishWeb.RoomLiveTest do
       eventually(fn -> has_element?(ctx.stage, "[data-role=bookends]") end)
     end
 
+    test "the failure notice shows Try again once, and New Gives starts the next ask", ctx do
+      fake_config = Keyword.get(ctx.steward, :fake, [])
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.put(
+          ctx.steward,
+          :fake,
+          Keyword.merge(fake_config, author_mode: :unavailable)
+        )
+      )
+
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=retry-author]", "Try again") end)
+
+      for phone <- [ctx.mara, ctx.jacob] do
+        assert has_element?(phone, "[data-role=retry-author]", "Try again")
+        assert has_element?(phone, "[data-role=reset-gives]", "New Gives")
+      end
+
+      ctx.jacob |> element("[data-role=retry-author]", "Try again") |> render_click()
+
+      eventually(fn ->
+        has_element?(ctx.mara, "[data-role=author-failure]") and
+          not has_element?(ctx.mara, "[data-role=retry-author]")
+      end)
+
+      for phone <- [ctx.mara, ctx.jacob] do
+        refute has_element?(phone, "[data-role=retry-author]")
+        assert has_element?(phone, "[data-role=reset-gives]", "New Gives")
+      end
+
+      ctx.mara |> element("[data-role=reset-gives]", "New Gives") |> render_click()
+      eventually(fn -> has_element?(ctx.mara, "[data-role=setting-form]") end)
+
+      give_setting(ctx.mara, "harbour")
+      give_setting(ctx.jacob, "lantern")
+
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=retry-author]", "Try again") end)
+      assert has_element?(ctx.mara, "[data-role=retry-author]", "Try again")
+      assert has_element?(ctx.mara, "[data-role=reset-gives]", "New Gives")
+    end
+
     test "New settings clears every Give and returns both phones to giving prefilled with last give",
          ctx do
       fake_config = Keyword.get(ctx.steward, :fake, [])

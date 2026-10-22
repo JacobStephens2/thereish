@@ -71,6 +71,8 @@ defmodule Thereish.Game do
     gives: %{},
     last_gives: %{},
     author_failure: nil,
+    author_retries_used: 0,
+    author_retry_allowance: 1,
     played: [],
     bookends_taps: %{},
     page_seat_ids: nil,
@@ -119,6 +121,8 @@ defmodule Thereish.Game do
           gives: %{String.t() => String.t()},
           last_gives: %{String.t() => String.t()},
           author_failure: term(),
+          author_retries_used: non_neg_integer(),
+          author_retry_allowance: non_neg_integer(),
           played: [Attempt.t()],
           bookends_taps: %{String.t() => String.t()},
           page_seat_ids: [String.t()] | nil,
@@ -204,6 +208,7 @@ defmodule Thereish.Game do
           | :give_required
           | :give_too_long
           | :not_failed
+          | :retries_spent
           | :not_bridging
           | :no_such_seat
           | :already_committed
@@ -255,6 +260,8 @@ defmodule Thereish.Game do
       gives: %{},
       last_gives: %{},
       author_failure: nil,
+      author_retries_used: 0,
+      author_retry_allowance: retry_allowance(opts),
       page_seat_ids: page_seat_ids,
       masks: %{},
       full_table: full_table == true
@@ -413,13 +420,25 @@ defmodule Thereish.Game do
 
   def apply(%__MODULE__{} = state, {:author_retried, %{seat_id: seat_id}}) do
     with :ok <- may_retry_author(state, seat_id) do
-      ask_author(%{state | author_failure: nil})
+      ask_author(%{
+        state
+        | author_failure: nil,
+          author_retries_used: state.author_retries_used + 1
+      })
     end
   end
 
   def apply(%__MODULE__{} = state, {:gives_reset, %{seat_id: seat_id}}) do
     with :ok <- may_reset_gives(state, seat_id) do
-      {:ok, %{state | gives: %{}, masks: %{}, author_failure: nil, page_seat_ids: nil}, []}
+      {:ok,
+       %{
+         state
+         | gives: %{},
+           masks: %{},
+           author_failure: nil,
+           page_seat_ids: nil,
+           author_retries_used: 0
+       }, []}
     end
   end
 
@@ -526,7 +545,15 @@ defmodule Thereish.Game do
       last_gives = Map.merge(state.last_gives || %{}, state.gives || %{})
       state = reset_page(state, nil)
 
-      {:ok, %{state | gives: %{}, last_gives: last_gives, page_seat_ids: nil, masks: %{}}, []}
+      {:ok,
+       %{
+         state
+         | gives: %{},
+           last_gives: last_gives,
+           page_seat_ids: nil,
+           masks: %{},
+           author_retries_used: 0
+       }, []}
     end
   end
 
@@ -1252,19 +1279,48 @@ defmodule Thereish.Game do
     end
   end
 
+  # New Gives waits for the Author to fail. Try again is the allowance kept
+  # with the Author's escalation times (`retries`, default 1), shared by
+  # every Seat for this set of Gives. New Gives and the next Page clear it.
   defp may_retry_author(state, seat_id) do
     with :ok <- taken_by_a_seat(state, seat_id) do
-      if phase(state) == :writing and state.author_failure != nil,
-        do: :ok,
-        else: {:error, :not_failed}
+      cond do
+        phase(state) != :writing or is_nil(state.author_failure) ->
+          {:error, :not_failed}
+
+        state.author_retries_used >= state.author_retry_allowance ->
+          {:error, :retries_spent}
+
+        true ->
+          :ok
+      end
     end
   end
 
   defp may_reset_gives(state, seat_id) do
     with :ok <- taken_by_a_seat(state, seat_id) do
-      if phase(state) == :writing, do: :ok, else: {:error, :not_writing}
+      cond do
+        phase(state) != :writing -> {:error, :not_writing}
+        is_nil(state.author_failure) -> {:error, :not_failed}
+        true -> :ok
+      end
     end
   end
+
+  # The Room passes the count it read with the escalation times. A Game built
+  # on its own reads the same list, and a missing count is one Try again.
+  defp retry_allowance(opts) do
+    opts
+    |> Keyword.get_lazy(:author_retry_allowance, fn ->
+      :thereish
+      |> Application.fetch_env!(:author_escalation_ms)
+      |> Keyword.get(:retries, 1)
+    end)
+    |> normalize_allowance()
+  end
+
+  defp normalize_allowance(count) when is_integer(count) and count >= 0, do: count
+  defp normalize_allowance(_other), do: 1
 
   # Whether this Page's first reveal has happened: the reveal is on screen now,
   # or an earlier Attempt of this Page already had one.

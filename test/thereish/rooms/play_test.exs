@@ -109,6 +109,15 @@ defmodule Thereish.Rooms.PlayTest do
     {play, heard ++ beat}
   end
 
+  # Both Gives in, the Author asked, and that ask failed.
+  defp failed_write(play) do
+    {play, _} = run(play, {:give, "mara", "deep canyon"})
+    {play, opened} = run(play, {:give, "jacob", "echoing wind"})
+    {:ask_author, ref, _request, _arm} = find(opened, :ask_author)
+    {play, _} = run(play, {:author_completed, ref, {:error, "timed out"}})
+    play
+  end
+
   # Plays a written Page to a meld.
   defp meld(play, opts \\ []) do
     {play, bridged} = bridges(play, "cairn", "cairn", opts)
@@ -443,32 +452,102 @@ defmodule Thereish.Rooms.PlayTest do
       assert Enum.all?(entry.gives, &(&1.arrived_at == @now.at))
     end
 
-    test "before the Author answers, its answer and its Foley are dropped" do
+    test "before the Author has failed, New Gives is refused and the Author is still waited on" do
       {play, _} = run(new(), {:give, "mara", "deep canyon"})
       {play, opened} = run(play, {:give, "jacob", "echoing wind"})
       {:ask_author, ref, _request, :astra} = find(opened, :ask_author)
       {:start_vamp, page_ref, _gives} = find(opened, :start_vamp)
 
-      {play, reset} = run(play, {:reset_gives, "mara"})
-      assert :broadcast in reset
-      assert phase(play) == :giving
+      assert {:error, :not_failed} = Play.apply(play, {:reset_gives, "mara"}, @now)
+      assert {:error, :not_failed} = Play.apply(play, {:reset_gives, "jacob"}, @now)
 
-      bookends = %{bookends: ["lighthouse", "picnic"], meta: %{}}
-      assert {:ok, ^play, []} = Play.apply(play, {:author_completed, ref, {:ok, bookends}}, @now)
+      assert phase(play) == :writing
+      assert view(play, "mara").your_give == "deep canyon"
+      assert view(play, "jacob").your_give == "echoing wind"
+      assert view(play).gives_in == 2
+      assert view(play).author_step == :writing
+      refute view(play, "mara").may.reset_gives
 
-      {play, vamped} = run(play, {:vamped, page_ref, {:ok, %{path: "/media/vamp.mp3"}}})
-      assert vamped == []
-      assert view(play).vamp == nil
+      {play, _} =
+        run(
+          play,
+          {:author_completed, ref, {:ok, %{bookends: ["lighthouse", "picnic"], meta: %{}}}}
+        )
+
+      assert phase(play) == :bridging
+      assert view(play).bookends == ["lighthouse", "picnic"]
+
+      {play, _vamped} = run(play, {:vamped, page_ref, {:ok, %{path: "/media/vamp.mp3"}}})
+      assert view(play).vamp.path == "/media/vamp.mp3"
     end
 
     test "new Gives keep the Page's Assignment, so the Room is asked for none" do
       {play, _} = run(new(), {:give, "mara", "deep canyon"})
-      {play, _} = run(play, {:give, "jacob", "echoing wind"})
+      {play, opened} = run(play, {:give, "jacob", "echoing wind"})
+      {:ask_author, ref, _request, _arm} = find(opened, :ask_author)
+      {play, _} = run(play, {:author_completed, ref, {:error, "timed out"}})
       {play, _} = run(play, {:reset_gives, "mara"})
       {play, _} = run(play, {:give, "mara", "harbour"})
       {_play, opened} = run(play, {:give, "jacob", "lantern"})
 
       assert {:open_page, _request, @assignment} = find(opened, :open_page)
+    end
+  end
+
+  describe "Try again for one set of Gives" do
+    test "the first ask is shared, a later failure refuses another, and New Gives restores it" do
+      play = failed_write(new())
+      assert view(play, "mara").may.retry_author
+      assert view(play, "jacob").may.retry_author
+      assert view(play, "jacob").may.reset_gives
+
+      {play, retried} = run(play, {:retry_author, "jacob"})
+      assert {:ask_author, ref, request, :astra} = find(retried, :ask_author)
+
+      assert Enum.map(request.gives, & &1.give) == ["deep canyon", "echoing wind"]
+      assert view(play).author_failure == nil
+      assert phase(play) == :writing
+
+      {play, _} = run(play, {:author_completed, ref, {:error, "timed out"}})
+      refute view(play, "mara").may.retry_author
+      refute view(play, "jacob").may.retry_author
+      assert view(play, "mara").may.reset_gives
+      assert {:error, :retries_spent} = Play.apply(play, {:retry_author, "mara"}, @now)
+      assert view(play).gives_in == 2
+      assert view(play, "mara").your_give == "deep canyon"
+
+      {play, _} = run(play, {:reset_gives, "mara"})
+      assert phase(play) == :giving
+      assert view(play).gives_in == 0
+
+      play = failed_write(play)
+      assert view(play, "jacob").may.retry_author
+      {_play, again} = run(play, {:retry_author, "mara"})
+      assert {:ask_author, _ref, _request, :astra} = find(again, :ask_author)
+    end
+
+    test "how many Try agains is the retry count kept with the Author's escalation times" do
+      twice = %{@durations | author: Keyword.put(@durations.author, :retries, 2)}
+      play = failed_write(new(durations: twice))
+
+      {play, first} = run(play, {:retry_author, "mara"})
+      {:ask_author, ref, _request, _arm} = find(first, :ask_author)
+      {play, _} = run(play, {:author_completed, ref, {:error, "timed out"}})
+      assert view(play, "jacob").may.retry_author
+
+      {play, second} = run(play, {:retry_author, "jacob"})
+      {:ask_author, ref, _request, _arm} = find(second, :ask_author)
+      {play, _} = run(play, {:author_completed, ref, {:error, "timed out"}})
+      refute view(play, "mara").may.retry_author
+      assert {:error, :retries_spent} = Play.apply(play, {:retry_author, "jacob"}, @now)
+      assert view(play, "mara").may.reset_gives
+
+      none = %{@durations | author: Keyword.put(@durations.author, :retries, 0)}
+      play = failed_write(new(durations: none))
+      refute view(play, "mara").may.retry_author
+      refute view(play, "jacob").may.retry_author
+      assert view(play, "jacob").may.reset_gives
+      assert {:error, :retries_spent} = Play.apply(play, {:retry_author, "mara"}, @now)
     end
   end
 
