@@ -4821,4 +4821,80 @@ defmodule ThereishWeb.RoomLiveTest do
       await_reveal_on(bram)
     end
   end
+
+  describe "the Split reading on the phone (T6)" do
+    # The Fake's third dial: the reverse ordering grades forty higher, so the
+    # Steward reconciles a Verdict the Assayer plainly disagrees with itself
+    # about — which is the only reveal this screen is for.
+    defp fake_spread(spread) do
+      steward = Application.fetch_env!(:thereish, :steward)
+      on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.update!(steward, :fake, &Keyword.put(&1, :spread, spread))
+      )
+    end
+
+    setup do
+      fake_spread(40)
+
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      # No shared prefix: the forward ordering grades nothing, the reverse forty.
+      commit(mara, "cairn")
+      commit(bram, "beacon")
+
+      await_reveal_on(mara)
+      await_reveal_on(bram)
+
+      %{slug: slug, mara: mara, bram: bram}
+    end
+
+    test "the two readings are drawn and written, and the generous one is one tap", ctx do
+      assert has_element?(ctx.mara, "[data-role=split-reading]")
+      assert has_element?(ctx.mara, "[data-role=split-headline]", "graded this twice")
+      assert has_element?(ctx.mara, "[data-role=rail-mark]")
+      assert has_element?(ctx.mara, "[data-role=propose-split-overrule]", "40")
+
+      ctx.mara |> element("[data-role=propose-split-overrule]") |> render_click()
+
+      # The same proposal as any other, at the number the table was shown, and
+      # every Seat still has to agree to it.
+      assert has_element?(ctx.bram, "[data-role=overrule-pending]", "to 40")
+      assert has_element?(ctx.bram, "[data-role=agree-overrule]")
+      assert Rooms.snapshot(ctx.slug, nil).reveal.closeness == 20
+
+      ctx.bram |> element("[data-role=agree-overrule]") |> render_click()
+
+      assert Rooms.snapshot(ctx.slug, nil).reveal.closeness == 40
+    end
+
+    test "a declined proposal says who declined instead of disappearing", ctx do
+      ctx.mara |> element("[data-role=propose-split-overrule]") |> render_click()
+      ctx.bram |> element("[data-role=decline-overrule]") |> render_click()
+
+      for phone <- [ctx.mara, ctx.bram] do
+        assert has_element?(phone, "[data-role=overrule-declined]", "Bram")
+        refute has_element?(phone, "[data-role=overrule-banner]")
+      end
+    end
+
+    test "a Room that turned Split readings off is shown none of it", ctx do
+      :ok = Rooms.set_split_readings(ctx.slug, false)
+
+      eventually(fn -> not has_element?(ctx.mara, "[data-role=split-reading]") end)
+
+      refute has_element?(ctx.mara, "[data-role=rail-mark]")
+      refute has_element?(ctx.mara, "[data-role=propose-split-overrule]")
+      assert has_element?(ctx.mara, "[data-role=propose-overrule]")
+    end
+  end
 end

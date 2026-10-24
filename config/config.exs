@@ -62,6 +62,12 @@ config :thereish,
   # a different one. An Arm takes it to zero for a Page
   # (`Thereish.Game.set_nudges_per_page/2`).
   nudges_per_page: 1,
+  # How far apart the Assayer's two readings of the same Bridges have to land
+  # before the table is shown both of them. Rarity is the whole safety argument:
+  # a grader caught disagreeing with itself once a night is the table's best
+  # argument and the first reason anyone reaches for an Overrule; one caught at
+  # it every Page is a grader nobody believes.
+  split_decision_at: 20,
   # The ladder a closeness is read on. All of it is configuration because all of
   # it is calibration — the boundaries move as the couple's fairness taps say
   # they should, and a Meld starts at the floor of the `meld` band.

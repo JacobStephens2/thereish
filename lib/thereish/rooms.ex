@@ -483,7 +483,16 @@ defmodule Thereish.Rooms do
     do: call(code, {:room_fact, {:set, :full_table, enabled}})
 
   @doc """
-  Flips Quips or Full table from the Room's own value, so two devices tapping
+  Turns Split readings on or off: whether this Room is ever shown the Assayer's
+  two readings of the same Bridges when they contradict each other.
+  """
+  @spec set_split_readings(String.t(), boolean()) :: :ok | {:error, term()}
+  def set_split_readings(code, enabled) when is_boolean(enabled),
+    do: call(code, {:room_fact, {:set, :split_readings, enabled}})
+
+  @doc """
+  Flips Quips, Full table or Split readings from the Room's own value, so two
+  devices tapping
   at once land where they started rather than cancelling out.
   """
   @spec toggle(String.t(), Facts.on_off()) :: :ok | {:error, term()}

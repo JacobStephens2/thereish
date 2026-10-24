@@ -1560,4 +1560,101 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "toggle_buzz"
     end
   end
+
+  describe "the Split reading on screen" do
+    @split %{
+      forward: 31,
+      reverse: 78,
+      reasoning: "They both name a light.",
+      reasoning_reverse: "They share nothing but the bookends.",
+      generous: 78
+    }
+
+    defp split_room(overrides \\ %{}) do
+      revealed_room(
+        Map.merge(%{reveal: Map.put(revealed_room().reveal, :split, @split)}, overrides)
+      )
+    end
+
+    test "both readings are drawn on the Rail and written under it, on every screen" do
+      for mode <- [:phone, :stage, :quiet] do
+        html = render_component(&reveal/1, room: split_room(), mode: mode)
+
+        assert html =~ ~s(data-role="split-reading"), "#{mode}"
+        assert html =~ "graded this twice"
+        assert html =~ @split.reasoning
+        assert html =~ @split.reasoning_reverse
+
+        # The same two numbers, on the same scale as the grade: the argument is
+        # a distance the table can see rather than a claim it has to take.
+        assert html =~ ~s(data-role="rail-mark")
+        assert html =~ "31"
+        assert html =~ "78"
+      end
+    end
+
+    test "a Room that turned Split readings off is shown neither pins nor sentences" do
+      html = render_component(&reveal/1, room: split_room(%{split_readings: false}), mode: :phone)
+
+      refute html =~ ~s(data-role="split-reading")
+      refute html =~ ~s(data-role="rail-mark")
+      refute html =~ @split.reasoning
+    end
+
+    test "a reveal the Assayer agreed with itself about shows nothing of either" do
+      html = render_component(&reveal/1, room: revealed_room(), mode: :phone)
+
+      refute html =~ ~s(data-role="split-reading")
+      refute html =~ ~s(data-role="rail-mark")
+    end
+
+    test "the Assayer's reasoning stays off every other reveal" do
+      html = render_component(&reveal/1, room: revealed_room(), mode: :stage)
+
+      refute html =~ "Stones, both."
+    end
+
+    test "the Room's off switch is in the settings card beside Full table" do
+      html = render_component(&foley_switches/1, room: %{speaker?: true, music: "page"})
+
+      assert html =~ ~s(data-role="split-readings-switch")
+      assert html =~ ~s(phx-click="toggle_split_readings")
+      # On unless a flat night turns it off, like the other Room facts.
+      assert html =~ ~s(data-role="split-readings-switch" data-active="true")
+    end
+
+    test "a declined overrule says who declined for the rest of the Attempt" do
+      room = %{
+        overrule: nil,
+        overrule_declined: %{seat_id: "s2", name: "Jacob"},
+        reveal: %{overruled?: false},
+        may: %{}
+      }
+
+      html = render_component(&overrule_banner/1, room: room)
+
+      assert html =~ ~s(data-role="overrule-declined")
+      assert html =~ "Jacob"
+      assert html =~ "The Assayer's grade stands"
+    end
+
+    test "a proposal still on the table outranks a decline said earlier" do
+      room = %{
+        overrule: %{
+          pending?: true,
+          proposer_name: "Mara",
+          you_proposed?: false,
+          you_agreed?: false
+        },
+        overrule_declined: %{seat_id: "s2", name: "Jacob"},
+        reveal: %{overruled?: false},
+        may: %{}
+      }
+
+      html = render_component(&overrule_banner/1, room: room)
+
+      assert html =~ ~s(data-role="overrule-banner")
+      refute html =~ ~s(data-role="overrule-declined")
+    end
+  end
 end

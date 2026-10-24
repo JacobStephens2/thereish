@@ -2,7 +2,8 @@ defmodule Thereish.Game.Attempt do
   @moduledoc """
   One Attempt at a Page, as the Game holds it: its number, its Bookends and
   where each came from, the Bridges written so far, the one Verdict on them,
-  an overrule the table has proposed and not yet settled, each Seat's Call
+  an overrule the table has proposed and not yet settled or has declined,
+  each Seat's Call
   during the Beat, each Seat's Reaction at the reveal, and each Seat's
   Opinion of the grade.
 
@@ -25,6 +26,7 @@ defmodule Thereish.Game.Attempt do
     bridges: %{},
     verdict: nil,
     overrule: nil,
+    declined: nil,
     calls: %{},
     reactions: %{},
     opinions: %{}
@@ -38,8 +40,10 @@ defmodule Thereish.Game.Attempt do
   the Bookends, when the Author named fewer sources than it wrote words.
 
   `overrule` is the proposal still waiting on the table (`Thereish.Overrule`),
-  nil once it is agreed or declined. `opinions` is each Seat's Opinion label,
-  by Seat id.
+  nil once it is agreed or declined. `declined` is the Seat that declined one,
+  kept for the rest of the Attempt so a withdrawn proposal is a sentence rather
+  than a banner that disappeared. `opinions` is each Seat's Opinion label, by
+  Seat id.
 
   `calls` is the band each Seat named during the Beat and `reactions` the one
   word each sent at the reveal, both by Seat id and both latest-wins: a Seat
@@ -52,6 +56,7 @@ defmodule Thereish.Game.Attempt do
           bridges: %{String.t() => String.t()},
           verdict: Thereish.Game.verdict() | nil,
           overrule: Thereish.Overrule.t() | nil,
+          declined: String.t() | nil,
           calls: %{String.t() => atom()},
           reactions: %{String.t() => atom()},
           opinions: %{String.t() => String.t()}

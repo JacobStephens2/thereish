@@ -246,6 +246,7 @@ defmodule Thereish.Game do
           | :call_window_closed
           | :invalid_band
           | :invalid_reaction
+          | :no_split_reading
 
   @doc """
   Builds the state of a Room that holds `seat_limit` Seats, `seats` of them
@@ -579,9 +580,12 @@ defmodule Thereish.Game do
     end
   end
 
+  # A decline withdraws the proposal and says so for the rest of the Attempt.
+  # It used to empty the proposal and leave the screens showing nothing, which
+  # read as a bug on a couch: somebody tapped and the banner vanished.
   def apply(%__MODULE__{} = state, {:overrule_declined, %{seat_id: seat_id}}) do
     with :ok <- may_vote_overrule(state, seat_id) do
-      {:ok, put_attempt(state, :overrule, nil), []}
+      {:ok, state |> put_attempt(:overrule, nil) |> put_attempt(:declined, seat_id), []}
     end
   end
 
@@ -745,6 +749,7 @@ defmodule Thereish.Game do
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
+      overrule_declined: declined_view(state),
       your_tap: Map.get(opinions, viewer),
       fairness_taps: opinions,
       your_bookends_tap: Map.get(state.bookends_taps || %{}, viewer),
@@ -1018,7 +1023,8 @@ defmodule Thereish.Game do
 
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
   # and the two words that landed furthest apart, named inside the same Verdict
-  # (ADR-0010). Reasoning is kept in the Chronicle and kept off the screen.
+  # (ADR-0010). Reasoning is kept in the Chronicle and kept off the screen —
+  # except in a Split reading, the one carve-out (ADR-0024).
   defp reveal(state, phase, _viewer) when phase in [:reveal, :closed] do
     gives = gives_view(state)
     graded = verdict(state) |> verdict_view() |> Map.delete(:reasoning)
@@ -1028,7 +1034,8 @@ defmodule Thereish.Game do
       furthest: furthest_view(state, verdict(state)),
       gives: gives,
       calls: reveal_calls(state, graded.band),
-      gap: gap(graded)
+      gap: gap(graded),
+      split: split(verdict(state))
     })
   end
 
@@ -1094,6 +1101,61 @@ defmodule Thereish.Game do
   defp gap(%{melded?: true}), do: nil
   defp gap(%{closeness: nil}), do: nil
   defp gap(%{closeness: closeness}), do: Ladder.meld_threshold() - closeness
+
+  # The Assayer's two readings of the same Bridges, shown when they contradict
+  # each other far enough that the table is being asked to rule rather than to
+  # read a grade (ADR-0024). Both numbers were always computed, averaged and
+  # thrown away; the recorded Verdict is still the mean, and the only thing that
+  # rewrites it is a unanimous Overrule, exactly as before.
+  #
+  # Rare on purpose: the threshold is the whole safety argument, because a
+  # grader shown disagreeing with itself every Page is not drama, it is a
+  # grader nobody believes. A Verdict from before the disagreement was
+  # measured carries no spread and so shows nothing, and a Verdict the table
+  # has already overruled has nothing left to settle.
+  defp split(nil), do: nil
+
+  defp split(%{graded?: false}), do: nil
+
+  defp split(verdict) do
+    meta = Map.get(verdict, :meta) || %{}
+    spread = meta_number(meta, :spread)
+    forward = meta_number(meta, :forward)
+    reverse = meta_number(meta, :reverse)
+
+    cond do
+      is_nil(spread) or is_nil(forward) or is_nil(reverse) ->
+        nil
+
+      spread < split_decision_at() ->
+        nil
+
+      Overrule.overruled?(verdict) ->
+        nil
+
+      true ->
+        %{
+          forward: forward,
+          reverse: reverse,
+          reasoning: Map.get(verdict, :reasoning),
+          reasoning_reverse: meta_value(meta, :reasoning_reverse),
+          generous: max(forward, reverse)
+        }
+    end
+  end
+
+  # Meta travels through Postgres and back as JSON, so the key it arrives under
+  # may be a string. Both are read here and nowhere else.
+  defp meta_value(meta, key), do: Map.get(meta, key) || Map.get(meta, to_string(key))
+
+  defp meta_number(meta, key) do
+    case meta_value(meta, key) do
+      number when is_number(number) -> number
+      _not_a_number -> nil
+    end
+  end
+
+  defp split_decision_at, do: Application.get_env(:thereish, :split_decision_at, 20)
 
   # The Page's number is the Verdict's, and an Attempt the Assayer could not
   # grade has no number rather than a zero: "we don't know" is not "you missed".
@@ -1234,6 +1296,17 @@ defmodule Thereish.Game do
       Map.put(view, :proposer_name, proposer && proposer.name)
     end
   end
+
+  # Who declined an overrule on this Attempt, so the screens can say it instead
+  # of simply showing one fewer banner. A declining Seat is answering for the
+  # table, and the table should hear who did it.
+  defp declined_view(%{attempt: %{declined: seat_id}} = state) when is_binary(seat_id) do
+    seat = find_seat(state, seat_id)
+
+    %{seat_id: seat_id, name: seat && seat.name}
+  end
+
+  defp declined_view(_state), do: nil
 
   # Holds the proposal while a Seat playing the Page has still to agree, and
   # rules it once every one of them has.
@@ -1379,6 +1452,7 @@ defmodule Thereish.Game do
       call: may_call(state, viewer) == :ok,
       react: may_react(state, viewer) == :ok,
       propose_overrule: may_propose_overrule(state, viewer) == :ok,
+      propose_split_overrule: may_propose_split_overrule(state, viewer) == :ok,
       vote_overrule: may_vote_overrule(state, viewer) == :ok,
       tap_fairness: may_tap_fairness(state, viewer) == :ok,
       advance: may_advance(state, viewer) == :ok,
@@ -1456,6 +1530,16 @@ defmodule Thereish.Game do
         Overrule.overruled?(verdict(state)) -> {:error, :already_overruled}
         true -> :ok
       end
+    end
+  end
+
+  # The one-tap Overrule a Split reading makes reachable: the same proposal as
+  # any other, at a number the table has already been shown. No new event and no
+  # weaker vote — only a reason to reach for the authority the players have had
+  # all along, which until now meant typing a number nobody had been given.
+  defp may_propose_split_overrule(state, seat_id) do
+    with :ok <- may_propose_overrule(state, seat_id) do
+      if split(verdict(state)), do: :ok, else: {:error, :no_split_reading}
     end
   end
 

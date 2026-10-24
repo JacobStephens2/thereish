@@ -641,6 +641,84 @@ defmodule ThereishWeb.RoomComponents do
   end
 
   attr :room, :map, required: true
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  The Assayer's two readings of the same Bridges, on the rare reveal where they
+  contradict each other far enough to say so (ADR-0024).
+
+  This is the one place in the game the Assayer's reasoning reaches a screen,
+  and the contradiction is the whole reason: the table is not being told what
+  the grade means, it is being handed two arguments and asked to settle them,
+  which is the one authority the players have always had. The recorded Verdict
+  is still the mean, and only a unanimous Overrule rewrites it.
+
+  It renders on the phone, on the Stage and on a quiet phone — the held phone
+  gets the words while the Stage holds the spectacle — and nowhere at all in a
+  Room that has turned Split readings off.
+  """
+  def split_reading(assigns) do
+    assigns = assign(assigns, :split, split_shown(assigns.room))
+
+    ~H"""
+    <div
+      :if={@split}
+      data-role="split-reading"
+      class={[
+        "flex flex-col items-center gap-1 text-center w-full",
+        if(@mode == :stage, do: "max-w-3xl", else: "max-w-sm")
+      ]}
+    >
+      <p
+        data-role="split-headline"
+        class={[
+          "font-bold uppercase tracking-widest opacity-70",
+          if(@mode == :stage, do: "text-sm", else: "text-xs")
+        ]}
+      >
+        The Assayer graded this twice — {@split.forward}, and {@split.reverse}.
+      </p>
+      <p
+        data-role="split-forward"
+        class={["opacity-80", if(@mode == :stage, do: "text-base", else: "text-sm")]}
+      >
+        {@split.reasoning}
+      </p>
+      <p
+        :if={@split[:reasoning_reverse]}
+        data-role="split-reverse"
+        class={["opacity-80", if(@mode == :stage, do: "text-base", else: "text-sm")]}
+      >
+        {@split[:reasoning_reverse]}
+      </p>
+    </div>
+    """
+  end
+
+  @doc """
+  The Split reading this Room is showing, or nil.
+
+  Both have to be there: the Verdict's two readings and the Room's own fact.
+  The Game is ignorant of Room facts and stays that way, so the two are put
+  together here, where the Rail's ghost pins and the one-tap Overrule read the
+  same answer.
+  """
+  @spec split_shown(map()) :: map() | nil
+  def split_shown(room) do
+    if Map.get(room, :split_readings, true) != false, do: (room[:reveal] || %{})[:split]
+  end
+
+  # The two readings as ghost pins, drawn on the same scale as the grade so the
+  # disagreement is a distance rather than a claim. Labelled with their own
+  # numbers, because what the pin says is where it is.
+  defp split_marks(room) do
+    case split_shown(room) do
+      nil -> []
+      split -> for n <- [split.forward, split.reverse], do: %{closeness: n, label: to_string(n)}
+    end
+  end
+
+  attr :room, :map, required: true
   attr :seat, :map, default: nil
   attr :mode, :atom, default: :phone
 
@@ -775,7 +853,10 @@ defmodule ThereishWeb.RoomComponents do
         melded?={@room.reveal[:melded?] == true}
         gap={@room.reveal[:gap]}
         calls={coloured_calls(@room, @room.reveal[:calls])}
+        marks={split_marks(@room)}
       />
+
+      <.split_reading room={@room} mode={@mode} />
 
       <p
         :if={@mode == :quiet}
@@ -905,6 +986,8 @@ defmodule ThereishWeb.RoomComponents do
             this.rail = el.querySelector('[data-role="ladder-rail"]')
             this.marker = el.querySelector('[data-role="rail-marker"]')
             this.pins = Array.from(el.querySelectorAll('[data-role="call-pin"]'))
+            this.marks = Array.from(el.querySelectorAll('[data-role="rail-mark"]'))
+            this.split = el.querySelector('[data-role="split-reading"]')
             this.shortBy = el.querySelector('[data-role="short-by"]')
             this.target = this.number ? parseInt(this.number.dataset.target, 10) : NaN
 
@@ -974,6 +1057,20 @@ defmodule ThereishWeb.RoomComponents do
             this.play(this.shortBy, [{opacity: 0}, {opacity: 1}], {
               duration: Math.max(140, settle * 0.2),
               delay: flip + settle * 0.8
+            })
+
+            // A Split reading is the aftermath and never the headline: the two
+            // ghost pins land once the grade has parked, and the sentences
+            // after them.
+            this.marks.forEach((mark, i) => {
+              this.play(mark, [{opacity: 0}, {opacity: 1}], {
+                duration: 240,
+                delay: launch + climb + 120 * (i + 1)
+              })
+            })
+            this.play(this.split, [{opacity: 0}, {opacity: 1}], {
+              duration: 240,
+              delay: launch + climb + 120 * (this.marks.length + 1)
             })
 
             if (el.dataset.melded === "true") this.flash(launch + climb * 0.75)
@@ -1082,7 +1179,9 @@ defmodule ThereishWeb.RoomComponents do
 
   @doc """
   The overrule banner: visible on both phones and the stage while a proposal is
-  pending, and showing the joint ruling once agreed.
+  pending, showing the joint ruling once agreed, and saying who declined one for
+  the rest of the Attempt — a proposal that simply vanished read as a bug on a
+  couch, which is not what a Seat answering for the table deserves.
   """
   def overrule_banner(assigns) do
     ~H"""
@@ -1105,7 +1204,7 @@ defmodule ThereishWeb.RoomComponents do
       >
         <p data-role="overrule-pending">
           <span class="font-semibold">{@room.overrule.proposer_name}</span>
-          proposed overruling this grade to a Meld.
+          proposed overruling this grade to {proposed_grade(@room.overrule)}.
         </p>
         <div class="flex gap-3">
           <.button phx-click="agree_overrule" data-role="agree-overrule" variant="primary">
@@ -1134,6 +1233,15 @@ defmodule ThereishWeb.RoomComponents do
     </div>
 
     <p
+      :if={!(@room.overrule && @room.overrule.pending?) && @room[:overrule_declined]}
+      data-role="overrule-declined"
+      class="text-center text-sm opacity-80"
+    >
+      <span class="font-semibold">{@room[:overrule_declined][:name]}</span>
+      declined. The Assayer's grade stands for this Attempt.
+    </p>
+
+    <p
       :if={@room.reveal && @room.reveal[:overruled?]}
       data-role="overruled-notice"
       class="text-center text-sm font-semibold text-primary"
@@ -1142,6 +1250,15 @@ defmodule ThereishWeb.RoomComponents do
     </p>
     """
   end
+
+  # What the table is being asked to agree to. Every Overrule used to be a Meld,
+  # because the proposer had no number to reach for; a Split reading hands them
+  # one, and it may not be a Meld, so the banner says which it is.
+  defp proposed_grade(%{closeness: closeness}) when is_integer(closeness) do
+    if Thereish.Ladder.melded?(closeness), do: "a Meld", else: to_string(closeness)
+  end
+
+  defp proposed_grade(_overrule), do: "a Meld"
 
   attr :room, :map, required: true
 
@@ -1693,6 +1810,19 @@ defmodule ThereishWeb.RoomComponents do
           >
             Matters from three Seats
           </p>
+          <label class="flex items-start gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              data-role="split-readings-switch"
+              data-active={to_string(Map.get(@room, :split_readings, true))}
+              checked={Map.get(@room, :split_readings, true)}
+              phx-click="toggle_split_readings"
+              class="checkbox checkbox-xs mt-0.5"
+            />
+            <span>
+              Split readings: when the Assayer's two readings of the same Bridges disagree, show the table both
+            </span>
+          </label>
         </div>
         <div class="flex flex-col gap-2">
           <p class="text-xs uppercase tracking-wide opacity-60">Music</p>

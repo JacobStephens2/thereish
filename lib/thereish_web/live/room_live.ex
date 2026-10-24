@@ -172,6 +172,19 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  # The one tap a Split reading earns: the same proposal, at the kinder of the
+  # two numbers the table has just been shown. The vote is unchanged — everyone
+  # still has to agree — only the number no longer has to be typed.
+  def handle_event("propose_split_overrule", _params, socket) do
+    if split = split_shown(socket.assigns.room) do
+      Rooms.propose_overrule(socket.assigns.slug, socket.assigns.seat.id,
+        closeness: split.generous
+      )
+    end
+
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("agree_overrule", _params, socket) do
     Rooms.agree_overrule(socket.assigns.slug, socket.assigns.seat.id)
 
@@ -248,6 +261,11 @@ defmodule ThereishWeb.RoomLive do
 
   def handle_event("toggle_full_table", _params, socket) do
     Rooms.toggle(socket.assigns.slug, :full_table)
+    {:noreply, resync(socket)}
+  end
+
+  def handle_event("toggle_split_readings", _params, socket) do
+    Rooms.toggle(socket.assigns.slug, :split_readings)
     {:noreply, resync(socket)}
   end
 
@@ -566,10 +584,18 @@ defmodule ThereishWeb.RoomLive do
 
       <div
         :if={may?(@room, :propose_overrule)}
-        class="flex justify-center"
+        class="flex flex-wrap justify-center gap-2"
       >
         <.button phx-click="propose_overrule" data-role="propose-overrule">
           Overrule the Assayer
+        </.button>
+        <.button
+          :if={may?(@room, :propose_split_overrule) && split_shown(@room)}
+          phx-click="propose_split_overrule"
+          data-role="propose-split-overrule"
+          variant="primary"
+        >
+          Believe the generous reading ({split_shown(@room).generous})
         </.button>
       </div>
 

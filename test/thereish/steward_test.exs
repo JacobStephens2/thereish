@@ -95,6 +95,32 @@ defmodule Thereish.StewardTest do
       assert verdict.meta.reasoning_reverse == "Reverse."
     end
 
+    test "how far the two orderings disagreed is recorded beside the mean" do
+      recorded(fn conn, body ->
+        case ordering(body) do
+          "beacon" -> Req.Test.json(conn, response(verdict(closeness: 31)))
+          "cairn" -> Req.Test.json(conn, response(verdict(closeness: 78)))
+        end
+      end)
+
+      {:ok, verdict} = Steward.assay(@pair)
+
+      # The grade is still the mean and nothing about grading has moved. The
+      # spread is the one number that decides whether the table is ever shown
+      # the two readings (ADR-0024), so it is measured where they are.
+      assert verdict.meta.spread == 47
+      assert verdict.closeness == 55
+    end
+
+    test "two orderings that agree are a spread of nothing" do
+      recorded(fn conn, _body -> Req.Test.json(conn, response(verdict(closeness: 62))) end)
+
+      {:ok, verdict} = Steward.assay(@pair)
+
+      assert verdict.meta.spread == 0
+      assert verdict.closeness == 62
+    end
+
     test "the quip and the provenance ride along with the grade" do
       recorded(fn conn, _body ->
         Req.Test.json(conn, response(verdict(quip: "Both of you went looking for the shore.")))
@@ -897,6 +923,16 @@ defmodule Thereish.StewardTest do
       assert verdict.furthest == ["cairn", "beacon"]
       assert verdict.reasoning =~ ~s("cairn" and "beacon")
       assert verdict.meta.reasoning_reverse =~ ~s("beacon" and "cable")
+    end
+
+    test "the spread dial is a grader that disagrees with itself by exactly that much" do
+      fake(spread: 25)
+
+      assert {:ok, verdict} = Steward.assay(@pair)
+
+      assert verdict.meta.spread == 25
+      assert verdict.meta.reverse - verdict.meta.forward == 25
+      assert verdict.closeness == round((verdict.meta.forward + verdict.meta.reverse) / 2)
     end
 
     test "the Verdict carries the Assayer role's prompt version, the Precedent's key" do

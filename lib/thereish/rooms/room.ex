@@ -26,6 +26,7 @@ defmodule Thereish.Rooms.Room do
     field :quip, :string
     field :prologue_skipped, :boolean, default: false
     field :full_table, :boolean, default: true
+    field :split_readings, :boolean, default: true
 
     has_many :seats, Thereish.Rooms.Seat
     has_many :nevers, Thereish.Rooms.Never
@@ -52,7 +53,8 @@ defmodule Thereish.Rooms.Room do
       :music,
       :quip,
       :prologue_skipped,
-      :full_table
+      :full_table,
+      :split_readings
     ])
     |> validate_required([:slug, :seat_limit])
     |> validate_format(:slug, @slug_format)
@@ -75,7 +77,7 @@ defmodule Thereish.Rooms.Room do
   @doc "Changeset for Room facts that can be changed during or across Pages."
   def facts_changeset(room, attrs) do
     room
-    |> cast(attrs, [:speaker, :quips, :music, :prologue_skipped, :full_table])
+    |> cast(attrs, [:speaker, :quips, :music, :prologue_skipped, :full_table, :split_readings])
     |> validate_inclusion(:music, @music_modes)
   end
 end

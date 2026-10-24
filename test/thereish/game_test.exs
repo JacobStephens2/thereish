@@ -2832,6 +2832,137 @@ defmodule Thereish.GameTest do
     end
   end
 
+  describe "the Split reading: the Assayer argues with itself (#200)" do
+    # A graded reveal whose Verdict carries `meta`, which is where the two
+    # orderings and how far apart they landed have always been recorded.
+    defp split_revealed(meta, closeness \\ 55) do
+      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
+      [{:assay, request}] = assays(effects)
+
+      {:ok, state, _effects} =
+        Game.apply(
+          state,
+          {:verdict_received,
+           %{
+             closeness: closeness,
+             reasoning: "They both name a light.",
+             furthest: Enum.take(request.bridges, 2),
+             meta: Map.merge(%{model: "test", prompt_version: "v1"}, meta)
+           }}
+        )
+
+      state
+    end
+
+    @split %{forward: 31, reverse: 78, spread: 47, reasoning_reverse: "They share nothing."}
+
+    test "two readings far enough apart are both shown, with the generous one named" do
+      view = Game.view(split_revealed(@split), "seat-Mara")
+
+      assert view.reveal.split == %{
+               forward: 31,
+               reverse: 78,
+               reasoning: "They both name a light.",
+               reasoning_reverse: "They share nothing.",
+               generous: 78
+             }
+
+      # The recorded grade is still the mean the Steward reconciled, and the
+      # reasoning is still off the reveal everywhere else (ADR-0024).
+      assert view.reveal.closeness == 55
+      refute Map.has_key?(view.reveal, :reasoning)
+    end
+
+    test "a narrow disagreement is no argument, and is shown to nobody" do
+      narrow = %{forward: 50, reverse: 60, spread: 10, reasoning_reverse: "Near enough."}
+
+      assert Game.view(split_revealed(narrow), "seat-Mara").reveal.split == nil
+    end
+
+    test "a Verdict from before the disagreement was measured shows none" do
+      old = %{forward: 31, reverse: 78, reasoning_reverse: "They share nothing."}
+
+      assert Game.view(split_revealed(old), "seat-Mara").reveal.split == nil
+    end
+
+    test "meta that came back from Postgres under string keys reads the same" do
+      strung = for {key, value} <- @split, into: %{}, do: {to_string(key), value}
+      view = Game.view(split_revealed(strung), "seat-Mara")
+
+      assert view.reveal.split.forward == 31
+      assert view.reveal.split.generous == 78
+    end
+
+    test "the threshold is configuration, and the shipped one is what decides it" do
+      at = Application.fetch_env!(:thereish, :split_decision_at)
+
+      just_under = %{forward: 50, reverse: 50 + at - 1, spread: at - 1}
+      just_over = %{forward: 50, reverse: 50 + at, spread: at}
+
+      assert Game.view(split_revealed(just_under), "seat-Mara").reveal.split == nil
+      assert Game.view(split_revealed(just_over), "seat-Mara").reveal.split
+    end
+
+    test "the one-tap Overrule is reachable only where there is a reading to believe" do
+      split = split_revealed(@split)
+      plain = split_revealed(%{forward: 50, reverse: 60, spread: 10})
+
+      assert Game.view(split, "seat-Mara").may.propose_split_overrule
+      refute Game.view(plain, "seat-Mara").may.propose_split_overrule
+      refute Game.view(split, nil).may.propose_split_overrule
+
+      # A proposal already on the table is the one thing to settle, and an
+      # Attempt still being written has nothing to argue about yet.
+      {:ok, proposed, []} = Game.apply(split, {:overrule_proposed, %{seat_id: "seat-Jacob"}})
+      refute Game.view(proposed, "seat-Mara").may.propose_split_overrule
+      refute Game.view(bridging(), "seat-Mara").may.propose_split_overrule
+    end
+
+    test "believing the generous reading proposes that number, and the vote is unchanged" do
+      split = split_revealed(@split)
+      generous = Game.view(split, "seat-Mara").reveal.split.generous
+
+      {:ok, proposed, []} =
+        Game.apply(split, {:overrule_proposed, %{seat_id: "seat-Mara", closeness: generous}})
+
+      assert Game.view(proposed, "seat-Mara").overrule.closeness == 78
+      # One Seat's tap is still not the table's ruling.
+      assert Game.view(proposed, nil).reveal.closeness == 55
+
+      assert {:ok, agreed, effects} =
+               Game.apply(proposed, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+      view = Game.view(agreed, nil)
+      assert view.reveal.closeness == 78
+      assert view.reveal.overruled?
+      # Settled: there is nothing left for the table to argue about.
+      assert view.reveal.split == nil
+
+      assert {:overrule, ruling} = Enum.find(effects, &match?({:overrule, _}, &1))
+      assert ruling.machine_closeness == 55
+      assert ruling.couple_closeness == 78
+    end
+
+    test "a decline is recorded and said out loud rather than vanishing" do
+      split = split_revealed(@split)
+      {:ok, proposed, []} = Game.apply(split, {:overrule_proposed, %{seat_id: "seat-Mara"}})
+
+      assert {:ok, declined, []} =
+               Game.apply(proposed, {:overrule_declined, %{seat_id: "seat-Jacob"}})
+
+      for viewer <- ["seat-Mara", "seat-Jacob", nil] do
+        view = Game.view(declined, viewer)
+
+        assert view.overrule == nil
+        assert view.overrule_declined == %{seat_id: "seat-Jacob", name: "Jacob"}
+      end
+
+      # It is the Attempt's, so the next Attempt starts with nothing said.
+      assert Game.view(split, nil).overrule_declined == nil
+      assert Game.view(again(declined), nil).overrule_declined == nil
+    end
+  end
+
   describe "what each viewer may do (#199)" do
     @actions [
       :give,
@@ -2840,6 +2971,7 @@ defmodule Thereish.GameTest do
       :call,
       :react,
       :propose_overrule,
+      :propose_split_overrule,
       :vote_overrule,
       :tap_fairness,
       :advance,
@@ -2937,6 +3069,13 @@ defmodule Thereish.GameTest do
 
     defp valid_events(:propose_overrule, seat_id),
       do: [{:overrule_proposed, %{seat_id: seat_id}}]
+
+    # The one-tap Overrule has no event of its own to be valid or invalid: it is
+    # `{:overrule_proposed, …}` at a number the table has already been shown, so
+    # what `apply/2` accepts is `propose_overrule`'s answer and is asserted
+    # there. What this `may` adds is whether there is a reading to believe, which
+    # the Split reading's own describe block asserts.
+    defp valid_events(:propose_split_overrule, _seat_id), do: []
 
     defp valid_events(:vote_overrule, seat_id),
       do: [
