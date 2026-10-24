@@ -306,6 +306,95 @@ defmodule ThereishWeb.RoomComponents do
   defp mask_url(_), do: nil
 
   attr :room, :map, required: true
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  The Nudges this Page has spent: one public word each, struck through.
+
+  A chip is struck through because that is what a Nudge is — the word it names
+  is barred for the rest of the Page, for everyone, the Seat that spent it
+  included. A chip from an earlier Attempt dims rather than leaves, because the
+  word is still barred. On the Stage the word is large and its Seat is named:
+  a Nudge landing is theatre, not a notification.
+  """
+  def nudges(assigns) do
+    assigns = assign(assigns, :chips, nudge_chips(assigns.room))
+
+    ~H"""
+    <div
+      :if={@chips != []}
+      class={[
+        "flex flex-col items-center",
+        if(@mode == :stage, do: "gap-2", else: "gap-3")
+      ]}
+    >
+      <.caption data-role="nudges-caption">
+        Nudges
+      </.caption>
+      <div
+        data-role="nudges"
+        class="flex flex-wrap items-start justify-center gap-2 sm:gap-3"
+      >
+        <div
+          :for={chip <- @chips}
+          data-role="nudge-chip"
+          data-seat={chip.seat_id}
+          data-attempt={chip.attempt}
+          data-earlier={to_string(earlier_nudge?(@room, chip))}
+          style={"--seat-color: #{chip.colour}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 12%, transparent);"}
+          class={[
+            "flex flex-col items-center gap-1 rounded-lg border",
+            if(@mode == :stage, do: "px-4 py-2", else: "px-3 py-2"),
+            earlier_nudge?(@room, chip) && "opacity-50"
+          ]}
+        >
+          <p
+            :if={@mode == :stage}
+            data-role="nudge-by"
+            class="text-xs uppercase tracking-widest opacity-70"
+          >
+            {chip.name} nudges
+          </p>
+          <div class="flex items-center gap-1.5">
+            <.seat_mask
+              :if={chip.seat}
+              seat={chip.seat}
+              size={if @mode == :stage, do: :sm, else: :xs}
+            />
+            <span class={[
+              "font-semibold tracking-tight line-through",
+              if(@mode == :stage, do: "text-2xl sm:text-3xl", else: "text-xl")
+            ]}>
+              {chip.word}
+            </span>
+            <span
+              data-role="nudge-spent"
+              class="rounded-full border border-current px-1.5 text-[10px] font-bold uppercase tracking-widest opacity-80"
+            >
+              Spent
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # Each Nudge with the Seat that spent it, so a chip can wear that Seat's Mask
+  # and colour. The Game says who nudged and nothing about how a Seat looks.
+  defp nudge_chips(room) do
+    seats = Map.new(room[:seats] || [], &{&1.id, &1})
+
+    for nudge <- room[:nudges] || [] do
+      seat = seats[nudge.seat_id]
+
+      Map.merge(nudge, %{seat: seat, colour: seat_colour(seat || %{})})
+    end
+  end
+
+  defp earlier_nudge?(room, chip), do: chip.attempt < room.attempt.number
+
+  attr :room, :map, required: true
 
   @doc """
   Which try this is, and how many the Page gets.
@@ -356,12 +445,19 @@ defmodule ThereishWeb.RoomComponents do
   end
 
   attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :phone
 
   @doc """
   The pause while the Assayer reads the Bridges.
 
   Shown when the Room has moved into `:assaying` — which means every Bridge has
   been committed and the beat is running.
+
+  The Beat is also the Call window, so this is where the phone stops being
+  three pulsing dots: a Seat that may Call gets the buttons instead, and every
+  screen shows who has called what, because a Call being public is the whole of
+  the mechanic.
   """
   def assaying(assigns) do
     ~H"""
@@ -372,7 +468,10 @@ defmodule ThereishWeb.RoomComponents do
       class="flex flex-col items-center justify-center gap-3 text-center"
     >
       <div
-        :if={is_nil(@room.assayer_step) or @room.assayer_step == :grading}
+        :if={
+          beat_dots?(@room, @mode) and
+            (is_nil(@room.assayer_step) or @room.assayer_step == :grading)
+        }
         data-role="beat-meter"
         class="flex flex-col items-center gap-2"
       >
@@ -386,11 +485,105 @@ defmodule ThereishWeb.RoomComponents do
         </p>
       </div>
 
+      <.call_bands room={@room} seat={@seat} mode={@mode} />
+
       <p class="text-lg opacity-70">
         {waiting_line(@room.assayer_step)}
       </p>
     </div>
     """
+  end
+
+  # The Beat's three dots were the phone's whole job at the climax. When this
+  # phone may Call, the buttons are the job and the dots under them would be
+  # noise; the Stage keeps them, because the Stage never calls.
+  defp beat_dots?(room, mode), do: mode == :stage or not may?(room, :call)
+
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  Call it: the band a Seat names during the Beat, before the number arrives,
+  and the row of who has called what.
+
+  A Call settles nothing and counts for nothing — nothing is totalled here or
+  anywhere, and a Seat that does not call simply has no pin on the Rail. The
+  row renders on every screen the Beat is on, the Stage included, because the
+  public read is the point; only a phone holding a Seat gets the buttons.
+  """
+  def call_bands(assigns) do
+    assigns =
+      assigns
+      |> assign(:calls, coloured_calls(assigns.room, assigns.room[:calls]))
+      |> assign(:buttons?, assigns.mode != :stage and may?(assigns.room, :call))
+      |> assign(:yours, your_call(assigns.room, assigns.seat))
+
+    ~H"""
+    <div
+      :if={@buttons? or @calls != []}
+      data-role="call-bands"
+      data-mode={@mode}
+      class="flex w-full flex-col items-center gap-2"
+    >
+      <.caption :if={@buttons?} data-role="call-caption">
+        Call it.
+      </.caption>
+
+      <div :if={@buttons?} class="flex w-full flex-col gap-2">
+        <button
+          :for={band <- @room.callable_bands}
+          type="button"
+          phx-click="call"
+          phx-value-band={band}
+          data-role="call-band"
+          data-band={band}
+          data-called={to_string(@yours == band)}
+          class={[
+            "btn min-h-11 w-full text-base font-bold uppercase tracking-widest",
+            if(@yours == band,
+              do: "btn-primary shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          {band(band)}
+        </button>
+      </div>
+
+      <div
+        :if={@calls != []}
+        data-role="call-row"
+        class="flex flex-wrap items-center justify-center gap-2"
+      >
+        <span
+          :for={call <- @calls}
+          data-role="called"
+          data-seat={call.seat_id}
+          data-band={call.band}
+          style={"--seat-color: #{call.colour}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 12%, transparent);"}
+          class={[
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-medium",
+            if(@mode == :stage, do: "text-base", else: "text-xs")
+          ]}
+        >
+          {call.name} called
+          <span class="font-bold uppercase tracking-widest">{band(call.band)}</span>
+        </span>
+      </div>
+    </div>
+    """
+  end
+
+  # Which band this Seat has called, if it has called one. The latest Call
+  # wins, so there is only ever the one.
+  defp your_call(_room, nil), do: nil
+
+  defp your_call(room, seat) do
+    case Enum.find(room[:calls] || [], &(&1.seat_id == seat.id)) do
+      nil -> nil
+      call -> call.band
+    end
   end
 
   attr :room, :map, required: true
@@ -523,8 +716,16 @@ defmodule ThereishWeb.RoomComponents do
         band={@room.reveal.band}
         melded?={@room.reveal[:melded?] == true}
         gap={@room.reveal[:gap]}
-        calls={call_pins(@room)}
+        calls={coloured_calls(@room, @room.reveal[:calls])}
       />
+
+      <p
+        :if={@mode == :quiet}
+        data-role="look-up"
+        class="text-sm font-bold uppercase tracking-[0.3em] opacity-70"
+      >
+        Look up.
+      </p>
 
       <div
         :if={@mode != :quiet && @room.reveal.closeness == nil}
@@ -1123,13 +1324,14 @@ defmodule ThereishWeb.RoomComponents do
   # it, and two readings of that would be two answers.
   defp reveal_sequence, do: Application.fetch_env!(:thereish, :reveal_sequence_ms)
 
-  # The reveal's Calls, each wearing the colour its Seat wears everywhere else.
-  # The Game says who called which band and nothing about how a Seat looks, so
-  # the pin's colour is read off the roster the screen already has.
-  defp call_pins(room) do
+  # Calls, each wearing the colour its Seat wears everywhere else — the Beat's
+  # row and the Rail's pins read the same list. The Game says who called which
+  # band and nothing about how a Seat looks, so the colour is read off the
+  # roster the screen already has.
+  defp coloured_calls(room, calls) do
     colours = Map.new(room[:seats] || [], &{&1.id, seat_colour(&1)})
 
-    for call <- room.reveal[:calls] || [] do
+    for call <- calls || [] do
       Map.put(call, :colour, colours[call.seat_id])
     end
   end

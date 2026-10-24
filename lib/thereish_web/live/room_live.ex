@@ -44,6 +44,7 @@ defmodule ThereishWeb.RoomLive do
      |> assign(:name, "")
      |> assign(:error, nil)
      |> assign(:bridge_error, nil)
+     |> assign(:nudge_error, nil)
      |> assign(:page_error, nil)
      |> assign(:give_input, "")
      |> assign(:give_error, nil)
@@ -95,6 +96,44 @@ defmodule ThereishWeb.RoomLive do
       {:error, reason} ->
         {:noreply, assign(socket, :bridge_error, message(reason))}
     end
+  end
+
+  # A Nudge is checked against the same barred words a Bridge is, by the same
+  # function, so nobody is ambushed at submit by a word the Page has already
+  # spent — including a word some other Seat has just nudged.
+  def handle_event("validate_nudge", %{"nudge" => word}, socket) do
+    barred = (socket.assigns.room && socket.assigns.room.barred_words) || []
+
+    error =
+      if String.trim(word) == "" do
+        nil
+      else
+        case Thereish.Steward.Legality.check_bridge(word, barred) do
+          :ok -> nil
+          {:illegal, why} -> why
+        end
+      end
+
+    {:noreply, assign(socket, :nudge_error, error)}
+  end
+
+  def handle_event("send_nudge", %{"nudge" => word}, socket) do
+    case Rooms.nudge(socket.assigns.slug, socket.assigns.seat.id, word) do
+      :ok ->
+        {:noreply, socket |> assign(:nudge_error, nil) |> resync()}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :nudge_error, message(reason))}
+    end
+  end
+
+  # The Call window is the Beat, and the Beat closes on its own. A tap that
+  # lands after it is the window closing rather than a mistake anybody made, so
+  # it is answered with the state the Room is actually in and no red sentence.
+  def handle_event("call", %{"band" => band}, socket) do
+    Rooms.call(socket.assigns.slug, socket.assigns.seat.id, band)
+
+    {:noreply, resync(socket)}
   end
 
   # Both phones can reach the same button, and on a couch both of them will.
@@ -282,6 +321,10 @@ defmodule ThereishWeb.RoomLive do
   defp message(:not_bridging), do: "Too late for this one."
   defp message(:no_such_seat), do: "You are not in this Room any more. Reload."
   defp message({:illegal_bridge, reason}), do: reason
+  defp message({:illegal_nudge, reason}), do: reason
+  defp message(:nudge_required), do: "Write one word first."
+  defp message(:no_nudges_left), do: "You have spent your nudge on this Page."
+  defp message(:nudges_off), do: "Nudges are off in this Room."
   defp message(:not_enough_gives), do: "Need at least two Gives to start."
   defp message(:not_playing_page), do: "You're watching this Page."
   defp message(:pool_exhausted), do: "That's every Page for tonight."
@@ -451,6 +494,30 @@ defmodule ThereishWeb.RoomLive do
 
       <.bookends :if={@seat} room={@room} />
 
+      <.nudges :if={@seat} room={@room} />
+
+      <form
+        :if={may?(@room, :nudge)}
+        id="nudge-form"
+        data-role="nudge-form"
+        phx-change="validate_nudge"
+        phx-submit="send_nudge"
+        class="flex flex-col gap-2 rounded-lg border border-base-300 p-4"
+      >
+        <.input name="nudge" value={nil} label="Nudge one word" autocomplete="off" />
+        <p data-role="nudge-cost" class="text-sm opacity-70">
+          One word, out loud. Nobody may write it — not even you. {@room.your_nudges_left} left on this Page.
+        </p>
+        <.button data-role="send-nudge">Nudge</.button>
+      </form>
+
+      <%!-- Outside the form on purpose: the refusal a spent budget earns arrives
+      in the same breath as the form going away, and a sentence inside it would
+      leave with it. --%>
+      <p :if={@seat && @nudge_error} data-role="nudge-error" class="text-sm text-error">
+        {@nudge_error}
+      </p>
+
       <form
         :if={may?(@room, :bridge)}
         id="bridge-form"
@@ -479,7 +546,7 @@ defmodule ThereishWeb.RoomLive do
         <p :if={@room.phase == :bridging} class="text-sm opacity-60">Waiting for the others.</p>
       </div>
 
-      <.assaying room={@room} />
+      <.assaying room={@room} seat={@seat} />
 
       <.reveal
         room={@room}

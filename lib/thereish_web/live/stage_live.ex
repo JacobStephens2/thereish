@@ -258,9 +258,11 @@ defmodule ThereishWeb.StageLive do
 
           <.bookends room={@room} mode={:stage} />
 
+          <.nudges room={@room} mode={:stage} />
+
           <.bridge_markers room={@room} />
 
-          <.assaying room={@room} />
+          <.assaying room={@room} mode={:stage} />
 
           <.reveal room={@room} mode={:stage} />
 

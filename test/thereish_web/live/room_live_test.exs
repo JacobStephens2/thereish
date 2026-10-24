@@ -21,6 +21,10 @@ defmodule ThereishWeb.RoomLiveTest do
     view |> form("[data-role=bridge-form]", %{"bridge" => bridge}) |> render_submit()
   end
 
+  defp nudge(view, word) do
+    view |> form("[data-role=nudge-form]", %{"nudge" => word}) |> render_submit()
+  end
+
   defp give_setting(view, give) do
     view |> form("[data-role=setting-form]", %{"give" => give}) |> render_submit()
   end
@@ -1186,8 +1190,15 @@ defmodule ThereishWeb.RoomLiveTest do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
+      # The Stage holds the breath; the phones spend it on the Call (T4), which
+      # is the beat being a thing to do rather than a thing to watch.
+      assert has_element?(stage, "[data-role=beat-meter]")
+
+      for view <- [ctx.mara, ctx.jacob] do
+        assert has_element?(view, "[data-role=call-bands]")
+      end
+
       for view <- [ctx.mara, ctx.jacob, stage] do
-        assert has_element?(view, "[data-role=beat-meter]")
         refute render(view) =~ "loading-spinner"
         refute render(view) =~ "spinner"
       end
@@ -4550,6 +4561,171 @@ defmodule ThereishWeb.RoomLiveTest do
       end
 
       refute has_element?(stage, "[data-role=pair]")
+    end
+  end
+
+  describe "the phone's Nudge (T4)" do
+    setup do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      %{slug: slug, mara: mara, bram: bram}
+    end
+
+    test "a Seat spends its one word and both phones wear the chip", ctx do
+      assert has_element?(ctx.mara, "[data-role=nudge-form]")
+      assert render(ctx.mara) =~ "Nobody may write it"
+      assert has_element?(ctx.mara, "[data-role=nudge-cost]", "1 left on this Page")
+
+      nudge(ctx.mara, "rope")
+
+      for view <- [ctx.mara, ctx.bram] do
+        eventually(fn -> has_element?(view, "[data-role=nudge-chip]", "rope") end)
+        assert has_element?(view, "[data-role=nudge-spent]", "Spent")
+      end
+
+      # The chip renders between the Bookends and the Bridge form, where the
+      # word it bars can be read before anything is typed.
+      assert_order(rendered_room(ctx.bram), [
+        ~s(data-role="bookends"),
+        ~s(data-role="nudges"),
+        ~s(data-role="bridge-form")
+      ])
+    end
+
+    test "the budget is one: the form goes, and a stale tap is told why", ctx do
+      nudge(ctx.mara, "rope")
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=nudge-chip]", "rope") end)
+      refute has_element?(ctx.mara, "[data-role=nudge-form]")
+      assert has_element?(ctx.bram, "[data-role=nudge-form]")
+
+      # A phone whose form was still on screen when the thumb landed: the tap
+      # reaches the Room and the Room says what the budget is.
+      render_submit(ctx.mara, "send_nudge", %{"nudge" => "cable"})
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=nudge-error]",
+               "You have spent your nudge on this Page."
+             )
+
+      refute has_element?(ctx.mara, "[data-role=nudge-chip]", "cable")
+    end
+
+    test "a nudged word is barred for everyone, live and at commit", ctx do
+      nudge(ctx.bram, "rope")
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=nudge-chip]", "rope") end)
+
+      ctx.mara
+      |> form("[data-role=bridge-form]", %{"bridge" => "rope"})
+      |> render_change()
+
+      assert has_element?(ctx.mara, "[data-role=bridge-error]")
+
+      commit(ctx.mara, "rope")
+
+      assert has_element?(ctx.mara, "[data-role=bridge-error]")
+      assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
+    end
+
+    test "a Seat that has committed may no longer nudge", ctx do
+      commit(ctx.mara, "cairn")
+
+      refute has_element?(ctx.mara, "[data-role=nudge-form]")
+      assert has_element?(ctx.bram, "[data-role=nudge-form]")
+    end
+  end
+
+  describe "the phone's Call (T4)" do
+    setup do
+      # The Beat is the Call window, and a suite's beat is five milliseconds:
+      # a test that taps a band needs the window a couch gets.
+      beat(1_000)
+
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      %{slug: slug, mara: mara, bram: bram}
+    end
+
+    test "one fat button per callable band, and never deep meld", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.bram, "cairo")
+
+      assert has_element?(ctx.mara, "[data-role=call-bands]")
+      assert has_element?(ctx.mara, "[data-role=call-caption]", "Call it.")
+
+      for band <- Thereish.Game.callable_bands() do
+        assert has_element?(ctx.mara, "[data-role=call-band][data-band=#{band}]")
+      end
+
+      refute has_element?(ctx.mara, "[data-role=call-band][data-band=deep_meld]")
+      refute render(ctx.mara) =~ "data-role=\"beat-meter\""
+
+      await_reveal_on(ctx.mara)
+      refute has_element?(ctx.mara, "[data-role=call-band]")
+    end
+
+    test "a tap is selected on the caller's phone and public on the other", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.bram, "cairo")
+
+      ctx.mara |> element("[data-role=call-band][data-band=almost]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost][data-called=true]")
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=meld][data-called=false]")
+
+      eventually(fn -> has_element?(ctx.bram, "[data-role=call-row]") end)
+      assert has_element?(ctx.bram, "[data-role=called]", "Mara called")
+      assert has_element?(ctx.bram, "[data-role=called][data-band=almost]")
+
+      # The latest Call wins: the Seat changes its mind and has one pin, not two.
+      ctx.mara |> element("[data-role=call-band][data-band=meld]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=meld][data-called=true]")
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost][data-called=false]")
+      eventually(fn -> has_element?(ctx.bram, "[data-role=called][data-band=meld]") end)
+      refute has_element?(ctx.bram, "[data-role=called][data-band=almost]")
+    end
+  end
+
+  describe "the quiet phone gets the Rail (T4)" do
+    test "with a Stage present the phone holds the Rail and says to look up", _ctx do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      commit(mara, "cairn")
+      commit(bram, "cairo")
+
+      await_reveal_on(stage)
+      await_reveal_on(mara)
+
+      assert has_element?(mara, "[data-role=reveal][data-mode=quiet]")
+      assert has_element?(mara, "[data-role=ladder-rail]")
+      assert has_element?(mara, "[data-role=rail-marker]")
+      assert has_element?(mara, "[data-role=look-up]", "Look up.")
+
+      refute has_element?(mara, "[data-role=quip]")
+      refute has_element?(mara, "[data-role=closeness]")
+      refute has_element?(stage, "[data-role=look-up]")
     end
   end
 end
