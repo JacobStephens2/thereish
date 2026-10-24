@@ -46,6 +46,15 @@
   --color-warning-content: oklch(98% 0.022 95.277);
   --color-error: oklch(58% 0.253 17.585);
   --color-error-content: oklch(96% 0.015 12.422);
+  /* The Ladder's bands, named once for every screen that draws one. A miss has
+     to stay funny rather than punitive, so the run is neutral to cool and the
+     warmth is kept for a Meld — nobody is shown red for writing a word. */
+  --band-miss: oklch(62% 0.02 255);
+  --band-adjacent: oklch(64% 0.05 245);
+  --band-close: oklch(68% 0.09 235);
+  --band-almost: oklch(70% 0.13 265);
+  --band-meld: var(--color-primary);
+  --band-deep-meld: var(--color-accent);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -81,6 +90,13 @@
   --color-warning-content: oklch(98% 0.022 95.277);
   --color-error: oklch(58% 0.253 17.585);
   --color-error-content: oklch(96% 0.015 12.422);
+  /* The same six rungs, darkened for a light room. */
+  --band-miss: oklch(55% 0.02 255);
+  --band-adjacent: oklch(56% 0.06 245);
+  --band-close: oklch(58% 0.1 235);
+  --band-almost: oklch(56% 0.15 265);
+  --band-meld: var(--color-primary);
+  --band-deep-meld: var(--color-accent);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -104,37 +120,46 @@
 
 /* This file is for your main application CSS */
 
-@keyframes reveal-comparison {
-  0% {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
+/* One rule for every band, so a 29 and a 54 can never look the same again. An
+   element says which rung it is with `data-band` and reads its colour from the
+   theme's token; the badge, the closeness card and the Rail all read the same
+   six, so the three cannot disagree about what a grade looks like. */
+[data-band] {
+  --band: var(--color-base-300);
 }
 
-@keyframes reveal-closeness {
-  0% {
-    opacity: 0;
-    transform: translateY(8px) scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+[data-band="miss"] { --band: var(--band-miss); }
+[data-band="adjacent"] { --band: var(--band-adjacent); }
+[data-band="close"] { --band: var(--band-close); }
+[data-band="almost"] { --band: var(--band-almost); }
+[data-band="meld"] { --band: var(--band-meld); }
+[data-band="deep_meld"] { --band: var(--band-deep-meld); }
+
+.band-tint {
+  border-color: color-mix(in oklab, var(--band) 45%, transparent);
+  background-color: color-mix(in oklab, var(--band) 14%, transparent);
 }
 
-@keyframes band-arrive {
-  0% {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
+.band-badge {
+  color: color-mix(in oklab, var(--band) 85%, var(--color-base-content));
+  background-color: color-mix(in oklab, var(--band) 24%, transparent);
+}
+
+/* The Rail. Each rung is its band, tinted the same way the card above it is;
+   the marker and the pins are driven by the reveal's sequencer, which is why
+   nothing here animates on its own. */
+.rail-band {
+  background-color: color-mix(in oklab, var(--band) 38%, transparent);
+}
+
+.rail-marker {
+  box-shadow: 0 0 0 0.15rem color-mix(in oklab, var(--band) 30%, transparent);
+}
+
+.call-pin {
+  color: var(--seat-color);
+  border-color: var(--seat-color);
+  background-color: color-mix(in oklab, var(--seat-color) 55%, transparent);
 }
 
 .bridge-marker {

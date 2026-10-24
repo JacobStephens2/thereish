@@ -236,14 +236,71 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ "Jacob"
     end
 
-    test "number arrives with climbing hook and band arrives with it", %{meld_room: room} do
+    test "number, band, cards and marker are performed by one sequencer", %{meld_room: room} do
       html = render_component(&reveal/1, room: room)
 
       assert html =~ ~s(data-role="closeness")
       assert html =~ "80"
-      assert html =~ "ClimbNumber"
+      assert html =~ "RevealSequence"
       assert html =~ ~s(data-role="band")
       assert html =~ "meld"
+      refute html =~ "ClimbNumber"
+    end
+
+    test "the reveal carries the numbers the hold was armed with", %{meld_room: room} do
+      html = render_component(&reveal/1, room: room)
+      sequence = Application.fetch_env!(:thereish, :reveal_sequence_ms)
+
+      assert html =~ ~s(data-stagger="#{sequence[:stagger]}")
+      assert html =~ ~s(data-cap="#{sequence[:cap]}")
+      assert html =~ ~s(data-settle="#{sequence[:settle]}")
+    end
+
+    test "the closeness card wears its band, and three near misses wear three", %{miss_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="closeness-display")
+      assert html =~ ~s(data-band="miss")
+
+      bands =
+        for {closeness, band} <- [{24, :miss}, {40, :adjacent}, {60, :close}] do
+          reveal = %{room.reveal | closeness: closeness, band: band}
+          html = render_component(&reveal/1, room: %{room | reveal: reveal})
+
+          assert html =~ ~s(data-band="#{band}")
+
+          band
+        end
+
+      assert bands == Enum.uniq(bands)
+    end
+
+    test "the Rail is drawn on the phone, on the Stage and on a quiet phone", %{miss_room: room} do
+      reveal = room.reveal |> Map.merge(%{closeness: 83, band: :almost}) |> Map.put(:gap, 7)
+      room = %{room | reveal: reveal}
+
+      for mode <- [:phone, :stage, :quiet] do
+        html = render_component(&reveal/1, room: room, mode: mode)
+
+        assert html =~ ~s(data-role="ladder-rail")
+        assert html =~ ~s(data-role="meld-line")
+        assert html =~ "seven short"
+      end
+    end
+
+    test "a Seat's Call is a pin in its own colour", %{miss_room: room} do
+      calls = [%{seat_id: "s1", name: "Mara", band: :close, right?: false, bands_off: 1}]
+
+      room =
+        room
+        |> Map.put(:reveal, Map.put(room.reveal, :calls, calls))
+        |> Map.put(:seats, [%{id: "s1", name: "Mara", colour: "#e11d48"}])
+
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="call-pin")
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ "--seat-color: #e11d48"
     end
 
     test "a Meld is staged as an arrival, distinct from a near miss", %{meld_room: room} do

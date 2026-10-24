@@ -27,6 +27,12 @@ config :thereish,
   # anyone may start the next Attempt or open the next Page. Distinct from the
   # beat that runs before the reveal.
   reveal_hold_ms: 5_000,
+  # How the reveal is performed inside that hold: how long between one Bridge
+  # flipping and the next, a ceiling on the whole flip run so eight Seats
+  # cannot stretch it, and how long the number and the marker take to settle
+  # after it. The sequence is absorbed by the hold rather than added to it, so
+  # these numbers move the theatre and never the ten-second ceiling.
+  reveal_sequence_ms: [stagger: 260, cap: 1_400, settle: 900],
   # How the reveal escalates when the Assayer is slow (design law 10). Visible
   # activity through four seconds; at ten the game states it has no verdict and
   # hands the ruling to the players. Ten seconds is a ceiling, not a target: the

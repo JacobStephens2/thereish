@@ -1206,7 +1206,9 @@ defmodule ThereishWeb.RoomLiveTest do
         assert has_element?(view, "[data-role=comparison]")
         assert has_element?(view, "[data-role=closeness]", "91")
         assert has_element?(view, "[data-role=band]", "meld")
-        assert html =~ "ClimbNumber"
+        assert html =~ "RevealSequence"
+        assert has_element?(view, "[data-role=ladder-rail]")
+        assert has_element?(view, "[data-role=meld-line]")
         refute has_element?(view, "[data-role=reasoning]")
         refute html =~ "reasoning"
         assert has_element?(view, "[data-role=quip]")

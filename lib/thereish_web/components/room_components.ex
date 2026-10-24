@@ -13,6 +13,8 @@ defmodule ThereishWeb.RoomComponents do
   """
   use ThereishWeb, :html
 
+  import ThereishWeb.RailComponents
+
   alias Thereish.Chronicle.Opinion
   alias Thereish.Mask
 
@@ -396,8 +398,12 @@ defmodule ThereishWeb.RoomComponents do
   attr :mode, :atom, default: :phone
 
   @doc """
-  The reveal: the Bridges side by side, then the number climbing into its band,
-  then the punchline quip.
+  The reveal, performed: the Bridges flipping face up one at a time, each word
+  landing before the name of whoever wrote it, then the marker climbing the
+  Rail with the number counting beside it, then the punchline quip.
+
+  One hook runs all of it off one clock, and the whole performance is absorbed
+  by the hold Pacing arms, never added on top of it.
   """
   def reveal(assigns) do
     standard_reveal(assigns)
@@ -405,15 +411,25 @@ defmodule ThereishWeb.RoomComponents do
 
   defp standard_reveal(assigns) do
     presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
-    assigns = assign(assigns, :presentation, presentation)
+    sequence = reveal_sequence()
+
+    assigns =
+      assigns
+      |> assign(:presentation, presentation)
+      |> assign(:sequence, sequence)
 
     ~H"""
     <section
       :if={@room.reveal}
       id="reveal-performance"
+      phx-hook=".RevealSequence"
       data-role="reveal"
       data-arrival={reveal_arrival(@room.reveal)}
       data-mode={@mode}
+      data-stagger={@sequence[:stagger]}
+      data-cap={@sequence[:cap]}
+      data-settle={@sequence[:settle]}
+      data-melded={to_string(@room.reveal[:melded?] == true)}
       class={[
         "flex flex-col items-center w-full mx-auto",
         if(@mode == :stage, do: "gap-[clamp(0.5rem,1.8vh,1.5rem)] max-w-4xl", else: "gap-8 max-w-xl")
@@ -421,7 +437,6 @@ defmodule ThereishWeb.RoomComponents do
     >
       <div
         data-role="comparison"
-        style="animation: reveal-comparison 0.35s ease-out both;"
         class={[
           "flex flex-wrap items-stretch justify-center w-full",
           if(@mode == :stage, do: "gap-2 sm:gap-3", else: "gap-3 sm:gap-4")
@@ -443,7 +458,10 @@ defmodule ThereishWeb.RoomComponents do
             )
           ]}
         >
-          <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider opacity-60">
+          <div
+            data-role="bridge-name"
+            class="flex items-center gap-1.5 text-xs uppercase tracking-wider opacity-60"
+          >
             <span>{bridge.name}</span>
             <span :if={you?(@seat, bridge)} class="font-bold text-primary">(you)</span>
           </div>
@@ -459,7 +477,7 @@ defmodule ThereishWeb.RoomComponents do
       <div
         :if={@mode != :quiet && @room.reveal.closeness}
         data-role="closeness-display"
-        style="animation: reveal-closeness 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;"
+        data-band={@room.reveal.band}
         class={[
           "flex flex-col items-center justify-center rounded-2xl transition-all duration-500 w-full max-w-sm text-center",
           if(@mode == :stage, do: "px-6 py-2 sm:py-3", else: "px-8 py-6"),
@@ -468,7 +486,6 @@ defmodule ThereishWeb.RoomComponents do
       >
         <span
           id="reveal-closeness"
-          phx-hook=".ClimbNumber"
           data-role="closeness"
           data-target={@room.reveal.closeness}
           class={[
@@ -486,7 +503,6 @@ defmodule ThereishWeb.RoomComponents do
         ]}>
           <span
             data-role="band"
-            style="animation: band-arrive 0.4s ease-out 0.8s both;"
             class={[
               "font-extrabold uppercase tracking-widest rounded-full",
               if(@mode == :stage,
@@ -500,6 +516,15 @@ defmodule ThereishWeb.RoomComponents do
           </span>
         </div>
       </div>
+
+      <.ladder_rail
+        mode={@mode}
+        closeness={@room.reveal.closeness}
+        band={@room.reveal.band}
+        melded?={@room.reveal[:melded?] == true}
+        gap={@room.reveal[:gap]}
+        calls={call_pins(@room)}
+      />
 
       <div
         :if={@mode != :quiet && @room.reveal.closeness == nil}
@@ -600,42 +625,150 @@ defmodule ThereishWeb.RoomComponents do
         The couch has the call · Use your phones to continue or overrule
       </p>
 
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".ClimbNumber">
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".RevealSequence">
         export default {
           mounted() {
-            const target = parseInt(this.el.dataset.target, 10)
-            if (isNaN(target)) return
+            // One hook for the whole performance. The cards, the marker and the
+            // number cannot drift apart if there is only one clock, and the run
+            // is sized from the numbers Pacing used to arm the hold, so the
+            // button never comes alive in the middle of the punchline.
+            const el = this.el
+            const dataset = (name, fallback) => {
+              const parsed = parseInt(el.dataset[name], 10)
+              return isNaN(parsed) ? fallback : parsed
+            }
+
+            this.cards = Array.from(el.querySelectorAll("[data-bridge]"))
+            this.names = this.cards.map((card) => card.querySelector('[data-role="bridge-name"]'))
+            this.number = el.querySelector('[data-role="closeness"]')
+            this.display = el.querySelector('[data-role="closeness-display"]')
+            this.badge = el.querySelector('[data-role="band"]')
+            this.rail = el.querySelector('[data-role="ladder-rail"]')
+            this.marker = el.querySelector('[data-role="rail-marker"]')
+            this.pins = Array.from(el.querySelectorAll('[data-role="call-pin"]'))
+            this.shortBy = el.querySelector('[data-role="short-by"]')
+            this.target = this.number ? parseInt(this.number.dataset.target, 10) : NaN
+
+            // Reduced motion is about motion and nothing else: every element
+            // ends in its final, legible place, it simply never travels there.
             if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-              this.el.textContent = target
+              this.setFinalState()
               return
             }
-            const delay = 350
-            const duration = 650
-            let started = false
-            let startTime = null
-            this.el.textContent = "0"
+
+            const cap = dataset("cap", 1400)
+            const settle = dataset("settle", 900)
+            const seats = Math.max(1, this.cards.length)
+            // The whole flip run fits under the cap at any Seat count: eight
+            // Seats wait no longer for the number than two do.
+            const stagger = Math.min(dataset("stagger", 260), cap / seats)
+            const flip = stagger * seats
+
+            this.cards.forEach((card, i) => {
+              this.play(card, [{opacity: 0, transform: "rotateY(180deg)"}, {opacity: 1}], {
+                duration: 360,
+                delay: i * stagger
+              })
+            })
+
+            // The word lands before its author — the guess-whose beat, bought
+            // with no extra input from anybody.
+            this.names.forEach((name, i) => {
+              this.play(name, [{opacity: 0}, {opacity: 1}], {
+                duration: 220,
+                delay: i * stagger + 180
+              })
+            })
+
+            this.play(this.display, [{opacity: 0, transform: "translateY(8px)"}, {opacity: 1}], {
+              duration: Math.max(160, settle * 0.25),
+              delay: flip
+            })
+            this.play(this.rail, [{opacity: 0, transform: "scaleX(0.97)"}, {opacity: 1}], {
+              duration: Math.max(160, settle * 0.25),
+              delay: flip
+            })
+            this.pins.forEach((pin, i) => {
+              this.play(pin, [{opacity: 0, transform: "translate(-50%, -0.5rem) scale(0.6)"}, {opacity: 1}], {
+                duration: 240,
+                delay: flip + 120 * (i + 1)
+              })
+            })
+
+            const launch = flip + settle * 0.1
+            const climb = Math.max(260, settle * 0.7)
+
+            if (this.marker) {
+              const place = this.marker.dataset.target
+              const over = Math.min(100, parseFloat(place) + 3)
+              this.play(this.marker, [{left: "0%"}, {left: over + "%"}, {left: place + "%"}], {
+                duration: climb,
+                delay: launch
+              })
+            }
+            if (!isNaN(this.target)) this.count(launch, climb)
+
+            this.play(this.badge, [{opacity: 0, transform: "scale(0.9)"}, {opacity: 1}], {
+              duration: 240,
+              delay: launch + climb * 0.6
+            })
+            this.play(this.shortBy, [{opacity: 0}, {opacity: 1}], {
+              duration: Math.max(140, settle * 0.2),
+              delay: flip + settle * 0.8
+            })
+
+            if (el.dataset.melded === "true") this.flash(launch + climb * 0.75)
+          },
+
+          destroyed() {
+            if (this.flashTimer) clearTimeout(this.flashTimer)
+          },
+
+          // Every step is the same shape: hold the element where it starts until
+          // its moment, then let the CSS it already carries be where it lands.
+          play(node, frames, timing) {
+            if (!node) return
+            node.animate(frames, Object.assign({easing: "cubic-bezier(.16,1,.3,1)", fill: "backwards"}, timing))
+          },
+
+          count(delay, duration) {
+            const node = this.number
+            const target = this.target
+            node.textContent = "0"
+            let start = null
 
             const tick = (now) => {
-              if (!started) {
-                startTime = now + delay
-                started = true
-              }
-              if (now < startTime) {
-                requestAnimationFrame(tick)
-                return
-              }
-              const elapsed = now - startTime
-              const progress = Math.min(elapsed / duration, 1)
-              const ease = 1 - Math.pow(1 - progress, 3)
-              const current = Math.round(ease * target)
-              this.el.textContent = current
-              if (progress < 1) {
-                requestAnimationFrame(tick)
-              } else {
-                this.el.textContent = target
-              }
+              if (start === null) start = now + delay
+              if (now < start) return requestAnimationFrame(tick)
+
+              const progress = Math.min((now - start) / duration, 1)
+              const eased = 1 - Math.pow(1 - progress, 3)
+              node.textContent = Math.round(eased * target)
+
+              if (progress < 1) requestAnimationFrame(tick)
+              else node.textContent = target
             }
             requestAnimationFrame(tick)
+          },
+
+          // A Meld is the one arrival the whole room gets: one flash, over the
+          // whole screen, touching nothing.
+          flash(delay) {
+            this.flashTimer = setTimeout(() => {
+              const flash = document.createElement("div")
+              flash.dataset.role = "meld-flash"
+              flash.style.cssText =
+                "position:fixed;inset:0;z-index:50;pointer-events:none;" +
+                "background:radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--color-primary) 40%, transparent), transparent 65%);"
+              document.body.appendChild(flash)
+              const anim = flash.animate([{opacity: 0}, {opacity: 1}, {opacity: 0}], {duration: 420, easing: "ease-out"})
+              anim.onfinish = () => flash.remove()
+              anim.oncancel = () => flash.remove()
+            }, delay)
+          },
+
+          setFinalState() {
+            if (!isNaN(this.target)) this.number.textContent = this.target
           }
         }
       </script>
@@ -964,60 +1097,41 @@ defmodule ThereishWeb.RoomComponents do
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
   defp reveal_arrival(_), do: "no_verdict"
 
-  defp closeness_presentation(%{band: :deep_meld}) do
-    %{
-      container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
-      number_class: "text-primary",
-      badge_class: "bg-primary text-primary-content font-bold"
-    }
-  end
-
+  # What the card the number sits in looks like. Six clauses used to give a 29
+  # and a 54 the same grey, which is the whole reason the bands were invisible:
+  # now the card wears the band's own `data-band` and the colour behind it is
+  # the theme's token (`.band-tint` in app.css), the same token the badge and
+  # the Rail read. A Meld keeps the lift that makes it an arrival.
   defp closeness_presentation(%{melded?: true}) do
     %{
-      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
+      container_class: "border-2 band-tint shadow-xl shadow-primary/20",
       number_class: "text-primary",
       badge_class: "bg-primary text-primary-content font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :almost}) do
-    %{
-      container_class: "border border-secondary/40 bg-base-200/40",
-      number_class: "text-base-content",
-      badge_class: "bg-secondary/20 text-secondary font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :close}) do
-    %{
-      container_class: "border border-info/30 bg-base-200/40",
-      number_class: "text-base-content",
-      badge_class: "bg-info/20 text-info font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :adjacent}) do
-    %{
-      container_class: "border border-base-300 bg-base-200/30",
-      number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/80 font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :miss}) do
-    %{
-      container_class: "border border-base-300 bg-base-200/30",
-      number_class: "text-base-content/85",
-      badge_class: "bg-base-300 text-base-content/80 font-bold"
     }
   end
 
   defp closeness_presentation(_reveal) do
     %{
-      container_class: "border border-base-300 bg-base-200/30",
+      container_class: "border band-tint",
       number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/70 font-bold"
+      badge_class: "band-badge font-bold"
     }
+  end
+
+  # The one place the sequence's numbers live is the config Pacing reads when it
+  # arms the hold: the performance is absorbed by the hold rather than added to
+  # it, and two readings of that would be two answers.
+  defp reveal_sequence, do: Application.fetch_env!(:thereish, :reveal_sequence_ms)
+
+  # The reveal's Calls, each wearing the colour its Seat wears everywhere else.
+  # The Game says who called which band and nothing about how a Seat looks, so
+  # the pin's colour is read off the roster the screen already has.
+  defp call_pins(room) do
+    colours = Map.new(room[:seats] || [], &{&1.id, seat_colour(&1)})
+
+    for call <- room.reveal[:calls] || [] do
+      Map.put(call, :colour, colours[call.seat_id])
+    end
   end
 
   defp chosen_opinion_class("too_harsh"),
@@ -1444,13 +1558,17 @@ defmodule ThereishWeb.RoomComponents do
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Foley">
       export default {
         mounted() {
-          this.isReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
           this.speaker = this.el.dataset.speaker === "true"
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
           // Read the speaker off the DOM rather than off the last `updated()`:
           // the tap that claims the Speaker is answered with the patch and the
           // first `foley:page` together, and a stale flag would swallow it.
-          this.canPlay = () => !this.isReducedMotion() && this.el.dataset.speaker === "true"
+          //
+          // Sound is the Speaker's business and nothing else's. This used to
+          // ask about reduced motion too, which silenced the music, the stings
+          // and every voice for anyone who had asked only for less movement —
+          // the richest part of the night, taken away by a motion setting.
+          this.canPlay = () => this.el.dataset.speaker === "true"
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -1899,7 +2017,6 @@ defmodule ThereishWeb.RoomComponents do
           }
 
           this.handleEvent("foley:commit", async () => {
-            if (this.isReducedMotion()) return
             await this.playCommitTick()
           })
 
@@ -1908,7 +2025,7 @@ defmodule ThereishWeb.RoomComponents do
             try {
               enabled = localStorage.getItem("foley:local-sounds") !== "off"
             } catch (_) {}
-            if (!enabled || this.isReducedMotion()) return
+            if (!enabled) return
             await this.playCommitTick()
           })
 
