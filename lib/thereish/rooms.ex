@@ -373,6 +373,29 @@ defmodule Thereish.Rooms do
   def decline_overrule(slug, seat_id), do: call(slug, {:decline_overrule, seat_id})
 
   @doc """
+  Spends one Seat's Nudge: a word it points at and may not write.
+
+  It is public the moment it lands and barred for the rest of the Page, so a
+  Nudge the Game refuses changes nothing at all.
+  """
+  @spec nudge(String.t(), String.t(), String.t()) :: :ok | {:error, term()}
+  def nudge(slug, seat_id, word), do: call(slug, {:nudge, seat_id, word})
+
+  @doc """
+  Records one Seat's Call — the band it names during the Beat, before the
+  number arrives. The window is the Beat; a Call after it is refused.
+  """
+  @spec call(String.t(), String.t(), String.t() | atom()) :: :ok | {:error, term()}
+  def call(slug, seat_id, band), do: call(slug, {:call, seat_id, band})
+
+  @doc """
+  Records one Seat's Reaction at a reveal. The latest replaces the earlier
+  ones, and nothing counts them.
+  """
+  @spec react(String.t(), String.t(), String.t() | atom()) :: :ok | {:error, term()}
+  def react(slug, seat_id, reaction), do: call(slug, {:react, seat_id, reaction})
+
+  @doc """
   Records one player fairness tap for the current reveal.
   """
   @spec record_fairness_tap(String.t(), String.t(), String.t() | atom()) ::

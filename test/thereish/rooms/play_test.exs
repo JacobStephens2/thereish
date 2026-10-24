@@ -331,6 +331,50 @@ defmodule Thereish.Rooms.PlayTest do
     end
   end
 
+  describe "the Nudge, the Call and the Reaction (#200)" do
+    test "a Nudge reaches the Game and asks the Room for nothing but a broadcast" do
+      {play, _page_ref, _giving} = written(new())
+
+      {play, nudged} = run(play, {:nudge, "mara", "beacon"})
+
+      assert nudged == [:broadcast]
+      assert [%{seat_id: "mara", word: "beacon", attempt: 1}] = view(play).nudges
+      assert view(play, "mara").your_nudges_left == 0
+    end
+
+    test "the Assayer is never told a Nudge" do
+      {play, _page_ref, _giving} = written(new())
+      {play, _nudged} = run(play, {:nudge, "mara", "beacon"})
+      {_play, bridged} = bridges(play, "cairn", "cairo")
+
+      assert {:ask_assayer, request} = find(bridged, :ask_assayer)
+      refute inspect(request) =~ "beacon"
+    end
+
+    test "a Call reaches the Game inside the Beat and is refused outside it" do
+      {play, _page_ref, _giving} = written(new())
+
+      assert Play.apply(play, {:call, "mara", :close}, @now) == {:error, :call_window_closed}
+
+      {play, _bridged} = bridges(play, "cairn", "cairo")
+      {play, called} = run(play, {:call, "mara", "almost"})
+
+      assert called == [:broadcast]
+      assert [%{seat_id: "mara", band: :almost}] = view(play).calls
+    end
+
+    test "a Reaction reaches the Game at the reveal" do
+      {play, _page_ref, _giving} = written(new())
+      {play, bridged} = bridges(play, "cairn", "cairo")
+      {play, _revealed} = assayed(play, bridged, 83, [])
+
+      {play, reacted} = run(play, {:react, "mara", "ooh"})
+
+      assert reacted == [:broadcast]
+      assert [%{seat_id: "mara", reaction: :ooh}] = view(play).reactions
+    end
+  end
+
   describe "the Page's Assignment" do
     test "from the Page's opening reaches its Entry at the close and its Bookends tap's write" do
       {play, _page_ref, _giving} = written(new())

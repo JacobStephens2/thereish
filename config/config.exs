@@ -40,6 +40,12 @@ config :thereish,
   # how long a converging arc stays funny, which makes it a setting the couch
   # moves rather than a number in the rules.
   attempts_per_page: 5,
+  # How many Nudges one Seat may spend on a Page. One is a guess about how much
+  # a channel between Seats may carry before the Bridges stop being written
+  # alone, which makes it the couch's number: zero is today's game, and two is
+  # a different one. An Arm takes it to zero for a Page
+  # (`Thereish.Game.set_nudges_per_page/2`).
+  nudges_per_page: 1,
   # The ladder a closeness is read on. All of it is configuration because all of
   # it is calibration — the boundaries move as the couple's fairness taps say
   # they should, and a Meld starts at the floor of the `meld` band.

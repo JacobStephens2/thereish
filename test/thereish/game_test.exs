@@ -2507,10 +2507,275 @@ defmodule Thereish.GameTest do
     end
   end
 
+  describe "the Nudge: one word spent, and barred for the Page (#200)" do
+    defp nudge(state, name, word) do
+      Game.apply(state, {:nudge_sent, %{seat_id: "seat-" <> name, word: word}})
+    end
+
+    defp nudges(view), do: Enum.map(view.nudges, &{&1.name, &1.word, &1.attempt})
+
+    test "a Nudge lands wearing its Seat's name and its Attempt, for everyone" do
+      {:ok, state, effects} = nudge(bridging(), "Mara", "beacon")
+
+      assert effects == []
+      assert nudges(Game.view(state, nil)) == [{"Mara", "beacon", 1}]
+      assert nudges(Game.view(state, "seat-Jacob")) == [{"Mara", "beacon", 1}]
+    end
+
+    test "a Nudge is refused once the Bookends are no longer being answered" do
+      {state, _effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "wharf"}])
+
+      assert {:error, :not_bridging} = nudge(state, "Mara", "beacon")
+    end
+
+    test "a Seat that has committed may not nudge its own just-written word" do
+      {:ok, state, []} = commit(bridging(), "Mara", "cairn")
+
+      assert {:error, :already_committed} = nudge(state, "Mara", "beacon")
+      assert {:ok, _state, []} = nudge(state, "Jacob", "beacon")
+    end
+
+    test "one Nudge a Page a Seat, and the other Seat still holds its own" do
+      {:ok, state, []} = nudge(bridging(), "Mara", "beacon")
+
+      assert {:error, :no_nudges_left} = nudge(state, "Mara", "signal")
+      assert {:ok, state, []} = nudge(state, "Jacob", "signal")
+      assert Game.view(state, "seat-Mara").your_nudges_left == 0
+      assert Game.view(state, "seat-Jacob").your_nudges_left == 0
+    end
+
+    test "a Nudge that echoes a Bookend or an earlier Bridge is refused and spends nothing" do
+      {state, _effects} = attempt(bridging(), [{"Mara", "cairn"}, {"Jacob", "wharf"}], 10)
+      state = again(state)
+
+      assert {:error, {:illegal_nudge, _why}} = nudge(state, "Mara", "harbour")
+      assert {:error, {:illegal_nudge, _why}} = nudge(state, "Mara", "cairn")
+      assert Game.view(state, "seat-Mara").nudges == []
+      assert Game.view(state, "seat-Mara").your_nudges_left == 1
+    end
+
+    test "a Nudge with nothing in it is refused" do
+      assert {:error, :nudge_required} = nudge(bridging(), "Mara", "   ")
+    end
+
+    test "a landed Nudge is unwritable as a Bridge, for the nudger too" do
+      {:ok, state, []} = nudge(bridging(), "Mara", "beacon")
+
+      assert "beacon" in Game.barred_words(state)
+      assert "beacon" in Game.view(state, "seat-Mara").barred_words
+
+      assert {:error, {:illegal_bridge, _why}} = commit(state, "Mara", "beacon")
+      assert {:error, {:illegal_bridge, _why}} = commit(state, "Jacob", "beacon")
+    end
+
+    test "a Nudge is never put in front of the Assayer" do
+      {:ok, state, []} = nudge(bridging(), "Mara", "beacon")
+      {_state, effects} = commit_all(state, [{"Mara", "cairn"}, {"Jacob", "wharf"}])
+
+      assert [{:assay, request}] = assays(effects)
+      refute inspect(request) =~ "beacon"
+    end
+
+    test "the next Page deals every Seat its Nudge again" do
+      {:ok, state, []} = nudge(bridging(), "Mara", "beacon")
+      {state, _effects} = attempt(state, [{"Mara", "cairn"}, {"Jacob", "cairn"}], 95)
+      {:ok, state, []} = Game.apply(state, {:next_page, %{seat_id: "seat-Mara"}})
+
+      assert Game.view(state, nil).nudges == []
+      assert Game.view(state, "seat-Mara").your_nudges_left == 1
+    end
+
+    test "a budget of nothing is today's game exactly" do
+      state = Game.set_nudges_per_page(bridging(), 0)
+
+      refute Game.view(state, "seat-Mara").may.nudge
+      assert Game.view(state, "seat-Mara").your_nudges_left == 0
+      assert {:error, :nudges_off} = nudge(state, "Mara", "beacon")
+      assert Game.barred_words(state) == ["lantern", "harbour"]
+      assert {:ok, _state, []} = commit(state, "Mara", "beacon")
+    end
+  end
+
+  describe "the Call: the band a Seat names in the Beat (#200)" do
+    defp call(state, name, band) do
+      Game.apply(state, {:call_made, %{seat_id: "seat-" <> name, band: band}})
+    end
+
+    defp calls(view), do: Enum.map(view.calls, &{&1.name, &1.band})
+
+    defp assaying(bridges \\ [{"Mara", "cairn"}, {"Jacob", "wharf"}]) do
+      commit_all(bridging(), bridges)
+    end
+
+    test "the callable bands are the Ladder's, less the same word twice" do
+      assert Game.callable_bands() == Ladder.band_names() -- [:deep_meld]
+      refute :deep_meld in Game.callable_bands()
+      assert Game.view(bridging(), nil).callable_bands == Game.callable_bands()
+    end
+
+    test "a Call before the Beat is refused, and the window is said out loud" do
+      refute Game.view(bridging(), "seat-Mara").calling?
+      assert {:error, :call_window_closed} = call(bridging(), "Mara", :close)
+
+      {state, _effects} = assaying()
+      assert Game.view(state, "seat-Mara").calling?
+    end
+
+    test "a Call in the Beat is public the moment it lands, and the latest wins" do
+      {state, _effects} = assaying()
+      {:ok, state, []} = call(state, "Mara", :close)
+
+      assert calls(Game.view(state, "seat-Jacob")) == [{"Mara", :close}]
+
+      {:ok, state, []} = call(state, "Mara", :almost)
+      {:ok, state, []} = call(state, "Jacob", "miss")
+
+      assert calls(Game.view(state, nil)) == [{"Mara", :almost}, {"Jacob", :miss}]
+    end
+
+    test "a band the Ladder has never heard of, and the one nobody calls, are refused" do
+      {state, _effects} = assaying()
+
+      assert {:error, :invalid_band} = call(state, "Mara", :deep_meld)
+      assert {:error, :invalid_band} = call(state, "Mara", :sideways)
+      assert {:error, :invalid_band} = call(state, "Mara", "")
+    end
+
+    test "a Call after the number has arrived is refused" do
+      {state, effects} = assaying()
+      state = grade(state, effects, 83)
+
+      assert {:error, :call_window_closed} = call(state, "Mara", :close)
+    end
+
+    test "the next Attempt starts with no Call on it" do
+      {state, effects} = assaying()
+      {:ok, state, []} = call(state, "Mara", :close)
+      state = state |> grade(effects, 10) |> again()
+
+      assert Game.view(state, nil).calls == []
+    end
+
+    test "the reveal says which Call landed and how far off the others were" do
+      {state, effects} = assaying()
+      {:ok, state, []} = call(state, "Mara", :almost)
+      {:ok, state, []} = call(state, "Jacob", :miss)
+      state = grade(state, effects, 83)
+
+      assert [mara, jacob] = Game.view(state, nil).reveal.calls
+      assert {mara.band, mara.right?, mara.bands_off} == {:almost, true, 0}
+      assert {jacob.band, jacob.right?, jacob.bands_off} == {:miss, false, 3}
+    end
+
+    test "an Attempt the Assayer could not grade settles no Call either way" do
+      {state, _effects} = assaying()
+      {:ok, state, []} = call(state, "Mara", :almost)
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
+
+      assert [mara] = Game.view(state, nil).reveal.calls
+      refute mara.right?
+      assert mara.bands_off == nil
+    end
+
+    test "the reveal names how far short of a Meld the Attempt landed" do
+      assert Ladder.meld_threshold() == 90
+
+      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "wharf"}], 83), nil).reveal.gap == 7
+
+      assert Game.view(revealed([{"Mara", "cairn"}, {"Jacob", "cairn"}], 95), nil).reveal.gap ==
+               nil
+
+      {state, _effects} = assaying()
+      {:ok, state, []} = Game.apply(state, {:verdict_unavailable, %{}})
+
+      assert Game.view(state, nil).reveal.gap == nil
+    end
+  end
+
+  describe "the Reaction: the noise at the punchline (#200)" do
+    defp react(state, name, reaction) do
+      Game.apply(state, {:reacted, %{seat_id: "seat-" <> name, reaction: reaction}})
+    end
+
+    defp reactions(view), do: Enum.map(view.reactions, &{&1.name, &1.reaction})
+
+    test "the four words are a closed vocabulary" do
+      assert Game.reactions() == [:ooh, :how, :no_way, :yes]
+    end
+
+    test "a Reaction before the reveal is refused" do
+      assert {:error, :not_revealed} = react(bridging(), "Mara", :ooh)
+
+      {state, _effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "wharf"}])
+      assert {:error, :not_revealed} = react(state, "Mara", :ooh)
+    end
+
+    test "a Reaction lands at a reveal and at a close, and the latest wins" do
+      state = revealed([{"Mara", "cairn"}, {"Jacob", "wharf"}], 83)
+      {:ok, state, []} = react(state, "Mara", :ooh)
+
+      assert reactions(Game.view(state, "seat-Jacob")) == [{"Mara", :ooh}]
+
+      {:ok, state, []} = react(state, "Mara", "no_way")
+      {:ok, state, []} = react(state, "Jacob", :yes)
+
+      assert reactions(Game.view(state, nil)) == [{"Mara", :no_way}, {"Jacob", :yes}]
+
+      closed = revealed([{"Mara", "cairn"}, {"Jacob", "cairn"}], 95)
+      assert Game.view(closed, nil).phase == :closed
+      assert {:ok, _state, []} = react(closed, "Mara", :how)
+    end
+
+    test "a word that is not one of the four is refused" do
+      state = revealed([{"Mara", "cairn"}, {"Jacob", "wharf"}], 83)
+
+      assert {:error, :invalid_reaction} = react(state, "Mara", :applause)
+      assert {:error, :invalid_reaction} = react(state, "Mara", "LOL")
+    end
+
+    test "the next Attempt starts with no Reaction on it" do
+      {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "wharf"}])
+      state = grade(state, effects, 10)
+      {:ok, state, []} = react(state, "Mara", :ooh)
+
+      assert Game.view(again(state), nil).reactions == []
+    end
+  end
+
+  describe "the book keeps the Nudges, the Calls and the Reactions (#200)" do
+    test "each Attempt's entry carries its own and nothing from another" do
+      {:ok, state, []} = nudge(bridging(), "Mara", "beacon")
+      {state, effects} = commit_all(state, [{"Mara", "cairn"}, {"Jacob", "wharf"}])
+      {:ok, state, []} = call(state, "Mara", :miss)
+      {state, _effects} = graded(state, effects, 10, nil)
+      {:ok, state, []} = react(state, "Mara", :ooh)
+
+      state = again(state)
+      {:ok, state, []} = nudge(state, "Jacob", "signal")
+      {state, effects} = commit_all(state, [{"Mara", "torch"}, {"Jacob", "torch"}])
+      {:ok, state, []} = call(state, "Jacob", :meld)
+      {_state, effects} = graded(state, effects, 95, nil)
+
+      assert [{:chronicle, entry}] = chronicles(effects)
+      assert [first, second] = entry.attempts
+
+      assert first.nudges == [%{seat_id: "seat-Mara", word: "beacon"}]
+      assert first.calls == [%{seat_id: "seat-Mara", band: :miss}]
+      assert first.reactions == [%{seat_id: "seat-Mara", reaction: :ooh}]
+
+      assert second.nudges == [%{seat_id: "seat-Jacob", word: "signal"}]
+      assert second.calls == [%{seat_id: "seat-Jacob", band: :meld}]
+      assert second.reactions == []
+    end
+  end
+
   describe "what each viewer may do (#199)" do
     @actions [
       :give,
       :bridge,
+      :nudge,
+      :call,
+      :react,
       :propose_overrule,
       :vote_overrule,
       :tap_fairness,
@@ -2600,6 +2865,13 @@ defmodule Thereish.GameTest do
     defp valid_events(:bridge, seat_id),
       do: [{:bridge_committed, %{seat_id: seat_id, bridge: "quill"}}]
 
+    defp valid_events(:nudge, seat_id),
+      do: [{:nudge_sent, %{seat_id: seat_id, word: "starlight"}}]
+
+    defp valid_events(:call, seat_id), do: [{:call_made, %{seat_id: seat_id, band: :close}}]
+
+    defp valid_events(:react, seat_id), do: [{:reacted, %{seat_id: seat_id, reaction: :ooh}}]
+
     defp valid_events(:propose_overrule, seat_id),
       do: [{:overrule_proposed, %{seat_id: seat_id}}]
 
@@ -2639,22 +2911,27 @@ defmodule Thereish.GameTest do
       assert allowed(states.both_gave, "seat-Mara") == [:start_page]
       assert allowed(states.writing, "seat-Mara") == [:reset_gives]
       assert allowed(states.failed, "seat-Jacob") == [:retry_author, :reset_gives]
-      assert allowed(states.bridging, "seat-Mara") == [:bridge]
+      assert allowed(states.bridging, "seat-Mara") == [:bridge, :nudge]
       assert allowed(states.one_bridge, "seat-Mara") == []
-      assert allowed(states.one_bridge, "seat-Jacob") == [:bridge]
-      assert allowed(states.assaying, "seat-Mara") == []
+      assert allowed(states.one_bridge, "seat-Jacob") == [:bridge, :nudge]
+      assert allowed(states.assaying, "seat-Mara") == [:call]
 
       assert allowed(states.reveal, "seat-Mara") ==
-               [:propose_overrule, :tap_fairness, :advance]
+               [:react, :propose_overrule, :tap_fairness, :advance]
 
-      assert allowed(states.ungraded, "seat-Mara") == [:propose_overrule, :advance]
-      assert allowed(states.proposed, "seat-Mara") == [:vote_overrule, :tap_fairness, :advance]
-      assert allowed(states.proposed, "seat-Jacob") == [:vote_overrule, :tap_fairness, :advance]
-      assert allowed(states.overruled, "seat-Mara") == [:tap_fairness, :advance]
-      assert allowed(states.second_attempt, "seat-Mara") == [:bridge]
+      assert allowed(states.ungraded, "seat-Mara") == [:react, :propose_overrule, :advance]
+
+      assert allowed(states.proposed, "seat-Mara") ==
+               [:react, :vote_overrule, :tap_fairness, :advance]
+
+      assert allowed(states.proposed, "seat-Jacob") ==
+               [:react, :vote_overrule, :tap_fairness, :advance]
+
+      assert allowed(states.overruled, "seat-Mara") == [:react, :tap_fairness, :advance]
+      assert allowed(states.second_attempt, "seat-Mara") == [:bridge, :nudge]
 
       assert allowed(states.closed, "seat-Mara") ==
-               [:propose_overrule, :tap_fairness, :tap_bookends, :next_page]
+               [:react, :propose_overrule, :tap_fairness, :tap_bookends, :next_page]
     end
 
     test "Start Page waits for the viewer's own Give and one more" do

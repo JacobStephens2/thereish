@@ -119,6 +119,9 @@ defmodule Thereish.Rooms.Play do
           | {:retry_author, seat_id()}
           | {:reset_gives, seat_id()}
           | {:commit_bridge, seat_id(), String.t()}
+          | {:nudge, seat_id(), String.t()}
+          | {:call, seat_id(), atom()}
+          | {:react, seat_id(), atom()}
           | {:next_attempt, seat_id()}
           | {:next_page, seat_id(), [Repertoire.member()]}
           | {:propose_overrule, seat_id(), keyword() | map()}
@@ -226,6 +229,15 @@ defmodule Thereish.Rooms.Play do
 
   def apply(%__MODULE__{} = play, {:commit_bridge, seat_id, bridge}, now),
     do: move(play, {:bridge_committed, %{seat_id: seat_id, bridge: bridge}}, now)
+
+  def apply(%__MODULE__{} = play, {:nudge, seat_id, word}, now),
+    do: move(play, {:nudge_sent, %{seat_id: seat_id, word: word}}, now)
+
+  def apply(%__MODULE__{} = play, {:call, seat_id, band}, now),
+    do: move(play, {:call_made, %{seat_id: seat_id, band: band}}, now)
+
+  def apply(%__MODULE__{} = play, {:react, seat_id, reaction}, now),
+    do: move(play, {:reacted, %{seat_id: seat_id, reaction: reaction}}, now)
 
   def apply(%__MODULE__{} = play, {:propose_overrule, seat_id, opts}, now),
     do: move(play, {:overrule_proposed, opts |> Map.new() |> Map.put(:seat_id, seat_id)}, now)
