@@ -75,7 +75,10 @@ defmodule Thereish.ChronicleTest do
 
       assert [page] = chronicled(ctx.slug)
       assert page.author_meta["model"] == "fake-author"
-      assert %Document{bookends: ["lantern", "harbour"], full_table: true} = page.document
+
+      assert %Document{bookends: ["lantern", "harbour", "summit", "ember"], full_table: true} =
+               page.document
+
       assert page.closed_because == "meld"
       assert page.melded == true
       assert page.closeness == 91
@@ -132,8 +135,10 @@ defmodule Thereish.ChronicleTest do
 
       # The carry-forward is legible from the rows alone: each attempt hangs
       # between the two Bridges that missed on the one before it.
+      # The opening Attempt is the Author's four — two Gives, two Bookends each —
+      # and every Attempt after a miss is the Bridges it carried forward.
       assert Enum.map(page.attempts, & &1.bookends) == [
-               ["lantern", "harbour"],
+               ["lantern", "harbour", "summit", "ember"],
                ["cairn", "beacon"],
                ["wharf", "gantry"]
              ]
@@ -466,7 +471,7 @@ defmodule Thereish.ChronicleTest do
       assert latest_page.id != first_page.id
 
       # First page in history (which is second in reverse order)
-      assert first_page.bookends == ["lantern", "harbour"]
+      assert first_page.bookends == ["lantern", "harbour", "summit", "ember"]
       assert first_page.melded == true
       [first_attempt] = first_page.attempts
       assert Enum.map(first_attempt.bridges, & &1.seat_name) == ["Mara", "Jacob"]
@@ -541,7 +546,7 @@ defmodule Thereish.ChronicleTest do
       assert length(parsed_evening) == 2
 
       [roundtrip_p1, roundtrip_p2] = parsed_evening
-      assert roundtrip_p1.bookends == ["lantern", "harbour"]
+      assert roundtrip_p1.bookends == ["lantern", "harbour", "summit", "ember"]
       assert roundtrip_p1.melded == true
       [a1] = roundtrip_p1.attempts
       assert a1.bridges == [{"Mara", "cairn"}, {"Jacob", "cairn"}]
@@ -1063,11 +1068,15 @@ defmodule Thereish.ChronicleTest do
       assert v.furthest == verdict.furthest
       assert view.full_table == true
 
+      # Four Gives at a Full table ask for six Bookends — two each, up to the
+      # ceiling — so the settings are walked round until every Bookend has one.
       assert Enum.map(view.bookend_origins, & &1.give) == [
                "setting one",
                "setting two",
                "setting three",
-               "setting four"
+               "setting four",
+               "setting one",
+               "setting two"
              ]
 
       # Markdown export renders every Bridge, the one Verdict, and the carried words

@@ -21,6 +21,10 @@ defmodule ThereishWeb.RoomLiveTest do
     view |> form("[data-role=bridge-form]", %{"bridge" => bridge}) |> render_submit()
   end
 
+  defp nudge(view, word) do
+    view |> form("[data-role=nudge-form]", %{"nudge" => word}) |> render_submit()
+  end
+
   defp give_setting(view, give) do
     view |> form("[data-role=setting-form]", %{"give" => give}) |> render_submit()
   end
@@ -1186,8 +1190,15 @@ defmodule ThereishWeb.RoomLiveTest do
       commit(ctx.mara, "cairn")
       commit(ctx.jacob, "cairo")
 
+      # The Stage holds the breath; the phones spend it on the Call (T4), which
+      # is the beat being a thing to do rather than a thing to watch.
+      assert has_element?(stage, "[data-role=beat-meter]")
+
+      for view <- [ctx.mara, ctx.jacob] do
+        assert has_element?(view, "[data-role=call-bands]")
+      end
+
       for view <- [ctx.mara, ctx.jacob, stage] do
-        assert has_element?(view, "[data-role=beat-meter]")
         refute render(view) =~ "loading-spinner"
         refute render(view) =~ "spinner"
       end
@@ -1206,7 +1217,9 @@ defmodule ThereishWeb.RoomLiveTest do
         assert has_element?(view, "[data-role=comparison]")
         assert has_element?(view, "[data-role=closeness]", "91")
         assert has_element?(view, "[data-role=band]", "meld")
-        assert html =~ "ClimbNumber"
+        assert html =~ "RevealSequence"
+        assert has_element?(view, "[data-role=ladder-rail]")
+        assert has_element?(view, "[data-role=meld-line]")
         refute has_element?(view, "[data-role=reasoning]")
         refute html =~ "reasoning"
         assert has_element?(view, "[data-role=quip]")
@@ -1965,7 +1978,8 @@ defmodule ThereishWeb.RoomLiveTest do
       for phone <- [mara, jacob] do
         assert has_element?(phone, "[data-role=reveal][data-mode=quiet]")
         assert has_element?(phone, "[data-role=comparison]")
-        assert has_element?(phone, "[data-role=fairness-controls]")
+        assert has_element?(phone, "[data-role=reactions]")
+        refute has_element?(phone, "[data-role=fairness-controls]")
         assert has_element?(phone, "[data-role=propose-overrule]")
         assert has_element?(phone, "[data-role=again]")
         refute has_element?(phone, "[data-role=closeness]")
@@ -2019,7 +2033,8 @@ defmodule ThereishWeb.RoomLiveTest do
 
       refute has_element?(mara, "[data-role=band]")
       refute has_element?(mara, "[data-role=quip]")
-      assert has_element?(mara, "[data-role=fairness-controls]")
+      assert has_element?(mara, "[data-role=reactions]")
+      refute has_element?(mara, "[data-role=fairness-controls]")
 
       # Stage exits
       Process.flag(:trap_exit, true)
@@ -2278,7 +2293,8 @@ defmodule ThereishWeb.RoomLiveTest do
       for phone <- phones do
         assert has_element?(phone, "[data-role=reveal][data-mode=quiet]")
         assert has_element?(phone, "[data-role=comparison]")
-        assert has_element?(phone, "[data-role=fairness-controls]")
+        assert has_element?(phone, "[data-role=reactions]")
+        refute has_element?(phone, "[data-role=fairness-controls]")
         assert has_element?(phone, "[data-role=propose-overrule]")
         assert has_element?(phone, "[data-role=again]")
         refute has_element?(phone, "[data-role=closeness]")
@@ -4011,14 +4027,14 @@ defmodule ThereishWeb.RoomLiveTest do
         await_reveal_on(phone)
       end
 
-      # Late seat (phone4) does NOT see propose overrule or fairness controls or again
+      # Late seat (phone4) does NOT see propose overrule or the Reactions or again
       refute has_element?(phone4, "[data-role=propose-overrule]")
-      refute has_element?(phone4, "[data-role=fairness-controls]")
+      refute has_element?(phone4, "[data-role=reactions]")
       refute has_element?(phone4, "[data-role=again]")
 
-      # Participating seat sees overrule button and fairness controls and again
+      # Participating seat sees overrule button and the Reactions and again
       assert has_element?(phone1, "[data-role=propose-overrule]")
-      assert has_element?(phone1, "[data-role=fairness-controls]")
+      assert has_element?(phone1, "[data-role=reactions]")
       assert has_element?(phone1, "[data-role=again]")
 
       # Propose overrule: Phone 1 proposes
@@ -4548,6 +4564,374 @@ defmodule ThereishWeb.RoomLiveTest do
       end
 
       refute has_element?(stage, "[data-role=pair]")
+    end
+  end
+
+  describe "the phone's Nudge (T4)" do
+    setup do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      %{slug: slug, mara: mara, bram: bram}
+    end
+
+    test "a Seat spends its one word and both phones wear the chip", ctx do
+      assert has_element?(ctx.mara, "[data-role=nudge-form]")
+      assert render(ctx.mara) =~ "Nobody may write it"
+      assert has_element?(ctx.mara, "[data-role=nudge-cost]", "1 left on this Page")
+
+      nudge(ctx.mara, "rope")
+
+      for view <- [ctx.mara, ctx.bram] do
+        eventually(fn -> has_element?(view, "[data-role=nudge-chip]", "rope") end)
+        assert has_element?(view, "[data-role=nudge-spent]", "Spent")
+      end
+
+      # The chip renders between the Bookends and the Bridge form, where the
+      # word it bars can be read before anything is typed.
+      assert_order(rendered_room(ctx.bram), [
+        ~s(data-role="bookends"),
+        ~s(data-role="nudges"),
+        ~s(data-role="bridge-form")
+      ])
+    end
+
+    test "the budget is one: the form goes, and a stale tap is told why", ctx do
+      nudge(ctx.mara, "rope")
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=nudge-chip]", "rope") end)
+      refute has_element?(ctx.mara, "[data-role=nudge-form]")
+      assert has_element?(ctx.bram, "[data-role=nudge-form]")
+
+      # A phone whose form was still on screen when the thumb landed: the tap
+      # reaches the Room and the Room says what the budget is.
+      render_submit(ctx.mara, "send_nudge", %{"nudge" => "cable"})
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=nudge-error]",
+               "You have spent your nudge on this Page."
+             )
+
+      refute has_element?(ctx.mara, "[data-role=nudge-chip]", "cable")
+    end
+
+    test "a nudged word is barred for everyone, live and at commit", ctx do
+      nudge(ctx.bram, "rope")
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=nudge-chip]", "rope") end)
+
+      ctx.mara
+      |> form("[data-role=bridge-form]", %{"bridge" => "rope"})
+      |> render_change()
+
+      assert has_element?(ctx.mara, "[data-role=bridge-error]", "Bram nudged")
+
+      commit(ctx.mara, "rope")
+
+      assert has_element?(ctx.mara, "[data-role=bridge-error]")
+      assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
+    end
+
+    test "a Seat that has committed may no longer nudge", ctx do
+      commit(ctx.mara, "cairn")
+
+      refute has_element?(ctx.mara, "[data-role=nudge-form]")
+      assert has_element?(ctx.bram, "[data-role=nudge-form]")
+    end
+
+    test "a Seat that has committed may Call while the others write, and only it sees the Call",
+         ctx do
+      commit(ctx.mara, "cairn")
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost]")
+      refute has_element?(ctx.bram, "[data-role=call-band]")
+
+      ctx.mara |> element("[data-role=call-band][data-band=almost]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost][data-called=true]")
+      refute has_element?(ctx.bram, "[data-role=called]")
+    end
+  end
+
+  describe "the phone's Call (T4)" do
+    setup do
+      # The Beat is the Call window, and a suite's beat is five milliseconds:
+      # a test that taps a band needs the window a couch gets.
+      beat(1_000)
+
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      %{slug: slug, mara: mara, bram: bram}
+    end
+
+    test "one fat button per callable band, and never deep meld", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.bram, "cairo")
+
+      assert has_element?(ctx.mara, "[data-role=call-bands]")
+      assert has_element?(ctx.mara, "[data-role=call-caption]", "Call it.")
+
+      for band <- Thereish.Game.callable_bands() do
+        assert has_element?(ctx.mara, "[data-role=call-band][data-band=#{band}]")
+      end
+
+      refute has_element?(ctx.mara, "[data-role=call-band][data-band=deep_meld]")
+      refute render(ctx.mara) =~ "data-role=\"beat-meter\""
+
+      await_reveal_on(ctx.mara)
+      refute has_element?(ctx.mara, "[data-role=call-band]")
+    end
+
+    test "a tap is selected on the caller's phone and public on the other", ctx do
+      commit(ctx.mara, "cairn")
+      commit(ctx.bram, "cairo")
+
+      ctx.mara |> element("[data-role=call-band][data-band=almost]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost][data-called=true]")
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=meld][data-called=false]")
+
+      eventually(fn -> has_element?(ctx.bram, "[data-role=call-row]") end)
+      assert has_element?(ctx.bram, "[data-role=called]", "Mara called")
+      assert has_element?(ctx.bram, "[data-role=called][data-band=almost]")
+
+      # The latest Call wins: the Seat changes its mind and has one pin, not two.
+      ctx.mara |> element("[data-role=call-band][data-band=meld]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=meld][data-called=true]")
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost][data-called=false]")
+      eventually(fn -> has_element?(ctx.bram, "[data-role=called][data-band=meld]") end)
+      refute has_element?(ctx.bram, "[data-role=called][data-band=almost]")
+    end
+  end
+
+  describe "the quiet phone gets the Rail (T4)" do
+    test "with a Stage present the phone holds the Rail and says to look up", _ctx do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      commit(mara, "cairn")
+      commit(bram, "cairo")
+
+      await_reveal_on(stage)
+      await_reveal_on(mara)
+
+      assert has_element?(mara, "[data-role=reveal][data-mode=quiet]")
+      assert has_element?(mara, "[data-role=ladder-rail]")
+      assert has_element?(mara, "[data-role=rail-marker]")
+      assert has_element?(mara, "[data-role=look-up]", "Look up.")
+
+      refute has_element?(mara, "[data-role=quip]")
+      refute has_element?(mara, "[data-role=closeness]")
+      refute has_element?(stage, "[data-role=look-up]")
+    end
+  end
+
+  describe "the noise at the punchline (T5)" do
+    setup do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      commit(mara, "cairn")
+      commit(bram, "cairo")
+
+      await_reveal_on(mara)
+      await_reveal_on(bram)
+      await_reveal_on(stage)
+
+      %{slug: slug, mara: mara, bram: bram, stage: stage}
+    end
+
+    test "four words on the phone, the latest one wins, and nothing is counted", ctx do
+      for reaction <- Thereish.Game.reactions() do
+        assert has_element?(ctx.mara, "[data-role=reaction][data-reaction=#{reaction}]")
+      end
+
+      ctx.mara |> element("[data-role=reaction][data-reaction=ooh]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=reaction][data-reaction=ooh][data-chosen=true]")
+      assert has_element?(ctx.mara, "[data-role=reaction][data-reaction=yes][data-chosen=false]")
+
+      # Bram shouted nothing, so nothing of his is chosen, and the Stage reads
+      # who shouted what — never how many did.
+      refute has_element?(ctx.bram, "[data-role=reaction][data-chosen=true]")
+      eventually(fn -> has_element?(ctx.stage, "#juice-container[data-reactions]") end)
+      assert render(ctx.stage) =~ ":ooh"
+
+      ctx.mara |> element("[data-role=reaction][data-reaction=no_way]") |> render_click()
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=reaction][data-reaction=no_way][data-chosen=true]"
+             )
+
+      refute has_element?(ctx.mara, "[data-role=reaction][data-reaction=ooh][data-chosen=true]")
+    end
+
+    test "the Stage performs the words when there is one, and the phones do when there is not",
+         ctx do
+      assert has_element?(ctx.mara, "[data-role=reveal][data-mode=quiet]")
+      assert has_element?(ctx.stage, "#juice-container[data-floats=true]")
+      refute has_element?(ctx.mara, "#juice-container[data-floats=true]")
+
+      # A Room of four phones and no stage is still a Room, and it has no Masks
+      # for a word to lift off, so there the phone performs the Reactions as
+      # well as feeling them.
+      slug = open_room()
+      {:ok, esme, _} = live(phone(slug))
+      {:ok, cole, _} = live(phone(slug))
+
+      join(esme, "Esme")
+      join(cole, "Cole")
+      play_to_bridging(esme, cole, slug)
+
+      commit(esme, "cairn")
+      commit(cole, "cairo")
+      await_reveal_on(esme)
+
+      assert has_element?(esme, "#juice-container[data-floats=true]")
+    end
+
+    test "the survey about the grader has left the punchline for the closing card", ctx do
+      refute has_element?(ctx.mara, "[data-role=fairness-controls]")
+      refute has_element?(ctx.mara, "[data-role=notes]")
+      refute has_element?(ctx.stage, "[data-role=reactions]")
+
+      # Spend the Page out so it closes, then the taps are there to be made.
+      spend_the_page(ctx.mara, ctx.bram)
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=ending]") end)
+      assert has_element?(ctx.mara, "[data-role=notes]", "Notes")
+      assert has_element?(ctx.mara, "[data-role=fairness-controls]")
+      assert has_element?(ctx.mara, "[data-role=bookends-controls]")
+      refute has_element?(ctx.stage, "[data-role=notes]")
+
+      ctx.mara |> element("[data-role=tap-fair]") |> render_click()
+      assert has_element?(ctx.mara, "[data-role=seat-tap]", "fair")
+    end
+  end
+
+  # Misses its way to the end of the Page, so the closing card is on screen. A
+  # pair of words per Attempt, each far from every word the Page has spent,
+  # because a Bridge that echoes a Bookend's root is refused.
+  @spent_words [
+    {"ferry", "granite"},
+    {"oboe", "plume"},
+    {"zebra", "trombone"},
+    {"mango", "velvet"}
+  ]
+
+  defp spend_the_page(mara, bram) do
+    for {a, b} <- Enum.take(@spent_words, Thereish.Game.attempt_cap() - 1) do
+      mara |> element("[data-role=again]") |> render_click()
+      eventually(fn -> has_element?(mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(bram, "[data-role=bridge-form]") end)
+
+      commit(mara, a)
+      commit(bram, b)
+
+      await_reveal_on(mara)
+      await_reveal_on(bram)
+    end
+  end
+
+  describe "the Split reading on the phone (T6)" do
+    # The Fake's third dial: the reverse ordering grades forty higher, so the
+    # Steward reconciles a Verdict the Assayer plainly disagrees with itself
+    # about — which is the only reveal this screen is for.
+    defp fake_spread(spread) do
+      steward = Application.fetch_env!(:thereish, :steward)
+      on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+
+      Application.put_env(
+        :thereish,
+        :steward,
+        Keyword.update!(steward, :fake, &Keyword.put(&1, :spread, spread))
+      )
+    end
+
+    setup do
+      fake_spread(40)
+
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      # No shared prefix: the forward ordering grades nothing, the reverse forty.
+      commit(mara, "cairn")
+      commit(bram, "beacon")
+
+      await_reveal_on(mara)
+      await_reveal_on(bram)
+
+      %{slug: slug, mara: mara, bram: bram}
+    end
+
+    test "the two readings are drawn and written, and the generous one is one tap", ctx do
+      assert has_element?(ctx.mara, "[data-role=split-reading]")
+      assert has_element?(ctx.mara, "[data-role=split-headline]", "graded this twice")
+      assert has_element?(ctx.mara, "[data-role=rail-mark]")
+      assert has_element?(ctx.mara, "[data-role=propose-split-overrule]", "40")
+
+      ctx.mara |> element("[data-role=propose-split-overrule]") |> render_click()
+
+      # The same proposal as any other, at the number the table was shown, and
+      # every Seat still has to agree to it.
+      assert has_element?(ctx.bram, "[data-role=overrule-pending]", "to 40")
+      assert has_element?(ctx.bram, "[data-role=agree-overrule]")
+      assert Rooms.snapshot(ctx.slug, nil).reveal.closeness == 20
+
+      ctx.bram |> element("[data-role=agree-overrule]") |> render_click()
+
+      assert Rooms.snapshot(ctx.slug, nil).reveal.closeness == 40
+    end
+
+    test "a declined proposal says who declined instead of disappearing", ctx do
+      ctx.mara |> element("[data-role=propose-split-overrule]") |> render_click()
+      ctx.bram |> element("[data-role=decline-overrule]") |> render_click()
+
+      for phone <- [ctx.mara, ctx.bram] do
+        assert has_element?(phone, "[data-role=overrule-declined]", "Bram")
+        refute has_element?(phone, "[data-role=overrule-banner]")
+      end
+    end
+
+    test "a Room that turned Split readings off is shown none of it", ctx do
+      :ok = Rooms.set_split_readings(ctx.slug, false)
+
+      eventually(fn -> not has_element?(ctx.mara, "[data-role=split-reading]") end)
+
+      refute has_element?(ctx.mara, "[data-role=rail-mark]")
+      refute has_element?(ctx.mara, "[data-role=propose-split-overrule]")
+      assert has_element?(ctx.mara, "[data-role=propose-overrule]")
     end
   end
 end

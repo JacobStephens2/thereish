@@ -293,6 +293,32 @@ defmodule Thereish.Steward.FakeTest do
       assert eight.bookends == Enum.uniq(eight.bookends)
     end
 
+    test "the fake Author answers N Bookends for any N, from however few Gives" do
+      two_gives = [
+        %{name: "Mara", text: "setting Mara"},
+        %{name: "Bram", text: "setting Bram"}
+      ]
+
+      # Bookends per Give: four words from two settings, and every setting named
+      # twice over in `from`, which is what the Author's own gate asks for.
+      assert {:ok, four} = Fake.author(%{gives: two_gives, count: 4})
+      assert length(four.bookends) == 4
+      assert four.bookends == Enum.uniq(four.bookends)
+      assert four.from == ["Mara", "Bram", "Mara", "Bram"]
+      assert :ok = Thereish.Steward.Author.check(json(four), two_gives, 4)
+
+      # Past the pool it keeps going and keeps every word distinct.
+      assert {:ok, wide} = Fake.author(%{gives: two_gives, count: 11})
+      assert length(wide.bookends) == 11
+      assert wide.bookends == Enum.uniq(wide.bookends)
+      assert length(wide.from) == 11
+    end
+
+    # The fake's answer as the gate reads it: string keys, as JSON.
+    defp json(result) do
+      %{"bookends" => result.bookends, "from" => result.from, "why" => result.why}
+    end
+
     test "the fake Author still honours a configured pair" do
       fake(author_bookends: ["cactus", "dune"])
 

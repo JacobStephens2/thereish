@@ -9,6 +9,7 @@ defmodule Thereish.Foley.CuesTest do
 
   alias Thereish.Experiments.Assignment
   alias Thereish.Foley.Cues
+  alias Thereish.Foley.Haptics
   alias Thereish.Rooms.Play
   alias Thereish.Rooms.Room
 
@@ -59,7 +60,8 @@ defmodule Thereish.Foley.CuesTest do
 
   defp find(effects, tag), do: Enum.find(effects, &(is_tuple(&1) and elem(&1, 0) == tag))
 
-  defp view(play), do: Play.view(play, nil, @speaker, %{now: @now, has_chronicle?: false})
+  defp view(play, viewer \\ nil),
+    do: Play.view(play, viewer, @speaker, %{now: @now, has_chronicle?: false})
 
   defp claimed, do: claim(new())
 
@@ -116,6 +118,13 @@ defmodule Thereish.Foley.CuesTest do
     %{path: path, title: title, kind: kind} = view.playing
     {:page, path, title, kind}
   end
+
+  # The cues a screen plays out loud. A phone feels the same moments as well as
+  # hearing them, and which of them it feels is "the buzz" below; these
+  # describes are about the sound, so they read the sound alone.
+  defp sounds(cues), do: Enum.reject(cues, &match?({:haptic, _}, &1))
+
+  defp buzzes(cues), do: for({:haptic, pattern} <- cues, do: pattern)
 
   describe "a screen's first render" do
     test "the Speaker hears the Page's music" do
@@ -204,7 +213,7 @@ defmodule Thereish.Foley.CuesTest do
       {committed, _} = commit(play, "mara", "cairn")
 
       assert Cues.between(view(play), view(committed), :stage) == [:commit]
-      assert Cues.between(view(play), view(committed), :phone) == []
+      assert sounds(Cues.between(view(play), view(committed), :phone)) == []
     end
 
     test "plays on a Stage that does not hold the Speaker" do
@@ -221,7 +230,7 @@ defmodule Thereish.Foley.CuesTest do
 
       assert view(assaying).phase == :assaying
       assert Cues.between(view(play), view(assaying), :stage) == [:commit, :beat]
-      assert Cues.between(view(play), view(assaying), :phone) == [:beat]
+      assert sounds(Cues.between(view(play), view(assaying), :phone)) == [:beat]
     end
 
     test "does not play when nothing was committed" do
@@ -256,7 +265,7 @@ defmodule Thereish.Foley.CuesTest do
       revealed = assayed(play, token, verdict(10))
 
       assert view(revealed).phase == :reveal
-      assert Cues.between(view(play), view(revealed), :phone) == [{:sting, :miss}]
+      assert sounds(Cues.between(view(play), view(revealed), :phone)) == [{:sting, :miss}]
     end
 
     test "a Verdict with no band stings as a miss" do
@@ -265,7 +274,7 @@ defmodule Thereish.Foley.CuesTest do
       revealed = assayed(play, token, {:verdict_unavailable, %{meta: %{}}})
 
       assert view(revealed).reveal.band == nil
-      assert Cues.between(view(play), view(revealed), :phone) == [{:sting, :miss}]
+      assert sounds(Cues.between(view(play), view(revealed), :phone)) == [{:sting, :miss}]
     end
 
     test "the next Attempt stops the last Attempt's Voice clip" do
@@ -284,7 +293,7 @@ defmodule Thereish.Foley.CuesTest do
       {play, token} = bridged(play)
       closed = assayed(play, token, verdict(95))
 
-      assert Cues.between(view(play), view(closed), :phone) == [
+      assert sounds(Cues.between(view(play), view(closed), :phone)) == [
                {:sting, :meld},
                {:ending, :meld}
              ]
@@ -295,7 +304,7 @@ defmodule Thereish.Foley.CuesTest do
       {play, token} = bridged(play)
       closed = assayed(play, token, verdict(100))
 
-      assert Cues.between(view(play), view(closed), :phone) == [
+      assert sounds(Cues.between(view(play), view(closed), :phone)) == [
                {:sting, :deep_meld},
                {:ending, :deep_meld}
              ]
@@ -307,7 +316,7 @@ defmodule Thereish.Foley.CuesTest do
 
       assert view(closed).phase == :closed
 
-      assert Cues.between(view(last), view(closed), :phone) == [
+      assert sounds(Cues.between(view(last), view(closed), :phone)) == [
                {:sting, :miss},
                {:ending, :unmelded}
              ]
@@ -327,7 +336,7 @@ defmodule Thereish.Foley.CuesTest do
       {play, token} = bridged(play)
       closed = assayed(play, token, verdict(95))
 
-      assert Cues.between(view(play), view(closed), :phone) == []
+      assert sounds(Cues.between(view(play), view(closed), :phone)) == []
     end
   end
 
@@ -355,7 +364,7 @@ defmodule Thereish.Foley.CuesTest do
       {lost, _} = run(play, {:room_fact, {:claim_speaker, "phone-token"}})
       closed = assayed(lost, token, verdict(95))
 
-      assert Cues.between(view(play), view(closed), :phone) == [:stop]
+      assert sounds(Cues.between(view(play), view(closed), :phone)) == [:stop]
     end
 
     test "a device that claims it hears the Page's music" do
@@ -373,6 +382,120 @@ defmodule Thereish.Foley.CuesTest do
                page(new),
                {:prologue, new.prologue.reading}
              ]
+    end
+  end
+
+  describe "the buzz" do
+    test "another Seat committing reaches the hand, and your own does not" do
+      {play, _} = written(claimed())
+      {committed, _} = commit(play, "jacob", "cairn")
+
+      assert buzzes(Cues.between(view(play), view(committed), :phone)) ==
+               [Haptics.pattern(:other_commit)]
+
+      # Jacob's own phone is told by the push the commit itself makes, so the
+      # diff must not tell it a second time.
+      assert buzzes(Cues.between(view(play, "jacob"), view(committed, "jacob"), :phone)) == []
+
+      assert buzzes(Cues.between(view(play, "mara"), view(committed, "mara"), :phone)) ==
+               [Haptics.pattern(:other_commit)]
+    end
+
+    test "the Beat is felt as it starts" do
+      {play, _} = written(claimed())
+      {play, _} = commit(play, "mara", "cairn")
+      {assaying, _} = commit(play, "jacob", "cairn")
+
+      assert buzzes(Cues.between(view(play, "mara"), view(assaying, "mara"), :phone)) ==
+               [Haptics.pattern(:other_commit), Haptics.pattern(:beat)]
+    end
+
+    test "the reveal is felt as its band" do
+      for {closeness, pattern} <- [{10, :sting_miss}, {83, :sting_almost}, {95, :sting_meld}] do
+        {play, _} = written(claimed())
+        {play, token} = bridged(play, "cairn", "cairo")
+        revealed = assayed(play, token, verdict(closeness))
+
+        assert Haptics.pattern(pattern) in buzzes(
+                 Cues.between(view(play, "mara"), view(revealed, "mara"), :phone)
+               )
+      end
+    end
+
+    test "a Nudge landing is felt" do
+      {play, _} = written(claimed())
+      {nudged, _} = run(play, {:nudge, "mara", "beacon"})
+
+      assert view(nudged).nudges != []
+
+      assert buzzes(Cues.between(view(play, "mara"), view(nudged, "mara"), :phone)) ==
+               [Haptics.pattern(:nudge_landed)]
+    end
+
+    test "another Seat's Reaction is felt, and your own shout is not" do
+      {play, _} = written(claimed())
+      {play, token} = bridged(play, "cairn", "cairo")
+      revealed = assayed(play, token, verdict(83))
+      {reacted, _} = run(revealed, {:react, "jacob", "no_way"})
+
+      # A Room of phones and no Stage has nowhere to show the word, so the
+      # hand is where the table's noise lands.
+      assert buzzes(Cues.between(view(revealed, "mara"), view(reacted, "mara"), :phone)) ==
+               [Haptics.pattern(:reaction_landed)]
+
+      assert buzzes(Cues.between(view(revealed, "jacob"), view(reacted, "jacob"), :phone)) == []
+      assert buzzes(Cues.between(view(revealed), view(reacted), :stage)) == []
+
+      # The same word again is not news; changing it is.
+      {same, _} = run(reacted, {:react, "jacob", "no_way"})
+      assert buzzes(Cues.between(view(reacted, "mara"), view(same, "mara"), :phone)) == []
+
+      {changed, _} = run(same, {:react, "jacob", "yes"})
+
+      assert buzzes(Cues.between(view(same, "mara"), view(changed, "mara"), :phone)) ==
+               [Haptics.pattern(:reaction_landed)]
+    end
+
+    test "the ending is felt once, after the sting" do
+      {play, _} = written(claimed())
+      {play, token} = bridged(play)
+      closed = assayed(play, token, verdict(95))
+
+      assert buzzes(Cues.between(view(play, "mara"), view(closed, "mara"), :phone)) ==
+               [Haptics.pattern(:sting_meld), Haptics.pattern(:ending)]
+
+      {tapped, _} = run(closed, {:tap_bookends, "mara", "great"})
+      assert buzzes(Cues.between(view(closed, "mara"), view(tapped, "mara"), :phone)) == []
+    end
+
+    test "a phone with no Speaker still feels everything it cannot hear" do
+      {play, _} = written(new())
+      {play, token} = bridged(play)
+      closed = assayed(play, token, verdict(95))
+
+      cues = Cues.between(view(play, "mara"), view(closed, "mara"), :phone)
+
+      assert sounds(cues) == []
+      assert buzzes(cues) == [Haptics.pattern(:sting_meld), Haptics.pattern(:ending)]
+    end
+
+    test "the Stage feels nothing — it has no hand to feel with" do
+      {play, _} = written(claimed())
+      {committed, _} = commit(play, "jacob", "cairn")
+      {play, token} = bridged(play)
+      closed = assayed(play, token, verdict(95))
+
+      assert buzzes(Cues.between(view(play), view(committed), :stage)) == []
+      assert buzzes(Cues.between(view(play), view(closed), :stage)) == []
+    end
+
+    test "a screen's first render feels nothing" do
+      {play, _} = written(claimed())
+      {play, token} = bridged(play)
+      closed = assayed(play, token, verdict(95))
+
+      assert buzzes(Cues.between(nil, view(closed, "mara"), :phone)) == []
+      assert buzzes(Cues.between(nil, view(closed), :stage)) == []
     end
   end
 

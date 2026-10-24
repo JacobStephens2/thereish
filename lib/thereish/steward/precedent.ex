@@ -253,8 +253,19 @@ defmodule Thereish.Steward.Precedent do
         cost_usd: precedent.cost_usd && Decimal.to_float(precedent.cost_usd),
         forward: precedent.forward,
         reverse: precedent.reverse,
-        reasoning_reverse: precedent.reasoning_reverse
+        reasoning_reverse: precedent.reasoning_reverse,
+        spread: spread(precedent)
       }
     }
   end
+
+  # The disagreement is not a column, because it is the two readings subtracted:
+  # a row that kept both keeps it. An inherited grade has to carry it, or the
+  # second table to write these Bridges would be shown a settled grade where the
+  # first was shown an argument (ADR-0006).
+  defp spread(%Precedent{forward: forward, reverse: reverse})
+       when is_integer(forward) and is_integer(reverse),
+       do: abs(forward - reverse)
+
+  defp spread(_precedent), do: nil
 end

@@ -6,6 +6,7 @@ defmodule ThereishWeb.FoleyTest do
   """
   use ExUnit.Case, async: true
 
+  alias Thereish.Foley.Haptics
   alias ThereishWeb.Foley
   alias Phoenix.LiveView.Socket
 
@@ -44,6 +45,13 @@ defmodule ThereishWeb.FoleyTest do
 
       assert Foley.event(:stop_prologue) == {"foley:stop_prologue", %{}}
       assert Foley.event(:commit) == {"foley:commit", %{}}
+    end
+
+    test "a buzz is its pattern, for the Juice hook rather than the Foley one" do
+      assert Foley.event({:haptic, [12]}) == {"juice:haptic", %{pattern: [12]}}
+
+      assert Foley.event({:haptic, Haptics.pattern(:sting_meld)}) ==
+               {"juice:haptic", %{pattern: [0, 40, 60, 40, 60, 140]}}
     end
   end
 
@@ -91,7 +99,17 @@ defmodule ThereishWeb.FoleyTest do
     test "does not push foley:own-commit when stage is present" do
       socket = test_socket() |> Phoenix.Component.assign(:stage_present?, true)
       result = Foley.push_own_commit(socket)
-      assert pushed_events(result) == []
+      refute {"foley:own-commit", %{}} in pushed_events(result)
+    end
+
+    test "buzzes the hand that pressed the button, Stage or no Stage" do
+      for stage? <- [true, false] do
+        socket = test_socket() |> Phoenix.Component.assign(:stage_present?, stage?)
+
+        assert {"juice:haptic", %{pattern: Haptics.pattern(:own_commit)}} in pushed_events(
+                 Foley.push_own_commit(socket)
+               )
+      end
     end
   end
 end

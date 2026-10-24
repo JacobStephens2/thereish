@@ -352,6 +352,71 @@ defmodule Thereish.Rooms.PacingTest do
     end
   end
 
+  describe "the reveal's performance" do
+    @sequence [stagger: 260, cap: 1_400, settle: 900]
+    @sequenced Map.put(%{@durations | hold: 1_000}, :sequence, @sequence)
+    @words ~w(cairn beacon wharf signal torch lamp)
+
+    # A table of `count` Seats with every Bridge in, revealed at 0 ms.
+    defp performed(durations, count) do
+      seats = Enum.map(Enum.take(~w(Mara Bram Esme Cole Sid Rafe), count), &seat/1)
+
+      game =
+        Enum.reduce(
+          Enum.zip(seats, @words),
+          Game.init(seat_limit: count, seats: seats, page: @page),
+          fn
+            {seat, word}, game ->
+              play(game, {:bridge_committed, %{seat_id: seat.id, bridge: word}})
+          end
+        )
+
+      revealed = play(game, graded(0))
+      {pacing, effects} = Pacing.moved(pacing(durations), game, revealed, at(0))
+
+      {pacing, revealed, effects}
+    end
+
+    test "a hold shorter than the performance is stretched to hold all of it" do
+      {pacing, game, effects} = performed(@sequenced, 2)
+
+      assert {_token, 1_420} = timer(effects, :hold)
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(1_419))
+      refute view(pacing, game, at(1_419)).can_advance?
+      assert :ok = Pacing.may_advance(pacing, at(1_420))
+    end
+
+    test "a big table flips inside the cap, so the hold grows no further than it" do
+      {_pacing, _game, effects} = performed(@sequenced, 6)
+
+      assert {_token, 2_300} = timer(effects, :hold)
+    end
+
+    test "a hold longer than the performance is the hold, unchanged" do
+      {pacing, _game, effects} = performed(Map.put(@durations, :sequence, @sequence), 2)
+
+      assert {_token, 5_000} = timer(effects, :hold)
+      assert :ok = Pacing.may_advance(pacing, at(5_000))
+    end
+
+    test "a hold the Room has turned off stays off: the performance never makes one" do
+      {pacing, game, effects} = performed(%{@sequenced | hold: 0}, 2)
+
+      assert timers(effects) == []
+      assert :ok = Pacing.may_advance(pacing, at(0))
+      assert view(pacing, game, at(0)).can_advance?
+    end
+
+    test "sequence_ms/2 is the flip run under its cap plus the settle" do
+      assert Pacing.sequence_ms(@sequenced, 2) == 1_420
+      assert Pacing.sequence_ms(@sequenced, 8) == 2_300
+    end
+
+    test "durations that name no sequence ask for nothing, which is today's game" do
+      assert Pacing.sequence_ms(@durations, 8) == 0
+    end
+  end
+
   describe "when each part of a Page happened" do
     # A Room with one Seat taken, waiting for its second.
     defp waiting, do: Game.init(seat_limit: 2, seats: [seat("Mara")])

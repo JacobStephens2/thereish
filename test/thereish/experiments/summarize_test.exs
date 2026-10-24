@@ -157,6 +157,55 @@ defmodule Thereish.Experiments.SummarizeTest do
     end
   end
 
+  describe "the channel experiment" do
+    test "summarizes the nudging Pages against the quiet ones by meld rate and attempts" do
+      outcomes =
+        [
+          outcome("nudge_on", melded: true, attempts_count: 3),
+          outcome("nudge_on", melded: false, attempts_count: 3),
+          outcome("nudge_on", melded: true, attempts_count: 2, closing_band: "meld"),
+          outcome("nudge_off", melded: true, attempts_count: 1, taps: %{"seat-a" => "fine"}),
+          outcome("nudge_off", melded: true, attempts_count: 2, closing_band: "deep_meld")
+        ]
+
+      readout = summarize("channel", %{outcomes: outcomes})
+
+      assert readout.experiment == Experiments.definition("channel")
+      assert readout.nudge_on.meld_rate == "2/3 (67%)"
+      assert readout.nudge_on.mean_attempts_to_meld == 2.5
+      assert readout.nudge_on.closing_bands == %{"meld" => 1}
+      assert readout.nudge_off.meld_rate == "2/2 (100%)"
+      assert readout.nudge_off.mean_attempts_to_meld == 1.5
+      assert readout.nudge_off.preferences_summary == "0 great, 1 fine, 0 flat"
+
+      assert readout.summary_narrative =~
+               "Pages with a Nudge achieved a meld rate of 2/3 (67%)"
+
+      assert readout.summary_narrative =~ "Pages without one achieved a meld rate of 2/2 (100%)"
+    end
+
+    test "counts no Nudges, Calls or Reactions anywhere in the readout" do
+      readout = summarize("channel", %{outcomes: history("nudge_on", [true, false])})
+
+      refute Map.has_key?(readout.nudge_on, :nudges_count)
+      refute Map.has_key?(readout.nudge_on, :calls_count)
+      refute Map.has_key?(readout.nudge_on, :reactions_count)
+      refute Map.has_key?(readout, :p_value)
+    end
+
+    test "an arm with no Pages reads as nothing played" do
+      readout = summarize("channel", %{})
+
+      for arm <- [:nudge_on, :nudge_off] do
+        summary = Map.fetch!(readout, arm)
+
+        assert summary.pages_count == 0
+        assert summary.meld_rate == "0/0 (0%)"
+        assert summary.mean_attempts_to_meld == 0.0
+      end
+    end
+  end
+
   describe "the Bait-against-plain experiment" do
     test "summarizes each arm's traps, deep convergence, fairness taps and overrules from its Pages' views" do
       bait = [

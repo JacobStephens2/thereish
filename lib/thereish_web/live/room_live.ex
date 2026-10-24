@@ -44,6 +44,7 @@ defmodule ThereishWeb.RoomLive do
      |> assign(:name, "")
      |> assign(:error, nil)
      |> assign(:bridge_error, nil)
+     |> assign(:nudge_error, nil)
      |> assign(:page_error, nil)
      |> assign(:give_input, "")
      |> assign(:give_error, nil)
@@ -76,7 +77,7 @@ defmodule ThereishWeb.RoomLive do
       else
         case Thereish.Steward.Legality.check_bridge(bridge, barred) do
           :ok -> nil
-          {:illegal, why} -> why
+          {:illegal, why} -> nudged(bridge, socket.assigns.room) || why
         end
       end
 
@@ -95,6 +96,52 @@ defmodule ThereishWeb.RoomLive do
       {:error, reason} ->
         {:noreply, assign(socket, :bridge_error, message(reason))}
     end
+  end
+
+  # A Nudge is checked against the same barred words a Bridge is, by the same
+  # function, so nobody is ambushed at submit by a word the Page has already
+  # spent — including a word some other Seat has just nudged.
+  def handle_event("validate_nudge", %{"nudge" => word}, socket) do
+    barred = (socket.assigns.room && socket.assigns.room.barred_words) || []
+
+    error =
+      if String.trim(word) == "" do
+        nil
+      else
+        case Thereish.Steward.Legality.check_bridge(word, barred) do
+          :ok -> nil
+          {:illegal, why} -> why
+        end
+      end
+
+    {:noreply, assign(socket, :nudge_error, error)}
+  end
+
+  def handle_event("send_nudge", %{"nudge" => word}, socket) do
+    case Rooms.nudge(socket.assigns.slug, socket.assigns.seat.id, word) do
+      :ok ->
+        {:noreply, socket |> assign(:nudge_error, nil) |> resync()}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :nudge_error, message(reason))}
+    end
+  end
+
+  # The Call window is the Beat, and the Beat closes on its own. A tap that
+  # lands after it is the window closing rather than a mistake anybody made, so
+  # it is answered with the state the Room is actually in and no red sentence.
+  def handle_event("call", %{"band" => band}, socket) do
+    Rooms.call(socket.assigns.slug, socket.assigns.seat.id, band)
+
+    {:noreply, resync(socket)}
+  end
+
+  # One of four words, and nothing rides on it: a word that does not land is a
+  # shout nobody heard, which is the right answer for a shout.
+  def handle_event("react", %{"reaction" => reaction}, socket) do
+    Rooms.react(socket.assigns.slug, socket.assigns.seat.id, reaction)
+
+    {:noreply, resync(socket)}
   end
 
   # Both phones can reach the same button, and on a couch both of them will.
@@ -121,6 +168,19 @@ defmodule ThereishWeb.RoomLive do
 
   def handle_event("propose_overrule", _params, socket) do
     Rooms.propose_overrule(socket.assigns.slug, socket.assigns.seat.id)
+
+    {:noreply, resync(socket)}
+  end
+
+  # The one tap a Split reading earns: the same proposal, at the kinder of the
+  # two numbers the table has just been shown. The vote is unchanged — everyone
+  # still has to agree — only the number no longer has to be typed.
+  def handle_event("propose_split_overrule", _params, socket) do
+    if split = split_shown(socket.assigns.room) do
+      Rooms.propose_overrule(socket.assigns.slug, socket.assigns.seat.id,
+        closeness: split.generous
+      )
+    end
 
     {:noreply, resync(socket)}
   end
@@ -204,6 +264,11 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("toggle_split_readings", _params, socket) do
+    Rooms.toggle(socket.assigns.slug, :split_readings)
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("set_music", %{"music" => music}, socket) do
     Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}
@@ -272,6 +337,15 @@ defmodule ThereishWeb.RoomLive do
     |> ThereishWeb.Foley.play_cues(old_room, new_room, :phone)
   end
 
+  # A Bridge barred by a Nudge says so, rather than "shares a root with" a word
+  # the writer never saw among the Bookends.
+  defp nudged(bridge, room) do
+    Enum.find_value(room[:nudges] || [], fn nudge ->
+      if Thereish.Steward.Legality.check_bridge(bridge, [nudge.word]) != :ok,
+        do: "#{nudge.name} nudged \"#{nudge.word}\" — nobody may write it."
+    end)
+  end
+
   defp message(:give_required), do: "Type a Give first."
   defp message(:name_required), do: "Type a name first."
   defp message(:name_too_long), do: "That name is longer than #{Seat.name_max()} characters."
@@ -282,6 +356,10 @@ defmodule ThereishWeb.RoomLive do
   defp message(:not_bridging), do: "Too late for this one."
   defp message(:no_such_seat), do: "You are not in this Room any more. Reload."
   defp message({:illegal_bridge, reason}), do: reason
+  defp message({:illegal_nudge, reason}), do: reason
+  defp message(:nudge_required), do: "Write one word first."
+  defp message(:no_nudges_left), do: "You have spent your nudge on this Page."
+  defp message(:nudges_off), do: "Nudges are off in this Room."
   defp message(:not_enough_gives), do: "Need at least two Gives to start."
   defp message(:not_playing_page), do: "You're watching this Page."
   defp message(:pool_exhausted), do: "That's every Page for tonight."
@@ -451,6 +529,30 @@ defmodule ThereishWeb.RoomLive do
 
       <.bookends :if={@seat} room={@room} />
 
+      <.nudges :if={@seat} room={@room} />
+
+      <form
+        :if={may?(@room, :nudge)}
+        id="nudge-form"
+        data-role="nudge-form"
+        phx-change="validate_nudge"
+        phx-submit="send_nudge"
+        class="flex flex-col gap-2 rounded-lg border border-base-300 p-4"
+      >
+        <.input name="nudge" value={nil} label="Nudge one word" autocomplete="off" />
+        <p data-role="nudge-cost" class="text-sm opacity-70">
+          One word, out loud. Nobody may write it — not even you. {@room.your_nudges_left} left on this Page.
+        </p>
+        <.button data-role="send-nudge">Nudge</.button>
+      </form>
+
+      <%!-- Outside the form on purpose: the refusal a spent budget earns arrives
+      in the same breath as the form going away, and a sentence inside it would
+      leave with it. --%>
+      <p :if={@seat && @nudge_error} data-role="nudge-error" class="text-sm text-error">
+        {@nudge_error}
+      </p>
+
       <form
         :if={may?(@room, :bridge)}
         id="bridge-form"
@@ -479,7 +581,9 @@ defmodule ThereishWeb.RoomLive do
         <p :if={@room.phase == :bridging} class="text-sm opacity-60">Waiting for the others.</p>
       </div>
 
-      <.assaying room={@room} />
+      <.call_bands :if={@room.phase == :bridging} room={@room} seat={@seat} />
+
+      <.assaying room={@room} seat={@seat} />
 
       <.reveal
         room={@room}
@@ -491,10 +595,18 @@ defmodule ThereishWeb.RoomLive do
 
       <div
         :if={may?(@room, :propose_overrule)}
-        class="flex justify-center"
+        class="flex flex-wrap justify-center gap-2"
       >
         <.button phx-click="propose_overrule" data-role="propose-overrule">
           Overrule the Assayer
+        </.button>
+        <.button
+          :if={may?(@room, :propose_split_overrule) && split_shown(@room)}
+          phx-click="propose_split_overrule"
+          data-role="propose-split-overrule"
+          variant="primary"
+        >
+          Believe the generous reading ({split_shown(@room).generous})
         </.button>
       </div>
 
@@ -582,6 +694,11 @@ defmodule ThereishWeb.RoomLive do
       </script>
 
       <.foley_hook speaker={@room && @room.speaker?} />
+      <%!-- A Room of phones and no Stage has no Masks to lift a Reaction off,
+      so the phone performs them itself, off each Seat's own Bridge card. With
+      a Stage in the room the Stage performs them and the phone only feels
+      them, so the word is never shouted twice. --%>
+      <.juice_hook room={@room} floats={not @stage_present?} />
     </main>
     """
   end

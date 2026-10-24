@@ -1,7 +1,7 @@
 defmodule Thereish.Rooms.Facts do
   @moduledoc """
-  The Room's facts: who holds the Speaker, Quips, Full table, the music
-  setting, whether the Prologue was skipped, the Code's Quip, and the
+  The Room's facts: who holds the Speaker, Quips, Full table, Split readings,
+  the music setting, whether the Prologue was skipped, the Code's Quip, and the
   Prologue take playing now.
 
   It is pure and effect-returning like Pacing, Pages, Occupancy and Voice,
@@ -38,8 +38,8 @@ defmodule Thereish.Rooms.Facts do
   alias Thereish.Foley.Prologue
   alias Thereish.Rooms.Room
 
-  @persisted [:speaker, :quips, :full_table, :music, :prologue_skipped]
-  @on_off [:quips, :full_table]
+  @persisted [:speaker, :quips, :full_table, :split_readings, :music, :prologue_skipped]
+  @on_off [:quips, :full_table, :split_readings]
 
   @doc "Whether `fact` is one of the Room facts that is only on or off."
   defguard is_on_off(fact) when fact in @on_off
@@ -47,18 +47,20 @@ defmodule Thereish.Rooms.Facts do
   defstruct speaker: nil,
             quips: true,
             full_table: true,
+            split_readings: true,
             music: "page",
             prologue_skipped: false,
             quip: nil,
             prologue: nil
 
   @type take :: %{reading: String.t(), text: String.t()}
-  @type on_off :: :quips | :full_table
+  @type on_off :: :quips | :full_table | :split_readings
 
   @type t :: %__MODULE__{
           speaker: String.t() | nil,
           quips: boolean(),
           full_table: boolean(),
+          split_readings: boolean(),
           music: String.t(),
           prologue_skipped: boolean(),
           quip: String.t() | nil,
@@ -90,6 +92,7 @@ defmodule Thereish.Rooms.Facts do
           speaker_claimed?: boolean(),
           quips: boolean(),
           full_table: boolean(),
+          split_readings: boolean(),
           music: String.t(),
           quip: String.t() | nil,
           prologue_skipped: boolean(),
@@ -104,6 +107,7 @@ defmodule Thereish.Rooms.Facts do
       speaker: room.speaker,
       quips: room.quips,
       full_table: room.full_table,
+      split_readings: room.split_readings,
       music: room.music,
       prologue_skipped: room.prologue_skipped,
       quip: room.quip
@@ -195,6 +199,7 @@ defmodule Thereish.Rooms.Facts do
       speaker_claimed?: speaker_claimed?(facts),
       quips: facts.quips,
       full_table: facts.full_table,
+      split_readings: facts.split_readings,
       music: facts.music,
       quip: facts.quip,
       prologue_skipped: facts.prologue_skipped,
@@ -217,6 +222,7 @@ defmodule Thereish.Rooms.Facts do
   defp on_off_effects(:full_table, %{full_table: same}, %{full_table: same}), do: []
   defp on_off_effects(:full_table, _old, new), do: [{:full_table_changed, new.full_table}]
   defp on_off_effects(:quips, _old, _new), do: []
+  defp on_off_effects(:split_readings, _old, _new), do: []
 
   defp blank?(nil), do: true
   defp blank?(value) when is_binary(value), do: String.trim(value) == ""

@@ -154,6 +154,33 @@ defmodule Thereish.Chronicle.PageView do
           inserted_at: DateTime.t()
         }
 
+  @typedoc "One Nudge spent on the Attempt, and who spent it."
+  @type nudge_view :: %{
+          seat_id: Ecto.UUID.t() | nil,
+          seat_name: String.t(),
+          word: String.t()
+        }
+
+  @typedoc """
+  One Call made during the Attempt's Beat. `right?` is whether the grade landed
+  in the band called, and is nil on an Attempt the Assayer could not grade: a
+  Call settles nothing either way, and is worth nothing when it is right
+  (ADR-0023).
+  """
+  @type call_view :: %{
+          seat_id: Ecto.UUID.t() | nil,
+          seat_name: String.t(),
+          band: String.t(),
+          right?: boolean() | nil
+        }
+
+  @typedoc "One word a Seat sent at the Attempt's reveal."
+  @type reaction_view :: %{
+          seat_id: Ecto.UUID.t() | nil,
+          seat_name: String.t(),
+          reaction: String.t()
+        }
+
   @typedoc "One Attempt, with the rows about it."
   @type attempt_view :: %{
           id: Ecto.UUID.t(),
@@ -162,6 +189,9 @@ defmodule Thereish.Chronicle.PageView do
           closeness: integer() | nil,
           melded: boolean(),
           bridges: [bridge_view()],
+          nudges: [nudge_view()],
+          calls: [call_view()],
+          reactions: [reaction_view()],
           participant_ids: [Ecto.UUID.t()],
           verdicts: [verdict_view()],
           carried: [String.t()] | nil,
@@ -317,6 +347,7 @@ defmodule Thereish.Chronicle.PageView do
 
     bridges = Enum.map(attempt.bridges, &bridge_view(&1, attempt, own.corrections))
     verdicts = Enum.map(attempt.verdicts, &verdict_view(&1, attempt_overrules != []))
+    names = seat_names(page)
 
     %{
       id: attempt.id,
@@ -325,6 +356,9 @@ defmodule Thereish.Chronicle.PageView do
       closeness: attempt.closeness,
       melded: attempt.melded,
       bridges: bridges,
+      nudges: Enum.map(stored(attempt, :nudges), &nudge_view(&1, names)),
+      calls: Enum.map(stored(attempt, :calls), &call_view(&1, names, graded_band(attempt))),
+      reactions: Enum.map(stored(attempt, :reactions), &reaction_view(&1, names)),
       participant_ids: Enum.map(attempt.bridges, & &1.seat_id),
       verdicts: verdicts,
       carried: carried(page, index, attempt),
@@ -362,6 +396,66 @@ defmodule Thereish.Chronicle.PageView do
       view
     end
   end
+
+  # The Nudges, Calls and Reactions an Attempt stored, which an Attempt from
+  # before they existed stored as nothing. Empty rather than nil, so no reader
+  # branches on a Page's vintage (ADR-0003).
+  defp stored(attempt, field), do: Map.get(attempt, field) || []
+
+  # A stored row read back out of Postgres is string-keyed; one built in memory
+  # is not. Both read the same way here, so no caller has to know which it has.
+  defp value(row, key), do: Map.get(row, key) || Map.get(row, to_string(key))
+
+  defp nudge_view(nudge, names) do
+    seat_id = value(nudge, :seat_id)
+
+    %{seat_id: seat_id, seat_name: named(names, seat_id), word: value(nudge, :word)}
+  end
+
+  defp call_view(call, names, graded_band) do
+    seat_id = value(call, :seat_id)
+    band = value(call, :band)
+
+    %{
+      seat_id: seat_id,
+      seat_name: named(names, seat_id),
+      band: to_string(band),
+      right?: graded_band && to_string(band) == graded_band
+    }
+  end
+
+  defp reaction_view(reaction, names) do
+    seat_id = value(reaction, :seat_id)
+
+    %{
+      seat_id: seat_id,
+      seat_name: named(names, seat_id),
+      reaction: to_string(value(reaction, :reaction))
+    }
+  end
+
+  # The band the Attempt's grade landed in, which is the only thing a Call ever
+  # turns out to have been about. An ungraded Attempt settles none of them.
+  defp graded_band(attempt) do
+    Enum.find_value(attempt.verdicts || [], &(&1.graded && &1.band))
+  end
+
+  # The names the Page can put to a Seat id: a Nudge, a Call and a Reaction are
+  # stored as the id alone, and their Seat is named by its Give or its Bridges
+  # the way every other row is.
+  defp seat_names(page) do
+    named_gives = for g <- page.gives, g.seat_id && g.seat, do: {g.seat_id, g.seat.name}
+
+    named_bridges =
+      for attempt <- page.attempts,
+          bridge <- attempt.bridges || [],
+          bridge.seat_id && bridge.seat,
+          do: {bridge.seat_id, bridge.seat.name}
+
+    Map.new(named_gives ++ named_bridges)
+  end
+
+  defp named(names, seat_id), do: Map.get(names, seat_id) || "Player"
 
   defp verdict_view(v, overruled_by_players?) do
     %{

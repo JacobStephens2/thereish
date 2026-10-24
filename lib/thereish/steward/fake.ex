@@ -28,20 +28,26 @@ defmodule Thereish.Steward.Fake do
   Like any adapter, it grades the one ordering of the Bridges it is handed.
   The Steward asks it for both orderings and reconciles them into the Verdict,
   so a Room played on this Assayer is graded by the same rule as one played on
-  a model. The two orderings grade the same here, because shared prefixes do
-  not care which word came first; only the furthest pair's tie-break and the
+  a model. The two orderings grade the same here unless a test asks them not
+  to (`spread`, below), because shared prefixes do not care which word came first; only the furthest pair's tie-break and the
   order the reasoning names the two words in follow the ordering.
 
-  Two knobs, both configuration, both for the tests that need the Room to be
-  waiting on something:
+  Three knobs, all configuration, the first two for the tests that need the
+  Room to be waiting on something:
 
-      config :thereish, :steward, fake: [delay_ms: 0, mode: :grade]
+      config :thereish, :steward, fake: [delay_ms: 0, mode: :grade, spread: 0]
 
   `delay_ms` is how long grading one ordering takes; the Steward asks for both
   at once, so it is how long a verdict takes too. `mode: :unavailable` is an Assayer
   that says it cannot answer, and `mode: :raise` is one that falls over without
   saying anything — the two shapes a failed grade comes in, both of which the
   game answers the same way.
+
+  `spread: n` is the third, for the tests of a Split reading: the reverse
+  ordering grades `n` higher than the forward one, so a test can ask for a
+  grader that disagrees with itself by exactly as much as it wants to assert on.
+  Left alone it is zero and both orderings grade the same, which is what they
+  have always done.
 
   `quip/1` is the fresh Quip the Steward asks for on a Precedent hit. It is the
   Quip this Assayer's own grade writes for those Bridges, and it answers to the
@@ -71,7 +77,7 @@ defmodule Thereish.Steward.Fake do
     delay_ms() |> Process.sleep()
 
     case mode() do
-      :grade -> {:ok, grade(ordering)}
+      :grade -> {:ok, ordering |> grade() |> disagreed(request, ordering)}
       :unavailable -> {:error, :no_verdict}
       :raise -> raise "this Assayer is having a moment"
     end
@@ -92,6 +98,7 @@ defmodule Thereish.Steward.Fake do
   end
 
   @bookend_pool ~w(lantern harbour summit ember grove spire ridge hearth)
+  @bookend_laps ~w(old new far near high low deep wide)
 
   @impl true
   def author(request, opts \\ []) do
@@ -104,7 +111,7 @@ defmodule Thereish.Steward.Fake do
 
         bookends =
           Keyword.get(opts, :bookends) ||
-            config_get(:author_bookends, Enum.take(@bookend_pool, count))
+            config_get(:author_bookends, pool_bookends(count))
 
         why =
           Keyword.get(opts, :why) ||
@@ -150,6 +157,27 @@ defmodule Thereish.Steward.Fake do
     end
   end
 
+  # N Bookends for whatever N a Full table asks for, all of them distinct: the
+  # pool first, then the pool again under a two-word phrase. A Page whose
+  # Bookends repeat a word is not a Page any width of table would be handed, so
+  # the fake never hands one out either.
+  defp pool_bookends(count) do
+    size = length(@bookend_pool)
+
+    for i <- 0..(count - 1)//1 do
+      word = Enum.at(@bookend_pool, rem(i, size))
+
+      case div(i, size) do
+        0 -> word
+        lap -> Enum.at(@bookend_laps, rem(lap - 1, length(@bookend_laps))) <> " " <> word
+      end
+    end
+  end
+
+  # The setting each Bookend was drawn from, in the order the Bookends came. The
+  # Gives are walked round and round until every Bookend has one, so a Page that
+  # asks for more Bookends than it has Gives still names every setting at least
+  # once — which is what the Author's own gate asks for.
   defp author_from(request, count) do
     gives =
       cond do
@@ -159,9 +187,16 @@ defmodule Thereish.Steward.Fake do
         true -> []
       end
 
-    gives
-    |> Enum.take(count)
-    |> Enum.map(&Thereish.Steward.Author.give_name/1)
+    case gives do
+      [] ->
+        []
+
+      gives ->
+        gives
+        |> Stream.cycle()
+        |> Enum.take(count)
+        |> Enum.map(&Thereish.Steward.Author.give_name/1)
+    end
   end
 
   @impl true
@@ -630,6 +665,22 @@ defmodule Thereish.Steward.Fake do
     |> Enum.zip(String.graphemes(right))
     |> Enum.take_while(fn {a, b} -> a == b end)
     |> length()
+  end
+
+  # Shared prefixes do not care which word came first, so this Assayer grades
+  # both orderings the same and no test could ask for a Verdict it disagrees
+  # with itself about. `spread: n` is the dial that asks: the reverse ordering
+  # grades `n` higher, the Steward still records the mean, and the Split reading
+  # a test wants is the Split reading it gets.
+  defp disagreed(graded, request, ordering) do
+    spread = config_get(:spread, 0)
+    {floor, ceiling} = Thereish.Ladder.scale()
+
+    if spread != 0 and ordering != Thereish.Steward.Assay.ordering(request) do
+      %{graded | closeness: graded.closeness |> Kernel.+(spread) |> max(floor) |> min(ceiling)}
+    else
+      graded
+    end
   end
 
   defp delay_ms, do: config(:delay_ms)

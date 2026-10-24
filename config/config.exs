@@ -27,6 +27,12 @@ config :thereish,
   # anyone may start the next Attempt or open the next Page. Distinct from the
   # beat that runs before the reveal.
   reveal_hold_ms: 5_000,
+  # How the reveal is performed inside that hold: how long between one Bridge
+  # flipping and the next, a ceiling on the whole flip run so eight Seats
+  # cannot stretch it, and how long the number and the marker take to settle
+  # after it. The sequence is absorbed by the hold rather than added to it, so
+  # these numbers move the theatre and never the ten-second ceiling.
+  reveal_sequence_ms: [stagger: 260, cap: 1_400, settle: 900],
   # How the reveal escalates when the Assayer is slow (design law 10). Visible
   # activity through four seconds; at ten the game states it has no verdict and
   # hands the ruling to the players. Ten seconds is a ceiling, not a target: the
@@ -40,6 +46,28 @@ config :thereish,
   # how long a converging arc stays funny, which makes it a setting the couch
   # moves rather than a number in the rules.
   attempts_per_page: 5,
+  # How wide a Full table opens: how many Bookends each Give heads. This is the
+  # difficulty dial the couch owns, and the one answer to "two players is too
+  # easy" that needs no new rule and no new wait — two Seats open on four words
+  # rather than on the same two the carry-forward would have handed them anyway.
+  bookends_per_give: 2,
+  # And how wide is too wide. A ceiling on the Bookends one Attempt shows, so a
+  # large table is not drowned in words it cannot hold in its head at once. The
+  # Seat count outranks it: a Full table's promise is a word per Seat, so eight
+  # Seats still open on eight.
+  max_bookends: 6,
+  # How many Nudges one Seat may spend on a Page. One is a guess about how much
+  # a channel between Seats may carry before the Bridges stop being written
+  # alone, which makes it the couch's number: zero is today's game, and two is
+  # a different one. An Arm takes it to zero for a Page
+  # (`Thereish.Game.set_nudges_per_page/2`).
+  nudges_per_page: 1,
+  # How far apart the Assayer's two readings of the same Bridges have to land
+  # before the table is shown both of them. Rarity is the whole safety argument:
+  # a grader caught disagreeing with itself once a night is the table's best
+  # argument and the first reason anyone reaches for an Overrule; one caught at
+  # it every Page is a grader nobody believes.
+  split_decision_at: 20,
   # The ladder a closeness is read on. All of it is configuration because all of
   # it is calibration — the boundaries move as the couple's fairness taps say
   # they should, and a Meld starts at the floor of the `meld` band.

@@ -66,7 +66,11 @@ defmodule ThereishWeb.AdminComponents do
           <span class="font-semibold">Declared outcomes:</span>
           Meld rate, attempts to meld, bookends preferences (flat / fine / great), and closing band distribution.
         </p>
-        <p :if={@readout.experiment.id != "author_model"}>
+        <p :if={@readout.experiment.id == "channel"}>
+          <span class="font-semibold">Declared outcomes:</span>
+          Meld rate, attempts to meld, closing band distribution, and bookends preferences (flat / fine / great).
+        </p>
+        <p :if={@readout.experiment.id == "bait_against_plain"}>
           <span class="font-semibold">Declared outcomes:</span>
           Meld rate, attempts to meld, fairness preferences, overrules, and bait trap convergence.
         </p>
@@ -125,7 +129,36 @@ defmodule ThereishWeb.AdminComponents do
         </div>
 
         <div
-          :if={@readout.experiment.id != "author_model"}
+          :if={@readout.experiment.id == "channel"}
+          class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+        >
+          <.arm_readout_card
+            data_role="readout-arm-nudge-on"
+            title="Pages with a Nudge"
+            title_class="text-secondary"
+            summary={@readout.nudge_on}
+          >
+            <div>
+              Best streak: <span class="font-semibold">{@readout.nudge_on.longest_meld_streak}</span>
+            </div>
+            <div class="mt-1 opacity-75">Preferences: {@readout.nudge_on.preferences_summary}</div>
+          </.arm_readout_card>
+
+          <.arm_readout_card
+            data_role="readout-arm-nudge-off"
+            title="Pages without one"
+            title_class="opacity-80"
+            summary={@readout.nudge_off}
+          >
+            <div>
+              Best streak: <span class="font-semibold">{@readout.nudge_off.longest_meld_streak}</span>
+            </div>
+            <div class="mt-1 opacity-75">Preferences: {@readout.nudge_off.preferences_summary}</div>
+          </.arm_readout_card>
+        </div>
+
+        <div
+          :if={@readout.experiment.id == "bait_against_plain"}
           class="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           <.arm_readout_card

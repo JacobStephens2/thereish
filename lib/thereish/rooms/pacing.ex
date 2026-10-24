@@ -43,6 +43,12 @@ defmodule Thereish.Rooms.Pacing do
   is why the Game itself can be driven in a test as a list of events with no
   clock in sight.
 
+  The reveal's performance — the Bridges flipping one by one, the marker
+  climbing the Rail, the number counting with it — runs inside that hold rather
+  than on top of it. Pacing holds no part of the theatre; it only makes sure
+  the hold it arms is never shorter than `sequence_ms/2`, so the button never
+  comes alive in the middle of the punchline.
+
   A Verdict is never waited on inline. The Room stays answerable while the
   Assayer thinks, because a phone asking what it missed must not be stuck
   behind a model. An Assayer that raises or exits is a Verdict the Game does not
@@ -99,7 +105,12 @@ defmodule Thereish.Rooms.Pacing do
           beat: non_neg_integer(),
           hold: non_neg_integer(),
           assayer: [slow: pos_integer(), unavailable: pos_integer()],
-          author: [still_writing: pos_integer(), deadline: pos_integer()]
+          author: [still_writing: pos_integer(), deadline: pos_integer()],
+          sequence: [
+            stagger: non_neg_integer(),
+            cap: non_neg_integer(),
+            settle: non_neg_integer()
+          ]
         }
 
   @attempt_times [:started_at, :assaying_started_at, :revealed_at, :advanced_at]
@@ -114,7 +125,7 @@ defmodule Thereish.Rooms.Pacing do
           held: [Game.event()],
           assayer: %{step: :grading | :slow, token: token()} | nil,
           author: %{ref: reference(), step: :writing | :still_writing, token: token()} | nil,
-          hold: %{revealed_ms: integer(), token: token() | nil} | nil,
+          hold: %{revealed_ms: integer(), ms: non_neg_integer(), token: token() | nil} | nil,
           opened_at: DateTime.t() | nil,
           times: %{
             gives: %{String.t() => DateTime.t()},
@@ -158,7 +169,7 @@ defmodule Thereish.Rooms.Pacing do
       |> record_times(old_game, new_game, {old_phase, new_phase}, now)
 
     cond do
-      old_phase == :assaying and revealed?(new_phase) -> hold(pacing, now)
+      old_phase == :assaying and revealed?(new_phase) -> hold(pacing, new_game, now)
       revealed?(old_phase) and not revealed?(new_phase) -> {%{pacing | hold: nil}, []}
       true -> {pacing, []}
     end
@@ -312,8 +323,27 @@ defmodule Thereish.Rooms.Pacing do
   @spec may_advance(t(), now()) :: :ok | {:error, :reveal_held}
   def may_advance(%__MODULE__{hold: nil}, _now), do: :ok
 
-  def may_advance(%__MODULE__{hold: hold} = pacing, now) do
-    if now.ms - hold.revealed_ms >= pacing.durations.hold, do: :ok, else: {:error, :reveal_held}
+  def may_advance(%__MODULE__{hold: hold}, now) do
+    if now.ms - hold.revealed_ms >= hold.ms, do: :ok, else: {:error, :reveal_held}
+  end
+
+  @doc """
+  How long the reveal's performance runs for this many Seats: the staggered
+  flip of the Bridges, capped so eight Seats cannot stretch it, plus the time
+  the number and the marker need to settle after it.
+
+  It is pure arithmetic about time, which is why it lives here rather than in
+  the hook that performs it. The hold absorbs this rather than adding to it —
+  design law 10's ceiling is on the whole reveal, not on the theatre alone — so
+  a Room that waits at all never lifts its hold mid-performance.
+  """
+  @spec sequence_ms(durations(), non_neg_integer()) :: non_neg_integer()
+  def sequence_ms(durations, seats) do
+    sequence = Map.get(durations, :sequence) || []
+    stagger = Keyword.get(sequence, :stagger, 0)
+    cap = Keyword.get(sequence, :cap, 0)
+
+    min(stagger * seats, cap) + Keyword.get(sequence, :settle, 0)
   end
 
   @doc """
@@ -386,15 +416,20 @@ defmodule Thereish.Rooms.Pacing do
   end
 
   # A hold of zero is no hold worth a timer, but the reveal's moment is still
-  # kept, so `may_advance/2` judges it the same way either way.
-  defp hold(pacing, now) do
+  # kept, so `may_advance/2` judges it the same way either way. A hold the Room
+  # has turned off stays off: the sequence is absorbed by a hold, never the
+  # reason for one.
+  defp hold(pacing, game, now) do
     case pacing.durations.hold do
       ms when is_integer(ms) and ms > 0 ->
+        ms = max(ms, sequence_ms(pacing.durations, length(game.seats)))
         {pacing, token} = mint(pacing)
-        {%{pacing | hold: %{revealed_ms: now.ms, token: token}}, [{:timer, :hold, token, ms}]}
+
+        {%{pacing | hold: %{revealed_ms: now.ms, ms: ms, token: token}},
+         [{:timer, :hold, token, ms}]}
 
       _ms ->
-        {%{pacing | hold: %{revealed_ms: now.ms, token: nil}}, []}
+        {%{pacing | hold: %{revealed_ms: now.ms, ms: 0, token: nil}}, []}
     end
   end
 

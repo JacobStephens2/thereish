@@ -236,14 +236,71 @@ defmodule ThereishWeb.RoomComponentsTest do
       assert html =~ "Jacob"
     end
 
-    test "number arrives with climbing hook and band arrives with it", %{meld_room: room} do
+    test "number, band, cards and marker are performed by one sequencer", %{meld_room: room} do
       html = render_component(&reveal/1, room: room)
 
       assert html =~ ~s(data-role="closeness")
       assert html =~ "80"
-      assert html =~ "ClimbNumber"
+      assert html =~ "RevealSequence"
       assert html =~ ~s(data-role="band")
       assert html =~ "meld"
+      refute html =~ "ClimbNumber"
+    end
+
+    test "the reveal carries the numbers the hold was armed with", %{meld_room: room} do
+      html = render_component(&reveal/1, room: room)
+      sequence = Application.fetch_env!(:thereish, :reveal_sequence_ms)
+
+      assert html =~ ~s(data-stagger="#{sequence[:stagger]}")
+      assert html =~ ~s(data-cap="#{sequence[:cap]}")
+      assert html =~ ~s(data-settle="#{sequence[:settle]}")
+    end
+
+    test "the closeness card wears its band, and three near misses wear three", %{miss_room: room} do
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="closeness-display")
+      assert html =~ ~s(data-band="miss")
+
+      bands =
+        for {closeness, band} <- [{24, :miss}, {40, :adjacent}, {60, :close}] do
+          reveal = %{room.reveal | closeness: closeness, band: band}
+          html = render_component(&reveal/1, room: %{room | reveal: reveal})
+
+          assert html =~ ~s(data-band="#{band}")
+
+          band
+        end
+
+      assert bands == Enum.uniq(bands)
+    end
+
+    test "the Rail is drawn on the phone, on the Stage and on a quiet phone", %{miss_room: room} do
+      reveal = room.reveal |> Map.merge(%{closeness: 83, band: :almost}) |> Map.put(:gap, 7)
+      room = %{room | reveal: reveal}
+
+      for mode <- [:phone, :stage, :quiet] do
+        html = render_component(&reveal/1, room: room, mode: mode)
+
+        assert html =~ ~s(data-role="ladder-rail")
+        assert html =~ ~s(data-role="meld-line")
+        assert html =~ "seven short"
+      end
+    end
+
+    test "a Seat's Call is a pin in its own colour", %{miss_room: room} do
+      calls = [%{seat_id: "s1", name: "Mara", band: :close, right?: false, bands_off: 1}]
+
+      room =
+        room
+        |> Map.put(:reveal, Map.put(room.reveal, :calls, calls))
+        |> Map.put(:seats, [%{id: "s1", name: "Mara", colour: "#e11d48"}])
+
+      html = render_component(&reveal/1, room: room)
+
+      assert html =~ ~s(data-role="call-pin")
+      assert html =~ ~s(data-seat="s1")
+      assert html =~ "--seat-color: #e11d48"
     end
 
     test "a Meld is staged as an arrival, distinct from a near miss", %{meld_room: room} do
@@ -1325,6 +1382,279 @@ defmodule ThereishWeb.RoomComponentsTest do
       html = render_component(&reveal/1, room: room, mode: :stage, seat: nil)
 
       refute html =~ ~s(data-role="gives")
+    end
+  end
+
+  describe "the noise at the punchline, and the labour moved off it" do
+    defp revealed_room(overrides \\ %{}) do
+      Map.merge(
+        %{
+          phase: :reveal,
+          may: %{react: true, tap_fairness: true},
+          reactions: [],
+          closed: nil,
+          played: [],
+          reveal: %{
+            closeness: 83,
+            band: :almost,
+            melded?: false,
+            gap: 7,
+            bridges: [
+              %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+              %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
+            ],
+            graded?: true,
+            overruled?: false,
+            quip: "Nearly the same hill.",
+            reasoning: "Stones, both.",
+            furthest: nil
+          }
+        },
+        overrides
+      )
+    end
+
+    defp closed_room(overrides \\ %{}) do
+      revealed_room(
+        Map.merge(
+          %{
+            phase: :closed,
+            closed: %{because: :meld, attempt: 2},
+            may: %{react: true, tap_fairness: true, tap_bookends: true}
+          },
+          overrides
+        )
+      )
+    end
+
+    test "the four words are offered on the phone and on a quiet phone" do
+      for mode <- [:phone, :quiet] do
+        html = render_component(&reveal/1, room: revealed_room(), mode: mode)
+
+        assert html =~ ~s(data-role="reactions")
+
+        for reaction <- Thereish.Game.reactions() do
+          assert html =~ ~s(data-reaction="#{reaction}")
+        end
+
+        assert html =~ "no way"
+      end
+    end
+
+    test "the Stage performs the reveal and offers no buttons" do
+      html = render_component(&reveal/1, room: revealed_room(), mode: :stage)
+
+      refute html =~ ~s(data-role="reactions")
+    end
+
+    test "a Seat that may not react is offered nothing" do
+      room = revealed_room(%{may: %{react: false}})
+
+      refute render_component(&reveal/1, room: room, mode: :phone) =~ ~s(data-role="reactions")
+    end
+
+    test "your own word is the chosen one, and nobody's is counted" do
+      room =
+        revealed_room(%{
+          reactions: [
+            %{seat_id: "s1", name: "Mara", reaction: :ooh},
+            %{seat_id: "s2", name: "Jacob", reaction: :ooh}
+          ]
+        })
+
+      html =
+        render_component(&reveal/1,
+          room: room,
+          seat: %{id: "s1", name: "Mara"},
+          mode: :phone
+        )
+
+      assert html =~ ~s(data-reaction="ooh" data-chosen="true")
+      assert html =~ ~s(data-reaction="yes" data-chosen="false")
+
+      # Two Seats shouted the same word and the screen says so nowhere: there
+      # is no score in this game and a reaction tally would be one.
+      refute html =~ "×2"
+      refute html =~ ~s(data-count)
+      refute html =~ "reaction-count"
+    end
+
+    test "the fairness tap has left the reveal" do
+      for mode <- [:phone, :quiet, :stage] do
+        html = render_component(&reveal/1, room: revealed_room(), mode: mode)
+
+        refute html =~ ~s(data-role="fairness-controls")
+        refute html =~ "Was this grade fair?"
+      end
+    end
+
+    test "the fairness tap and the Bookends taps are on the closing card, behind Notes" do
+      html = render_component(&ending/1, room: closed_room(), seat: %{id: "s1", name: "Mara"})
+
+      assert html =~ ~s(data-role="notes")
+      assert html =~ "Notes"
+      assert html =~ ~s(data-role="fairness-controls")
+      assert html =~ ~s(data-role="bookends-controls")
+
+      # The ending line and the arc still own the card.
+      {ending_idx, _} = :binary.match(html, ~s(data-role="ending-line"))
+      {notes_idx, _} = :binary.match(html, ~s(data-role="notes"))
+      assert ending_idx < notes_idx
+    end
+
+    test "the Stage's closing card carries no taps" do
+      html = render_component(&ending/1, room: closed_room(), mode: :stage)
+
+      refute html =~ ~s(data-role="notes")
+      refute html =~ ~s(data-role="fairness-controls")
+    end
+
+    test "a closing card nobody may tap has no Notes at all" do
+      html = render_component(&ending/1, room: closed_room(%{may: %{}}))
+
+      refute html =~ ~s(data-role="notes")
+    end
+  end
+
+  describe "the Juice hook" do
+    test "the hand is always wired and the floats are asked for by whoever performs them" do
+      room = %{attempt: %{number: 2, of: 5}, reactions: []}
+
+      phone = render_component(&juice_hook/1, room: room)
+      stage = render_component(&juice_hook/1, room: room, floats: true)
+
+      assert phone =~ "Juice"
+      assert phone =~ ~s(data-floats="false")
+      assert stage =~ ~s(data-floats="true")
+      assert phone =~ ~s(data-attempt="2")
+    end
+
+    test "the Reactions reach the hook as who shouted what, never how many" do
+      room = %{
+        attempt: %{number: 1, of: 5},
+        reactions: [
+          %{seat_id: "s1", name: "Mara", reaction: :ooh},
+          %{seat_id: "s2", name: "Jacob", reaction: :no_way}
+        ]
+      }
+
+      html = render_component(&juice_hook/1, room: room, floats: true)
+
+      assert html =~ ~s(data-reactions="s1:ooh s2:no_way")
+      refute html =~ ~s(data-reactions="2")
+    end
+
+    test "a Room that has not loaded yet still renders" do
+      assert render_component(&juice_hook/1, room: nil) =~ ~s(id="juice-container")
+    end
+  end
+
+  describe "the Buzz switch" do
+    test "is a device preference in the settings card, with no Room fact behind it" do
+      html = render_component(&foley_switches/1, room: %{speaker?: true, music: "page"})
+
+      assert html =~ ~s(data-role="buzz-switch")
+      assert html =~ ~s(data-pref="juice:haptics")
+      assert html =~ ~s(data-default="on")
+      assert html =~ "Buzz"
+      refute html =~ "toggle_buzz"
+    end
+  end
+
+  describe "the Split reading on screen" do
+    @split %{
+      forward: 31,
+      reverse: 78,
+      reasoning: "They both name a light.",
+      reasoning_reverse: "They share nothing but the bookends.",
+      generous: 78
+    }
+
+    defp split_room(overrides \\ %{}) do
+      revealed_room(
+        Map.merge(%{reveal: Map.put(revealed_room().reveal, :split, @split)}, overrides)
+      )
+    end
+
+    test "both readings are drawn on the Rail and written under it, on every screen" do
+      for mode <- [:phone, :stage, :quiet] do
+        html = render_component(&reveal/1, room: split_room(), mode: mode)
+
+        assert html =~ ~s(data-role="split-reading"), "#{mode}"
+        assert html =~ "graded this twice"
+        assert html =~ @split.reasoning
+        assert html =~ @split.reasoning_reverse
+
+        # The same two numbers, on the same scale as the grade: the argument is
+        # a distance the table can see rather than a claim it has to take.
+        assert html =~ ~s(data-role="rail-mark")
+        assert html =~ "31"
+        assert html =~ "78"
+      end
+    end
+
+    test "a Room that turned Split readings off is shown neither pins nor sentences" do
+      html = render_component(&reveal/1, room: split_room(%{split_readings: false}), mode: :phone)
+
+      refute html =~ ~s(data-role="split-reading")
+      refute html =~ ~s(data-role="rail-mark")
+      refute html =~ @split.reasoning
+    end
+
+    test "a reveal the Assayer agreed with itself about shows nothing of either" do
+      html = render_component(&reveal/1, room: revealed_room(), mode: :phone)
+
+      refute html =~ ~s(data-role="split-reading")
+      refute html =~ ~s(data-role="rail-mark")
+    end
+
+    test "the Assayer's reasoning stays off every other reveal" do
+      html = render_component(&reveal/1, room: revealed_room(), mode: :stage)
+
+      refute html =~ "Stones, both."
+    end
+
+    test "the Room's off switch is in the settings card beside Full table" do
+      html = render_component(&foley_switches/1, room: %{speaker?: true, music: "page"})
+
+      assert html =~ ~s(data-role="split-readings-switch")
+      assert html =~ ~s(phx-click="toggle_split_readings")
+      # On unless a flat night turns it off, like the other Room facts.
+      assert html =~ ~s(data-role="split-readings-switch" data-active="true")
+    end
+
+    test "a declined overrule says who declined for the rest of the Attempt" do
+      room = %{
+        overrule: nil,
+        overrule_declined: %{seat_id: "s2", name: "Jacob"},
+        reveal: %{overruled?: false},
+        may: %{}
+      }
+
+      html = render_component(&overrule_banner/1, room: room)
+
+      assert html =~ ~s(data-role="overrule-declined")
+      assert html =~ "Jacob"
+      assert html =~ "The Assayer's grade stands"
+    end
+
+    test "a proposal still on the table outranks a decline said earlier" do
+      room = %{
+        overrule: %{
+          pending?: true,
+          proposer_name: "Mara",
+          you_proposed?: false,
+          you_agreed?: false
+        },
+        overrule_declined: %{seat_id: "s2", name: "Jacob"},
+        reveal: %{overruled?: false},
+        may: %{}
+      }
+
+      html = render_component(&overrule_banner/1, room: room)
+
+      assert html =~ ~s(data-role="overrule-banner")
+      refute html =~ ~s(data-role="overrule-declined")
     end
   end
 end
