@@ -346,7 +346,9 @@ defmodule Thereish.GameTest do
       assert [%{name: "Mara", give: "lighthouse"}, %{name: "Jacob", give: "candle"}] =
                request.gives
 
-      assert request.count == 2
+      # Two Seats at a Full table open on four words: Bookends per Give, not one
+      # Bookend each (ADR-0022).
+      assert request.count == 4
       assert Game.view(state, nil).phase == :writing
     end
 
@@ -589,6 +591,66 @@ defmodule Thereish.GameTest do
     end
   end
 
+  describe "a Full table's width is Bookends per Give (ADR-0022)" do
+    @two ~w(Mara Bram)
+    @three ~w(Mara Bram Esme)
+
+    defp table(names, opts) do
+      Game.init(Keyword.merge([seat_limit: length(names), seats: Enum.map(names, &seat/1)], opts))
+    end
+
+    defp asked(names, opts \\ []) do
+      {_state, effects} =
+        Enum.reduce(names, {table(names, opts), []}, fn name, {state, _effects} ->
+          {:ok, state, effects} =
+            Game.apply(
+              state,
+              {:give_committed, %{seat_id: "seat-" <> name, give: "setting #{name}"}}
+            )
+
+          {state, effects}
+        end)
+
+      [{:author, request}] = effects
+      request
+    end
+
+    test "two Seats open on four words rather than on the two a miss would have carried" do
+      assert asked(@two).count == 4
+    end
+
+    test "three Seats open on six" do
+      assert asked(@three).count == 6
+    end
+
+    test "a large table is not drowned: four and six Seats both stop at the ceiling" do
+      assert asked(~w(Mara Bram Esme Cole)).count == 6
+      assert asked(~w(Mara Bram Esme Cole Sid Rafe)).count == 6
+    end
+
+    test "the floor outranks the ceiling: eight Seats still see a word each" do
+      assert asked(~w(Mara Bram Esme Cole Sid Rafe Ada Ned)).count == 8
+    end
+
+    test "Full table off is untouched: still two Bookends, however many Seats" do
+      assert asked(@two, full_table: false).count == 2
+      assert asked(~w(Mara Bram Esme Cole Sid Rafe), full_table: false).count == 2
+    end
+
+    # The one place a test moves the knob. Safe inside this module, because tests
+    # of one module run one at a time and no other async module asks the Author.
+    test "one Bookend per Give is today's game, exactly" do
+      per_give = Application.fetch_env!(:thereish, :bookends_per_give)
+      on_exit(fn -> Application.put_env(:thereish, :bookends_per_give, per_give) end)
+      Application.put_env(:thereish, :bookends_per_give, 1)
+
+      assert asked(@two).count == 2
+      assert asked(@three).count == 3
+      assert asked(~w(Mara Bram Esme Cole Sid Rafe Ada Ned)).count == 8
+      assert asked(@two, full_table: false).count == 2
+    end
+  end
+
   describe "the Room starts when everyone is here (ticket 08)" do
     test "a Page starts when the Seats present declare their Gives are in rather than waiting for Room to fill" do
       state =
@@ -615,7 +677,8 @@ defmodule Thereish.GameTest do
                Game.apply(state, {:start_page, %{seat_id: "seat-Mara"}})
 
       assert length(request.gives) == 3
-      assert request.count == 3
+      # Three Gives, two Bookends each.
+      assert request.count == 6
       assert Enum.map(request.gives, & &1.name) == ["Mara", "Jacob", "Ada"]
       assert Game.view(writing_state, nil).phase == :writing
 

@@ -487,7 +487,7 @@ defmodule Thereish.RoomsTest do
         view = Rooms.snapshot(ctx.slug, viewer)
 
         assert view.phase == :bridging
-        assert [_lantern, _harbour] = view.bookends
+        assert [_lantern, _harbour, _summit, _ember] = view.bookends
       end
     end
 
@@ -809,7 +809,7 @@ defmodule Thereish.RoomsTest do
       assert view.phase == :closed
       assert view.closed == %{because: :attempts_spent, attempt: 2}
       refute view.reveal.melded?
-      assert Enum.map(view.played, & &1.bookends) == [["lantern", "harbour"]]
+      assert Enum.map(view.played, & &1.bookends) == [["lantern", "harbour", "summit", "ember"]]
     end
 
     test "one more? is a fresh Page with the same Seats", ctx do
@@ -1577,7 +1577,7 @@ defmodule Thereish.RoomsTest do
 
       view = await_phase(ctx.slug, :bridging)
       assert view.phase == :bridging
-      assert [_b1, _b2] = view.bookends
+      assert [_b1, _b2, _b3, _b4] = view.bookends
     end
 
     test "an Author failure allows retry or entering new settings", ctx do
@@ -1858,7 +1858,8 @@ defmodule Thereish.RoomsTest do
 
       [page] = Chronicle.pages(room.id)
       count = page.author_meta["count"] || page.author_meta[:count]
-      assert count == 2
+      # Two Gives, two Bookends each (ADR-0022).
+      assert count == 4
 
       assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       await_phase(ctx.slug, :giving)

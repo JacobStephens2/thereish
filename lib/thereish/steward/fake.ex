@@ -92,6 +92,7 @@ defmodule Thereish.Steward.Fake do
   end
 
   @bookend_pool ~w(lantern harbour summit ember grove spire ridge hearth)
+  @bookend_laps ~w(old new far near high low deep wide)
 
   @impl true
   def author(request, opts \\ []) do
@@ -104,7 +105,7 @@ defmodule Thereish.Steward.Fake do
 
         bookends =
           Keyword.get(opts, :bookends) ||
-            config_get(:author_bookends, Enum.take(@bookend_pool, count))
+            config_get(:author_bookends, pool_bookends(count))
 
         why =
           Keyword.get(opts, :why) ||
@@ -150,6 +151,27 @@ defmodule Thereish.Steward.Fake do
     end
   end
 
+  # N Bookends for whatever N a Full table asks for, all of them distinct: the
+  # pool first, then the pool again under a two-word phrase. A Page whose
+  # Bookends repeat a word is not a Page any width of table would be handed, so
+  # the fake never hands one out either.
+  defp pool_bookends(count) do
+    size = length(@bookend_pool)
+
+    for i <- 0..(count - 1)//1 do
+      word = Enum.at(@bookend_pool, rem(i, size))
+
+      case div(i, size) do
+        0 -> word
+        lap -> Enum.at(@bookend_laps, rem(lap - 1, length(@bookend_laps))) <> " " <> word
+      end
+    end
+  end
+
+  # The setting each Bookend was drawn from, in the order the Bookends came. The
+  # Gives are walked round and round until every Bookend has one, so a Page that
+  # asks for more Bookends than it has Gives still names every setting at least
+  # once — which is what the Author's own gate asks for.
   defp author_from(request, count) do
     gives =
       cond do
@@ -159,9 +181,16 @@ defmodule Thereish.Steward.Fake do
         true -> []
       end
 
-    gives
-    |> Enum.take(count)
-    |> Enum.map(&Thereish.Steward.Author.give_name/1)
+    case gives do
+      [] ->
+        []
+
+      gives ->
+        gives
+        |> Stream.cycle()
+        |> Enum.take(count)
+        |> Enum.map(&Thereish.Steward.Author.give_name/1)
+    end
   end
 
   @impl true

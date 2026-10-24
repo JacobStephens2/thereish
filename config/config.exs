@@ -40,6 +40,16 @@ config :thereish,
   # how long a converging arc stays funny, which makes it a setting the couch
   # moves rather than a number in the rules.
   attempts_per_page: 5,
+  # How wide a Full table opens: how many Bookends each Give heads. This is the
+  # difficulty dial the couch owns, and the one answer to "two players is too
+  # easy" that needs no new rule and no new wait — two Seats open on four words
+  # rather than on the same two the carry-forward would have handed them anyway.
+  bookends_per_give: 2,
+  # And how wide is too wide. A ceiling on the Bookends one Attempt shows, so a
+  # large table is not drowned in words it cannot hold in its head at once. The
+  # Seat count outranks it: a Full table's promise is a word per Seat, so eight
+  # Seats still open on eight.
+  max_bookends: 6,
   # How many Nudges one Seat may spend on a Page. One is a guess about how much
   # a channel between Seats may carry before the Bridges stop being written
   # alone, which makes it the couch's number: zero is today's game, and two is

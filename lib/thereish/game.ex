@@ -832,7 +832,27 @@ defmodule Thereish.Game do
   end
 
   defp bookend_count(%{full_table: false}, _seats), do: 2
-  defp bookend_count(_state, seats), do: length(seats)
+
+  # A Full table's width is Bookends per Give, not one Bookend each. At two
+  # Seats "one per Give" and "the two that landed furthest apart" name the same
+  # two words, so Full table was a no-op there and a Meld on Attempt 2 was the
+  # rule working as written; the fix is a count (ADR-0022, amending ADR-0016).
+  #
+  # The clamp order is the promise. The ceiling stops a large table being
+  # drowned in words, and the floor outranks it, because a Full table says every
+  # Seat sees a word of its own whatever `max_bookends` says: at eight Seats the
+  # count is eight, not six.
+  defp bookend_count(_state, seats) do
+    seats
+    |> length()
+    |> then(&(&1 * bookends_per_give()))
+    |> min(max(max_bookends(), length(seats)))
+    |> max(length(seats))
+  end
+
+  defp bookends_per_give, do: Application.fetch_env!(:thereish, :bookends_per_give)
+
+  defp max_bookends, do: Application.fetch_env!(:thereish, :max_bookends)
 
   # A Page keeps the rule it was written under. A Room that has not written
   # one yet, or a Page from before the rule, reads as the Room's current rule.
