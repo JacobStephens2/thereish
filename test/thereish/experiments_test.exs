@@ -55,6 +55,28 @@ defmodule Thereish.ExperimentsTest do
       assert :closing_band in exp.declared_outcomes
     end
 
+    test "declares the channel experiment" do
+      exp = Experiments.definition(:channel)
+
+      assert exp.id == "channel"
+      assert exp.name =~ "Nudge on against off"
+      assert exp.arms == [:nudge_on, :nudge_off]
+      assert exp.sample_size == 20
+
+      assert exp.declared_outcomes == [
+               :meld_rate,
+               :attempts_to_meld,
+               :closing_band,
+               :bookends_preferences
+             ]
+    end
+
+    test "refuses an id nothing declares rather than answering with a live Experiment" do
+      assert_raise ArgumentError, ~r/no Experiment is declared as "rungs"/, fn ->
+        Experiments.definition("rungs")
+      end
+    end
+
     test "keeps bait_against_plain readable" do
       exp = Experiments.definition(:bait_against_plain)
 
@@ -92,6 +114,39 @@ defmodule Thereish.ExperimentsTest do
       assert Experiments.assign(room.id).arm == :flash
     end
 
+    test "alternates the channel arm on its own rows, beside the Author's", %{room: room} do
+      pages = for _ <- 1..3, do: Experiments.assign(room.id)
+
+      assert Enum.map(pages, & &1.arm) == [:flash, :astra, :flash]
+      assert Enum.map(pages, &Assignment.arm(&1, :channel)) == [:nudge_on, :nudge_off, :nudge_on]
+
+      channel = ExperimentFixtures.assignments(room.id, "channel")
+      assert Enum.map(channel, & &1.arm) == ["nudge_on", "nudge_off", "nudge_on"]
+
+      # Both of a Page's rows name the Page the same way, so its Arms read as
+      # one Page.
+      assert Enum.map(channel, & &1.page_identifier) ==
+               Enum.map(
+                 ExperimentFixtures.assignments(room.id, "author_model"),
+                 & &1.page_identifier
+               )
+    end
+
+    test "alternates the channel arm from the Room's own channel rows", %{room: room} do
+      insert_assignment(room.id, experiment_id: "channel", arm: "nudge_on")
+
+      assert Assignment.arm(Experiments.assign(room.id), :channel) == :nudge_off
+    end
+
+    test "answers no channel arm at all when no row could be written" do
+      log =
+        capture_log(fn ->
+          assert Assignment.arm(Experiments.assign("no-such-room"), :channel) == nil
+        end)
+
+      assert log =~ "no experiment arm could be assigned"
+    end
+
     test "logs and falls back to the default arm, with no row, rather than raising" do
       log =
         capture_log(fn ->
@@ -109,6 +164,22 @@ defmodule Thereish.ExperimentsTest do
       {_page, outcome2} = record_outcome(room, assignment: Experiments.assign(room.id))
 
       assert {outcome.arm, outcome2.arm} == {"flash", "astra"}
+    end
+
+    test "records the Page under every Experiment it played under, linking each row",
+         %{room: room} do
+      assignment = Experiments.assign(room.id)
+      {page, outcome} = record_outcome(room, assignment: assignment)
+
+      assert {outcome.experiment_id, outcome.arm} == {"author_model", "flash"}
+
+      assert [channel] = ExperimentFixtures.outcomes(room.id, "channel")
+      assert {channel.arm, channel.page_id} == {"nudge_on", page.id}
+
+      assert Enum.all?(
+               ExperimentFixtures.assignments(room.id, "channel"),
+               &(&1.page_id == page.id)
+             )
     end
 
     test "files the outcome under the Assignment's own Experiment", %{room: room} do

@@ -9,6 +9,12 @@ defmodule Thereish.Chronicle.Attempt do
   `closeness` is the number the players were shown, stored rather than
   recomputed: the grade that was shown is the record of what happened
   (ADR-0006).
+
+  `nudges`, `calls` and `reactions` are the noise around the Attempt: the words
+  spent on it, the bands its Seats called during its Beat, and the words they
+  sent at its reveal. Kept so the book reads as the table did, and counted
+  nowhere (ADR-0020, ADR-0023). An Attempt from before they existed has none,
+  which is not the same as having had a quiet table.
   """
   use Ecto.Schema
 
@@ -22,6 +28,9 @@ defmodule Thereish.Chronicle.Attempt do
     field :bookends, {:array, :string}
     field :closeness, :integer
     field :melded, :boolean
+    field :nudges, {:array, :map}
+    field :calls, {:array, :map}
+    field :reactions, {:array, :map}
     field :started_at, :utc_datetime_usec
     field :assaying_started_at, :utc_datetime_usec
     field :revealed_at, :utc_datetime_usec
@@ -43,6 +52,9 @@ defmodule Thereish.Chronicle.Attempt do
       :bookends,
       :closeness,
       :melded,
+      :nudges,
+      :calls,
+      :reactions,
       :started_at,
       :assaying_started_at,
       :revealed_at,

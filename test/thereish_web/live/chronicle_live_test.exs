@@ -509,6 +509,99 @@ defmodule ThereishWeb.ChronicleLiveTest do
     end
   end
 
+  describe "the noise around an Attempt (#200)" do
+    # A closed Page whose one Attempt was nudged, called and shouted at.
+    defp write_noisy_page(ctx) do
+      room = Repo.get_by!(Room, slug: ctx.slug)
+
+      {:ok, page} =
+        Chronicle.write(
+          room.id,
+          entry(%{
+            page: %Document{bookends: ["desert", "oasis"]},
+            closed_because: :attempts_spent,
+            melded?: false,
+            closeness: 41,
+            attempts: [
+              %{
+                number: 1,
+                bookends: ["desert", "oasis"],
+                closeness: 41,
+                melded?: false,
+                bridges: [
+                  %{seat_id: ctx.mara.id, bridge: "mirage"},
+                  %{seat_id: ctx.jacob.id, bridge: "well"}
+                ],
+                nudges: [%{seat_id: ctx.mara.id, word: "lighthouse"}],
+                calls: [
+                  %{seat_id: ctx.mara.id, band: :close},
+                  %{seat_id: ctx.jacob.id, band: :miss}
+                ],
+                reactions: [%{seat_id: ctx.jacob.id, reaction: :no_way}],
+                verdicts: [
+                  %{
+                    seat_ids: [ctx.mara.id, ctx.jacob.id],
+                    bridges: ["mirage", "well"],
+                    graded?: true,
+                    closeness: 41,
+                    band: :close
+                  }
+                ]
+              }
+            ]
+          })
+        )
+
+      page
+    end
+
+    test "reads as the Nudges spent, the bands called and the words sent",
+         %{conn: conn, slug: slug} = ctx do
+      write_noisy_page(ctx)
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      nudges = render(element(view, "[data-role=attempt-nudges]"))
+      assert nudges =~ "Mara spent"
+      assert nudges =~ "lighthouse"
+
+      called = render(element(view, "[data-role=call-entry][data-band=close]"))
+      assert called =~ "Mara called"
+      assert called =~ "close"
+      assert called =~ "and it landed there"
+
+      missed = render(element(view, "[data-role=call-entry][data-band=miss]"))
+      assert missed =~ "Jacob called"
+      refute missed =~ "landed there"
+
+      shouted = render(element(view, "[data-role=reaction-entry]"))
+      assert shouted =~ "Jacob:"
+      assert shouted =~ "no way"
+    end
+
+    test "counts none of it, on the Page or in the Attempt",
+         %{conn: conn, slug: slug} = ctx do
+      write_noisy_page(ctx)
+
+      {:ok, _view, html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      refute html =~ "1 nudge"
+      refute html =~ "2 calls"
+      refute html =~ "1 reaction"
+    end
+
+    test "is nowhere at all on a Page played before any of it",
+         %{conn: conn, slug: slug} = ctx do
+      play(ctx, "cairn", "cairns")
+
+      {:ok, view, _html} = live(conn, ~p"/r/#{slug}/chronicle")
+
+      refute has_element?(view, "[data-role=attempt-nudges]")
+      refute has_element?(view, "[data-role=attempt-calls]")
+      refute has_element?(view, "[data-role=attempt-reactions]")
+    end
+  end
+
   describe "operator information stays off the ordinary Chronicle (ticket 09)" do
     test "has no export links, experiment card, or spend foot",
          %{conn: conn, slug: slug} = ctx do

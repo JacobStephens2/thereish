@@ -28,6 +28,12 @@ defmodule Thereish.Rooms.PlayTest do
   @track %{path: "/media/track.mp3", meta: %{provider: "fake"}}
   @assignment %Assignment{id: "assignment-1", experiment_id: "author_model", arm: :astra}
 
+  # The Page's Assignment with the channel Experiment's Arm beside the
+  # Author's, as `Experiments.assign/1` hands one out.
+  defp channel(arm) do
+    %{@assignment | also: [%Assignment{id: "assignment-2", experiment_id: "channel", arm: arm}]}
+  end
+
   # A Room as full as its Seats, unless `room` says otherwise.
   defp new(opts \\ []) do
     seats = Keyword.get(opts, :seats, @seats)
@@ -57,8 +63,8 @@ defmodule Thereish.Rooms.PlayTest do
     end)
   end
 
-  defp answer({:open_page, request, assignment}, _opts),
-    do: {:page_opened, request, assignment || @assignment, nil}
+  defp answer({:open_page, request, assignment}, opts),
+    do: {:page_opened, request, assignment || opts[:assignment] || @assignment, nil}
 
   defp answer({:look_up_track, page_ref, _gives}, _opts), do: {:track_looked_up, page_ref, nil}
 
@@ -78,15 +84,19 @@ defmodule Thereish.Rooms.PlayTest do
   # Both Gives in, the Author asked and answered. Answers the Play at the
   # Bookends, the Page ref its Foley was asked under and the giving ref its
   # Masks were drawn under.
-  defp written(play) do
-    {play, given} = run(play, {:give, "mara", "deep canyon"})
-    {play, opened} = run(play, {:give, "jacob", "echoing wind"})
+  defp written(play, opts \\ []) do
+    {play, given} = run(play, {:give, "mara", "deep canyon"}, opts)
+    {play, opened} = run(play, {:give, "jacob", "echoing wind"}, opts)
     {:draw_mask, "mara", giving, "deep canyon", _colour} = find(given, :draw_mask)
     {:ask_author, ref, _request, _arm} = find(opened, :ask_author)
     {:start_vamp, page_ref, _gives} = find(opened, :start_vamp)
 
     {play, _} =
-      run(play, {:author_completed, ref, {:ok, %{bookends: ["lighthouse", "picnic"], meta: %{}}}})
+      run(
+        play,
+        {:author_completed, ref, {:ok, %{bookends: ["lighthouse", "picnic"], meta: %{}}}},
+        opts
+      )
 
     {play, page_ref, giving}
   end
@@ -386,6 +396,29 @@ defmodule Thereish.Rooms.PlayTest do
 
       assert {:write_page, "page-1", {:bookends_tap, %{label: "great", assignment: @assignment}}} =
                find(tapped, :write_page)
+    end
+  end
+
+  describe "the channel Experiment's Arm" do
+    test "on its off Arm leaves the Page with no Nudge to spend" do
+      {play, _page_ref, _giving} = written(new(), assignment: channel(:nudge_off))
+
+      assert view(play, "mara").your_nudges_left == 0
+      refute view(play, "mara").may.nudge
+      assert Play.apply(play, {:nudge, "mara", "beacon"}, @now) == {:error, :nudges_off}
+    end
+
+    test "on its on Arm leaves the configured budget alone" do
+      {play, _page_ref, _giving} = written(new(), assignment: channel(:nudge_on))
+
+      assert view(play, "mara").your_nudges_left == 1
+      assert view(play, "mara").may.nudge
+    end
+
+    test "is not read off the Author's Arm, which says nothing about it" do
+      {play, _page_ref, _giving} = written(new())
+
+      assert view(play, "mara").your_nudges_left == 1
     end
   end
 

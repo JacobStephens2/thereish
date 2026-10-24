@@ -3,7 +3,10 @@ defmodule ThereishWeb.ChronicleLive do
   The Chronicle as a book read on a phone (ticket 08, ticket 11).
 
   Reads the Chronicle in reverse chronological order: every Page, every attempt,
-  both Bridges, the grade, the reasoning, and any overrule. Original participants
+  both Bridges, the grade, the reasoning, and any overrule — and the noise
+  around each Attempt: the Nudges spent on it, the bands the table called, and
+  what it shouted at the reveal, each read as words with nothing totalled
+  (ADR-0020, ADR-0023). Original participants
   and the authenticated admin can record Too harsh / Fair / Too kind opinions
   without rewriting recorded play (ADR-0019). Historical corrections remain
   readable. Every view is computed from the event log.
@@ -303,6 +306,25 @@ defmodule ThereishWeb.ChronicleLive do
                 {chip.word} from {chip.seat_name}'s {chip.give}
               </p>
 
+              <!-- Nudges spent while the Bridges were still being written -->
+              <div
+                :if={attempt.nudges != []}
+                data-role="attempt-nudges"
+                class="flex flex-wrap items-center gap-1.5 text-xs"
+              >
+                <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Nudges:
+                </span>
+                <span
+                  :for={n <- attempt.nudges}
+                  data-role="nudge-entry"
+                  data-seat={n.seat_id}
+                  class="rounded bg-base-300 px-1.5 py-0.5"
+                >
+                  {n.seat_name} spent <span class="font-medium line-through">{n.word}</span>
+                </span>
+              </div>
+
               <!-- Bridges -->
               <div class="flex flex-wrap items-center gap-3 text-base">
                 <div :for={b <- attempt.bridges} class="flex items-center gap-1.5">
@@ -338,6 +360,47 @@ defmodule ThereishWeb.ChronicleLive do
                 </div>
                 <p :if={v.reasoning} class="italic opacity-80">"{v.reasoning}"</p>
                 <p :if={v.quip} class="text-xs font-medium opacity-90">{v.quip}</p>
+              </div>
+
+              <!-- What the table called in the Beat, and what it shouted after -->
+              <div
+                :if={attempt.calls != []}
+                data-role="attempt-calls"
+                class="flex flex-wrap items-center gap-1.5 text-xs"
+              >
+                <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Calls:
+                </span>
+                <span
+                  :for={c <- attempt.calls}
+                  data-role="call-entry"
+                  data-seat={c.seat_id}
+                  data-band={c.band}
+                  data-right={to_string(c.right? == true)}
+                  class="rounded bg-base-300 px-1.5 py-0.5"
+                >
+                  {c.seat_name} called
+                  <span class="font-medium uppercase tracking-wide">{in_words(c.band)}</span>
+                  <span :if={c.right?} class="opacity-70">— and it landed there</span>
+                </span>
+              </div>
+
+              <div
+                :if={attempt.reactions != []}
+                data-role="attempt-reactions"
+                class="flex flex-wrap items-center gap-1.5 text-xs"
+              >
+                <span class="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Reactions:
+                </span>
+                <span
+                  :for={r <- attempt.reactions}
+                  data-role="reaction-entry"
+                  data-seat={r.seat_id}
+                  class="rounded bg-base-300 px-1.5 py-0.5"
+                >
+                  {r.seat_name}: <span class="font-medium">{in_words(r.reaction)}</span>
+                </span>
               </div>
 
               <p
@@ -516,6 +579,9 @@ defmodule ThereishWeb.ChronicleLive do
   end
 
   defp room_path(slug), do: ~p"/r/#{slug}"
+
+  # A band or a Reaction as the table says it, not as the rules spell it.
+  defp in_words(name), do: name |> to_string() |> String.replace("_", " ")
 
   attr :event, :string, required: true
   attr :page_id, :string, required: true

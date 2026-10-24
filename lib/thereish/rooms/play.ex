@@ -48,7 +48,8 @@ defmodule Thereish.Rooms.Play do
 
     * `{:open_page, request, assignment_or_nil}`: the Room makes an
       Assignment when this is nil, reads the Track cache for the request's
-      Gives, and runs `{:page_opened, request, assignment, cached_track}`
+      Gives, and runs `{:page_opened, request, assignment, cached_track}`,
+      which is also where the Page's Nudge budget is read off its Arm
     * `{:look_up_track, page_ref, gives}`: runs
       `{:track_looked_up, page_ref, cached_track}`
     * `{:write_chronicle, entry}`: runs `{:chronicle_written, page_id}`, or
@@ -85,6 +86,7 @@ defmodule Thereish.Rooms.Play do
   import Kernel, except: [apply: 3]
 
   alias Thereish.Chronicle.Entry
+  alias Thereish.Experiments.Assignment
   alias Thereish.Foley.Occupancy
   alias Thereish.Foley.Repertoire
   alias Thereish.Foley.Voice
@@ -404,7 +406,12 @@ defmodule Thereish.Rooms.Play do
     gives = Enum.map(request.gives, & &1.text)
     music = play.facts.music
 
-    play = %{play | pages: Pages.page_opened(play.pages, page_ref, assignment)}
+    play = %{
+      play
+      | pages: Pages.page_opened(play.pages, page_ref, assignment),
+        game: nudge_budget(play.game, assignment)
+    }
+
     {play, paced} = pace(play, &Pacing.author_asked(&1, ref, now), now)
 
     {play, occupied} =
@@ -542,6 +549,18 @@ defmodule Thereish.Rooms.Play do
   defp game_effect(play, {:assay, request}, now) do
     {play, paced} = pace(play, &Pacing.assayer_asked(&1, now), now)
     {play, [{:ask_assayer, request} | paced]}
+  end
+
+  # The channel Experiment's Arm is a budget and nothing else: off takes the
+  # Nudge away for this Page, on hands the configured one back, so a Page never
+  # inherits the Arm before it. No screen is told which it is — the Arm is
+  # blinded by there being nothing to see (ADR-0020).
+  defp nudge_budget(game, assignment) do
+    case Assignment.arm(assignment, :channel) do
+      :nudge_off -> Game.set_nudges_per_page(game, 0)
+      :nudge_on -> Game.set_nudges_per_page(game, nil)
+      nil -> game
+    end
   end
 
   defp author_event(play, {:ok, result}) do

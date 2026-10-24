@@ -12,10 +12,11 @@ defmodule Thereish.Steward.Digest do
   grades and all, and naming a Room reads it the same way. The Scribe reads it
   with every recap and callback it has already written folded in, and with no
   grade anywhere: the closeness never crosses to the Scribe (ADR-0006), whether
-  it is tonight's Page or one from last month. It also hears the Reactions: the
-  noise around a reveal is the evening, and the Scribe is the only role writing
-  the evening. The Assayer reads only the recent Quips, so that its comedy does
-  not repeat a construction.
+  it is tonight's Page or one from last month. It also hears the noise around
+  each Attempt — the Nudges spent on it, the bands the table called, and the
+  Reactions at its reveal: that noise is the evening, and the Scribe is the only
+  role writing the evening. The Assayer reads only the recent Quips, so that its
+  comedy does not repeat a construction.
   """
 
   @empty "Nothing yet; this is the first Page."
@@ -39,8 +40,9 @@ defmodule Thereish.Steward.Digest do
   evenings it has already written about, including its own prose, so that it
   does not plant the same callback twice. It sees bands and reasoning and never
   a closeness: not a Verdict's, not the meld's, and not the one an overrule
-  proposed. It sees each Attempt's Reactions as the words they were, with no
-  count of them anywhere.
+  proposed. It sees each Attempt's Nudges, Calls and Reactions as the words they
+  were, with no count of them anywhere: a band a Seat called is a word like any
+  other, and carries no number with it.
   """
   @spec scribe([map()]) :: String.t()
   def scribe(views), do: compose(views, :scribe)
@@ -122,13 +124,13 @@ defmodule Thereish.Steward.Digest do
       [] ->
         [
           "  Attempt #{attempt.number}: #{bridges}. Verdict: Ungraded"
-          | reactions(attempt, reader)
+          | noise(attempt, reader)
         ]
 
       [single] ->
         [
           "  Attempt #{attempt.number}: #{bridges}. Verdict: #{verdict(single, reader)}"
-          | reactions(attempt, reader)
+          | noise(attempt, reader)
         ]
 
       # An attempt written before ADR-0010, when the Assayer answered one pair at
@@ -140,22 +142,35 @@ defmodule Thereish.Steward.Digest do
             "    Pair [#{Enum.join(verdict.bridges, " / ")}]: #{verdict(verdict, reader)}"
           end)
 
-        ["  Attempt #{attempt.number}: #{bridges}." | pair_lines] ++ reactions(attempt, reader)
+        ["  Attempt #{attempt.number}: #{bridges}." | pair_lines] ++ noise(attempt, reader)
     end
   end
 
-  # What the couch shouted. The Scribe writes the evening, so it may hear it;
-  # nothing that grades may, which is why there is no `:author` clause and why
-  # `assayer/2` never goes near it (ADR-0023). A Page written before Reactions
-  # existed simply has none.
-  defp reactions(attempt, :scribe) do
-    case Map.get(attempt, :reactions) || [] do
-      [] -> []
-      shouts -> ["    Reactions: " <> Enum.map_join(shouts, ", ", &reaction/1)]
-    end
+  # What the couch did around the Attempt: the Nudges spent on it, the bands it
+  # called in the Beat, and what it shouted at the reveal. The Scribe writes the
+  # evening, so it may hear all three; nothing that grades may, which is why
+  # there is no `:author` clause and why `assayer/2` never goes near them
+  # (ADR-0020, ADR-0023). A Page written before any of it simply has none.
+  defp noise(attempt, :scribe) do
+    noise_line("Nudges", Map.get(attempt, :nudges), &nudge/1) ++
+      noise_line("Calls", Map.get(attempt, :calls), &call/1) ++
+      noise_line("Reactions", Map.get(attempt, :reactions), &reaction/1)
   end
 
-  defp reactions(_attempt, _reader), do: []
+  defp noise(_attempt, _reader), do: []
+
+  defp noise_line(_label, none, _say) when none in [nil, []], do: []
+  defp noise_line(label, rows, say), do: ["    #{label}: " <> Enum.map_join(rows, ", ", say)]
+
+  defp nudge(%{seat_name: name, word: word}) when is_binary(name),
+    do: ~s(#{name} spent "#{word}")
+
+  defp nudge(%{word: word}), do: ~s("#{word}")
+
+  # A band, never the number behind it: the closeness does not cross to the
+  # Scribe, and a Call is only ever a word the table said (ADR-0006).
+  defp call(%{seat_name: name, band: band}) when is_binary(name), do: "#{name}: #{band}"
+  defp call(%{band: band}), do: to_string(band)
 
   defp reaction(%{seat_name: name, reaction: reaction}) when is_binary(name),
     do: "#{name}: #{reaction}"

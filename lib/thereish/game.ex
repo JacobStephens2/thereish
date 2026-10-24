@@ -305,9 +305,12 @@ defmodule Thereish.Game do
 
   A knob rather than a constant, because what one public word does to an
   Attempt is a question the couch answers — and because an Arm has to be able
-  to take it away for a Page (`Thereish.Experiments`).
+  to take it away for a Page (`Thereish.Experiments`). Nil is the configured
+  budget, which is how an Arm hands it back for the Page after.
   """
-  @spec set_nudges_per_page(t(), non_neg_integer()) :: t()
+  @spec set_nudges_per_page(t(), non_neg_integer() | nil) :: t()
+  def set_nudges_per_page(%__MODULE__{} = state, nil), do: %{state | nudges_per_page: nil}
+
   def set_nudges_per_page(%__MODULE__{} = state, budget)
       when is_integer(budget) and budget >= 0 do
     %{state | nudges_per_page: budget}

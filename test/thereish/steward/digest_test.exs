@@ -46,6 +46,18 @@ defmodule Thereish.Steward.DigestTest do
     )
   end
 
+  # One Attempt with everything the couch did around it.
+  defp noisy_attempt do
+    %{
+      number: 1,
+      bridges: [%{seat_name: "Mara", bridge: "cairn"}],
+      verdicts: [verdict([])],
+      nudges: [%{seat_name: "Mara", word: "lighthouse"}],
+      calls: [%{seat_name: "Bram", band: "almost"}, %{seat_name: "Esme", band: "meld"}],
+      reactions: [%{seat_name: "Bram", reaction: "ooh"}]
+    }
+  end
+
   defp overrule(attrs \\ []) do
     Map.merge(
       %{proposer_name: "Mara", couple_closeness: 88, couple_reasoning: "Water in the desert."},
@@ -132,6 +144,15 @@ defmodule Thereish.Steward.DigestTest do
                "[Give (Mara): nurse, Give (Jacob): clinic]"
     end
 
+    test "hears none of the noise around an Attempt" do
+      digest = Digest.author([view(attempts: [noisy_attempt()])])
+
+      refute digest =~ "lighthouse"
+      refute digest =~ "Nudges"
+      refute digest =~ "Calls"
+      refute digest =~ "Reactions"
+    end
+
     test "leaves the Scribe's recaps and callbacks out" do
       digest = Digest.author([view(recap: recap())])
 
@@ -214,6 +235,16 @@ defmodule Thereish.Steward.DigestTest do
 
       assert digest =~ "    Reactions: Mara: ooh, Bram: no_way"
       refute digest =~ "2 reactions"
+    end
+
+    test "hears the Nudges spent and the bands called, as words and never as numbers" do
+      digest = Digest.scribe([view(attempts: [noisy_attempt()])])
+
+      assert digest =~ ~s(    Nudges: Mara spent "lighthouse")
+      assert digest =~ "    Calls: Bram: almost, Esme: meld"
+      assert digest =~ "    Reactions: Bram: ooh"
+      refute digest =~ "91"
+      refute digest =~ "closeness"
     end
 
     test "a Page written before Reactions existed reads as it always did" do

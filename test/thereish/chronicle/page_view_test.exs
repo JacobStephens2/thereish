@@ -26,6 +26,7 @@ defmodule Thereish.Chronicle.PageViewTest do
   @page_id "page"
   @mara "mara"
   @jacob "jacob"
+  @bram "bram"
 
   @no_rows %{
     overrules: [],
@@ -81,6 +82,11 @@ defmodule Thereish.Chronicle.PageViewTest do
       position: position
     }
   end
+
+  # A Bridge whose Seat row came back with it, which is how the Page can put a
+  # name to the Seat a Nudge, a Call or a Reaction names by id alone.
+  defp named_bridge(seat_id, name, word, position),
+    do: %{bridge(seat_id, word, position) | seat: %Seat{name: name}}
 
   defp verdict(attrs) do
     struct!(
@@ -192,6 +198,87 @@ defmodule Thereish.Chronicle.PageViewTest do
       assert give.seat_name == "Seat"
       assert give.text == "cactus"
       assert give.mask == mask("mara")
+    end
+  end
+
+  describe "project/2 reads the noise around an Attempt" do
+    # The rows come back out of Postgres string-keyed, which is how they are
+    # written here.
+    defp noisy_attempt(attrs) do
+      attempt(
+        1,
+        Keyword.merge(
+          [
+            bridges: [
+              named_bridge(@mara, "Mara", "beacon", 0),
+              named_bridge(@bram, "Bram", "cairn", 1)
+            ],
+            verdicts: [verdict(band: "close")]
+          ],
+          attrs
+        )
+      )
+    end
+
+    test "as the Nudges spent on it, the bands called and the words sent, under their Seats" do
+      view =
+        project(
+          page(
+            attempts: [
+              noisy_attempt(
+                nudges: [%{"seat_id" => @mara, "word" => "lighthouse"}],
+                calls: [
+                  %{"seat_id" => @mara, "band" => "close"},
+                  %{"seat_id" => @bram, "band" => "miss"}
+                ],
+                reactions: [%{"seat_id" => @bram, "reaction" => "no_way"}]
+              )
+            ]
+          )
+        )
+
+      assert [attempt] = view.attempts
+      assert attempt.nudges == [%{seat_id: @mara, seat_name: "Mara", word: "lighthouse"}]
+
+      assert attempt.calls == [
+               %{seat_id: @mara, seat_name: "Mara", band: "close", right?: true},
+               %{seat_id: @bram, seat_name: "Bram", band: "miss", right?: false}
+             ]
+
+      assert attempt.reactions == [
+               %{seat_id: @bram, seat_name: "Bram", reaction: "no_way"}
+             ]
+    end
+
+    test "with a Call settling nothing on an Attempt the Assayer could not grade" do
+      view =
+        project(
+          page(
+            attempts: [
+              noisy_attempt(
+                closeness: nil,
+                verdicts: [verdict(graded: false, closeness: nil, band: nil)],
+                calls: [%{"seat_id" => @mara, "band" => "close"}]
+              )
+            ]
+          )
+        )
+
+      assert [%{right?: nil}] = hd(view.attempts).calls
+    end
+
+    test "naming a Seat it cannot place the way every other row does" do
+      view =
+        project(
+          page(attempts: [noisy_attempt(nudges: [%{"seat_id" => "cole", "word" => "ferry"}])])
+        )
+
+      assert [%{seat_name: "Player", word: "ferry"}] = hd(view.attempts).nudges
+    end
+
+    test "as empty lists on a Page written before any of it existed" do
+      assert [attempt] = project(page([])).attempts
+      assert {attempt.nudges, attempt.calls, attempt.reactions} == {[], [], []}
     end
   end
 
