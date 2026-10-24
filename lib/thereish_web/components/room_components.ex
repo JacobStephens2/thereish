@@ -993,7 +993,10 @@ defmodule ThereishWeb.RoomComponents do
 
             // Reduced motion is about motion and nothing else: every element
             // ends in its final, legible place, it simply never travels there.
-            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            // A Stage that is not being looked at gets no animation frames, so
+            // its performance would start whenever someone looks; it lands in
+            // its final state instead.
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.hidden) {
               this.setFinalState()
               return
             }
@@ -1078,6 +1081,7 @@ defmodule ThereishWeb.RoomComponents do
 
           destroyed() {
             if (this.flashTimer) clearTimeout(this.flashTimer)
+            if (this.landTimer) clearTimeout(this.landTimer)
           },
 
           // Every step is the same shape: hold the element where it starts until
@@ -1105,6 +1109,9 @@ defmodule ThereishWeb.RoomComponents do
               else node.textContent = target
             }
             requestAnimationFrame(tick)
+            // Frames can be throttled; the clock cannot. The number is the
+            // grade by the time the climb is over, whatever the frames did.
+            this.landTimer = setTimeout(() => (node.textContent = target), delay + duration + 50)
           },
 
           // A Meld is the one arrival the whole room gets: one flash, over the
