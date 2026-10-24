@@ -432,6 +432,30 @@ defmodule Thereish.Foley.CuesTest do
                [Haptics.pattern(:nudge_landed)]
     end
 
+    test "another Seat's Reaction is felt, and your own shout is not" do
+      {play, _} = written(claimed())
+      {play, token} = bridged(play, "cairn", "cairo")
+      revealed = assayed(play, token, verdict(83))
+      {reacted, _} = run(revealed, {:react, "jacob", "no_way"})
+
+      # A Room of phones and no Stage has nowhere to show the word, so the
+      # hand is where the table's noise lands.
+      assert buzzes(Cues.between(view(revealed, "mara"), view(reacted, "mara"), :phone)) ==
+               [Haptics.pattern(:reaction_landed)]
+
+      assert buzzes(Cues.between(view(revealed, "jacob"), view(reacted, "jacob"), :phone)) == []
+      assert buzzes(Cues.between(view(revealed), view(reacted), :stage)) == []
+
+      # The same word again is not news; changing it is.
+      {same, _} = run(reacted, {:react, "jacob", "no_way"})
+      assert buzzes(Cues.between(view(reacted, "mara"), view(same, "mara"), :phone)) == []
+
+      {changed, _} = run(same, {:react, "jacob", "yes"})
+
+      assert buzzes(Cues.between(view(same, "mara"), view(changed, "mara"), :phone)) ==
+               [Haptics.pattern(:reaction_landed)]
+    end
+
     test "the ending is felt once, after the sting" do
       {play, _} = written(claimed())
       {play, token} = bridged(play)

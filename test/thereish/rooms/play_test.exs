@@ -420,6 +420,22 @@ defmodule Thereish.Rooms.PlayTest do
 
       assert view(play, "mara").your_nudges_left == 1
     end
+
+    test "a Page the Experiment assigned nothing gets the configured budget back" do
+      {play, _page_ref, _giving} = written(new(), assignment: channel(:nudge_off))
+      refute view(play, "mara").may.nudge
+
+      {play, _} = meld(play, assignment: channel(:nudge_off), written: "page-1")
+      {play, _} = run(play, {:next_page, "mara", @members})
+
+      # The Page after it is handed an Assignment with no channel Arm at all —
+      # a lost row, or the default a rescue hands back — so it plays the
+      # configured budget rather than inheriting the Arm before it.
+      {play, _page_ref, _giving} = written(play)
+
+      assert view(play, "mara").your_nudges_left == 1
+      assert view(play, "mara").may.nudge
+    end
   end
 
   describe "a turned Page" do

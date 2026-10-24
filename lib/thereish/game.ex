@@ -1314,6 +1314,11 @@ defmodule Thereish.Game do
   # Holds the proposal while a Seat playing the Page has still to agree, and
   # rules it once every one of them has.
   defp resolve_overrule(state, proposal) do
+    # A fresh proposal, and the ruling that may follow it, clear the last
+    # decline: the Attempt holds only the live state, so no screen can say the
+    # grade stands beside a Verdict the table has just rewritten.
+    state = put_attempt(state, :declined, nil)
+
     if Overrule.unanimous?(proposal, Enum.map(page_seats(state), & &1.id)) do
       rule_overrule(state, proposal)
     else

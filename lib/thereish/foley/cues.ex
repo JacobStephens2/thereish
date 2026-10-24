@@ -14,9 +14,9 @@ defmodule Thereish.Foley.Cues do
        within one Attempt while bridging or assaying. It plays whether or not
        the Stage holds the Speaker.
     2. On a phone, the buzzes: another Seat committing, the Beat, the sting at
-       the reveal, a Nudge landing, and the ending. A buzz is not the
-       Speaker's business — a phone that holds no Speaker still lives in a
-       hand — so it is answered outside the Speaker's arm.
+       the reveal, a Nudge landing, another Seat's Reaction, and the ending. A
+       buzz is not the Speaker's business — a phone that holds no Speaker still
+       lives in a hand — so it is answered outside the Speaker's arm.
     3. A screen that just lost the Speaker only stops all sound.
     4. A screen holding the Speaker hears, in order: a stale Voice clip
        stopped when the Attempt moved on, the Page's music, the Beat, the
@@ -94,6 +94,7 @@ defmodule Thereish.Foley.Cues do
       entered_assaying?(old, new) && Haptics.pattern(:beat),
       first_reveal?(old, new) && Haptics.for_sting(new.reveal.band),
       nudge_landed?(old, new) && Haptics.pattern(:nudge_landed),
+      reaction_landed?(old, new) && Haptics.pattern(:reaction_landed),
       closed?(old, new) && Haptics.pattern(:ending)
     ]
 
@@ -106,6 +107,22 @@ defmodule Thereish.Foley.Cues do
   end
 
   defp nudge_landed?(old, new), do: length(new.nudges) > length(old.nudges)
+
+  # A Reaction is public, and a Room of phones and no Stage has nowhere to show
+  # it, so the hand is the other screen: one light buzz when somebody else
+  # shouts, or changes what they shouted. Never for this Seat's own word — the
+  # tap is its own confirmation — and never a count of them.
+  defp reaction_landed?(old, new),
+    do: not MapSet.subset?(others_reacted(new), others_reacted(old))
+
+  defp others_reacted(view) do
+    yours = Enum.find_value(view.seats, &(&1.you? && &1.id))
+
+    for reaction <- view.reactions,
+        reaction.seat_id != yours,
+        into: MapSet.new(),
+        do: {reaction.seat_id, reaction.reaction}
+  end
 
   defp stale_voice(old, new) do
     if old != nil and old.attempt.number != new.attempt.number,

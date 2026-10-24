@@ -552,14 +552,16 @@ defmodule Thereish.Rooms.Play do
   end
 
   # The channel Experiment's Arm is a budget and nothing else: off takes the
-  # Nudge away for this Page, on hands the configured one back, so a Page never
-  # inherits the Arm before it. No screen is told which it is — the Arm is
-  # blinded by there being nothing to see (ADR-0020).
+  # Nudge away for this Page, anything else hands the configured one back, so a
+  # Page never inherits the Arm before it. The Game is built once for the Room
+  # and the budget outlives a Page, so a Page with no Arm at all — a lost
+  # Assignment row, a default handed back by a rescue — has to be given the
+  # budget back rather than left with the last Page's. No screen is told which
+  # Arm it is: the Arm is blinded by there being nothing to see (ADR-0020).
   defp nudge_budget(game, assignment) do
     case Assignment.arm(assignment, :channel) do
       :nudge_off -> Game.set_nudges_per_page(game, 0)
-      :nudge_on -> Game.set_nudges_per_page(game, nil)
-      nil -> game
+      _arm -> Game.set_nudges_per_page(game, nil)
     end
   end
 

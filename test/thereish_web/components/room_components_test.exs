@@ -1517,7 +1517,7 @@ defmodule ThereishWeb.RoomComponentsTest do
   end
 
   describe "the Juice hook" do
-    test "the hand is wired on the phone and the floats are the Stage's" do
+    test "the hand is always wired and the floats are asked for by whoever performs them" do
       room = %{attempt: %{number: 2, of: 5}, reactions: []}
 
       phone = render_component(&juice_hook/1, room: room)

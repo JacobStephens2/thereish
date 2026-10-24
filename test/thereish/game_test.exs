@@ -2961,6 +2961,27 @@ defmodule Thereish.GameTest do
       assert Game.view(split, nil).overrule_declined == nil
       assert Game.view(again(declined), nil).overrule_declined == nil
     end
+
+    test "a decline is forgotten the moment the table is asked again" do
+      split = split_revealed(@split)
+      {:ok, proposed, []} = Game.apply(split, {:overrule_proposed, %{seat_id: "seat-Mara"}})
+
+      {:ok, declined, []} =
+        Game.apply(proposed, {:overrule_declined, %{seat_id: "seat-Jacob"}})
+
+      # Mara asks again, and this time the table agrees. The grade did not
+      # stand, so the sentence saying it did cannot still be on the screen
+      # beside the Verdict that rewrote it.
+      {:ok, reproposed, []} = Game.apply(declined, {:overrule_proposed, %{seat_id: "seat-Mara"}})
+      assert Game.view(reproposed, nil).overrule_declined == nil
+
+      assert {:ok, agreed, _effects} =
+               Game.apply(reproposed, {:overrule_agreed, %{seat_id: "seat-Jacob"}})
+
+      view = Game.view(agreed, nil)
+      assert view.overrule_declined == nil
+      assert view.reveal.overruled?
+    end
   end
 
   describe "what each viewer may do (#199)" do

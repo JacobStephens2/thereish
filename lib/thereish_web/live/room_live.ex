@@ -683,7 +683,11 @@ defmodule ThereishWeb.RoomLive do
       </script>
 
       <.foley_hook speaker={@room && @room.speaker?} />
-      <.juice_hook room={@room} />
+      <%!-- A Room of phones and no Stage has no Masks to lift a Reaction off,
+      so the phone performs them itself, off each Seat's own Bridge card. With
+      a Stage in the room the Stage performs them and the phone only feels
+      them, so the word is never shouted twice. --%>
+      <.juice_hook room={@room} floats={not @stage_present?} />
     </main>
     """
   end

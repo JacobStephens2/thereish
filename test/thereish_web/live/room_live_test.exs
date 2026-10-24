@@ -4779,6 +4779,30 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(ctx.mara, "[data-role=reaction][data-reaction=ooh][data-chosen=true]")
     end
 
+    test "the Stage performs the words when there is one, and the phones do when there is not",
+         ctx do
+      assert has_element?(ctx.mara, "[data-role=reveal][data-mode=quiet]")
+      assert has_element?(ctx.stage, "#juice-container[data-floats=true]")
+      refute has_element?(ctx.mara, "#juice-container[data-floats=true]")
+
+      # A Room of four phones and no stage is still a Room, and it has no Masks
+      # for a word to lift off, so there the phone performs the Reactions as
+      # well as feeling them.
+      slug = open_room()
+      {:ok, esme, _} = live(phone(slug))
+      {:ok, cole, _} = live(phone(slug))
+
+      join(esme, "Esme")
+      join(cole, "Cole")
+      play_to_bridging(esme, cole, slug)
+
+      commit(esme, "cairn")
+      commit(cole, "cairo")
+      await_reveal_on(esme)
+
+      assert has_element?(esme, "#juice-container[data-floats=true]")
+    end
+
     test "the survey about the grader has left the punchline for the closing card", ctx do
       refute has_element?(ctx.mara, "[data-role=fairness-controls]")
       refute has_element?(ctx.mara, "[data-role=notes]")

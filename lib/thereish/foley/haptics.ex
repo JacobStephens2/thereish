@@ -25,6 +25,10 @@ defmodule Thereish.Foley.Haptics do
     sting_meld: [0, 40, 60, 40, 60, 140],
     # A Nudge landing: the one word that moved between Seats.
     nudge_landed: [14, 30, 14],
+    # Somebody shouted at the reveal. The lightest thing in the vocabulary,
+    # because a Reaction is noise and noise is not news: it is how a Room of
+    # phones and no Stage still knows the table made a sound (ADR-0023).
+    reaction_landed: [6],
     ending: [0, 30, 90, 30]
   }
 
@@ -36,6 +40,7 @@ defmodule Thereish.Foley.Haptics do
           | :sting_almost
           | :sting_meld
           | :nudge_landed
+          | :reaction_landed
           | :ending
 
   @doc """
