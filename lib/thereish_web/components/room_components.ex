@@ -575,6 +575,60 @@ defmodule ThereishWeb.RoomComponents do
     """
   end
 
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+
+  @doc """
+  The noise at the punchline: four words a Seat may send at a reveal.
+
+  The vocabulary is the Game's and is read from there, the way the Rail reads
+  the Ladder's bands, so there is one list of them. Nothing is totalled: the
+  reactions are kept in the Chronicle and counted nowhere, on no screen, ever
+  (ADR-0023). A Seat's latest word replaces its last, so there is only one.
+  """
+  def reactions(assigns) do
+    assigns =
+      assigns
+      |> assign(:vocabulary, Thereish.Game.reactions())
+      |> assign(:yours, your_reaction(assigns.room, assigns.seat))
+
+    ~H"""
+    <div
+      data-role="reactions"
+      class="flex flex-wrap items-center justify-center gap-2"
+    >
+      <button
+        :for={reaction <- @vocabulary}
+        type="button"
+        phx-click="react"
+        phx-value-reaction={reaction}
+        data-role="reaction"
+        data-reaction={reaction}
+        data-chosen={to_string(@yours == reaction)}
+        class={[
+          "btn btn-sm min-h-11 text-xs font-bold uppercase tracking-widest",
+          if(@yours == reaction,
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+          )
+        ]}
+      >
+        {band(reaction)}
+      </button>
+    </div>
+    """
+  end
+
+  # The one word this Seat has sent at this reveal, if it has sent one.
+  defp your_reaction(_room, nil), do: nil
+
+  defp your_reaction(room, seat) do
+    case Enum.find(room[:reactions] || [], &(&1.seat_id == seat.id)) do
+      nil -> nil
+      reaction -> reaction.reaction
+    end
+  end
+
   # Which band this Seat has called, if it has called one. The latest Call
   # wins, so there is only ever the one.
   defp your_call(_room, nil), do: nil
@@ -597,6 +651,10 @@ defmodule ThereishWeb.RoomComponents do
 
   One hook runs all of it off one clock, and the whole performance is absorbed
   by the hold Pacing arms, never added on top of it.
+
+  The phone's own job at the punchline is the noise: four words to shout and
+  nothing to fill in. The survey about the grader that used to sit here has
+  moved to the closing card (`ending/1`).
   """
   def reveal(assigns) do
     standard_reveal(assigns)
@@ -776,8 +834,8 @@ defmodule ThereishWeb.RoomComponents do
         </div>
       </div>
 
-      <.fairness_controls
-        :if={@mode in [:phone, :quiet] && may?(@room, :tap_fairness)}
+      <.reactions
+        :if={@mode in [:phone, :quiet] && may?(@room, :react)}
         room={@room}
         seat={@seat}
       />
@@ -1136,6 +1194,13 @@ defmodule ThereishWeb.RoomComponents do
   A Page that ran out of attempts has not gone wrong, and this line is the whole
   difference between an ending and an error message: the players spent five
   tries on two words and did not converge, which is the game working.
+
+  The closing card is also where the calibration labour lives now. The fairness
+  tap and the Bookends taps used to sit under the number at the reveal, which
+  put a survey about the grader in the two seconds that belong to the
+  punchline; both are here, behind a Notes disclosure, so the ending line and
+  the arc own the card. The rule did not move — the Game permits a tap at a
+  reveal and at a close exactly as it did (ADR-0019) — only the buttons did.
   """
   attr :seat, :map, default: nil
   attr :mode, :atom, default: :phone
@@ -1182,76 +1247,89 @@ defmodule ThereishWeb.RoomComponents do
         </li>
       </ol>
 
-      <div
-        :if={@mode == :phone && may?(@room, :tap_bookends)}
-        data-role="bookends-controls"
-        class="flex flex-col items-center gap-2 pt-2"
+      <details
+        :if={@mode == :phone && (may?(@room, :tap_fairness) || may?(@room, :tap_bookends))}
+        data-role="notes"
+        class="w-full max-w-sm rounded-xl border border-base-300 bg-base-100/60"
       >
-        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-          How were these Bookends?
-        </span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            phx-click="bookends_tap"
-            phx-value-label="flat"
-            data-role="tap-flat"
-            data-tap="flat"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_bookends_tap(@room, @seat) == "flat",
-                do: "btn-warning text-warning-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Flat
-          </button>
-          <button
-            type="button"
-            phx-click="bookends_tap"
-            phx-value-label="fine"
-            data-role="tap-fine"
-            data-tap="fine"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_bookends_tap(@room, @seat) == "fine",
-                do: "btn-primary font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Fine
-          </button>
-          <button
-            type="button"
-            phx-click="bookends_tap"
-            phx-value-label="great"
-            data-role="tap-great"
-            data-tap="great"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_bookends_tap(@room, @seat) == "great",
-                do: "btn-success text-success-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Great
-          </button>
-        </div>
-        <%= if tap = your_bookends_tap(@room, @seat) do %>
+        <summary class="cursor-pointer px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider opacity-60">
+          Notes
+        </summary>
+        <div class="flex flex-col items-center gap-3 px-3 pb-3">
+          <.fairness_controls :if={may?(@room, :tap_fairness)} room={@room} seat={@seat} />
+
           <div
-            data-role="your-bookends-tap"
-            class="flex items-center gap-1.5 text-xs text-primary font-medium"
+            :if={may?(@room, :tap_bookends)}
+            data-role="bookends-controls"
+            class="flex flex-col items-center gap-2 pt-2"
           >
-            <span data-role="seat-bookends-tap" class="font-semibold capitalize">
-              {tap}
+            <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+              How were these Bookends?
             </span>
-            recorded
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                phx-click="bookends_tap"
+                phx-value-label="flat"
+                data-role="tap-flat"
+                data-tap="flat"
+                class={[
+                  "btn btn-sm text-xs font-medium transition-all",
+                  if(your_bookends_tap(@room, @seat) == "flat",
+                    do: "btn-warning text-warning-content font-bold shadow-sm",
+                    else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+                  )
+                ]}
+              >
+                Flat
+              </button>
+              <button
+                type="button"
+                phx-click="bookends_tap"
+                phx-value-label="fine"
+                data-role="tap-fine"
+                data-tap="fine"
+                class={[
+                  "btn btn-sm text-xs font-medium transition-all",
+                  if(your_bookends_tap(@room, @seat) == "fine",
+                    do: "btn-primary font-bold shadow-sm",
+                    else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+                  )
+                ]}
+              >
+                Fine
+              </button>
+              <button
+                type="button"
+                phx-click="bookends_tap"
+                phx-value-label="great"
+                data-role="tap-great"
+                data-tap="great"
+                class={[
+                  "btn btn-sm text-xs font-medium transition-all",
+                  if(your_bookends_tap(@room, @seat) == "great",
+                    do: "btn-success text-success-content font-bold shadow-sm",
+                    else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+                  )
+                ]}
+              >
+                Great
+              </button>
+            </div>
+            <%= if tap = your_bookends_tap(@room, @seat) do %>
+              <div
+                data-role="your-bookends-tap"
+                class="flex items-center gap-1.5 text-xs text-primary font-medium"
+              >
+                <span data-role="seat-bookends-tap" class="font-semibold capitalize">
+                  {tap}
+                </span>
+                recorded
+              </div>
+            <% end %>
           </div>
-        <% end %>
-      </div>
+        </div>
+      </details>
     </section>
     """
   end
@@ -1569,6 +1647,22 @@ defmodule ThereishWeb.RoomComponents do
           </label>
         </div>
         <div class="flex flex-col gap-2">
+          <p class="text-xs uppercase tracking-wide opacity-60">This device</p>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input
+              id="buzz-switch"
+              phx-hook=".VoicePref"
+              type="checkbox"
+              data-role="buzz-switch"
+              data-pref="juice:haptics"
+              data-default="on"
+              data-active="true"
+              class="checkbox checkbox-xs"
+            />
+            <span>Buzz</span>
+          </label>
+        </div>
+        <div class="flex flex-col gap-2">
           <p class="text-xs uppercase tracking-wide opacity-60">This Room</p>
           <label class="flex items-center gap-1.5 cursor-pointer">
             <input
@@ -1670,9 +1764,13 @@ defmodule ThereishWeb.RoomComponents do
               localStorage.setItem(key, next ? "on" : "off")
             } catch (_) {}
             this.syncUI()
-            document.dispatchEvent(
-              new CustomEvent("thereish:voice-pref", { detail: { enabled: next, kind } })
-            )
+            // A switch with no kind is a plain device preference — the Buzz is
+            // one — and has nothing to tell the Voice about.
+            if (kind) {
+              document.dispatchEvent(
+                new CustomEvent("thereish:voice-pref", { detail: { enabled: next, kind } })
+              )
+            }
           }
 
           this.el.addEventListener("change", this.handleChange)
@@ -1727,6 +1825,137 @@ defmodule ThereishWeb.RoomComponents do
 
       true ->
         nil
+    end
+  end
+
+  attr :room, :map, default: nil
+  attr :floats, :boolean, default: false, doc: "whether reactions lift off the Seats' Masks"
+
+  @doc """
+  Juice: the buzz in the hand, and the reactions lifting off the Stage.
+
+  Both read the same diff the sound does — one buzz per Cue the Room pushed,
+  one float per Reaction that is new since the last render — so a phone that
+  slept and came back does not replay the night at its owner. Nothing here is
+  counted or kept.
+  """
+  def juice_hook(assigns) do
+    assigns =
+      assigns
+      |> assign(:signature, reaction_signature(assigns.room))
+      |> assign(:attempt, assigns.room && get_in(assigns.room, [:attempt, :number]))
+
+    ~H"""
+    <div
+      id="juice-container"
+      phx-hook=".Juice"
+      data-floats={to_string(@floats)}
+      data-attempt={@attempt}
+      data-reactions={@signature}
+      class="hidden"
+    >
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".Juice">
+      export default {
+        mounted() {
+          // What this device has already answered for. A Stage or a phone that
+          // arrives mid-reveal records what is there and floats none of it,
+          // the same rule the Cues keep for a screen's first render.
+          this.floated = new Map()
+          this.attempt = this.el.dataset.attempt
+
+          this.reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          this.buzzOn = () => {
+            try {
+              return localStorage.getItem("juice:haptics") !== "off"
+            } catch (_) {
+              return true
+            }
+          }
+
+          // Feature detection and nothing more: a laptop and an iPhone have no
+          // vibrator, so the buzz is a silent no-op there. The device this is
+          // for is the phone in a hand.
+          this.handleEvent("juice:haptic", ({pattern}) => {
+            if (!navigator.vibrate || !Array.isArray(pattern) || !this.buzzOn()) return
+            try {
+              navigator.vibrate(pattern)
+            } catch (_) {}
+          })
+
+          this.sync(true)
+        },
+
+        updated() {
+          this.sync(false)
+        },
+
+        sync(first) {
+          if (this.el.dataset.attempt !== this.attempt) {
+            this.attempt = this.el.dataset.attempt
+            this.floated = new Map()
+          }
+
+          const pairs = (this.el.dataset.reactions || "")
+            .split(" ")
+            .filter(Boolean)
+            .map((pair) => pair.split(":"))
+
+          pairs.forEach(([seat, reaction], i) => {
+            if (this.floated.get(seat) === reaction) return
+            this.floated.set(seat, reaction)
+            if (first || this.el.dataset.floats !== "true") return
+            this.float(seat, reaction, i)
+          })
+        },
+
+        // The word lifts off whoever shouted it: their Mask on the Stage, and
+        // their own Bridge card once the Masks have gone.
+        float(seat, reaction, i) {
+          const anchor =
+            document.querySelector('[data-role="stage-mask"][data-seat="' + CSS.escape(seat) + '"]') ||
+            document.querySelector('[data-bridge="' + CSS.escape(seat) + '"]')
+          if (!anchor) return
+
+          const box = anchor.getBoundingClientRect()
+          const node = document.createElement("div")
+          node.dataset.role = "reaction-float"
+          node.textContent = reaction.replace(/_/g, " ").toUpperCase()
+          node.style.cssText =
+            "position:fixed;z-index:60;pointer-events:none;white-space:nowrap;" +
+            "font-weight:800;letter-spacing:0.15em;font-size:1.5rem;" +
+            "left:" + (box.left + box.width / 2) + "px;top:" + box.top + "px;" +
+            "transform:translate(-50%, 0);"
+          document.body.appendChild(node)
+
+          if (this.reduced()) {
+            setTimeout(() => node.remove(), 1200)
+            return
+          }
+
+          const anim = node.animate(
+            [
+              {opacity: 1, transform: "translate(-50%, 0)"},
+              {opacity: 0, transform: "translate(-50%, -80px)"}
+            ],
+            {duration: 1600, delay: i * 120, easing: "cubic-bezier(.16,1,.3,1)", fill: "backwards"}
+          )
+          anim.onfinish = () => node.remove()
+          anim.oncancel = () => node.remove()
+        }
+      }
+    </script>
+    """
+  end
+
+  # The Reactions as the hook reads them: one `seat:word` pair per Seat, which
+  # is a list of who shouted what and never a tally of how many did.
+  defp reaction_signature(nil), do: nil
+
+  defp reaction_signature(room) do
+    case room[:reactions] || [] do
+      [] -> nil
+      reactions -> Enum.map_join(reactions, " ", &"#{&1.seat_id}:#{&1.reaction}")
     end
   end
 

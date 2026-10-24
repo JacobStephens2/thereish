@@ -1978,7 +1978,8 @@ defmodule ThereishWeb.RoomLiveTest do
       for phone <- [mara, jacob] do
         assert has_element?(phone, "[data-role=reveal][data-mode=quiet]")
         assert has_element?(phone, "[data-role=comparison]")
-        assert has_element?(phone, "[data-role=fairness-controls]")
+        assert has_element?(phone, "[data-role=reactions]")
+        refute has_element?(phone, "[data-role=fairness-controls]")
         assert has_element?(phone, "[data-role=propose-overrule]")
         assert has_element?(phone, "[data-role=again]")
         refute has_element?(phone, "[data-role=closeness]")
@@ -2032,7 +2033,8 @@ defmodule ThereishWeb.RoomLiveTest do
 
       refute has_element?(mara, "[data-role=band]")
       refute has_element?(mara, "[data-role=quip]")
-      assert has_element?(mara, "[data-role=fairness-controls]")
+      assert has_element?(mara, "[data-role=reactions]")
+      refute has_element?(mara, "[data-role=fairness-controls]")
 
       # Stage exits
       Process.flag(:trap_exit, true)
@@ -2291,7 +2293,8 @@ defmodule ThereishWeb.RoomLiveTest do
       for phone <- phones do
         assert has_element?(phone, "[data-role=reveal][data-mode=quiet]")
         assert has_element?(phone, "[data-role=comparison]")
-        assert has_element?(phone, "[data-role=fairness-controls]")
+        assert has_element?(phone, "[data-role=reactions]")
+        refute has_element?(phone, "[data-role=fairness-controls]")
         assert has_element?(phone, "[data-role=propose-overrule]")
         assert has_element?(phone, "[data-role=again]")
         refute has_element?(phone, "[data-role=closeness]")
@@ -4024,14 +4027,14 @@ defmodule ThereishWeb.RoomLiveTest do
         await_reveal_on(phone)
       end
 
-      # Late seat (phone4) does NOT see propose overrule or fairness controls or again
+      # Late seat (phone4) does NOT see propose overrule or the Reactions or again
       refute has_element?(phone4, "[data-role=propose-overrule]")
-      refute has_element?(phone4, "[data-role=fairness-controls]")
+      refute has_element?(phone4, "[data-role=reactions]")
       refute has_element?(phone4, "[data-role=again]")
 
-      # Participating seat sees overrule button and fairness controls and again
+      # Participating seat sees overrule button and the Reactions and again
       assert has_element?(phone1, "[data-role=propose-overrule]")
-      assert has_element?(phone1, "[data-role=fairness-controls]")
+      assert has_element?(phone1, "[data-role=reactions]")
       assert has_element?(phone1, "[data-role=again]")
 
       # Propose overrule: Phone 1 proposes
@@ -4726,6 +4729,96 @@ defmodule ThereishWeb.RoomLiveTest do
       refute has_element?(mara, "[data-role=quip]")
       refute has_element?(mara, "[data-role=closeness]")
       refute has_element?(stage, "[data-role=look-up]")
+    end
+  end
+
+  describe "the noise at the punchline (T5)" do
+    setup do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, bram, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+
+      join(mara, "Mara")
+      join(bram, "Bram")
+      play_to_bridging(mara, bram, slug)
+
+      commit(mara, "cairn")
+      commit(bram, "cairo")
+
+      await_reveal_on(mara)
+      await_reveal_on(bram)
+      await_reveal_on(stage)
+
+      %{slug: slug, mara: mara, bram: bram, stage: stage}
+    end
+
+    test "four words on the phone, the latest one wins, and nothing is counted", ctx do
+      for reaction <- Thereish.Game.reactions() do
+        assert has_element?(ctx.mara, "[data-role=reaction][data-reaction=#{reaction}]")
+      end
+
+      ctx.mara |> element("[data-role=reaction][data-reaction=ooh]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=reaction][data-reaction=ooh][data-chosen=true]")
+      assert has_element?(ctx.mara, "[data-role=reaction][data-reaction=yes][data-chosen=false]")
+
+      # Bram shouted nothing, so nothing of his is chosen, and the Stage reads
+      # who shouted what — never how many did.
+      refute has_element?(ctx.bram, "[data-role=reaction][data-chosen=true]")
+      eventually(fn -> has_element?(ctx.stage, "#juice-container[data-reactions]") end)
+      assert render(ctx.stage) =~ ":ooh"
+
+      ctx.mara |> element("[data-role=reaction][data-reaction=no_way]") |> render_click()
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=reaction][data-reaction=no_way][data-chosen=true]"
+             )
+
+      refute has_element?(ctx.mara, "[data-role=reaction][data-reaction=ooh][data-chosen=true]")
+    end
+
+    test "the survey about the grader has left the punchline for the closing card", ctx do
+      refute has_element?(ctx.mara, "[data-role=fairness-controls]")
+      refute has_element?(ctx.mara, "[data-role=notes]")
+      refute has_element?(ctx.stage, "[data-role=reactions]")
+
+      # Spend the Page out so it closes, then the taps are there to be made.
+      spend_the_page(ctx.mara, ctx.bram)
+
+      eventually(fn -> has_element?(ctx.mara, "[data-role=ending]") end)
+      assert has_element?(ctx.mara, "[data-role=notes]", "Notes")
+      assert has_element?(ctx.mara, "[data-role=fairness-controls]")
+      assert has_element?(ctx.mara, "[data-role=bookends-controls]")
+      refute has_element?(ctx.stage, "[data-role=notes]")
+
+      ctx.mara |> element("[data-role=tap-fair]") |> render_click()
+      assert has_element?(ctx.mara, "[data-role=seat-tap]", "fair")
+    end
+  end
+
+  # Misses its way to the end of the Page, so the closing card is on screen. A
+  # pair of words per Attempt, each far from every word the Page has spent,
+  # because a Bridge that echoes a Bookend's root is refused.
+  @spent_words [
+    {"ferry", "granite"},
+    {"oboe", "plume"},
+    {"zebra", "trombone"},
+    {"mango", "velvet"}
+  ]
+
+  defp spend_the_page(mara, bram) do
+    for {a, b} <- Enum.take(@spent_words, Thereish.Game.attempt_cap() - 1) do
+      mara |> element("[data-role=again]") |> render_click()
+      eventually(fn -> has_element?(mara, "[data-role=bridge-form]") end)
+      eventually(fn -> has_element?(bram, "[data-role=bridge-form]") end)
+
+      commit(mara, a)
+      commit(bram, b)
+
+      await_reveal_on(mara)
+      await_reveal_on(bram)
     end
   end
 end

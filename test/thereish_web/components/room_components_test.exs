@@ -1384,4 +1384,180 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ ~s(data-role="gives")
     end
   end
+
+  describe "the noise at the punchline, and the labour moved off it" do
+    defp revealed_room(overrides \\ %{}) do
+      Map.merge(
+        %{
+          phase: :reveal,
+          may: %{react: true, tap_fairness: true},
+          reactions: [],
+          closed: nil,
+          played: [],
+          reveal: %{
+            closeness: 83,
+            band: :almost,
+            melded?: false,
+            gap: 7,
+            bridges: [
+              %{seat_id: "s1", name: "Mara", bridge: "cairn"},
+              %{seat_id: "s2", name: "Jacob", bridge: "beacon"}
+            ],
+            graded?: true,
+            overruled?: false,
+            quip: "Nearly the same hill.",
+            reasoning: "Stones, both.",
+            furthest: nil
+          }
+        },
+        overrides
+      )
+    end
+
+    defp closed_room(overrides \\ %{}) do
+      revealed_room(
+        Map.merge(
+          %{
+            phase: :closed,
+            closed: %{because: :meld, attempt: 2},
+            may: %{react: true, tap_fairness: true, tap_bookends: true}
+          },
+          overrides
+        )
+      )
+    end
+
+    test "the four words are offered on the phone and on a quiet phone" do
+      for mode <- [:phone, :quiet] do
+        html = render_component(&reveal/1, room: revealed_room(), mode: mode)
+
+        assert html =~ ~s(data-role="reactions")
+
+        for reaction <- Thereish.Game.reactions() do
+          assert html =~ ~s(data-reaction="#{reaction}")
+        end
+
+        assert html =~ "no way"
+      end
+    end
+
+    test "the Stage performs the reveal and offers no buttons" do
+      html = render_component(&reveal/1, room: revealed_room(), mode: :stage)
+
+      refute html =~ ~s(data-role="reactions")
+    end
+
+    test "a Seat that may not react is offered nothing" do
+      room = revealed_room(%{may: %{react: false}})
+
+      refute render_component(&reveal/1, room: room, mode: :phone) =~ ~s(data-role="reactions")
+    end
+
+    test "your own word is the chosen one, and nobody's is counted" do
+      room =
+        revealed_room(%{
+          reactions: [
+            %{seat_id: "s1", name: "Mara", reaction: :ooh},
+            %{seat_id: "s2", name: "Jacob", reaction: :ooh}
+          ]
+        })
+
+      html =
+        render_component(&reveal/1,
+          room: room,
+          seat: %{id: "s1", name: "Mara"},
+          mode: :phone
+        )
+
+      assert html =~ ~s(data-reaction="ooh" data-chosen="true")
+      assert html =~ ~s(data-reaction="yes" data-chosen="false")
+
+      # Two Seats shouted the same word and the screen says so nowhere: there
+      # is no score in this game and a reaction tally would be one.
+      refute html =~ "×2"
+      refute html =~ ~s(data-count)
+      refute html =~ "reaction-count"
+    end
+
+    test "the fairness tap has left the reveal" do
+      for mode <- [:phone, :quiet, :stage] do
+        html = render_component(&reveal/1, room: revealed_room(), mode: mode)
+
+        refute html =~ ~s(data-role="fairness-controls")
+        refute html =~ "Was this grade fair?"
+      end
+    end
+
+    test "the fairness tap and the Bookends taps are on the closing card, behind Notes" do
+      html = render_component(&ending/1, room: closed_room(), seat: %{id: "s1", name: "Mara"})
+
+      assert html =~ ~s(data-role="notes")
+      assert html =~ "Notes"
+      assert html =~ ~s(data-role="fairness-controls")
+      assert html =~ ~s(data-role="bookends-controls")
+
+      # The ending line and the arc still own the card.
+      {ending_idx, _} = :binary.match(html, ~s(data-role="ending-line"))
+      {notes_idx, _} = :binary.match(html, ~s(data-role="notes"))
+      assert ending_idx < notes_idx
+    end
+
+    test "the Stage's closing card carries no taps" do
+      html = render_component(&ending/1, room: closed_room(), mode: :stage)
+
+      refute html =~ ~s(data-role="notes")
+      refute html =~ ~s(data-role="fairness-controls")
+    end
+
+    test "a closing card nobody may tap has no Notes at all" do
+      html = render_component(&ending/1, room: closed_room(%{may: %{}}))
+
+      refute html =~ ~s(data-role="notes")
+    end
+  end
+
+  describe "the Juice hook" do
+    test "the hand is wired on the phone and the floats are the Stage's" do
+      room = %{attempt: %{number: 2, of: 5}, reactions: []}
+
+      phone = render_component(&juice_hook/1, room: room)
+      stage = render_component(&juice_hook/1, room: room, floats: true)
+
+      assert phone =~ "Juice"
+      assert phone =~ ~s(data-floats="false")
+      assert stage =~ ~s(data-floats="true")
+      assert phone =~ ~s(data-attempt="2")
+    end
+
+    test "the Reactions reach the hook as who shouted what, never how many" do
+      room = %{
+        attempt: %{number: 1, of: 5},
+        reactions: [
+          %{seat_id: "s1", name: "Mara", reaction: :ooh},
+          %{seat_id: "s2", name: "Jacob", reaction: :no_way}
+        ]
+      }
+
+      html = render_component(&juice_hook/1, room: room, floats: true)
+
+      assert html =~ ~s(data-reactions="s1:ooh s2:no_way")
+      refute html =~ ~s(data-reactions="2")
+    end
+
+    test "a Room that has not loaded yet still renders" do
+      assert render_component(&juice_hook/1, room: nil) =~ ~s(id="juice-container")
+    end
+  end
+
+  describe "the Buzz switch" do
+    test "is a device preference in the settings card, with no Room fact behind it" do
+      html = render_component(&foley_switches/1, room: %{speaker?: true, music: "page"})
+
+      assert html =~ ~s(data-role="buzz-switch")
+      assert html =~ ~s(data-pref="juice:haptics")
+      assert html =~ ~s(data-default="on")
+      assert html =~ "Buzz"
+      refute html =~ "toggle_buzz"
+    end
+  end
 end

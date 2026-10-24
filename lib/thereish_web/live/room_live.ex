@@ -136,6 +136,14 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  # One of four words, and nothing rides on it: a word that does not land is a
+  # shout nobody heard, which is the right answer for a shout.
+  def handle_event("react", %{"reaction" => reaction}, socket) do
+    Rooms.react(socket.assigns.slug, socket.assigns.seat.id, reaction)
+
+    {:noreply, resync(socket)}
+  end
+
   # Both phones can reach the same button, and on a couch both of them will.
   # Whichever tap lands second is answered by the Room with the state the first
   # one left, so there is nothing to say about it beyond showing what is there.
@@ -649,6 +657,7 @@ defmodule ThereishWeb.RoomLive do
       </script>
 
       <.foley_hook speaker={@room && @room.speaker?} />
+      <.juice_hook room={@room} />
     </main>
     """
   end

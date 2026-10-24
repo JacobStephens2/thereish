@@ -12,8 +12,10 @@ defmodule Thereish.Steward.Digest do
   grades and all, and naming a Room reads it the same way. The Scribe reads it
   with every recap and callback it has already written folded in, and with no
   grade anywhere: the closeness never crosses to the Scribe (ADR-0006), whether
-  it is tonight's Page or one from last month. The Assayer reads only the
-  recent Quips, so that its comedy does not repeat a construction.
+  it is tonight's Page or one from last month. It also hears the Reactions: the
+  noise around a reveal is the evening, and the Scribe is the only role writing
+  the evening. The Assayer reads only the recent Quips, so that its comedy does
+  not repeat a construction.
   """
 
   @empty "Nothing yet; this is the first Page."
@@ -37,7 +39,8 @@ defmodule Thereish.Steward.Digest do
   evenings it has already written about, including its own prose, so that it
   does not plant the same callback twice. It sees bands and reasoning and never
   a closeness: not a Verdict's, not the meld's, and not the one an overrule
-  proposed.
+  proposed. It sees each Attempt's Reactions as the words they were, with no
+  count of them anywhere.
   """
   @spec scribe([map()]) :: String.t()
   def scribe(views), do: compose(views, :scribe)
@@ -117,10 +120,16 @@ defmodule Thereish.Steward.Digest do
 
     case attempt.verdicts do
       [] ->
-        ["  Attempt #{attempt.number}: #{bridges}. Verdict: Ungraded"]
+        [
+          "  Attempt #{attempt.number}: #{bridges}. Verdict: Ungraded"
+          | reactions(attempt, reader)
+        ]
 
       [single] ->
-        ["  Attempt #{attempt.number}: #{bridges}. Verdict: #{verdict(single, reader)}"]
+        [
+          "  Attempt #{attempt.number}: #{bridges}. Verdict: #{verdict(single, reader)}"
+          | reactions(attempt, reader)
+        ]
 
       # An attempt written before ADR-0010, when the Assayer answered one pair at
       # a time. The book is append-only, so those rows are still read out the way
@@ -131,9 +140,27 @@ defmodule Thereish.Steward.Digest do
             "    Pair [#{Enum.join(verdict.bridges, " / ")}]: #{verdict(verdict, reader)}"
           end)
 
-        ["  Attempt #{attempt.number}: #{bridges}." | pair_lines]
+        ["  Attempt #{attempt.number}: #{bridges}." | pair_lines] ++ reactions(attempt, reader)
     end
   end
+
+  # What the couch shouted. The Scribe writes the evening, so it may hear it;
+  # nothing that grades may, which is why there is no `:author` clause and why
+  # `assayer/2` never goes near it (ADR-0023). A Page written before Reactions
+  # existed simply has none.
+  defp reactions(attempt, :scribe) do
+    case Map.get(attempt, :reactions) || [] do
+      [] -> []
+      shouts -> ["    Reactions: " <> Enum.map_join(shouts, ", ", &reaction/1)]
+    end
+  end
+
+  defp reactions(_attempt, _reader), do: []
+
+  defp reaction(%{seat_name: name, reaction: reaction}) when is_binary(name),
+    do: "#{name}: #{reaction}"
+
+  defp reaction(%{reaction: reaction}), do: to_string(reaction)
 
   defp verdict(verdict, :author) do
     band = (verdict.band && " (#{verdict.band})") || ""

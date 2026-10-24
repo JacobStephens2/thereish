@@ -320,6 +320,7 @@ defmodule ThereishWeb.StageLive do
       </script>
 
       <.foley_hook speaker={@room && @room.speaker?} />
+      <.juice_hook room={@room} floats={true} />
     </main>
     """
   end
