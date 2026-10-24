@@ -4630,7 +4630,7 @@ defmodule ThereishWeb.RoomLiveTest do
       |> form("[data-role=bridge-form]", %{"bridge" => "rope"})
       |> render_change()
 
-      assert has_element?(ctx.mara, "[data-role=bridge-error]")
+      assert has_element?(ctx.mara, "[data-role=bridge-error]", "Bram nudged")
 
       commit(ctx.mara, "rope")
 
@@ -4643,6 +4643,19 @@ defmodule ThereishWeb.RoomLiveTest do
 
       refute has_element?(ctx.mara, "[data-role=nudge-form]")
       assert has_element?(ctx.bram, "[data-role=nudge-form]")
+    end
+
+    test "a Seat that has committed may Call while the others write, and only it sees the Call",
+         ctx do
+      commit(ctx.mara, "cairn")
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost]")
+      refute has_element?(ctx.bram, "[data-role=call-band]")
+
+      ctx.mara |> element("[data-role=call-band][data-band=almost]") |> render_click()
+
+      assert has_element?(ctx.mara, "[data-role=call-band][data-band=almost][data-called=true]")
+      refute has_element?(ctx.bram, "[data-role=called]")
     end
   end
 

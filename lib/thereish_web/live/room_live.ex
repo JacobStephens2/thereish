@@ -77,7 +77,7 @@ defmodule ThereishWeb.RoomLive do
       else
         case Thereish.Steward.Legality.check_bridge(bridge, barred) do
           :ok -> nil
-          {:illegal, why} -> why
+          {:illegal, why} -> nudged(bridge, socket.assigns.room) || why
         end
       end
 
@@ -337,6 +337,15 @@ defmodule ThereishWeb.RoomLive do
     |> ThereishWeb.Foley.play_cues(old_room, new_room, :phone)
   end
 
+  # A Bridge barred by a Nudge says so, rather than "shares a root with" a word
+  # the writer never saw among the Bookends.
+  defp nudged(bridge, room) do
+    Enum.find_value(room[:nudges] || [], fn nudge ->
+      if Thereish.Steward.Legality.check_bridge(bridge, [nudge.word]) != :ok,
+        do: "#{nudge.name} nudged \"#{nudge.word}\" — nobody may write it."
+    end)
+  end
+
   defp message(:give_required), do: "Type a Give first."
   defp message(:name_required), do: "Type a name first."
   defp message(:name_too_long), do: "That name is longer than #{Seat.name_max()} characters."
@@ -571,6 +580,8 @@ defmodule ThereishWeb.RoomLive do
         </p>
         <p :if={@room.phase == :bridging} class="text-sm opacity-60">Waiting for the others.</p>
       </div>
+
+      <.call_bands :if={@room.phase == :bridging} room={@room} seat={@seat} />
 
       <.assaying room={@room} seat={@seat} />
 

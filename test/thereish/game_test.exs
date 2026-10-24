@@ -2676,12 +2676,29 @@ defmodule Thereish.GameTest do
       assert Game.view(bridging(), nil).callable_bands == Game.callable_bands()
     end
 
-    test "a Call before the Beat is refused, and the window is said out loud" do
+    test "a Call before your own commit is refused, and the window is said out loud" do
       refute Game.view(bridging(), "seat-Mara").calling?
       assert {:error, :call_window_closed} = call(bridging(), "Mara", :close)
 
       {state, _effects} = assaying()
       assert Game.view(state, "seat-Mara").calling?
+    end
+
+    test "the window opens on your own commit, and the Call stays yours until the Beat" do
+      {:ok, state, _effects} = commit(bridging(), "Mara", "cairn")
+
+      assert Game.view(state, "seat-Mara").calling?
+      refute Game.view(state, "seat-Jacob").calling?
+      assert {:error, :call_window_closed} = call(state, "Jacob", :close)
+
+      {:ok, state, []} = call(state, "Mara", :almost)
+      assert calls(Game.view(state, "seat-Mara")) == [{"Mara", :almost}]
+      assert calls(Game.view(state, "seat-Jacob")) == []
+      assert calls(Game.view(state, nil)) == []
+
+      {:ok, state, _effects} = commit(state, "Jacob", "wharf")
+      assert calls(Game.view(state, "seat-Jacob")) == [{"Mara", :almost}]
+      assert calls(Game.view(state, nil)) == [{"Mara", :almost}]
     end
 
     test "a Call in the Beat is public the moment it lands, and the latest wins" do
@@ -3135,7 +3152,7 @@ defmodule Thereish.GameTest do
       assert allowed(states.writing, "seat-Mara") == [:reset_gives]
       assert allowed(states.failed, "seat-Jacob") == [:retry_author, :reset_gives]
       assert allowed(states.bridging, "seat-Mara") == [:bridge, :nudge]
-      assert allowed(states.one_bridge, "seat-Mara") == []
+      assert allowed(states.one_bridge, "seat-Mara") == [:call]
       assert allowed(states.one_bridge, "seat-Jacob") == [:bridge, :nudge]
       assert allowed(states.assaying, "seat-Mara") == [:call]
 

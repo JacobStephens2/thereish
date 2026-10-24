@@ -760,13 +760,13 @@ defmodule Thereish.Game do
       barred_words: if(phase != :waiting, do: barred_words(state)),
       gives: if(first_revealed?(state), do: gives_view(state)),
       full_table: page_full_table(state.page, state.full_table),
-      # One projection for both screens. A Nudge, a Call and a Reaction are all
-      # public the moment they land — the public read is the whole point of
-      # each of them — so none of the three is cut to the viewer.
+      # One projection for both screens. A Nudge and a Reaction are public the
+      # moment they land; a Call made while others are still writing is the
+      # caller's own until the Beat, so a confident band cannot steer a Bridge.
       nudges: nudges_view(state),
       your_nudges_left: nudges_left(state, viewer),
-      calling?: phase == :assaying,
-      calls: calls_view(state),
+      calling?: may_call(state, viewer) == :ok,
+      calls: calls_view(state, viewer),
       callable_bands: callable_bands(),
       reactions: reactions_view(state)
     }
@@ -1067,10 +1067,11 @@ defmodule Thereish.Game do
 
   # The Calls and the Reactions in roster order — the order the reveal puts the
   # Seats in, so the pins and the Bridges read down the screen together.
-  defp calls_view(state) do
+  defp calls_view(state, viewer) do
     calls = calls(state)
+    public? = phase(state) != :bridging
 
-    for seat <- page_seats(state), Map.has_key?(calls, seat.id) do
+    for seat <- page_seats(state), Map.has_key?(calls, seat.id), public? or seat.id == viewer do
       %{seat_id: seat.id, name: seat.name, band: calls[seat.id]}
     end
   end
@@ -1090,7 +1091,7 @@ defmodule Thereish.Game do
     bands = Ladder.band_names()
     graded = Enum.find_index(bands, &(&1 == graded_band))
 
-    Enum.map(calls_view(state), fn call ->
+    Enum.map(calls_view(state, nil), fn call ->
       Map.merge(call, %{
         right?: call.band == graded_band,
         bands_off: graded && abs(Enum.find_index(bands, &(&1 == call.band)) - graded)
@@ -1510,14 +1511,21 @@ defmodule Thereish.Game do
     end
   end
 
-  # The Call window is the Beat, and nothing else closes it: a late Call is
-  # refused here rather than by a clock, so the Beat stays the fixed theatre it
-  # is (design law 10) and Pacing is left alone.
+  # The Call window opens on a Seat's own commit and closes when the number
+  # arrives: the wait for the others is the time to make up your mind, and the
+  # Beat alone was too short to read four Bookends and a Bridge and choose. A
+  # late Call is refused here rather than by a clock, so the Beat stays the
+  # fixed theatre it is (design law 10) and Pacing is left alone.
   defp may_call(state, seat_id) do
-    if phase(state) == :assaying do
-      with :ok <- taken_by_a_seat(state, seat_id), do: playing_page_seat(state, seat_id)
-    else
-      {:error, :call_window_closed}
+    case phase(state) do
+      :assaying ->
+        with :ok <- taken_by_a_seat(state, seat_id), do: playing_page_seat(state, seat_id)
+
+      :bridging ->
+        if committed?(state, seat_id), do: :ok, else: {:error, :call_window_closed}
+
+      _phase ->
+        {:error, :call_window_closed}
     end
   end
 

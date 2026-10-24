@@ -4,7 +4,7 @@ status: accepted
 
 # Calls and Reactions: stakes and noise in a game that keeps no score
 
-Thereish has no score and will not have one: the Closeness is a punchline, not a tally, and design law 8's graded ladder is the whole of the co-op's arithmetic. That left the Beat as dead air — a fixed pause in which the table waits for the Assayer — and the reveal as a moment the phones had no part in. Decision (2026-10-23): a Seat may **Call** a band during the Beat, before the number arrives, and may send one of four **Reactions** at the reveal — ooh, how, no way, yes. Both are legitimate in a scoreless game for one reason: **nothing accumulates.**
+Thereish has no score and will not have one: the Closeness is a punchline, not a tally, and design law 8's graded ladder is the whole of the co-op's arithmetic. That left the Beat as dead air — a fixed pause in which the table waits for the Assayer — and the reveal as a moment the phones had no part in. Decision (2026-10-23): a Seat may **Call** a band before the number arrives — from its own commit, while the others write, until the Beat ends — and may send one of four **Reactions** at the reveal — ooh, how, no way, yes. Both are legitimate in a scoreless game for one reason: **nothing accumulates.**
 
 Precisely, and these are the rules that keep it true:
 
@@ -29,3 +29,5 @@ What they buy is a stake in the thirty seconds that had none — a reason to loo
 - Each lands on its Attempt in the Chronicle, in roster order, and the book shows them with no count beside them.
 - A Reaction is felt as well as seen: the buzz is a Cue the phone takes whether or not it holds the Speaker, which is the one Cue that is not the Speaker's.
 - The fairness tap and the Bookends taps leave the punchline for the closing card, so the reveal's seconds belong to the Call, the Rail and the Quip. ADR-0019 is untouched: feedback still never rewrites recorded play.
+
+Amended 2026-10-24, after the first local run: a window of the Beat alone (2.5 s) was too short to read the Bookends and choose, and it left the first Seat to commit with nothing to do while the others wrote. The window now opens on a Seat's own commit. A Call made before the Beat is shown only to its caller, so a confident band cannot steer a Bridge still being written; at the Beat every Call becomes public.

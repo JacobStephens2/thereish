@@ -165,7 +165,7 @@ How far an Attempt's Bridges are from being one mind, on the Ladder's scale — 
 _Avoid_: score, similarity, distance, rating
 
 **Call**:
-The band a Seat names during the Beat, before the number arrives. It settles nothing and counts for nothing: a Seat that does not call simply has no pin on the Rail (ADR-0023).
+The band a Seat names before the number arrives — from its own commit, while the others write, until the Beat ends. A Call stays its caller's own until every Bridge is in, then it is public. It settles nothing and counts for nothing: a Seat that does not call simply has no pin on the Rail (ADR-0023).
 _Avoid_: bet, wager, prediction, score, guess
 
 **Ladder**:
