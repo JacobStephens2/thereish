@@ -11,6 +11,8 @@ defmodule ThereishWeb.StageLiveTest do
   import Thereish.RoomFixtures
   import Phoenix.LiveViewTest
 
+  alias Thereish.Rooms
+
   defp phone(slug), do: build_conn() |> get(~p"/r/#{slug}")
 
   defp join(view, name),
@@ -44,6 +46,64 @@ defmodule ThereishWeb.StageLiveTest do
   end
 
   describe "the Nudge on the Stage (T4)" do
+    test "the Room's Nudges toggle applies next Page from the Stage or a phone" do
+      slug = open_room()
+      {:ok, mara, _} = live(phone(slug))
+      {:ok, esme, _} = live(phone(slug))
+      {:ok, stage, _} = live(build_conn(), ~p"/r/#{slug}/stage")
+      join(mara, "Mara")
+      join(esme, "Esme")
+
+      for screen <- [mara, esme, stage] do
+        assert has_element?(
+                 screen,
+                 "[data-role=settings-modal] [data-role=nudges-switch][checked]"
+               )
+      end
+
+      stage |> element("[data-role=nudges-switch]") |> render_click()
+
+      for screen <- [mara, esme, stage] do
+        eventually(fn -> has_element?(screen, "[data-role=nudges-switch][data-active=false]") end)
+      end
+
+      give_setting(mara, "lanterns on the quay")
+      give_setting(esme, "fog over the harbour")
+      await_phase(slug, :bridging)
+
+      for screen <- [mara, esme, stage] do
+        refute has_element?(screen, "[data-role=nudge-form]")
+        refute has_element?(screen, "[data-role=nudge-chip]")
+      end
+
+      for seat <- Rooms.snapshot(slug, nil).seats do
+        assert Rooms.nudge(slug, seat.id, "rope") == {:error, :nudges_off}
+      end
+
+      mara |> element("[data-role=nudges-switch]") |> render_click()
+      refute has_element?(mara, "[data-role=nudge-form]")
+      refute has_element?(esme, "[data-role=nudge-form]")
+
+      commit(mara, "cairn")
+      commit(esme, "cairn")
+      await_phase(slug, :closed)
+      render_click(mara, "next_page", %{})
+      give_setting(mara, "lanterns on the quay")
+      give_setting(esme, "fog over the harbour")
+      await_phase(slug, :bridging)
+
+      for screen <- [mara, esme] do
+        eventually(fn -> has_element?(screen, "[data-role=nudge-form]") end)
+      end
+
+      nudge(mara, "rope")
+      eventually(fn -> has_element?(stage, "[data-role=nudge-chip]", "rope") end)
+
+      esme |> element("[data-role=nudges-switch]") |> render_click()
+      assert has_element?(stage, "[data-role=nudge-chip]", "rope")
+      assert has_element?(esme, "[data-role=nudge-form]")
+    end
+
     test "a landed Nudge is theatre under the Bookends, and says whose it is" do
       slug = open_room()
       %{mara: mara, stage: stage} = couch(slug)

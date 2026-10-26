@@ -25,6 +25,7 @@ defmodule Thereish.Rooms.FactsTest do
           quips: false,
           full_table: false,
           split_readings: false,
+          nudges: false,
           music: "house",
           prologue_skipped: true,
           quip: "a Code's Quip"
@@ -36,6 +37,7 @@ defmodule Thereish.Rooms.FactsTest do
       assert view.quips == false
       assert view.full_table == false
       assert view.split_readings == false
+      assert view.nudges_enabled? == false
       assert view.music == "house"
       assert view.prologue_skipped == true
       assert view.quip == "a Code's Quip"
@@ -179,7 +181,7 @@ defmodule Thereish.Rooms.FactsTest do
     end
   end
 
-  describe "Quips, Full table and Split readings" do
+  describe "Quips, Full table, Split readings and Nudges" do
     test "setting Quips persists the new value" do
       assert {facts, %{quips: false}, []} = run!(facts(), {:set, :quips, false})
       assert Facts.view(facts, nil).quips == false
@@ -195,7 +197,7 @@ defmodule Thereish.Rooms.FactsTest do
     test "setting either to the value it has changes nothing" do
       start = facts()
 
-      for fact <- [:quips, :full_table, :split_readings] do
+      for fact <- [:quips, :full_table, :split_readings, :nudges] do
         assert {^start, attrs, []} = run!(start, {:set, fact, true})
         assert attrs == %{}
       end
@@ -208,6 +210,16 @@ defmodule Thereish.Rooms.FactsTest do
       assert Facts.view(facts, nil).split_readings == false
     end
 
+    test "Nudges default to on and toggling persists without immediate effects" do
+      assert Facts.view(facts(), nil).nudges_enabled? == true
+
+      assert {off, %{nudges: false}, []} = run!(facts(), {:toggle, :nudges})
+      assert Facts.view(off, nil).nudges_enabled? == false
+
+      assert {on, %{nudges: true}, []} = run!(off, {:toggle, :nudges})
+      assert Facts.view(on, nil).nudges_enabled? == true
+    end
+
     test "toggling flips the Room's own value" do
       assert {_facts, %{quips: false}, []} = run!(facts(), {:toggle, :quips})
 
@@ -218,7 +230,7 @@ defmodule Thereish.Rooms.FactsTest do
     test "toggling twice returns to the start" do
       start = facts()
 
-      for fact <- [:quips, :full_table, :split_readings] do
+      for fact <- [:quips, :full_table, :split_readings, :nudges] do
         {once, _attrs, _effects} = run!(start, {:toggle, fact})
         {twice, attrs, _effects} = run!(once, {:toggle, fact})
 
@@ -275,6 +287,7 @@ defmodule Thereish.Rooms.FactsTest do
                    :quips,
                    :full_table,
                    :split_readings,
+                   :nudges_enabled?,
                    :music,
                    :quip,
                    :prologue_skipped,

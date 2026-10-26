@@ -400,6 +400,63 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   describe "the channel Experiment's Arm" do
+    test "turning Nudges off preserves this Page's allowance and chips, then takes effect" do
+      {play, _page_ref, _giving} = written(new())
+      {play, _} = run(play, {:nudge, "mara", "beacon"})
+      {play, _} = run(play, {:room_fact, {:toggle, :nudges}})
+
+      refute view(play).nudges_enabled?
+      assert [%{word: "beacon"}] = view(play).nudges
+      assert view(play, "jacob").may.nudge
+      assert {:ok, _play, _effects} = Play.apply(play, {:nudge, "jacob", "signal"}, @now)
+
+      {play, _} = meld(play, written: "page-1")
+      {play, _} = run(play, {:next_page, "mara", @members})
+      {play, _page_ref, _giving} = written(play)
+
+      assert view(play).nudges == []
+      assert Play.apply(play, {:nudge, "mara", "beacon"}, @now) == {:error, :nudges_off}
+
+      {play, _} = run(play, {:room_fact, {:toggle, :nudges}})
+      assert Play.apply(play, {:nudge, "mara", "beacon"}, @now) == {:error, :nudges_off}
+
+      {play, _} = meld(play, written: "page-2")
+      {play, _} = run(play, {:next_page, "mara", @members})
+      {play, _page_ref, _giving} = written(play, assignment: channel(:nudge_on))
+
+      assert view(play, "mara").your_nudges_left == 1
+      assert view(play, "mara").may.nudge
+    end
+
+    test "retrying the Author keeps the Page's original Nudge budget" do
+      {play, _} = run(new(), {:give, "mara", "deep canyon"})
+      {play, opened} = run(play, {:give, "jacob", "echoing wind"})
+      {:ask_author, ref, _request, _arm} = find(opened, :ask_author)
+
+      {play, _} = run(play, {:author_completed, ref, {:error, :unavailable}})
+      {play, _} = run(play, {:room_fact, {:toggle, :nudges}})
+      {play, retried} = run(play, {:retry_author, "mara"})
+      {:ask_author, retry_ref, _request, _arm} = find(retried, :ask_author)
+
+      {play, _} =
+        run(
+          play,
+          {:author_completed, retry_ref, {:ok, %{bookends: ["lighthouse", "picnic"], meta: %{}}}}
+        )
+
+      refute view(play).nudges_enabled?
+      assert view(play, "mara").may.nudge
+    end
+
+    test "a Room with Nudges off gives its next Page no budget, even with an on Arm" do
+      {play, _page_ref, _giving} =
+        written(new(room: %{nudges: false}), assignment: channel(:nudge_on))
+
+      assert view(play, "mara").your_nudges_left == 0
+      refute view(play, "mara").may.nudge
+      assert Play.apply(play, {:nudge, "mara", "beacon"}, @now) == {:error, :nudges_off}
+    end
+
     test "on its off Arm leaves the Page with no Nudge to spend" do
       {play, _page_ref, _giving} = written(new(), assignment: channel(:nudge_off))
 
