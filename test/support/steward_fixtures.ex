@@ -282,6 +282,28 @@ defmodule Thereish.StewardFixtures do
     Application.put_env(:thereish, :steward, live)
   end
 
+  @doc "Puts the real Lyria provider behind the seam for the smoke test."
+  def let_it_call_lyria do
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+
+    System.get_env("GEMINI_API_KEY") ||
+      flunk("this test calls a provider and needs GEMINI_API_KEY in the environment")
+
+    Application.put_env(:thereish, :steward, Keyword.put(steward, :http_options, []))
+  end
+
+  @doc "Puts the real APIFRAME provider behind the seam for the smoke test."
+  def let_it_call_apiframe do
+    steward = Application.fetch_env!(:thereish, :steward)
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+
+    System.get_env("APIFRAME_API_KEY") ||
+      flunk("this test calls a provider and needs APIFRAME_API_KEY in the environment")
+
+    Application.put_env(:thereish, :steward, Keyword.put(steward, :http_options, []))
+  end
+
   @doc "Puts the real Mureka provider behind the seam for the smoke test."
   def let_it_call_mureka do
     steward = Application.fetch_env!(:thereish, :steward)

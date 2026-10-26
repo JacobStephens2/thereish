@@ -18,16 +18,16 @@ defmodule Thereish.Steward.Music do
 
   @vamp_opener "A 30-second looping instrumental music bed. No vocals, no speech, no crowd, no talking. "
 
-  @doc "House style prefix used for Mureka instrumental generation."
+  @doc "House style prefix used for the Track's instrumental generation."
   @spec house_prefix([String.t() | map()]) :: String.t()
   def house_prefix(gives \\ []), do: build(@house_opener, gives)
 
-  @doc "Prefix for the Vamp: ElevenLabs sound-generation, not Mureka."
+  @doc "Prefix for the Vamp: ElevenLabs sound-generation, not the Track's provider."
   @spec vamp_prefix([String.t() | map()]) :: String.t()
   def vamp_prefix(gives \\ []), do: build(@vamp_opener, gives)
 
   @doc """
-  Builds a prompt for Mureka from the given Gives.
+  Builds the Track's prompt from the given Gives.
   """
   @spec prompt([String.t() | map()]) :: String.t()
   def prompt(gives) when is_list(gives) do

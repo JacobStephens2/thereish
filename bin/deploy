@@ -35,10 +35,13 @@ fi
 # missing line in a file, not a design, and this is the last moment anyone is looking.
 VOICE_PROVIDER=$(grep -E '^[[:space:]]*voice:[[:space:]]*\[' -A 5 "${SCRIPT_DIR}/../config/config.exs" | grep -v '^[[:space:]]*#' | grep -o 'provider:[[:space:]]*Thereish\.Steward\.[A-Za-z0-9_]*' | head -n1 | sed 's/.*\.//')
 
+MUSIC_PROVIDER=$(grep -E '^[[:space:]]*music:[[:space:]]*\[' -A 2 "${SCRIPT_DIR}/../config/config.exs" | grep -v '^[[:space:]]*#' | grep -o 'provider:[[:space:]]*Thereish\.Steward\.[A-Za-z0-9_]*' | head -n1 | sed 's/.*\.//')
+
 MISSING_KEYS=$(ssh "${SERVER}" "
   grep -q '^GEMINI_API_KEY=.' ${APP_DIR}/.env || echo 'GEMINI_API_KEY'
   grep -q '^ANTHROPIC_API_KEY=.' ${APP_DIR}/.env || echo 'ANTHROPIC_API_KEY'
   grep -q '^MUREKA_API_KEY=.' ${APP_DIR}/.env || echo 'MUREKA_API_KEY'
+  grep -q '^APIFRAME_API_KEY=.' ${APP_DIR}/.env || echo 'APIFRAME_API_KEY'
   grep -qE '^(RECRAFT_AI_API_KEY|RECRAFT_API_KEY|RECRAFT_API_TOKEN)=.' ${APP_DIR}/.env || echo 'RECRAFT_AI_API_KEY'
   grep -q '^HUME_API_KEY=.' ${APP_DIR}/.env || echo 'HUME_API_KEY'
   grep -q '^HUME_SECRET_KEY=.' ${APP_DIR}/.env || echo 'HUME_SECRET_KEY'
@@ -62,8 +65,21 @@ if echo "${MISSING_KEYS}" | grep -q 'ANTHROPIC_API_KEY'; then
   echo "      See docs/deploy.md, \"The Author's key\"."
 fi
 
-if echo "${MISSING_KEYS}" | grep -q 'MUREKA_API_KEY'; then
-  echo "Note: no MUREKA_API_KEY in ${APP_DIR}/.env — every Page will have only the house loop."
+# The Track's key is whichever one the configured music provider reads: Lyria
+# shares the Assayer's GEMINI_API_KEY, the alternatives have their own.
+if [ "${MUSIC_PROVIDER}" = "Lyria" ]; then
+  MUSIC_KEY="GEMINI_API_KEY"
+elif [ "${MUSIC_PROVIDER}" = "Apiframe" ]; then
+  MUSIC_KEY="APIFRAME_API_KEY"
+elif [ "${MUSIC_PROVIDER}" = "Mureka" ]; then
+  MUSIC_KEY="MUREKA_API_KEY"
+else
+  echo "Warning: could not determine music provider from config/config.exs (found: '${MUSIC_PROVIDER}')" >&2
+  MUSIC_KEY=""
+fi
+
+if [ -n "${MUSIC_KEY}" ] && echo "${MISSING_KEYS}" | grep -q "${MUSIC_KEY}"; then
+  echo "Note: no ${MUSIC_KEY} in ${APP_DIR}/.env — every Page will have only the house loop."
   echo "      See docs/deploy.md, \"Foley's keys\"."
 fi
 
