@@ -28,7 +28,7 @@ FROM ${BUILDER_IMAGE} AS builder
 
 # install build dependencies
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends build-essential git \
+  && apt-get install -y --no-install-recommends build-essential git curl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 # prepare build dir
@@ -51,6 +51,16 @@ RUN mkdir config
 # to be re-compiled.
 COPY config/config.exs config/${MIX_ENV}.exs config/
 RUN mix deps.compile
+
+# tailwind.install fetches with httpc, which rejects GitHub's release redirect
+# (its headers run past httpc's 10 KB limit). curl puts the binary where
+# `--if-missing` finds it. The version must match config :tailwind.
+ARG TAILWIND_VERSION=4.3.0
+RUN case "$(dpkg --print-architecture)" in amd64) arch=x64 ;; arm64) arch=arm64 ;; esac \
+  && mkdir -p _build \
+  && curl -fsSL -o "_build/tailwind-linux-${arch}-${TAILWIND_VERSION}" \
+    "https://github.com/tailwindlabs/tailwindcss/releases/download/v${TAILWIND_VERSION}/tailwindcss-linux-${arch}" \
+  && chmod +x "_build/tailwind-linux-${arch}-${TAILWIND_VERSION}"
 
 RUN mix assets.setup
 
