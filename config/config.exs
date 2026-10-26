@@ -239,15 +239,17 @@ config :thereish, :steward,
           timeout_ms: 30_000,
           api_key: nil
         ],
+        # Lyria 3.5 won the Track bake-off once Mureka's quota ran out (ADR-0025);
+        # either alternative is one config line.
         music: [
-          provider: Thereish.Steward.Mureka,
-          model: "auto",
-          n: 1,
+          provider: Thereish.Steward.Lyria,
+          model: "lyria-3.5",
           deadline_ms: 180_000,
-          poll_interval_ms: 2_000,
-          timeout_ms: 30_000,
           api_key: nil
         ],
+        # Alternatives:
+        # music: [provider: Thereish.Steward.Apiframe, model: "V5_5", deadline_ms: 180_000, poll_interval_ms: 3_000, timeout_ms: 30_000, api_key: nil],
+        # music: [provider: Thereish.Steward.Mureka, model: "auto", n: 1, deadline_ms: 180_000, poll_interval_ms: 2_000, timeout_ms: 30_000, api_key: nil],
         ear: [
           provider: Thereish.Steward.Gemini,
           model: "gemini-3.8-flash",
@@ -306,6 +308,13 @@ config :thereish, :steward,
     "eleven_text_to_sound_v2" => 0.00010,
     # Mureka instrumental music ($0.04 / track; Mureka's model identifier is "auto")
     "auto" => {:track, 0.04},
+    # Lyria through the Gemini API, per song (pricing page 2026-10-26; ticket 277)
+    "lyria-3.5" => {:track, 0.08},
+    "lyria-3-pro-preview" => {:track, 0.08},
+    "lyria-3-clip-preview" => {:track, 0.04},
+    # Suno through APIFRAME: 11 credits (~$0.11) per generation of two tracks;
+    # the Track keeps the first (apiframe.ai pricing 2026-10-26; ticket 277)
+    "V5_5" => {:track, 0.11},
     "eleven_v3_conversational" => 0.00010,
     "octave-2" => 0.00015,
     # Limner image models (research 2026-09-09).

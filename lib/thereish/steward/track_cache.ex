@@ -2,8 +2,9 @@ defmodule Thereish.Steward.TrackCache do
   @moduledoc """
   The track cache table holding scored instrumentals keyed by normalized, sorted Gives.
 
-  Answers a hit without a provider call. On miss, Mureka writes into the app's media
-  directory on the server's volume, never relying on Mureka's thirty-day URL.
+  Answers a hit without a provider call. On miss, the music provider's bytes are
+  written into the app's media directory on the server's volume, never relying on
+  a vendor's expiring URL.
   """
   use Ecto.Schema
   import Ecto.Changeset

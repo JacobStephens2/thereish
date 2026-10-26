@@ -45,7 +45,7 @@ if key = System.get_env("GEMINI_API_KEY") do
       assayer: [api_key: key],
       author: [api_key: key],
       scribe: [jobs: [naming: [api_key: key], title: [api_key: key]]],
-      foley: [jobs: [ear: [api_key: key]]]
+      foley: [lyria_api_key: key, jobs: [ear: [api_key: key]]]
     ]
 end
 
@@ -84,8 +84,14 @@ if key = System.get_env("HUME_SECRET_KEY") do
   config :thereish, :steward, roles: [foley: [hume_secret_key: key]]
 end
 
+# Music keys are vendor-scoped on the role, so whichever provider the music job
+# names finds its own key (`Thereish.Steward.provider/3`).
 if key = System.get_env("MUREKA_API_KEY") do
-  config :thereish, :steward, roles: [foley: [jobs: [music: [api_key: key]]]]
+  config :thereish, :steward, roles: [foley: [mureka_api_key: key]]
+end
+
+if key = System.get_env("APIFRAME_API_KEY") do
+  config :thereish, :steward, roles: [foley: [apiframe_api_key: key]]
 end
 
 if key =

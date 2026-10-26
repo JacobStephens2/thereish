@@ -1285,31 +1285,29 @@ defmodule Thereish.StewardTest do
       assert hd(candidates).bytes == <<255, 251, 144, 100, 1>>
     end
 
-    test "forge with music calls Mureka" do
-      Req.Test.stub(Thereish.Steward.Mureka, fn conn ->
-        case {conn.method, conn.request_path} do
-          {"POST", "/v1/instrumental/generate"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_mureka_live"}))
-
-          {"GET", "/v1/instrumental/query/task_mureka_live"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(
-              200,
-              Jason.encode!(%{
-                "id" => "task_mureka_live",
-                "status" => "succeeded",
-                "choices" => [%{"url" => "https://cdn.mureka.ai/track.mp3"}]
-              })
-            )
-
-          {"GET", "/track.mp3"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
-            |> Plug.Conn.send_resp(200, <<255, 251, 144, 100, 2>>)
-        end
+    test "forge with music calls the configured music provider" do
+      Req.Test.stub(Thereish.Steward.Lyria, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "candidates" => [
+              %{
+                "content" => %{
+                  "parts" => [
+                    %{
+                      "inlineData" => %{
+                        "mimeType" => "audio/mpeg",
+                        "data" => Base.encode64(<<255, 251, 144, 100, 2>>)
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          })
+        )
       end)
 
       assert {:ok, candidates} = Live.forge(%{prompt: "house loop", kind: :music}, n: 1)

@@ -24,15 +24,15 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
       assert log == ""
     end
 
-    test "warns when MUREKA_API_KEY is missing" do
-      configure_foley([], music: [api_key: nil])
+    test "warns when the music provider's key is missing" do
+      configure_foley([lyria_api_key: nil], music: [api_key: nil])
 
       log =
         capture_log(fn ->
           assert :ok = Thereish.Steward.warn_missing_foley_keys()
         end)
 
-      assert log =~ "no MUREKA_API_KEY — every Page will have only the house loop"
+      assert log =~ "no GEMINI_API_KEY — every Page will have only the house loop"
       refute log =~ "voice switch"
     end
 
@@ -47,7 +47,7 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
       assert log =~ "the voice switch will do nothing"
       assert log =~ "HUME_API_KEY"
       assert log =~ "HUME_SECRET_KEY"
-      refute log =~ "MUREKA_API_KEY"
+      refute log =~ "GEMINI_API_KEY"
     end
 
     test "voice warning follows configured voice provider (ElevenLabs)" do
@@ -67,7 +67,7 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
 
     test "warns once per Foley job when both music and voice have no keys" do
       configure_foley(
-        [hume_api_key: nil, hume_secret_key: nil],
+        [lyria_api_key: nil, hume_api_key: nil, hume_secret_key: nil],
         music: [api_key: nil]
       )
 
@@ -77,7 +77,7 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
         end)
 
       # One warning for music
-      assert log =~ "no MUREKA_API_KEY — every Page will have only the house loop"
+      assert log =~ "no GEMINI_API_KEY — every Page will have only the house loop"
       # One warning for voice
       assert log =~ "the voice switch will do nothing"
       assert log =~ "HUME_API_KEY"
@@ -85,14 +85,14 @@ defmodule Thereish.Steward.WarnMissingFoleyKeysTest do
     end
 
     test "application boot invokes Foley key warning" do
-      configure_foley([], music: [api_key: nil])
+      configure_foley([lyria_api_key: nil], music: [api_key: nil])
 
       log =
         capture_log(fn ->
           _ = Thereish.Application.start(:normal, [])
         end)
 
-      assert log =~ "no MUREKA_API_KEY — every Page will have only the house loop"
+      assert log =~ "no GEMINI_API_KEY — every Page will have only the house loop"
     end
 
     test "application boot invokes Limner key warning" do

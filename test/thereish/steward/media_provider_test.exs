@@ -23,6 +23,8 @@ defmodule Thereish.Steward.MediaProviderTest do
             {Steward.Hume, "hume"},
             {Steward.ElevenLabs, "eleven_labs"},
             {Steward.Mureka, "mureka"},
+            {Steward.Lyria, "lyria"},
+            {Steward.Apiframe, "apiframe"},
             {Steward.Recraft, "recraft"},
             {Steward.Fal, "fal"},
             {Steward.Bfl, "bfl"},

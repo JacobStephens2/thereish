@@ -798,7 +798,7 @@ defmodule Thereish.Steward do
   @doc """
   Warns at application boot if keys for Foley's active jobs are missing.
 
-  - Music (`:music`): a missing key (`MUREKA_API_KEY` today) warns that every
+  - Music (`:music`): a missing key (`GEMINI_API_KEY` for Lyria today) warns that every
     Page will have only the house loop.
   - Voice (`:voice`): missing key(s) for the configured voice provider
     (`HUME_API_KEY` and `HUME_SECRET_KEY` today, `ELEVENLABS_API_KEY` if

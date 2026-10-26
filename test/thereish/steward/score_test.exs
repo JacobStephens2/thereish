@@ -8,7 +8,7 @@ defmodule Thereish.Steward.ScoreTest do
   alias Thereish.Steward.Fake
   alias Thereish.Steward.Music
   alias Thereish.Steward.TrackCache
-  alias Thereish.Steward.Mureka
+  alias Thereish.Steward.Lyria
 
   @gives ["summer camp", "viking beaches"]
   @fake_bytes <<255, 251, 144, 100, 11, 22, 33>>
@@ -74,14 +74,14 @@ defmodule Thereish.Steward.ScoreTest do
       File.mkdir_p!(test_dir)
       Application.put_env(:thereish, :media_dir, test_dir)
 
-      # Ensure Mureka API key is present in live config for test
+      # Ensure the music API key is present in live config for test
       steward_cfg = Application.get_env(:thereish, :steward, [])
       roles = Keyword.get(steward_cfg, :roles, [])
       foley_cfg = Keyword.get(roles, :foley, [])
       jobs = Keyword.get(foley_cfg, :jobs, [])
       music_cfg = Keyword.get(jobs, :music, [])
 
-      updated_music = Keyword.put(music_cfg, :api_key, "test-mureka-key")
+      updated_music = Keyword.put(music_cfg, :api_key, "test-music-key")
       updated_jobs = Keyword.put(jobs, :music, updated_music)
       updated_foley = Keyword.put(foley_cfg, :jobs, updated_jobs)
       updated_roles = Keyword.put(roles, :foley, updated_foley)
@@ -114,57 +114,55 @@ defmodule Thereish.Steward.ScoreTest do
         meta: %{"provider" => "mureka", "cost_usd" => 0.04}
       })
 
-      # No Req.Test.stub set up for Mureka - if it calls Mureka, it will crash
+      # No Req.Test.stub set up for the provider - a call would crash
       assert {:ok, track} = Live.score(@gives)
       assert track.path == "/media/tracks/already-cached.mp3"
       assert track.duration == 150
     end
 
-    test "cache miss calls Mureka with house prefix, n: 1, downloads to media dir, and caches" do
+    test "cache miss scores the Music prompt through the configured provider, writes to media dir, and caches" do
       test_pid = self()
 
-      Req.Test.stub(Mureka, fn conn ->
-        case {conn.method, conn.request_path} do
-          {"POST", "/v1/instrumental/generate"} ->
-            {:ok, body, conn} = Plug.Conn.read_body(conn)
-            decoded = Jason.decode!(body)
-            send(test_pid, {:mureka_generate, decoded})
+      Req.Test.stub(Lyria, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:lyria_generate, conn.request_path, Jason.decode!(body)})
 
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_scored_123"}))
-
-          {"GET", "/v1/instrumental/query/task_scored_123"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(
-              200,
-              Jason.encode!(%{
-                "id" => "task_scored_123",
-                "status" => "succeeded",
-                "choices" => [%{"url" => "https://cdn.mureka.ai/audio/score.mp3"}]
-              })
-            )
-
-          {"GET", "/audio/score.mp3"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
-            |> Plug.Conn.send_resp(200, @fake_bytes)
-        end
+        conn
+        |> Plug.Conn.put_resp_header("content-type", "application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "candidates" => [
+              %{
+                "content" => %{
+                  "parts" => [
+                    %{
+                      "inlineData" => %{
+                        "mimeType" => "audio/mpeg",
+                        "data" => Base.encode64(@fake_bytes)
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          })
+        )
       end)
 
       fresh_gives = ["Kiss Heavy Metal", "bossa nova"]
       assert {:ok, track} = Live.score(fresh_gives)
 
-      assert_receive {:mureka_generate, body}
-      assert body["n"] == 1
-      assert body["prompt"] == Music.prompt(fresh_gives)
+      assert_receive {:lyria_generate, "/v1beta/models/lyria-3.5:generateContent", body}
+      assert [%{"parts" => [%{"text" => prompt}]}] = body["contents"]
+      assert prompt == Music.prompt(fresh_gives)
 
       assert String.starts_with?(track.path, "/media/tracks/")
-      assert track.meta.provider == "mureka"
-      assert track.meta.cost_usd == 0.04
+      assert File.read!(TrackCache.disk_path(track.path)) == @fake_bytes
+      assert track.meta.provider == "lyria"
+      assert track.meta.model == "lyria-3.5"
+      assert track.meta.cost_usd == 0.08
 
-      # Verify cached
       assert {:ok, cached} = TrackCache.get(fresh_gives)
       assert cached.path == track.path
     end
@@ -173,74 +171,22 @@ defmodule Thereish.Steward.ScoreTest do
       steward_cfg = Application.get_env(:thereish, :steward)
       Application.put_env(:thereish, :steward, Keyword.put(steward_cfg, :adapter, Live))
 
-      assert Steward.score_failure(:timeout).provider == "mureka"
+      assert %{provider: "lyria", model: "lyria-3.5"} = Steward.score_failure(:timeout)
     end
 
-    test "handles provider error on miss" do
-      Req.Test.stub(Mureka, fn conn ->
+    test "a quota refusal on miss is an error and caches nothing" do
+      Req.Test.stub(Lyria, fn conn ->
         conn
         |> Plug.Conn.put_resp_header("content-type", "application/json")
-        |> Plug.Conn.send_resp(500, Jason.encode!(%{"error" => "internal error"}))
+        |> Plug.Conn.send_resp(
+          429,
+          Jason.encode!(%{"error" => %{"status" => "RESOURCE_EXHAUSTED"}})
+        )
       end)
 
       fresh_gives = ["stormy sea", "lighthouse"]
-      assert {:error, _} = Live.score(fresh_gives)
-    end
-
-    test "cache miss generates track via Mureka non-stream request, then caches final MP3" do
-      poll_count = Agent.start_link(fn -> 0 end) |> elem(1)
-      test_pid = self()
-
-      Req.Test.stub(Mureka, fn conn ->
-        case {conn.method, conn.request_path} do
-          {"POST", "/v1/instrumental/generate"} ->
-            {:ok, body, conn} = Plug.Conn.read_body(conn)
-            decoded = Jason.decode!(body)
-            send(test_pid, {:mureka_generate_called, decoded})
-
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(%{"id" => "task_live_1"}))
-
-          {"GET", "/v1/instrumental/query/task_live_1"} ->
-            step = Agent.get_and_update(poll_count, &{&1 + 1, &1 + 1})
-
-            response_data =
-              case step do
-                1 ->
-                  %{"id" => "task_live_1", "status" => "preparing"}
-
-                _ ->
-                  %{
-                    "id" => "task_live_1",
-                    "status" => "succeeded",
-                    "choices" => [%{"url" => "https://cdn.mureka.ai/audio/live1_final.mp3"}]
-                  }
-              end
-
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "application/json")
-            |> Plug.Conn.send_resp(200, Jason.encode!(response_data))
-
-          {"GET", "/audio/live1_final.mp3"} ->
-            conn
-            |> Plug.Conn.put_resp_header("content-type", "audio/mpeg")
-            |> Plug.Conn.send_resp(200, @fake_bytes)
-        end
-      end)
-
-      gives = ["crystal cave", "ancient flute"]
-
-      assert {:ok, track} = Live.score(gives)
-      assert String.starts_with?(track.path, "/media/tracks/")
-      assert track.format == :mp3
-
-      assert_receive {:mureka_generate_called, body}
-      refute Map.has_key?(body, "stream")
-
-      # Verified final file cached
-      assert {:ok, cached} = TrackCache.get(gives)
-      assert cached.path == track.path
+      assert {:error, {:http, 429, _}} = Live.score(fresh_gives)
+      assert :miss = TrackCache.get(fresh_gives)
     end
   end
 end

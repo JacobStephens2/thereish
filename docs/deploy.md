@@ -180,9 +180,12 @@ planned to use `claude-fable-5-1` as well and will share this key.
 
 Foley makes what the Room hears — instrumental Tracks scored live for each
 Page from its Gives, spoken Verdicts at the reveal, and sound effects for the
-forge. They use four keys that `deploy/provision.sh` cannot generate:
+forge. The Track is Lyria's, on the Assayer's `GEMINI_API_KEY` (ADR-0025);
+without it every Page has only the house loop. Beyond that they use keys that
+`deploy/provision.sh` cannot generate:
 
-- `MUREKA_API_KEY`: a Track for every Page (without it: the house loop only).
+- `MUREKA_API_KEY` or `APIFRAME_API_KEY`: only if the music job is switched to
+  its Mureka or Suno alternative.
 - `HUME_API_KEY`: the Assayer's voice (Hume Octave 2, the bake-off winner; Hume needs both keys).
 - `HUME_SECRET_KEY`: the Assayer's voice (Hume needs both keys).
 - `ELEVENLABS_API_KEY`: the alternative voice, and the forge's effects.
@@ -197,7 +200,7 @@ Or by hand in the server's `.env`:
 
 ```sh
 ssh jacob@stephens.page
-sudo -e /var/www/thereish.app/.env    # MUREKA_API_KEY=... HUME_API_KEY=... HUME_SECRET_KEY=...
+sudo -e /var/www/thereish.app/.env    # HUME_API_KEY=... HUME_SECRET_KEY=... ELEVENLABS_API_KEY=...
 cd /var/www/thereish.app && docker compose -f docker-compose.app.yml up -d
 ```
 
