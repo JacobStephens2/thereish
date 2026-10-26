@@ -44,7 +44,7 @@ if key = System.get_env("GEMINI_API_KEY") do
     roles: [
       assayer: [api_key: key],
       author: [api_key: key],
-      scribe: [jobs: [naming: [api_key: key], title: [api_key: key]]],
+      scribe: [jobs: [naming: [api_key: key], title: [api_key: key], guidance: [api_key: key]]],
       foley: [lyria_api_key: key, jobs: [ear: [api_key: key]]]
     ]
 end

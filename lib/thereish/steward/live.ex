@@ -41,6 +41,7 @@ defmodule Thereish.Steward.Live do
   alias Thereish.Steward
   alias Thereish.Steward.Assay
   alias Thereish.Steward.Gate
+  alias Thereish.Steward.GiveGuidance
   alias Thereish.Steward.Music
   alias Thereish.Steward.Naming
   alias Thereish.Steward.Recap
@@ -392,6 +393,25 @@ defmodule Thereish.Steward.Live do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @impl true
+  def give_guidance(digest, previous) do
+    with {:ok, answer} <-
+           Gate.answer(
+             Steward.role(:scribe, :guidance),
+             GiveGuidance.prompt(digest, previous),
+             fn json ->
+               with :ok <- GiveGuidance.check(json, previous),
+                    do: Vale.check(String.trim(json["text"]))
+             end
+           ) do
+      {:ok,
+       %{
+         text: String.trim(answer.json["text"]),
+         meta: Map.take(answer, [:model, :cost_usd, :latency_ms, :attempts])
+       }}
     end
   end
 
