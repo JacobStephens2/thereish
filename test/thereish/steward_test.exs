@@ -1376,7 +1376,7 @@ defmodule Thereish.StewardTest do
   describe "the words for an Author failure" do
     test "each reason reads as the Game shows it" do
       for {reason, words} <- [
-            {{:max_tokens, 4096}, "too broad or complex"},
+            {{:max_tokens, 4096}, "it ran long"},
             {:refused, "content declined"},
             {{:refusal, "not that"}, "declined: not that"},
             {{:rejected, "schema: bookends must be a list of exactly 2 items"},

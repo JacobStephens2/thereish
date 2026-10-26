@@ -18,13 +18,26 @@ defmodule Thereish.Steward.Music do
 
   @vamp_opener "A 30-second looping instrumental music bed. No vocals, no speech, no crowd, no talking. "
 
+  # ElevenLabs sound generation refuses a text over 450 characters, and the
+  # Track's direction plus two Gives already came to 445, so the Vamp says the
+  # same things in fewer words, and a table too long even for that loses the
+  # tail of its Gives rather than the whole Vamp.
+  @vamp_limit 450
+
+  @vamp_composition_brief "A Give naming a genre, artist, instrument, or energy sets genre, instrumentation, and energy, loud styles included; other Gives are atmosphere only."
+
+  @vamp_fusion_brief "Fuse differing genres."
+
+  @vamp_mix_brief "Comfortable volume."
+
   @doc "House style prefix used for the Track's instrumental generation."
   @spec house_prefix([String.t() | map()]) :: String.t()
   def house_prefix(gives \\ []), do: build(@house_opener, gives)
 
   @doc "Prefix for the Vamp: ElevenLabs sound-generation, not the Track's provider."
   @spec vamp_prefix([String.t() | map()]) :: String.t()
-  def vamp_prefix(gives \\ []), do: build(@vamp_opener, gives)
+  def vamp_prefix(gives \\ []),
+    do: @vamp_opener <> vamp_direction(gives) <> " Gives: "
 
   @doc """
   Builds the Track's prompt from the given Gives.
@@ -42,10 +55,27 @@ defmodule Thereish.Steward.Music do
   """
   @spec vamp_prompt([String.t() | map()]) :: String.t()
   def vamp_prompt(gives) when is_list(gives) do
-    vamp_prefix(gives) <> theme(gives)
+    prefix = vamp_prefix(gives)
+    prefix <> fit(theme(gives), @vamp_limit - String.length(prefix))
+  end
+
+  defp fit(theme, room) do
+    if String.length(theme) <= room do
+      theme
+    else
+      theme
+      |> String.slice(0, room)
+      |> String.replace(~r/[\s,]+\S*$/u, "")
+    end
   end
 
   defp build(opener, gives), do: opener <> direction(gives) <> " Gives: "
+
+  defp vamp_direction(gives) do
+    [@vamp_composition_brief, several?(gives) && @vamp_fusion_brief, @vamp_mix_brief]
+    |> Enum.filter(& &1)
+    |> Enum.join(" ")
+  end
 
   defp direction(gives) do
     [

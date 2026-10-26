@@ -49,6 +49,28 @@ defmodule Thereish.Steward.MusicTest do
     end
   end
 
+  describe "the Vamp brief fits ElevenLabs' 450 characters" do
+    test "a table of four ordinary Gives is heard in full" do
+      gives = ["the feeling of a Sunday night", "Vecna", "a can of worms", "grandma's kitchen"]
+      prompt = Music.vamp_prompt(gives)
+
+      assert String.length(prompt) <= 450
+      for give <- gives, do: assert(prompt =~ give)
+    end
+
+    test "a table too long to fit keeps the direction and cuts the Gives at a word" do
+      gives = for n <- 1..8, do: "an extraordinarily long and winding Give number #{n}"
+      prompt = Music.vamp_prompt(gives)
+
+      assert String.length(prompt) <= 450
+      assert String.starts_with?(prompt, Music.vamp_prefix(gives))
+      assert prompt =~ "an extraordinarily long and winding Give number 1"
+      refute prompt =~ "number 8"
+      refute String.ends_with?(prompt, " ")
+      refute String.ends_with?(prompt, ",")
+    end
+  end
+
   defp briefs(gives), do: [Music.prompt(gives), Music.vamp_prompt(gives)]
 
   defp assert_drives_genre_and_energy(prompt) do

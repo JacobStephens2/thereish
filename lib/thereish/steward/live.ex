@@ -103,7 +103,9 @@ defmodule Thereish.Steward.Live do
     count = Thereish.Steward.Author.requested_count(request)
     prompt = Thereish.Steward.Author.prompt(gives, digest, count)
 
-    case Gate.answer(role, prompt, &Thereish.Steward.Author.check(&1, gives, count)) do
+    check = &Thereish.Steward.Author.check(&1, gives, count)
+
+    case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
       {:ok, answer} ->
         bookends = answer.json["bookends"]
         why = answer.json["why"]
