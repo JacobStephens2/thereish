@@ -1830,6 +1830,17 @@ defmodule ThereishWeb.RoomComponents do
               Split readings: when the Assayer's two readings of the same Bridges disagree, show the table both
             </span>
           </label>
+          <label class="flex items-start gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              data-role="nudges-switch"
+              data-active={to_string(Map.get(@room, :nudges_enabled?, true))}
+              checked={Map.get(@room, :nudges_enabled?, true)}
+              phx-click="toggle_nudges"
+              class="checkbox checkbox-xs mt-0.5"
+            />
+            <span>Nudges: one word to point the table toward a meaning. Changes from the next Page.</span>
+          </label>
         </div>
         <div class="flex flex-col gap-2">
           <p class="text-xs uppercase tracking-wide opacity-60">Music</p>

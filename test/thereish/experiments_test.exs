@@ -138,6 +138,29 @@ defmodule Thereish.ExperimentsTest do
       assert Assignment.arm(Experiments.assign(room.id), :channel) == :nudge_off
     end
 
+    test "a Room with Nudges off skips the channel sample and resumes its alternation", %{
+      room: room
+    } do
+      assert Assignment.arm(Experiments.assign(room.id), :channel) == :nudge_on
+      :ok = Rooms.toggle(room.slug, :nudges)
+
+      skipped = Experiments.assign(room.slug)
+      assert skipped.arm == :astra
+      assert Assignment.arm(skipped, :channel) == nil
+      assert [%{arm: "nudge_on"}] = ExperimentFixtures.assignments(room.id, "channel")
+
+      {_page, _outcome} = record_outcome(room, assignment: skipped)
+      assert ExperimentFixtures.outcomes(room.id, "channel") == []
+      assert Experiments.progress(room.id, "channel").recorded == 0
+      assert Experiments.progress(room.id, "author_model").recorded == 1
+
+      :ok = Rooms.toggle(room.slug, :nudges)
+      resumed = Experiments.assign(room.id)
+      assert resumed.arm == :flash
+      assert Assignment.arm(resumed, :channel) == :nudge_off
+      assert Assignment.arm(Experiments.assign(room.id), :channel) == :nudge_on
+    end
+
     test "answers no channel arm at all when no row could be written" do
       log =
         capture_log(fn ->

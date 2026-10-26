@@ -5,7 +5,8 @@ defmodule Thereish.Experiments do
   Two Experiments are live. The Author model, Flash against Astra, decides
   which model writes the Page's Bookends; the channel, Nudge on against off,
   decides whether the Page has a Nudge in it at all (ADR-0020). Each Page is
-  assigned an Arm of both when the Author is asked for it, each alternating
+  assigned an Arm of both when the Author is asked for it, unless its Room has
+  Nudges off and takes no channel Arm. Each Experiment alternates
   strictly on its own rows, so the two never line up and neither confounds the
   other. Assignment is deterministic, with no randomization or Chapter
   stratification. Bait against plain, ADR-0004's misdirection test, is retired,
@@ -126,10 +127,13 @@ defmodule Thereish.Experiments do
   @default_assignment %Assignment{id: nil, experiment_id: @author_model_id, arm: :flash}
 
   @doc """
-  Assigns the next Page in a Room an Arm of every live Experiment, each
+  Assigns the next Page in a Room an Arm of every eligible live Experiment, each
   strictly alternating from that Experiment's own past rows in the Room,
   records a row for each blind, and answers the Author-model one as the Page's
   Assignment with the rest beside it (`Assignment.arm/2`).
+
+  A Room with Nudges off gets no channel Assignment: its Pages advance
+  neither that Experiment's alternation nor its sample (ADR-0020).
 
   When no row can be read or written, that is logged and the Page plays under
   the default Arm, Flash, with no row and no other Experiment: a lost row must
@@ -139,13 +143,15 @@ defmodule Thereish.Experiments do
   @spec assign(Ecto.UUID.t() | String.t()) :: Assignment.t()
   def assign(room_id_or_slug) do
     room_id = resolve_room_id(room_id_or_slug)
+    room = Repo.get!(Room, room_id)
     past = Enum.group_by(assignments(room_id), & &1.experiment_id, & &1.arm)
     # Every row names the Page the same way, so a Page's Arms read as one Page.
     identifier = "page-#{length(Map.get(past, @author_model_id, [])) + 1}"
     at = DateTime.utc_now()
 
     made =
-      for experiment <- @live_experiments do
+      for experiment <- @live_experiments,
+          experiment.id != @channel_id or room.nudges do
         %Assignment{
           id: Ecto.UUID.generate(),
           experiment_id: experiment.id,

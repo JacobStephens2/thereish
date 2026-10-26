@@ -409,7 +409,7 @@ defmodule Thereish.Rooms.Play do
     play = %{
       play
       | pages: Pages.page_opened(play.pages, page_ref, assignment),
-        game: nudge_budget(play.game, assignment)
+        game: nudge_budget(play, assignment)
     }
 
     {play, paced} = pace(play, &Pacing.author_asked(&1, ref, now), now)
@@ -551,17 +551,17 @@ defmodule Thereish.Rooms.Play do
     {play, [{:ask_assayer, request} | paced]}
   end
 
-  # The channel Experiment's Arm is a budget and nothing else: off takes the
-  # Nudge away for this Page, anything else hands the configured one back, so a
-  # Page never inherits the Arm before it. The Game is built once for the Room
-  # and the budget outlives a Page, so a Page with no Arm at all — a lost
-  # Assignment row, a default handed back by a rescue — has to be given the
-  # budget back rather than left with the last Page's. No screen is told which
-  # Arm it is: the Arm is blinded by there being nothing to see (ADR-0020).
-  defp nudge_budget(game, assignment) do
-    case Assignment.arm(assignment, :channel) do
-      :nudge_off -> Game.set_nudges_per_page(game, 0)
-      _arm -> Game.set_nudges_per_page(game, nil)
+  # A retry keeps this Page's budget, just as it keeps its Assignment. The
+  # Room's choice and the blinded channel Arm can each take the Nudge away
+  # from a new Page; every other Page gets the configured budget (ADR-0020).
+  defp nudge_budget(play, assignment) do
+    if Pages.assignment(play.pages) do
+      play.game
+    else
+      budget =
+        if not play.facts.nudges or Assignment.arm(assignment, :channel) == :nudge_off, do: 0
+
+      Game.set_nudges_per_page(play.game, budget)
     end
   end
 

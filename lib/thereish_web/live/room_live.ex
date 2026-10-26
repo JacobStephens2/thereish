@@ -269,6 +269,11 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("toggle_nudges", _params, socket) do
+    Rooms.toggle(socket.assigns.slug, :nudges)
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("set_music", %{"music" => music}, socket) do
     Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}

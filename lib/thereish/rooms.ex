@@ -491,7 +491,7 @@ defmodule Thereish.Rooms do
     do: call(code, {:room_fact, {:set, :split_readings, enabled}})
 
   @doc """
-  Flips Quips, Full table or Split readings from the Room's own value, so two
+  Flips Quips, Full table, Split readings or Nudges from the Room's own value, so two
   devices tapping
   at once land where they started rather than cancelling out.
   """

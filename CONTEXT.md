@@ -113,7 +113,7 @@ A Room's verdict that one Repertoire member will not be drawn again in that Room
 _Avoid_: dismiss, hide, ban, skip (that is Next)
 
 **Room fact**:
-A setting or state the Room keeps across Pages rather than any one Page keeping it: who holds the Speaker, Quips on or off, Full table, the music setting, and whether the Prologue was skipped. Flipped from any device and kept with the Room, so a restart restores it.
+A setting or state the Room keeps across Pages rather than any one Page keeping it: who holds the Speaker, Quips on or off, Full table, Nudges on or off, the music setting, and whether the Prologue was skipped. Flipped from any device and kept with the Room, so a restart restores it.
 _Avoid_: settings, config, preferences, switches
 
 **Bookends**:
@@ -129,7 +129,7 @@ A player's answer — the word or phrase whose meaning spans the Bookends. Anyth
 _Avoid_: answer, guess, submission
 
 **Nudge**:
-One word a Seat may spend on a Page to point at a meaning it may not write. It is public the moment it lands, and it is barred for the rest of the Page like any Bookend or earlier Bridge: a Nudge cannot be the answer, only the direction. How many a Seat gets is configuration, and a Room that wants none plays the game exactly as it was before (ADR-0020).
+One public word a Seat may spend on a Page to point at a meaning nobody may write, barred for the rest of the Page like any Bookend or earlier Bridge. Nudges are a Room fact, on by default; turning them off takes effect from the next Page, leaving the current Page's allowance intact (ADR-0020).
 _Avoid_: clue, hint, tell, bid, whisper
 
 **Attempt**:

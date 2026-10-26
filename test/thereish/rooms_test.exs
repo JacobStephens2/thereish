@@ -2165,6 +2165,26 @@ defmodule Thereish.RoomsTest do
       assert is_nil(view.prologue)
     end
 
+    test "Nudges default to on and the Room restores its choice after a restart", ctx do
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).nudges_enabled?
+      assert :ok = Rooms.toggle(ctx.slug, :nudges)
+
+      pid = GenServer.whereis(Server.via(ctx.slug))
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      view =
+        once_restarted(fn ->
+          {:ok, _slug, _pid} = Rooms.ensure_started(ctx.slug)
+          Rooms.snapshot(ctx.slug, ctx.mara.id)
+        end)
+
+      refute view.nudges_enabled?
+      assert :ok = Rooms.toggle(ctx.slug, :nudges)
+      assert Rooms.snapshot(ctx.slug, ctx.mara.id).nudges_enabled?
+    end
+
     test "prologue_skipped survives a Room process restart", ctx do
       assert :ok = Rooms.skip_prologue(ctx.slug)
 
