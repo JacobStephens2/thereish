@@ -1703,7 +1703,8 @@ defmodule ThereishWeb.RoomLiveTest do
       assert render(ctx.jacob) =~ "value=\"misty harbor\""
     end
 
-    @tag author_escalation: [still_writing: 30, deadline: 100]
+    # All three LiveViews must render each rung before its timer advances.
+    @tag author_escalation: [still_writing: 250, deadline: 750]
     test "stage shows waiting count with no give text, then writing animation, then still writing, then failure state",
          ctx do
       fake_config = Keyword.get(ctx.steward, :fake, [])
@@ -1714,7 +1715,7 @@ defmodule ThereishWeb.RoomLiveTest do
         Keyword.put(
           ctx.steward,
           :fake,
-          Keyword.merge(fake_config, author_delay_ms: 250, author_mode: :ok)
+          Keyword.merge(fake_config, author_delay_ms: 1_250, author_mode: :ok)
         )
       )
 
@@ -1731,7 +1732,7 @@ defmodule ThereishWeb.RoomLiveTest do
       assert render(ctx.stage) =~ "The Author is reading your Gives..."
       assert render(ctx.mara) =~ "The Author is reading your Gives..."
 
-      # 3. At five seconds (30ms test time): every screen says the Author is still writing
+      # 3. At five seconds (250ms test time): every screen says the Author is still writing
       eventually(fn -> render(ctx.stage) =~ "The Author is still writing..." end)
       assert render(ctx.mara) =~ "The Author is still writing..."
       assert render(ctx.jacob) =~ "The Author is still writing..."
