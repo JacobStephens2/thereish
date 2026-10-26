@@ -134,7 +134,10 @@ config :thereish, :steward,
       model: "gemini-3.8-flash",
       effort: "low",
       max_tokens: 400,
-      requests: 1,
+      # Two at once, first good answer wins, as the Assayer does: a Gemini ask
+      # that thinks long instead takes 7-27 s or hits the cap, and two of them
+      # rarely both do. A capped ask is asked once more (`Thereish.Steward.Gate`).
+      requests: 2,
       retries: 1,
       timeout_ms: 8_000,
       deadline_ms: 8_000,

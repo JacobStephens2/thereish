@@ -347,7 +347,7 @@ defmodule Thereish.Steward do
   Says why the Author could not write, in the words the Game shows the players.
   """
   @spec author_failure(term()) :: String.t()
-  def author_failure({:max_tokens, _}), do: "too broad or complex"
+  def author_failure({:max_tokens, _}), do: "it ran long"
   def author_failure(:refused), do: "content declined"
   def author_failure({:refusal, msg}), do: "declined: #{msg}"
   # The validator's reason stays with the gate, quoted back to the model.

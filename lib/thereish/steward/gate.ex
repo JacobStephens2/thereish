@@ -51,8 +51,7 @@ defmodule Thereish.Steward.Gate do
   defp ask(role, prompt, check, retries_left, spent) do
     case role.provider.complete(request(role, prompt)) do
       {:ok, %{stop_reason: cap} = response} when cap in ["max_tokens", "length"] ->
-        spent = add(spent, response)
-        {:error, {:max_tokens, "hit the output token cap (stop_reason=#{cap})"}, spent}
+        capped(role, prompt, check, retries_left, add(spent, response), cap)
 
       {:ok, response} ->
         spent = add(spent, response)
@@ -83,6 +82,20 @@ defmodule Thereish.Steward.Gate do
             "Produce a corrected answer."
     }
 
+    ask(role, prompt, check, retries_left - 1, spent)
+  end
+
+  # A reply cut off at the cap is asked for again as it was, with nothing quoted
+  # back: there is no answer to correct. Gemini 3.8 Flash cannot turn thinking
+  # off and now and then thinks past a fast role's whole budget before writing
+  # a word (6 of 20 Author asks on 2026-10-26), and the next ask usually lands
+  # in a few seconds. A cap that fails fast and a fresh ask beat a bigger cap,
+  # which only turns the same thought into a timeout.
+  defp capped(_role, _prompt, _check, 0, spent, cap),
+    do: {:error, {:max_tokens, "hit the output token cap (stop_reason=#{cap})"}, spent}
+
+  defp capped(role, prompt, check, retries_left, spent, cap) do
+    Logger.warning("#{role.model} hit the output token cap (stop_reason=#{cap}); asking again")
     ask(role, prompt, check, retries_left - 1, spent)
   end
 
