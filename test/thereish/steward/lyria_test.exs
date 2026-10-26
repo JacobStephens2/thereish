@@ -61,12 +61,23 @@ defmodule Thereish.Steward.LyriaTest do
       assert_receive {:called, "POST", "/v1beta/models/lyria-3.5:generateContent", headers, body}
       assert {"x-goog-api-key", "test-gemini-key"} in headers
 
-      assert body["contents"] == [
-               %{
-                 "role" => "user",
-                 "parts" => [%{"text" => "Instrumental music. Gives: pine, cold river"}]
-               }
-             ]
+      assert [%{"role" => "user", "parts" => [%{"text" => text}]}] = body["contents"]
+      assert String.starts_with?(text, "Instrumental music. Gives: pine, cold river")
+    end
+
+    test "asks for no vocals, since Lyria has no instrumental switch" do
+      test_pid = self()
+
+      Req.Test.stub(Lyria, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:body, Jason.decode!(body)})
+        reply(conn, 200, song(@fake_mp3))
+      end)
+
+      Lyria.generate(%{prompt: "Instrumental music. Gives: surf rock", api_key: "k"})
+
+      assert_receive {:body, %{"contents" => [%{"parts" => [%{"text" => text}]}]}}
+      assert text =~ "No vocals, no singing, no speech, no shouts."
     end
 
     test "a quota refusal is an error, not a track" do
@@ -84,7 +95,23 @@ defmodule Thereish.Steward.LyriaTest do
                Lyria.generate(%{prompt: "music", model: "lyria-3.5", api_key: "k"})
     end
 
-    test "an answer with no audio in it is an error" do
+    test "an answer with no audio is asked for once more" do
+      calls = Agent.start_link(fn -> 0 end) |> elem(1)
+
+      Req.Test.stub(Lyria, fn conn ->
+        case Agent.get_and_update(calls, &{&1 + 1, &1 + 1}) do
+          1 -> reply(conn, 200, %{"promptFeedback" => %{"blockReason" => "PROHIBITED_CONTENT"}})
+          _ -> reply(conn, 200, song(@fake_mp3))
+        end
+      end)
+
+      assert {:ok, %{bytes: @fake_mp3}} =
+               Lyria.generate(%{prompt: "music", model: "lyria-3.5", api_key: "k"})
+
+      assert Agent.get(calls, & &1) == 2
+    end
+
+    test "an answer with no audio twice is an error" do
       Req.Test.stub(Lyria, fn conn ->
         reply(conn, 200, %{"promptFeedback" => %{"blockReason" => "OTHER"}})
       end)

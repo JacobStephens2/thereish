@@ -222,6 +222,9 @@ config :thereish, :steward,
       eleven_labs_api_key: nil,
       hume_api_key: nil,
       hume_secret_key: nil,
+      lyria_api_key: nil,
+      apiframe_api_key: nil,
+      mureka_api_key: nil,
       jobs: [
         effects: [
           provider: Thereish.Steward.ElevenLabs,

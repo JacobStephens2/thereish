@@ -22,4 +22,5 @@ The bake-off is in `docs/research/music-providers-after-mureka.md`. Lyria 3.5 la
 - Music keys are vendor-scoped on the Foley role (`lyria_api_key`, `apiframe_api_key`, `mureka_api_key`), so whichever provider the job names finds its own key. `bin/deploy` reads the configured music provider and warns about that provider's key, as it already does for voice.
 - One Gemini key now pays for both the Assayer and the Track. A Gemini quota or billing failure silences both at once.
 - Lyria answers no duration, so the Track cache records its default length. Nothing reads a Track's stored length today.
-- A Lyria answer can arrive with no audio in it, and the provider treats that as a failure. The Page keeps the house loop, and the Chronicle records why.
+- A Lyria answer can arrive with no audio in it (2 of 16 calls in the bake-off). The provider asks once more within the deadline, and a second empty answer is a failure: the Page keeps the house loop, and the Chronicle records why.
+- Lyria has no instrumental switch, so its adapter asks for no vocals in the prompt. Genre shouts still get through sometimes (surf rock). If the listening call minds, the answer is `model: "lyria-3-pro-preview"`, not more prompt wording.

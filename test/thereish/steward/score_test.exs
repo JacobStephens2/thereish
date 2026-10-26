@@ -155,7 +155,7 @@ defmodule Thereish.Steward.ScoreTest do
 
       assert_receive {:lyria_generate, "/v1beta/models/lyria-3.5:generateContent", body}
       assert [%{"parts" => [%{"text" => prompt}]}] = body["contents"]
-      assert prompt == Music.prompt(fresh_gives)
+      assert String.starts_with?(prompt, Music.prompt(fresh_gives))
 
       assert String.starts_with?(track.path, "/media/tracks/")
       assert File.read!(TrackCache.disk_path(track.path)) == @fake_bytes

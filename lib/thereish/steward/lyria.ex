@@ -3,11 +3,11 @@ defmodule Thereish.Steward.Lyria do
   Google's Lyria instrumental music, through the Gemini API (ticket 277).
 
   One synchronous `generateContent` call answers the whole song as base64 MP3
-  in an `inlineData` part, so there is no job to poll: `deadline_ms` is the
-  request's receive timeout. Confirmed against the endpoint on 2026-10-26:
-  `lyria-3.5` answers a ~3-minute 192 kbps song in 25–45 s, and
-  `lyria-3-clip-preview` a 30-second one in ~8 s. An answer can come back with
-  no candidates at all; that is an error here, not an empty Track.
+  in an `inlineData` part, so there is no job to poll: `deadline_ms` bounds the
+  request and one retry of an answer with no audio in it. Confirmed against
+  the endpoint on 2026-10-26: `lyria-3.5` answers a ~3-minute 192 kbps song in
+  25–45 s, and `lyria-3-clip-preview` a 30-second one in ~8 s. Asked twice
+  with no audio either time, that is an error here, not an empty Track.
 
   The key is the Gemini key the Assayer already uses.
   """
@@ -20,6 +20,10 @@ defmodule Thereish.Steward.Lyria do
 
   @base_url "https://generativelanguage.googleapis.com/v1beta/models"
 
+  # Mureka had an instrumental endpoint and Suno has a flag; Lyria has neither,
+  # and the bake-off heard shouts in a surf-rock Track without this line.
+  @no_vocals " No vocals, no singing, no speech, no shouts."
+
   @impl Provider
   def credentials, do: [api_key: "GEMINI_API_KEY"]
 
@@ -29,19 +33,36 @@ defmodule Thereish.Steward.Lyria do
   def generate(request) when is_map(request) do
     model = Map.get(request, :model) || "lyria-3.5"
 
+    deadline = System.monotonic_time(:millisecond) + Map.get(request, :deadline_ms, 180_000)
+
     with {:ok, key} <- api_key(request),
-         {:ok, bytes} <-
-           compose(request.prompt, model, key, Map.get(request, :deadline_ms, 180_000)) do
+         {:ok, bytes} <- compose(request.prompt, model, key, deadline, 2) do
       {:ok, %{bytes: bytes, model: model, cost_usd: Provider.track_cost(model)}}
     end
   end
 
-  defp compose(prompt, model, key, deadline_ms) do
+  # Lyria now and then answers a prompt it answered a moment ago with no audio
+  # at all (2 of 16 calls on 2026-10-26, one a `PROHIBITED_CONTENT` block on
+  # surf rock and a tax audit), and asking again lands it. Such an answer bills
+  # no output, so the second ask costs nothing unless it lands.
+  defp compose(prompt, model, key, deadline, attempts) do
+    case post(prompt, model, key, deadline - System.monotonic_time(:millisecond)) do
+      {:error, {:no_audio, _}} when attempts > 1 ->
+        if System.monotonic_time(:millisecond) < deadline,
+          do: compose(prompt, model, key, deadline, attempts - 1),
+          else: {:error, :timeout}
+
+      result ->
+        result
+    end
+  end
+
+  defp post(prompt, model, key, timeout_ms) do
     [
       url: "#{@base_url}/#{model}:generateContent",
       headers: [{"x-goog-api-key", key}],
-      json: %{contents: [%{role: "user", parts: [%{text: prompt}]}]},
-      receive_timeout: deadline_ms,
+      json: %{contents: [%{role: "user", parts: [%{text: prompt <> @no_vocals}]}]},
+      receive_timeout: max(timeout_ms, 1),
       retry: false
     ]
     |> Keyword.merge(Provider.http_options(__MODULE__))

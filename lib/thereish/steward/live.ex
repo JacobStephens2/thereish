@@ -164,7 +164,7 @@ defmodule Thereish.Steward.Live do
         provider = Steward.provider(:foley, :music)
         prompt = Map.get(brief_map, :prompt) || brief_map[:text] || ""
 
-        # Mureka enforces concurrent requests limit 1, so generate sequentially
+        # Sequential, because Mureka (an alternative provider) allows one request at a time
         results =
           Enum.map(1..n, fn _ ->
             params =
