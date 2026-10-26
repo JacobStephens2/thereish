@@ -402,7 +402,10 @@ defmodule Thereish.Steward.Live do
            Gate.answer(
              Steward.role(:scribe, :guidance),
              GiveGuidance.prompt(digest, previous),
-             &GiveGuidance.check(&1, previous)
+             fn json ->
+               with :ok <- GiveGuidance.check(json, previous),
+                    do: Vale.check(String.trim(json["text"]))
+             end
            ) do
       {:ok,
        %{

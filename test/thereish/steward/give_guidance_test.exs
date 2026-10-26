@@ -102,6 +102,33 @@ defmodule Thereish.Steward.GiveGuidanceTest do
     end
   end
 
+  test "prose rejected by the Scribe's Vale gate never reaches a Seat" do
+    rejected = "Give an idea! A memory, a feeling, or a sound: thaw · homesick · brass bands."
+    assert {:error, faults} = Steward.Vale.check(rejected)
+    assert faults =~ "Scribe.Exclaim"
+    guidance_settings(retries: 0)
+
+    recorded(fn conn, _body ->
+      Req.Test.json(conn, response(Jason.encode!(%{text: rejected})))
+    end)
+
+    assert {:ok, %{text: text, meta: %{fallback: true}}} = Steward.give_guidance([])
+    refute text == rejected
+  end
+
+  test "the Scribe repairs a Vale fault using the normal repair pass" do
+    rejected = "Give an idea! A memory, a feeling, or a sound: thaw · homesick · brass bands."
+    repaired = "Give an idea or a memory: thaw · homesick · brass bands."
+
+    recorded(fn conn, body ->
+      user = Enum.find_value(body["messages"], &(&1["role"] == "user" && &1["content"]))
+      text = if user =~ "Scribe.Exclaim", do: repaired, else: rejected
+      Req.Test.json(conn, response(Jason.encode!(%{text: text})))
+    end)
+
+    assert {:ok, %{text: ^repaired, meta: %{attempts: 2}}} = Steward.give_guidance([])
+  end
+
   test "missing credentials return guidance without making a provider request" do
     guidance_settings(api_key: nil)
 
