@@ -81,6 +81,11 @@ defmodule ThereishWeb.StageLive do
     {:noreply, resync(socket)}
   end
 
+  def handle_event("toggle_split_readings", _params, socket) do
+    Rooms.toggle(socket.assigns.slug, :split_readings)
+    {:noreply, resync(socket)}
+  end
+
   def handle_event("set_music", %{"music" => music}, socket) do
     Rooms.set_music(socket.assigns.slug, music)
     {:noreply, resync(socket)}
@@ -170,10 +175,15 @@ defmodule ThereishWeb.StageLive do
       </header>
 
       <div
+        id="stage-body"
         data-role="stage-body"
+        phx-hook=".StageFit"
         class="flex-1 min-h-0 overflow-y-auto w-full"
       >
-        <div class="flex min-h-full flex-col items-center justify-center gap-[clamp(0.5rem,1.8vh,1.5rem)] py-2">
+        <div
+          data-role="stage-fit"
+          class="flex min-h-full flex-col items-center justify-center gap-[clamp(0.5rem,1.8vh,1.5rem)] py-2"
+        >
           <section
             :if={@room && filling?(@room)}
             data-role="waiting-stage"
@@ -258,9 +268,11 @@ defmodule ThereishWeb.StageLive do
 
           <.bookends room={@room} mode={:stage} />
 
+          <.nudges room={@room} mode={:stage} />
+
           <.bridge_markers room={@room} />
 
-          <.assaying room={@room} />
+          <.assaying room={@room} mode={:stage} />
 
           <.reveal room={@room} mode={:stage} />
 
@@ -288,6 +300,33 @@ defmodule ThereishWeb.StageLive do
         <.now_playing :if={@room} room={@room} />
         <Layouts.made_by :if={filling?(@room)} size={:stage} />
       </footer>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".StageFit">
+        export default {
+          // The Stage is read, not touched: nobody scrolls a laptop across the
+          // table to find the quip. When a reveal outgrows the screen — six
+          // Seats, a Nudge, the Rail — the whole of it shrinks to fit instead.
+          mounted() {
+            this.inner = this.el.querySelector('[data-role="stage-fit"]')
+            if (!this.inner) return
+            this.fit = () => {
+              this.inner.style.zoom = 1
+              const scale = Math.min(1, this.el.clientHeight / this.inner.scrollHeight)
+              this.inner.style.zoom = scale < 0.99 ? Math.max(0.6, scale) : 1
+            }
+            this.observer = new ResizeObserver(() => this.fit())
+            this.observer.observe(this.el)
+            this.observer.observe(this.inner)
+            this.fit()
+          },
+          updated() {
+            if (this.fit) this.fit()
+          },
+          destroyed() {
+            if (this.observer) this.observer.disconnect()
+          }
+        }
+      </script>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".WakeLock">
         export default {
@@ -318,6 +357,7 @@ defmodule ThereishWeb.StageLive do
       </script>
 
       <.foley_hook speaker={@room && @room.speaker?} />
+      <.juice_hook room={@room} floats={true} />
     </main>
     """
   end

@@ -24,6 +24,7 @@ defmodule Thereish.Rooms.FactsTest do
           speaker: "a",
           quips: false,
           full_table: false,
+          split_readings: false,
           music: "house",
           prologue_skipped: true,
           quip: "a Code's Quip"
@@ -34,6 +35,7 @@ defmodule Thereish.Rooms.FactsTest do
       assert view.speaker? == true
       assert view.quips == false
       assert view.full_table == false
+      assert view.split_readings == false
       assert view.music == "house"
       assert view.prologue_skipped == true
       assert view.quip == "a Code's Quip"
@@ -177,7 +179,7 @@ defmodule Thereish.Rooms.FactsTest do
     end
   end
 
-  describe "Quips and Full table" do
+  describe "Quips, Full table and Split readings" do
     test "setting Quips persists the new value" do
       assert {facts, %{quips: false}, []} = run!(facts(), {:set, :quips, false})
       assert Facts.view(facts, nil).quips == false
@@ -193,10 +195,17 @@ defmodule Thereish.Rooms.FactsTest do
     test "setting either to the value it has changes nothing" do
       start = facts()
 
-      for fact <- [:quips, :full_table] do
+      for fact <- [:quips, :full_table, :split_readings] do
         assert {^start, attrs, []} = run!(start, {:set, fact, true})
         assert attrs == %{}
       end
+    end
+
+    test "setting Split readings persists the new value and tells nobody" do
+      assert {facts, %{split_readings: false}, []} =
+               run!(facts(), {:set, :split_readings, false})
+
+      assert Facts.view(facts, nil).split_readings == false
     end
 
     test "toggling flips the Room's own value" do
@@ -209,7 +218,7 @@ defmodule Thereish.Rooms.FactsTest do
     test "toggling twice returns to the start" do
       start = facts()
 
-      for fact <- [:quips, :full_table] do
+      for fact <- [:quips, :full_table, :split_readings] do
         {once, _attrs, _effects} = run!(start, {:toggle, fact})
         {twice, attrs, _effects} = run!(once, {:toggle, fact})
 
@@ -265,6 +274,7 @@ defmodule Thereish.Rooms.FactsTest do
                    :speaker_claimed?,
                    :quips,
                    :full_table,
+                   :split_readings,
                    :music,
                    :quip,
                    :prologue_skipped,

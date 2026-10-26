@@ -9,6 +9,7 @@ defmodule ThereishWeb.Foley do
   import Phoenix.LiveView, only: [push_event: 3]
 
   alias Thereish.Foley.Cues
+  alias Thereish.Foley.Haptics
 
   @doc """
   Pushes the Cues `screen` plays as the Room's view moves from `old_room`
@@ -38,18 +39,27 @@ defmodule ThereishWeb.Foley do
   def event({:prologue, reading}), do: {"foley:prologue", %{path: reading}}
   def event(:stop_prologue), do: {"foley:stop_prologue", %{}}
   def event(:commit), do: {"foley:commit", %{}}
+  def event({:haptic, pattern}), do: {"juice:haptic", %{pattern: pattern}}
 
   @doc """
-  Pushes a foley:own-commit event to the committing phone's view only when no
-  Stage holds the Room. With a Stage present, the Stage sounds the commit and
-  the phone stays quiet.
+  Pushes the committing phone's own confirmation: the buzz always, and the
+  sound only when no Stage holds the Room.
+
+  The sound is the Room's, so with a Stage present the Stage sounds the commit
+  and the phone stays quiet. The buzz is the device's own, in the hand that
+  just pressed the button, and a Stage in the corner is no reason to withhold
+  it.
   """
   def push_own_commit(socket) do
-    if Map.get(socket.assigns, :stage_present?, false) do
-      socket
-    else
-      push_event(socket, "foley:own-commit", %{})
-    end
+    socket
+    |> push_event("juice:haptic", %{pattern: Haptics.pattern(:own_commit)})
+    |> then(fn socket ->
+      if Map.get(socket.assigns, :stage_present?, false) do
+        socket
+      else
+        push_event(socket, "foley:own-commit", %{})
+      end
+    end)
   end
 
   @doc """

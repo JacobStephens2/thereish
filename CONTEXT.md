@@ -101,7 +101,7 @@ What the Speaker is playing for a Room right now: this Page's Track, its Vamp, a
 _Avoid_: now playing (that is the Stage's label for it), soundtrack, audio state, music state
 
 **Cue**:
-A sound moment a screen plays because the Room's view changed: a Page's music, the Beat, a sting at the reveal, the ending, the Prologue, a stale Voice clip stopped, or the Stage's commit tick. Decided by Foley from the Room's view, and only played where the Speaker is, except the Stage's commit tick.
+A sound moment a screen plays because the Room's view changed: a Page's music, the Beat, a sting at the reveal, the ending, the Prologue, a stale Voice clip stopped, or the Stage's commit tick. A buzz in a hand is one too — a Cue the phone feels rather than hears, and the only kind a phone without the Speaker takes. Decided by Foley from the Room's view, and only played where the Speaker is, except the Stage's commit tick and the buzz. A Split reading is never one: it is read, not spoken (ADR-0024).
 _Avoid_: event, push, sound effect, trigger
 
 **House**:
@@ -117,16 +117,20 @@ A setting or state the Room keeps across Pages rather than any one Page keeping 
 _Avoid_: settings, config, preferences, switches
 
 **Bookends**:
-The words — or two-word phrases — an Attempt shows, two or more; each player writes the Bridge whose meaning spans all of them. On a Page's first Attempt they are the Author's, each drawn from a different Give and chosen to stand far apart; on every Attempt after a miss they are the Bridges carried forward. How many there are is the Room's rule: two, or one per Seat at a Full table. Which Bridges a miss carries forward, and whose each one is, is one rule, read the same at the table and in the Chronicle.
+The words — or two-word phrases — an Attempt shows, two or more; each player writes the Bridge whose meaning spans all of them. On a Page's first Attempt they are the Author's, each drawn from a different Give and chosen to stand far apart; on every Attempt after a miss they are the Bridges carried forward. How many there are is the Room's rule: two, or at a Full table its Bookends per Give — one per Seat as the floor, so many a Give heads none of them, and a ceiling so a large table is not drowned (ADR-0022). Which Bridges a miss carries forward, and whose each one is, is one rule, read the same at the table and in the Chronicle.
 _Avoid_: anchors (the earlier name), clues, prompt (collides with the model-prompt sense), pair, cue
 
 **Full table**:
-The Room's rule, on unless a Room turns it off, that an Attempt has one Bookend per Seat: the Author draws one from every Give, and after a miss every Seat's Bridge carries forward. Off, an Attempt has two Bookends and a miss carries the two Bridges that landed furthest apart. A Room fact, flipped from any device, that a Page keeps from the moment it is written.
+The Room's rule, on unless a Room turns it off, that an Attempt has a word per Seat at the least: the count is the Room's Bookends per Give, floored at one per Seat and capped so a large table is not drowned, the Author draws from every Give, and after a miss every Seat's Bridge carries forward. Two Seats therefore open on four words. Off, an Attempt has two Bookends and a miss carries the two Bridges that landed furthest apart. A Room fact, flipped from any device, that a Page keeps from the moment it is written.
 _Avoid_: settings page, difficulty, mode, N-bookend rule, "all bridges"
 
 **Bridge**:
-A player's answer — the word or phrase whose meaning spans the Bookends. Anything goes except a Bookend or a Bridge this Page has already seen, root and all.
+A player's answer — the word or phrase whose meaning spans the Bookends. Anything goes except a Bookend, a Nudge, or a Bridge this Page has already seen, root and all.
 _Avoid_: answer, guess, submission
+
+**Nudge**:
+One word a Seat may spend on a Page to point at a meaning it may not write. It is public the moment it lands, and it is barred for the rest of the Page like any Bookend or earlier Bridge: a Nudge cannot be the answer, only the direction. How many a Seat gets is configuration, and a Room that wants none plays the game exactly as it was before (ADR-0020).
+_Avoid_: clue, hint, tell, bid, whisper
 
 **Attempt**:
 One try at a Page: a set of Bookends, a Bridge from every Seat, and one Verdict on all of them. A Page gets a fixed number of them, and a miss carries Bridges forward as the next Attempt's Bookends — every Seat's at a Full table, otherwise the two that landed furthest apart — so the Attempts of one Page are a converging arc rather than repeated guesses.
@@ -140,9 +144,17 @@ _Avoid_: match, hit, win
 What the Assayer says about one Attempt's Bridges, read together: a Closeness, the reasoning behind it, and which two Bridges landed furthest apart (named on every Attempt, and the carry-forward only when the Room is not a Full table). An Attempt the Assayer could not grade has no Verdict, which is a thing the game says out loud rather than a zero it invents.
 _Avoid_: result, judgement, ruling (the players rule; the Assayer only grades)
 
+**Split reading**:
+When the Assayer's two orderings of the same Bridges disagree far enough to say so out loud. The grade is still the mean; the two readings are shown, in writing and never spoken, so the table can settle it with an Overrule (ADR-0024).
+_Avoid_: second opinion, disagreement, error, tie-break
+
 **Quip**:
 The Assayer's one line of comedy at the reveal, written about the Bridges the players actually wrote. It rides on the Verdict beside the reasoning and is not the grade's justification — it is what makes the graded number a punchline rather than a ruling. Also the Scribe's one line about the Room's Code, shown beneath the Code on the Code card, in the Stage's header beside the join line, and under each rejoin link on the front page.
 _Avoid_: joke (on its own), flavour text, band script (the Author's prewritten fallback), roast
+
+**Reaction**:
+One of four words a Seat may send at a reveal — ooh, how, no way, yes — shown on the Stage and felt on the phones. The noise around a reveal, kept and never counted (ADR-0023).
+_Avoid_: vote, rating, emoji, like, upvote
 
 **Phase**:
 Where a Page has got to — waiting for the Room to fill, bridging, assaying, revealed. It is derived from the state rather than stored in it, so nothing has to remember to advance it.
@@ -152,12 +164,20 @@ _Avoid_: status, step, stage (the laptop is the stage), state
 How far an Attempt's Bridges are from being one mind, on the Ladder's scale — one reading for the whole set, which at two Seats is how near two words landed to each other. Three tight words and one stray read as close, not as a miss.
 _Avoid_: score, similarity, distance, rating
 
+**Call**:
+The band a Seat names before the number arrives — from its own commit, while the others write, until the Beat ends. A Call stays its caller's own until every Bridge is in, then it is public. It settles nothing and counts for nothing: a Seat that does not call simply has no pin on the Rail (ADR-0023).
+_Avoid_: bet, wager, prediction, score, guess
+
 **Ladder**:
 The scale a Closeness is read on and the bands it is read into — miss, adjacent, close, almost, meld, deep meld. A Meld starts at the floor of the meld band; deep meld is the top rung, the same word written twice. Boundaries are configuration, because every one of them is a calibration question the couch answers; the wording that dresses a band is the Assayer's.
 _Avoid_: scale (on its own), rubric, tiers, grade bands
 
+**Rail**:
+How the Ladder is drawn: one scale with its bands in order, a line where a Meld starts, the Attempt's Closeness as a marker on it, and each Seat's Call as a pin. The bands are the Ladder's, read from the same configuration the grade is read against (ADR-0021).
+_Avoid_: meter, gauge, scoreboard, progress bar
+
 **Beat**:
-The fixed pause between the last Bridge committed and the reveal. It is theatre, not a wait: the Assayer grades during it, and a verdict that lands early is held until it is over.
+The fixed pause between the last Bridge committed and the reveal. It is theatre, not a wait: the Assayer grades during it, the table makes its Calls in it, and a verdict that lands early is held until it is over.
 _Avoid_: delay, loading, spinner, timeout
 
 **Pacing**:

@@ -43,6 +43,15 @@ defmodule Thereish.Chronicle.ExperimentAssignment do
       :chapter,
       :assigned_at
     ])
-    |> validate_inclusion(:arm, ["bait", "plain", "flash", "astra"])
+    # Every Arm any Experiment has declared, the retired ones included: a row
+    # outlives its Experiment and still has to read back (ADR-0003).
+    |> validate_inclusion(:arm, [
+      "bait",
+      "plain",
+      "flash",
+      "astra",
+      "nudge_on",
+      "nudge_off"
+    ])
   end
 end

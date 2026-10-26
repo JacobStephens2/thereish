@@ -33,8 +33,8 @@ defmodule Thereish.Steward.AuthorTest do
       assert why =~ "exactly 2 items"
     end
 
-    test "prompts and pages carry bumped prompt_version author-4" do
-      assert Author.version() == "author-4"
+    test "prompts and pages carry bumped prompt_version author-5" do
+      assert Author.version() == "author-5"
     end
   end
 
@@ -138,6 +138,77 @@ defmodule Thereish.Steward.AuthorTest do
     end
   end
 
+  describe "more Bookends than Gives (Bookends per Give)" do
+    @two_gives [
+      %{name: "Mara", text: "a candlelit cathedral"},
+      %{name: "Jacob", text: "a cyberpunk nightclub"}
+    ]
+
+    test "accepts four Bookends from two Gives when both settings are named twice over" do
+      json =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "crypt", "bouncer"],
+            from: ["Mara", "Jacob", "Mara", "Jacob"]
+          )
+        )
+
+      assert :ok = Author.check(json, @two_gives, 4)
+    end
+
+    test "rejects four Bookends when a setting heads none of them" do
+      json =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "crypt", "altar", "pew"],
+            from: ["Mara", "Mara", "Mara", "Mara"]
+          )
+        )
+
+      assert {:error, why} = Author.check(json, @two_gives, 4)
+      assert why =~ "heads no bookend"
+    end
+
+    test "rejects a setting that is not at the table" do
+      json =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "crypt", "bouncer"],
+            from: ["Mara", "Jacob", "Mara", "Esme"]
+          )
+        )
+
+      assert {:error, why} = Author.check(json, @two_gives, 4)
+      assert why =~ "must name the setting it was drawn from"
+    end
+
+    test "two Bookends from one setting still owe each other a distinct root" do
+      json =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "crypt", "crypts"],
+            from: ["Mara", "Jacob", "Mara", "Jacob"]
+          )
+        )
+
+      assert {:error, why} = Author.check(json, @two_gives, 4)
+      assert why =~ "share a root"
+    end
+
+    test "still rejects three Bookends when four were asked for" do
+      json =
+        Jason.decode!(
+          author_json(
+            bookends: ["nave", "neon", "crypt"],
+            from: ["Mara", "Jacob", "Mara"]
+          )
+        )
+
+      assert {:error, why} = Author.check(json, @two_gives, 4)
+      assert why =~ "exactly 4 items"
+    end
+  end
+
   describe "the Author brief names the count and the rule" do
     @four_gives [
       %{name: "Mara", text: "a candlelit cathedral"},
@@ -146,13 +217,23 @@ defmodule Thereish.Steward.AuthorTest do
       %{name: "Sam", text: "a vintage bookstore"}
     ]
 
-    test "a Full table brief asks for one Bookend from each setting's world" do
+    test "a Full table brief asks for every setting to head at least one Bookend" do
       prompt = Author.prompt(@four_gives, nil, 4)
       combined = prompt.system <> "\n" <> prompt.user
 
       assert combined =~ "Exactly 4"
       assert combined =~ "Full table"
-      assert combined =~ "one Bookend from each"
+      assert combined =~ "every setting must head at least one Bookend"
+    end
+
+    test "a wider Full table brief says what two Bookends from one setting owe each other" do
+      prompt = Author.prompt(Enum.take(@four_gives, 2), nil, 4)
+      combined = prompt.system <> "\n" <> prompt.user
+
+      assert combined =~ "Exactly 4"
+      assert combined =~ "Full table"
+      assert combined =~ "when a setting heads more than one, those Bookends must stand far apart"
+      assert combined =~ "every setting must appear at least once"
     end
 
     test "a two-Bookend brief asks for two Bookends from two different settings" do
@@ -161,7 +242,7 @@ defmodule Thereish.Steward.AuthorTest do
 
       assert combined =~ "Exactly 2"
       assert combined =~ "not a Full table"
-      refute combined =~ "one Bookend from each"
+      refute combined =~ "every setting must head at least one Bookend"
     end
   end
 
@@ -361,7 +442,7 @@ defmodule Thereish.Steward.AuthorTest do
         combined = system_prompt <> "\n" <> user_prompt
         assert combined =~ "Exactly 4"
         assert combined =~ "Full table"
-        assert combined =~ "one Bookend from each"
+        assert combined =~ "every setting must head at least one Bookend"
 
         Req.Test.json(
           conn,
@@ -378,7 +459,7 @@ defmodule Thereish.Steward.AuthorTest do
       assert result.bookends == ["nave", "neon", "abyss", "folio"]
       assert result.meta.count == 4
       assert result.meta.arm == :flash
-      assert result.meta.prompt_version == "author-4"
+      assert result.meta.prompt_version == "author-5"
     end
 
     test "Steward writes with the job named by the Page's arm" do

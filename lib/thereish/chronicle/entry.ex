@@ -18,7 +18,10 @@ defmodule Thereish.Chronicle.Entry do
   the Page stores each through its own type.
 
   `bridges` on an Attempt is `%{seat_id, bridge}` per Seat that wrote one, in
-  roster order.
+  roster order. `nudges`, `calls` and `reactions` read the same way: the words
+  spent on that Attempt, the band each Seat called during its Beat, and the one
+  word each sent at its reveal — kept so the book reads as the table did, and
+  never counted.
   """
 
   defmodule Give do
@@ -85,6 +88,9 @@ defmodule Thereish.Chronicle.Entry do
       :revealed_at,
       :advanced_at,
       bridges: [],
+      nudges: [],
+      calls: [],
+      reactions: [],
       verdicts: []
     ]
 
@@ -94,6 +100,9 @@ defmodule Thereish.Chronicle.Entry do
             closeness: integer() | nil,
             melded?: boolean(),
             bridges: [%{seat_id: Ecto.UUID.t(), bridge: String.t()}],
+            nudges: [%{seat_id: Ecto.UUID.t(), word: String.t()}],
+            calls: [%{seat_id: Ecto.UUID.t(), band: atom()}],
+            reactions: [%{seat_id: Ecto.UUID.t(), reaction: atom()}],
             verdicts: [Verdict.t()],
             started_at: DateTime.t() | nil,
             assaying_started_at: DateTime.t() | nil,

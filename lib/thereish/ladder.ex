@@ -39,6 +39,18 @@ defmodule Thereish.Ladder do
   @spec bands() :: keyword(integer())
   def bands, do: config(:bands)
 
+  @doc """
+  The ends of the scale a closeness is read on: the lowest number and the
+  highest. The Rail draws against these, so the drawing and the grade are read
+  off one configuration.
+  """
+  @spec scale() :: {integer(), integer()}
+  def scale do
+    first..last//_ = config(:scale)
+
+    {first, last}
+  end
+
   @doc "The names of the bands on the ladder, lowest first, as atoms."
   @spec band_names() :: [atom()]
   def band_names, do: Keyword.keys(bands())
@@ -63,7 +75,7 @@ defmodule Thereish.Ladder do
   # 140 has said "as close as it gets", and the players are shown the top rung
   # rather than a number the ladder has no rung for.
   defp clamp(closeness) do
-    first..last//_ = config(:scale)
+    {first, last} = scale()
 
     closeness |> max(first) |> min(last)
   end

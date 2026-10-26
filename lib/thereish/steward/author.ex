@@ -3,14 +3,18 @@ defmodule Thereish.Steward.Author do
   The Author role: writes a Page live from the Seats' Gives.
 
   Takes Gives with player names in roster order, the count of Bookends wanted
-  (one per Give at a Full table, or two), plus a digest of the Room's Chronicle
-  when available, and answers that many Bookends and a sentence of why.
-  Prompt version: author-4.
+  (Bookends per Give at a Full table, with one per Give as the floor, or two),
+  plus a digest of the Room's Chronicle when available, and answers that many
+  Bookends and a sentence of why.
+  Prompt version: author-5.
   """
 
   alias Thereish.Steward.Legality
 
-  @version "author-4"
+  # author-5: a Full table asks for Bookends per Give rather than one each, so a
+  # setting may head more than one Bookend and the brief says what that asks of
+  # them. No Precedent crosses this — the Author's answers are not cached.
+  @version "author-5"
 
   def version, do: @version
 
@@ -41,7 +45,7 @@ defmodule Thereish.Steward.Author do
             {"type", "array"},
             {"items", ordered_object([{"type", "string"}])},
             {"description",
-             "The Seat name heading the setting each Bookend was drawn from, in the same order as bookends. At a Full table this is every setting once."}
+             "The Seat name heading the setting each Bookend was drawn from, in the same order as bookends. At a Full table every setting appears at least once."}
           ])},
          {"why",
           ordered_object([
@@ -92,8 +96,9 @@ defmodule Thereish.Steward.Author do
   @doc """
   Deterministic gate: checks schema, exactly `count` bookends, each 1 or 2 words
   of letters/hyphens/apostrophes, at most 20 chars, distinct roots across them,
-  no word sharing a root with any word of any Give, and at a Full table one
-  Bookend from each Give.
+  no word sharing a root with any word of any Give, and at a Full table every
+  Give heading at least one Bookend — exactly one each when the count is the
+  count of the Gives.
   """
   def check(json, gives \\ [], count \\ 2)
 
@@ -157,9 +162,16 @@ defmodule Thereish.Steward.Author do
 
   defp check_from(_from, gives, _count) when gives == [] or is_nil(gives), do: :ok
 
+  # A Full table now asks for Bookends per Give, so once the count runs past the
+  # Gives a setting must head more than one Bookend and "no two from the same
+  # setting" is unsatisfiable. What holds at every width is coverage: every
+  # setting heads at least one Bookend. One per Give is the case where coverage
+  # and the older, stricter reading are the same thing, and there the strict
+  # reading still stands, so a one-per-Give Page cannot double up.
   defp check_from(from, gives, count) do
-    required? = length(gives) == count and count >= 2
-    known = MapSet.new(Enum.map(gives, &(&1 |> give_name() |> normalize_name())))
+    required? = count >= length(gives) and count >= 2
+    known = MapSet.new(gives, &(&1 |> give_name() |> normalize_name()))
+    named = if is_list(from), do: MapSet.new(from, &normalize_name/1), else: MapSet.new()
 
     cond do
       is_nil(from) and not required? ->
@@ -168,11 +180,15 @@ defmodule Thereish.Steward.Author do
       not is_list(from) or length(from) != count or not Enum.all?(from, &is_binary/1) ->
         {:error, "each bookend must name the setting it was drawn from"}
 
-      from |> Enum.map(&normalize_name/1) |> Enum.uniq() |> length() != length(from) ->
+      count <= length(gives) and
+          from |> Enum.map(&normalize_name/1) |> Enum.uniq() |> length() != length(from) ->
         {:error, "two bookends from the same setting"}
 
-      not Enum.all?(from, &(normalize_name(&1) in known)) ->
+      not MapSet.subset?(named, known) ->
         {:error, "each bookend must name the setting it was drawn from"}
+
+      required? and not MapSet.equal?(named, known) ->
+        {:error, "a setting heads no bookend"}
 
       true ->
         :ok
@@ -274,7 +290,9 @@ defmodule Thereish.Steward.Author do
         true -> []
       end
 
-    full_table? = count == length(gives_list) and count >= 2
+    # A Full table is a Page that asks for at least one Bookend per Give. Asking
+    # for more than one each is the same table, opened wider.
+    full_table? = count >= length(gives_list) and count >= 2
 
     settings_text =
       if gives_list == [] do
@@ -308,8 +326,8 @@ defmodule Thereish.Steward.Author do
     {rule, from_each, from_line} =
       if full_table? do
         {"This Page is a Full table.",
-         "Each Bookend MUST belong to a DIFFERENT setting's world — one Bookend from each setting.",
-         "Name the Seat heading each setting in `from`, in the same order as `bookends`. At a Full table this is every setting once."}
+         "Spread the Bookends across the settings: every setting must head at least one Bookend, and when a setting heads more than one, those Bookends must stand far apart from each other too.",
+         "Name the Seat heading each setting in `from`, in the same order as `bookends`; every setting must appear at least once."}
       else
         {"This Page is not a Full table.",
          "When there are two or more settings, each Bookend MUST be drawn from a DIFFERENT setting.",

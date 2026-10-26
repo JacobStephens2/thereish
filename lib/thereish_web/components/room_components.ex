@@ -13,6 +13,8 @@ defmodule ThereishWeb.RoomComponents do
   """
   use ThereishWeb, :html
 
+  import ThereishWeb.RailComponents
+
   alias Thereish.Chronicle.Opinion
   alias Thereish.Mask
 
@@ -304,6 +306,95 @@ defmodule ThereishWeb.RoomComponents do
   defp mask_url(_), do: nil
 
   attr :room, :map, required: true
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  The Nudges this Page has spent: one public word each, struck through.
+
+  A chip is struck through because that is what a Nudge is — the word it names
+  is barred for the rest of the Page, for everyone, the Seat that spent it
+  included. A chip from an earlier Attempt dims rather than leaves, because the
+  word is still barred. On the Stage the word is large and its Seat is named:
+  a Nudge landing is theatre, not a notification.
+  """
+  def nudges(assigns) do
+    assigns = assign(assigns, :chips, nudge_chips(assigns.room))
+
+    ~H"""
+    <div
+      :if={@chips != []}
+      class={[
+        "flex flex-col items-center",
+        if(@mode == :stage, do: "gap-2", else: "gap-3")
+      ]}
+    >
+      <.caption data-role="nudges-caption">
+        Nudges
+      </.caption>
+      <div
+        data-role="nudges"
+        class="flex flex-wrap items-start justify-center gap-2 sm:gap-3"
+      >
+        <div
+          :for={chip <- @chips}
+          data-role="nudge-chip"
+          data-seat={chip.seat_id}
+          data-attempt={chip.attempt}
+          data-earlier={to_string(earlier_nudge?(@room, chip))}
+          style={"--seat-color: #{chip.colour}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 12%, transparent);"}
+          class={[
+            "flex flex-col items-center gap-1 rounded-lg border",
+            if(@mode == :stage, do: "px-4 py-2", else: "px-3 py-2"),
+            earlier_nudge?(@room, chip) && "opacity-50"
+          ]}
+        >
+          <p
+            :if={@mode == :stage}
+            data-role="nudge-by"
+            class="text-xs uppercase tracking-widest opacity-70"
+          >
+            {chip.name} nudges
+          </p>
+          <div class="flex items-center gap-1.5">
+            <.seat_mask
+              :if={chip.seat}
+              seat={chip.seat}
+              size={if @mode == :stage, do: :sm, else: :xs}
+            />
+            <span class={[
+              "font-semibold tracking-tight line-through",
+              if(@mode == :stage, do: "text-2xl sm:text-3xl", else: "text-xl")
+            ]}>
+              {chip.word}
+            </span>
+            <span
+              data-role="nudge-spent"
+              class="rounded-full border border-current px-1.5 text-[10px] font-bold uppercase tracking-widest opacity-80"
+            >
+              Spent
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # Each Nudge with the Seat that spent it, so a chip can wear that Seat's Mask
+  # and colour. The Game says who nudged and nothing about how a Seat looks.
+  defp nudge_chips(room) do
+    seats = Map.new(room[:seats] || [], &{&1.id, &1})
+
+    for nudge <- room[:nudges] || [] do
+      seat = seats[nudge.seat_id]
+
+      Map.merge(nudge, %{seat: seat, colour: seat_colour(seat || %{})})
+    end
+  end
+
+  defp earlier_nudge?(room, chip), do: chip.attempt < room.attempt.number
+
+  attr :room, :map, required: true
 
   @doc """
   Which try this is, and how many the Page gets.
@@ -354,12 +445,19 @@ defmodule ThereishWeb.RoomComponents do
   end
 
   attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :phone
 
   @doc """
   The pause while the Assayer reads the Bridges.
 
   Shown when the Room has moved into `:assaying` — which means every Bridge has
   been committed and the beat is running.
+
+  The Beat is also the Call window, so this is where the phone stops being
+  three pulsing dots: a Seat that may Call gets the buttons instead, and every
+  screen shows who has called what, because a Call being public is the whole of
+  the mechanic.
   """
   def assaying(assigns) do
     ~H"""
@@ -370,7 +468,10 @@ defmodule ThereishWeb.RoomComponents do
       class="flex flex-col items-center justify-center gap-3 text-center"
     >
       <div
-        :if={is_nil(@room.assayer_step) or @room.assayer_step == :grading}
+        :if={
+          beat_dots?(@room, @mode) and
+            (is_nil(@room.assayer_step) or @room.assayer_step == :grading)
+        }
         data-role="beat-meter"
         class="flex flex-col items-center gap-2"
       >
@@ -384,6 +485,8 @@ defmodule ThereishWeb.RoomComponents do
         </p>
       </div>
 
+      <.call_bands room={@room} seat={@seat} mode={@mode} />
+
       <p class="text-lg opacity-70">
         {waiting_line(@room.assayer_step)}
       </p>
@@ -391,13 +494,245 @@ defmodule ThereishWeb.RoomComponents do
     """
   end
 
+  # The Beat's three dots were the phone's whole job at the climax. When this
+  # phone may Call, the buttons are the job and the dots under them would be
+  # noise; the Stage keeps them, because the Stage never calls.
+  defp beat_dots?(room, mode), do: mode == :stage or not may?(room, :call)
+
   attr :room, :map, required: true
   attr :seat, :map, default: nil
   attr :mode, :atom, default: :phone
 
   @doc """
-  The reveal: the Bridges side by side, then the number climbing into its band,
-  then the punchline quip.
+  Call it: the band a Seat names during the Beat, before the number arrives,
+  and the row of who has called what.
+
+  A Call settles nothing and counts for nothing — nothing is totalled here or
+  anywhere, and a Seat that does not call simply has no pin on the Rail. The
+  row renders on every screen the Beat is on, the Stage included, because the
+  public read is the point; only a phone holding a Seat gets the buttons.
+  """
+  def call_bands(assigns) do
+    assigns =
+      assigns
+      |> assign(:calls, coloured_calls(assigns.room, assigns.room[:calls]))
+      |> assign(:buttons?, assigns.mode != :stage and may?(assigns.room, :call))
+      |> assign(:yours, your_call(assigns.room, assigns.seat))
+
+    ~H"""
+    <div
+      :if={@buttons? or @calls != []}
+      data-role="call-bands"
+      data-mode={@mode}
+      class="flex w-full flex-col items-center gap-2"
+    >
+      <.caption :if={@buttons?} data-role="call-caption">
+        Call it.
+      </.caption>
+
+      <div :if={@buttons?} class="flex w-full flex-col gap-2">
+        <button
+          :for={band <- @room.callable_bands}
+          type="button"
+          phx-click="call"
+          phx-value-band={band}
+          data-role="call-band"
+          data-band={band}
+          data-called={to_string(@yours == band)}
+          class={[
+            "btn min-h-11 w-full text-base font-bold uppercase tracking-widest",
+            if(@yours == band,
+              do: "btn-primary shadow-sm",
+              else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+            )
+          ]}
+        >
+          {band(band)}
+        </button>
+      </div>
+
+      <div
+        :if={@calls != []}
+        data-role="call-row"
+        class="flex flex-wrap items-center justify-center gap-2"
+      >
+        <span
+          :for={call <- @calls}
+          data-role="called"
+          data-seat={call.seat_id}
+          data-band={call.band}
+          style={"--seat-color: #{call.colour}; border-color: var(--seat-color); background-color: color-mix(in oklab, var(--seat-color) 12%, transparent);"}
+          class={[
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-medium",
+            if(@mode == :stage, do: "text-base", else: "text-xs")
+          ]}
+        >
+          {call.name} called
+          <span class="font-bold uppercase tracking-widest">{band(call.band)}</span>
+        </span>
+      </div>
+    </div>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+
+  @doc """
+  The noise at the punchline: four words a Seat may send at a reveal.
+
+  The vocabulary is the Game's and is read from there, the way the Rail reads
+  the Ladder's bands, so there is one list of them. Nothing is totalled: the
+  reactions are kept in the Chronicle and counted nowhere, on no screen, ever
+  (ADR-0023). A Seat's latest word replaces its last, so there is only one.
+  """
+  def reactions(assigns) do
+    assigns =
+      assigns
+      |> assign(:vocabulary, Thereish.Game.reactions())
+      |> assign(:yours, your_reaction(assigns.room, assigns.seat))
+
+    ~H"""
+    <div
+      data-role="reactions"
+      class="flex flex-wrap items-center justify-center gap-2"
+    >
+      <button
+        :for={reaction <- @vocabulary}
+        type="button"
+        phx-click="react"
+        phx-value-reaction={reaction}
+        data-role="reaction"
+        data-reaction={reaction}
+        data-chosen={to_string(@yours == reaction)}
+        class={[
+          "btn btn-sm min-h-11 text-xs font-bold uppercase tracking-widest",
+          if(@yours == reaction,
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+          )
+        ]}
+      >
+        {band(reaction)}
+      </button>
+    </div>
+    """
+  end
+
+  # The one word this Seat has sent at this reveal, if it has sent one.
+  defp your_reaction(_room, nil), do: nil
+
+  defp your_reaction(room, seat) do
+    case Enum.find(room[:reactions] || [], &(&1.seat_id == seat.id)) do
+      nil -> nil
+      reaction -> reaction.reaction
+    end
+  end
+
+  # Which band this Seat has called, if it has called one. The latest Call
+  # wins, so there is only ever the one.
+  defp your_call(_room, nil), do: nil
+
+  defp your_call(room, seat) do
+    case Enum.find(room[:calls] || [], &(&1.seat_id == seat.id)) do
+      nil -> nil
+      call -> call.band
+    end
+  end
+
+  attr :room, :map, required: true
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  The Assayer's two readings of the same Bridges, on the rare reveal where they
+  contradict each other far enough to say so (ADR-0024).
+
+  This is the one place in the game the Assayer's reasoning reaches a screen,
+  and the contradiction is the whole reason: the table is not being told what
+  the grade means, it is being handed two arguments and asked to settle them,
+  which is the one authority the players have always had. The recorded Verdict
+  is still the mean, and only a unanimous Overrule rewrites it.
+
+  It renders on the phone, on the Stage and on a quiet phone — the held phone
+  gets the words while the Stage holds the spectacle — and nowhere at all in a
+  Room that has turned Split readings off.
+  """
+  def split_reading(assigns) do
+    assigns = assign(assigns, :split, split_shown(assigns.room))
+
+    ~H"""
+    <div
+      :if={@split}
+      data-role="split-reading"
+      class={[
+        "flex flex-col items-center gap-1 text-center w-full",
+        if(@mode == :stage, do: "max-w-3xl", else: "max-w-sm")
+      ]}
+    >
+      <p
+        data-role="split-headline"
+        class={[
+          "font-bold uppercase tracking-widest opacity-70",
+          if(@mode == :stage, do: "text-sm", else: "text-xs")
+        ]}
+      >
+        The Assayer graded this twice — {@split.forward}, and {@split.reverse}.
+      </p>
+      <p
+        data-role="split-forward"
+        class={["opacity-80", if(@mode == :stage, do: "text-base", else: "text-sm")]}
+      >
+        {@split.reasoning}
+      </p>
+      <p
+        :if={@split[:reasoning_reverse]}
+        data-role="split-reverse"
+        class={["opacity-80", if(@mode == :stage, do: "text-base", else: "text-sm")]}
+      >
+        {@split[:reasoning_reverse]}
+      </p>
+    </div>
+    """
+  end
+
+  @doc """
+  The Split reading this Room is showing, or nil.
+
+  Both have to be there: the Verdict's two readings and the Room's own fact.
+  The Game is ignorant of Room facts and stays that way, so the two are put
+  together here, where the Rail's ghost pins and the one-tap Overrule read the
+  same answer.
+  """
+  @spec split_shown(map()) :: map() | nil
+  def split_shown(room) do
+    if Map.get(room, :split_readings, true) != false, do: (room[:reveal] || %{})[:split]
+  end
+
+  # The two readings as ghost pins, drawn on the same scale as the grade so the
+  # disagreement is a distance rather than a claim. Labelled with their own
+  # numbers, because what the pin says is where it is.
+  defp split_marks(room) do
+    case split_shown(room) do
+      nil -> []
+      split -> for n <- [split.forward, split.reverse], do: %{closeness: n, label: to_string(n)}
+    end
+  end
+
+  attr :room, :map, required: true
+  attr :seat, :map, default: nil
+  attr :mode, :atom, default: :phone
+
+  @doc """
+  The reveal, performed: the Bridges flipping face up one at a time, each word
+  landing before the name of whoever wrote it, then the marker climbing the
+  Rail with the number counting beside it, then the punchline quip.
+
+  One hook runs all of it off one clock, and the whole performance is absorbed
+  by the hold Pacing arms, never added on top of it.
+
+  The phone's own job at the punchline is the noise: four words to shout and
+  nothing to fill in. The survey about the grader that used to sit here has
+  moved to the closing card (`ending/1`).
   """
   def reveal(assigns) do
     standard_reveal(assigns)
@@ -405,15 +740,25 @@ defmodule ThereishWeb.RoomComponents do
 
   defp standard_reveal(assigns) do
     presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
-    assigns = assign(assigns, :presentation, presentation)
+    sequence = reveal_sequence()
+
+    assigns =
+      assigns
+      |> assign(:presentation, presentation)
+      |> assign(:sequence, sequence)
 
     ~H"""
     <section
       :if={@room.reveal}
       id="reveal-performance"
+      phx-hook=".RevealSequence"
       data-role="reveal"
       data-arrival={reveal_arrival(@room.reveal)}
       data-mode={@mode}
+      data-stagger={@sequence[:stagger]}
+      data-cap={@sequence[:cap]}
+      data-settle={@sequence[:settle]}
+      data-melded={to_string(@room.reveal[:melded?] == true)}
       class={[
         "flex flex-col items-center w-full mx-auto",
         if(@mode == :stage, do: "gap-[clamp(0.5rem,1.8vh,1.5rem)] max-w-4xl", else: "gap-8 max-w-xl")
@@ -421,7 +766,6 @@ defmodule ThereishWeb.RoomComponents do
     >
       <div
         data-role="comparison"
-        style="animation: reveal-comparison 0.35s ease-out both;"
         class={[
           "flex flex-wrap items-stretch justify-center w-full",
           if(@mode == :stage, do: "gap-2 sm:gap-3", else: "gap-3 sm:gap-4")
@@ -443,7 +787,10 @@ defmodule ThereishWeb.RoomComponents do
             )
           ]}
         >
-          <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider opacity-60">
+          <div
+            data-role="bridge-name"
+            class="flex items-center gap-1.5 text-xs uppercase tracking-wider opacity-60"
+          >
             <span>{bridge.name}</span>
             <span :if={you?(@seat, bridge)} class="font-bold text-primary">(you)</span>
           </div>
@@ -459,7 +806,7 @@ defmodule ThereishWeb.RoomComponents do
       <div
         :if={@mode != :quiet && @room.reveal.closeness}
         data-role="closeness-display"
-        style="animation: reveal-closeness 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;"
+        data-band={@room.reveal.band}
         class={[
           "flex flex-col items-center justify-center rounded-2xl transition-all duration-500 w-full max-w-sm text-center",
           if(@mode == :stage, do: "px-6 py-2 sm:py-3", else: "px-8 py-6"),
@@ -468,7 +815,6 @@ defmodule ThereishWeb.RoomComponents do
       >
         <span
           id="reveal-closeness"
-          phx-hook=".ClimbNumber"
           data-role="closeness"
           data-target={@room.reveal.closeness}
           class={[
@@ -486,7 +832,6 @@ defmodule ThereishWeb.RoomComponents do
         ]}>
           <span
             data-role="band"
-            style="animation: band-arrive 0.4s ease-out 0.8s both;"
             class={[
               "font-extrabold uppercase tracking-widest rounded-full",
               if(@mode == :stage,
@@ -500,6 +845,26 @@ defmodule ThereishWeb.RoomComponents do
           </span>
         </div>
       </div>
+
+      <.ladder_rail
+        mode={@mode}
+        closeness={@room.reveal.closeness}
+        band={@room.reveal.band}
+        melded?={@room.reveal[:melded?] == true}
+        gap={@room.reveal[:gap]}
+        calls={coloured_calls(@room, @room.reveal[:calls])}
+        marks={split_marks(@room)}
+      />
+
+      <.split_reading room={@room} mode={@mode} />
+
+      <p
+        :if={@mode == :quiet}
+        data-role="look-up"
+        class="text-sm font-bold uppercase tracking-[0.3em] opacity-70"
+      >
+        Look up.
+      </p>
 
       <div
         :if={@mode != :quiet && @room.reveal.closeness == nil}
@@ -550,8 +915,8 @@ defmodule ThereishWeb.RoomComponents do
         </div>
       </div>
 
-      <.fairness_controls
-        :if={@mode in [:phone, :quiet] && may?(@room, :tap_fairness)}
+      <.reactions
+        :if={@mode in [:phone, :quiet] && may?(@room, :react)}
         room={@room}
         seat={@seat}
       />
@@ -600,42 +965,173 @@ defmodule ThereishWeb.RoomComponents do
         The couch has the call · Use your phones to continue or overrule
       </p>
 
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".ClimbNumber">
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".RevealSequence">
         export default {
           mounted() {
-            const target = parseInt(this.el.dataset.target, 10)
-            if (isNaN(target)) return
-            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-              this.el.textContent = target
+            // One hook for the whole performance. The cards, the marker and the
+            // number cannot drift apart if there is only one clock, and the run
+            // is sized from the numbers Pacing used to arm the hold, so the
+            // button never comes alive in the middle of the punchline.
+            const el = this.el
+            const dataset = (name, fallback) => {
+              const parsed = parseInt(el.dataset[name], 10)
+              return isNaN(parsed) ? fallback : parsed
+            }
+
+            this.cards = Array.from(el.querySelectorAll("[data-bridge]"))
+            this.names = this.cards.map((card) => card.querySelector('[data-role="bridge-name"]'))
+            this.number = el.querySelector('[data-role="closeness"]')
+            this.display = el.querySelector('[data-role="closeness-display"]')
+            this.badge = el.querySelector('[data-role="band"]')
+            this.rail = el.querySelector('[data-role="ladder-rail"]')
+            this.marker = el.querySelector('[data-role="rail-marker"]')
+            this.pins = Array.from(el.querySelectorAll('[data-role="call-pin"]'))
+            this.marks = Array.from(el.querySelectorAll('[data-role="rail-mark"]'))
+            this.split = el.querySelector('[data-role="split-reading"]')
+            this.shortBy = el.querySelector('[data-role="short-by"]')
+            this.target = this.number ? parseInt(this.number.dataset.target, 10) : NaN
+
+            // Reduced motion is about motion and nothing else: every element
+            // ends in its final, legible place, it simply never travels there.
+            // A Stage that is not being looked at gets no animation frames, so
+            // its performance would start whenever someone looks; it lands in
+            // its final state instead.
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.hidden) {
+              this.setFinalState()
               return
             }
-            const delay = 350
-            const duration = 650
-            let started = false
-            let startTime = null
-            this.el.textContent = "0"
+
+            const cap = dataset("cap", 1400)
+            const settle = dataset("settle", 900)
+            const seats = Math.max(1, this.cards.length)
+            // The whole flip run fits under the cap at any Seat count: eight
+            // Seats wait no longer for the number than two do.
+            const stagger = Math.min(dataset("stagger", 260), cap / seats)
+            const flip = stagger * seats
+
+            this.cards.forEach((card, i) => {
+              this.play(card, [{opacity: 0, transform: "rotateY(180deg)"}, {opacity: 1}], {
+                duration: 360,
+                delay: i * stagger
+              })
+            })
+
+            // The word lands before its author — the guess-whose beat, bought
+            // with no extra input from anybody.
+            this.names.forEach((name, i) => {
+              this.play(name, [{opacity: 0}, {opacity: 1}], {
+                duration: 220,
+                delay: i * stagger + 180
+              })
+            })
+
+            this.play(this.display, [{opacity: 0, transform: "translateY(8px)"}, {opacity: 1}], {
+              duration: Math.max(160, settle * 0.25),
+              delay: flip
+            })
+            this.play(this.rail, [{opacity: 0, transform: "scaleX(0.97)"}, {opacity: 1}], {
+              duration: Math.max(160, settle * 0.25),
+              delay: flip
+            })
+            this.pins.forEach((pin, i) => {
+              this.play(pin, [{opacity: 0, transform: "translate(-50%, -0.5rem) scale(0.6)"}, {opacity: 1}], {
+                duration: 240,
+                delay: flip + 120 * (i + 1)
+              })
+            })
+
+            const launch = flip + settle * 0.1
+            const climb = Math.max(260, settle * 0.7)
+
+            if (this.marker) {
+              const place = this.marker.dataset.target
+              const over = Math.min(100, parseFloat(place) + 3)
+              this.play(this.marker, [{left: "0%"}, {left: over + "%"}, {left: place + "%"}], {
+                duration: climb,
+                delay: launch
+              })
+            }
+            if (!isNaN(this.target)) this.count(launch, climb)
+
+            this.play(this.badge, [{opacity: 0, transform: "scale(0.9)"}, {opacity: 1}], {
+              duration: 240,
+              delay: launch + climb * 0.6
+            })
+            this.play(this.shortBy, [{opacity: 0}, {opacity: 1}], {
+              duration: Math.max(140, settle * 0.2),
+              delay: flip + settle * 0.8
+            })
+
+            // A Split reading is the aftermath and never the headline: the two
+            // ghost pins land once the grade has parked, and the sentences
+            // after them.
+            this.marks.forEach((mark, i) => {
+              this.play(mark, [{opacity: 0}, {opacity: 1}], {
+                duration: 240,
+                delay: launch + climb + 120 * (i + 1)
+              })
+            })
+            this.play(this.split, [{opacity: 0}, {opacity: 1}], {
+              duration: 240,
+              delay: launch + climb + 120 * (this.marks.length + 1)
+            })
+
+            if (el.dataset.melded === "true") this.flash(launch + climb * 0.75)
+          },
+
+          destroyed() {
+            if (this.flashTimer) clearTimeout(this.flashTimer)
+            if (this.landTimer) clearTimeout(this.landTimer)
+          },
+
+          // Every step is the same shape: hold the element where it starts until
+          // its moment, then let the CSS it already carries be where it lands.
+          play(node, frames, timing) {
+            if (!node) return
+            node.animate(frames, Object.assign({easing: "cubic-bezier(.16,1,.3,1)", fill: "backwards"}, timing))
+          },
+
+          count(delay, duration) {
+            const node = this.number
+            const target = this.target
+            node.textContent = "0"
+            let start = null
 
             const tick = (now) => {
-              if (!started) {
-                startTime = now + delay
-                started = true
-              }
-              if (now < startTime) {
-                requestAnimationFrame(tick)
-                return
-              }
-              const elapsed = now - startTime
-              const progress = Math.min(elapsed / duration, 1)
-              const ease = 1 - Math.pow(1 - progress, 3)
-              const current = Math.round(ease * target)
-              this.el.textContent = current
-              if (progress < 1) {
-                requestAnimationFrame(tick)
-              } else {
-                this.el.textContent = target
-              }
+              if (start === null) start = now + delay
+              if (now < start) return requestAnimationFrame(tick)
+
+              const progress = Math.min((now - start) / duration, 1)
+              const eased = 1 - Math.pow(1 - progress, 3)
+              node.textContent = Math.round(eased * target)
+
+              if (progress < 1) requestAnimationFrame(tick)
+              else node.textContent = target
             }
             requestAnimationFrame(tick)
+            // Frames can be throttled; the clock cannot. The number is the
+            // grade by the time the climb is over, whatever the frames did.
+            this.landTimer = setTimeout(() => (node.textContent = target), delay + duration + 50)
+          },
+
+          // A Meld is the one arrival the whole room gets: one flash, over the
+          // whole screen, touching nothing.
+          flash(delay) {
+            this.flashTimer = setTimeout(() => {
+              const flash = document.createElement("div")
+              flash.dataset.role = "meld-flash"
+              flash.style.cssText =
+                "position:fixed;inset:0;z-index:50;pointer-events:none;" +
+                "background:radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--color-primary) 40%, transparent), transparent 65%);"
+              document.body.appendChild(flash)
+              const anim = flash.animate([{opacity: 0}, {opacity: 1}, {opacity: 0}], {duration: 420, easing: "ease-out"})
+              anim.onfinish = () => flash.remove()
+              anim.oncancel = () => flash.remove()
+            }, delay)
+          },
+
+          setFinalState() {
+            if (!isNaN(this.target)) this.number.textContent = this.target
           }
         }
       </script>
@@ -690,7 +1186,9 @@ defmodule ThereishWeb.RoomComponents do
 
   @doc """
   The overrule banner: visible on both phones and the stage while a proposal is
-  pending, and showing the joint ruling once agreed.
+  pending, showing the joint ruling once agreed, and saying who declined one for
+  the rest of the Attempt — a proposal that simply vanished read as a bug on a
+  couch, which is not what a Seat answering for the table deserves.
   """
   def overrule_banner(assigns) do
     ~H"""
@@ -713,7 +1211,7 @@ defmodule ThereishWeb.RoomComponents do
       >
         <p data-role="overrule-pending">
           <span class="font-semibold">{@room.overrule.proposer_name}</span>
-          proposed overruling this grade to a Meld.
+          proposed overruling this grade to {proposed_grade(@room.overrule)}.
         </p>
         <div class="flex gap-3">
           <.button phx-click="agree_overrule" data-role="agree-overrule" variant="primary">
@@ -742,6 +1240,15 @@ defmodule ThereishWeb.RoomComponents do
     </div>
 
     <p
+      :if={!(@room.overrule && @room.overrule.pending?) && @room[:overrule_declined]}
+      data-role="overrule-declined"
+      class="text-center text-sm opacity-80"
+    >
+      <span class="font-semibold">{@room[:overrule_declined][:name]}</span>
+      declined. The Assayer's grade stands for this Attempt.
+    </p>
+
+    <p
       :if={@room.reveal && @room.reveal[:overruled?]}
       data-role="overruled-notice"
       class="text-center text-sm font-semibold text-primary"
@@ -750,6 +1257,15 @@ defmodule ThereishWeb.RoomComponents do
     </p>
     """
   end
+
+  # What the table is being asked to agree to. Every Overrule used to be a Meld,
+  # because the proposer had no number to reach for; a Split reading hands them
+  # one, and it may not be a Meld, so the banner says which it is.
+  defp proposed_grade(%{closeness: closeness}) when is_integer(closeness) do
+    if Thereish.Ladder.melded?(closeness), do: "a Meld", else: to_string(closeness)
+  end
+
+  defp proposed_grade(_overrule), do: "a Meld"
 
   attr :room, :map, required: true
 
@@ -802,6 +1318,13 @@ defmodule ThereishWeb.RoomComponents do
   A Page that ran out of attempts has not gone wrong, and this line is the whole
   difference between an ending and an error message: the players spent five
   tries on two words and did not converge, which is the game working.
+
+  The closing card is also where the calibration labour lives now. The fairness
+  tap and the Bookends taps used to sit under the number at the reveal, which
+  put a survey about the grader in the two seconds that belong to the
+  punchline; both are here, behind a Notes disclosure, so the ending line and
+  the arc own the card. The rule did not move — the Game permits a tap at a
+  reveal and at a close exactly as it did (ADR-0019) — only the buttons did.
   """
   attr :seat, :map, default: nil
   attr :mode, :atom, default: :phone
@@ -848,76 +1371,89 @@ defmodule ThereishWeb.RoomComponents do
         </li>
       </ol>
 
-      <div
-        :if={@mode == :phone && may?(@room, :tap_bookends)}
-        data-role="bookends-controls"
-        class="flex flex-col items-center gap-2 pt-2"
+      <details
+        :if={@mode == :phone && (may?(@room, :tap_fairness) || may?(@room, :tap_bookends))}
+        data-role="notes"
+        class="w-full max-w-sm rounded-xl border border-base-300 bg-base-100/60"
       >
-        <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
-          How were these Bookends?
-        </span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            phx-click="bookends_tap"
-            phx-value-label="flat"
-            data-role="tap-flat"
-            data-tap="flat"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_bookends_tap(@room, @seat) == "flat",
-                do: "btn-warning text-warning-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Flat
-          </button>
-          <button
-            type="button"
-            phx-click="bookends_tap"
-            phx-value-label="fine"
-            data-role="tap-fine"
-            data-tap="fine"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_bookends_tap(@room, @seat) == "fine",
-                do: "btn-primary font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Fine
-          </button>
-          <button
-            type="button"
-            phx-click="bookends_tap"
-            phx-value-label="great"
-            data-role="tap-great"
-            data-tap="great"
-            class={[
-              "btn btn-sm text-xs font-medium transition-all",
-              if(your_bookends_tap(@room, @seat) == "great",
-                do: "btn-success text-success-content font-bold shadow-sm",
-                else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
-              )
-            ]}
-          >
-            Great
-          </button>
-        </div>
-        <%= if tap = your_bookends_tap(@room, @seat) do %>
+        <summary class="cursor-pointer px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider opacity-60">
+          Notes
+        </summary>
+        <div class="flex flex-col items-center gap-3 px-3 pb-3">
+          <.fairness_controls :if={may?(@room, :tap_fairness)} room={@room} seat={@seat} />
+
           <div
-            data-role="your-bookends-tap"
-            class="flex items-center gap-1.5 text-xs text-primary font-medium"
+            :if={may?(@room, :tap_bookends)}
+            data-role="bookends-controls"
+            class="flex flex-col items-center gap-2 pt-2"
           >
-            <span data-role="seat-bookends-tap" class="font-semibold capitalize">
-              {tap}
+            <span class="text-xs font-semibold uppercase tracking-wider opacity-60">
+              How were these Bookends?
             </span>
-            recorded
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                phx-click="bookends_tap"
+                phx-value-label="flat"
+                data-role="tap-flat"
+                data-tap="flat"
+                class={[
+                  "btn btn-sm text-xs font-medium transition-all",
+                  if(your_bookends_tap(@room, @seat) == "flat",
+                    do: "btn-warning text-warning-content font-bold shadow-sm",
+                    else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+                  )
+                ]}
+              >
+                Flat
+              </button>
+              <button
+                type="button"
+                phx-click="bookends_tap"
+                phx-value-label="fine"
+                data-role="tap-fine"
+                data-tap="fine"
+                class={[
+                  "btn btn-sm text-xs font-medium transition-all",
+                  if(your_bookends_tap(@room, @seat) == "fine",
+                    do: "btn-primary font-bold shadow-sm",
+                    else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+                  )
+                ]}
+              >
+                Fine
+              </button>
+              <button
+                type="button"
+                phx-click="bookends_tap"
+                phx-value-label="great"
+                data-role="tap-great"
+                data-tap="great"
+                class={[
+                  "btn btn-sm text-xs font-medium transition-all",
+                  if(your_bookends_tap(@room, @seat) == "great",
+                    do: "btn-success text-success-content font-bold shadow-sm",
+                    else: "btn-ghost border border-base-300 opacity-80 hover:opacity-100"
+                  )
+                ]}
+              >
+                Great
+              </button>
+            </div>
+            <%= if tap = your_bookends_tap(@room, @seat) do %>
+              <div
+                data-role="your-bookends-tap"
+                class="flex items-center gap-1.5 text-xs text-primary font-medium"
+              >
+                <span data-role="seat-bookends-tap" class="font-semibold capitalize">
+                  {tap}
+                </span>
+                recorded
+              </div>
+            <% end %>
           </div>
-        <% end %>
-      </div>
+        </div>
+      </details>
     </section>
     """
   end
@@ -964,60 +1500,42 @@ defmodule ThereishWeb.RoomComponents do
   defp reveal_arrival(%{band: band}) when not is_nil(band), do: to_string(band)
   defp reveal_arrival(_), do: "no_verdict"
 
-  defp closeness_presentation(%{band: :deep_meld}) do
-    %{
-      container_class: "border-2 border-primary/50 bg-primary/15 shadow-xl shadow-primary/20",
-      number_class: "text-primary",
-      badge_class: "bg-primary text-primary-content font-bold"
-    }
-  end
-
+  # What the card the number sits in looks like. Six clauses used to give a 29
+  # and a 54 the same grey, which is the whole reason the bands were invisible:
+  # now the card wears the band's own `data-band` and the colour behind it is
+  # the theme's token (`.band-tint` in app.css), the same token the badge and
+  # the Rail read. A Meld keeps the lift that makes it an arrival.
   defp closeness_presentation(%{melded?: true}) do
     %{
-      container_class: "border-2 border-primary/40 bg-primary/10 shadow-lg shadow-primary/10",
+      container_class: "border-2 band-tint shadow-xl shadow-primary/20",
       number_class: "text-primary",
       badge_class: "bg-primary text-primary-content font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :almost}) do
-    %{
-      container_class: "border border-secondary/40 bg-base-200/40",
-      number_class: "text-base-content",
-      badge_class: "bg-secondary/20 text-secondary font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :close}) do
-    %{
-      container_class: "border border-info/30 bg-base-200/40",
-      number_class: "text-base-content",
-      badge_class: "bg-info/20 text-info font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :adjacent}) do
-    %{
-      container_class: "border border-base-300 bg-base-200/30",
-      number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/80 font-bold"
-    }
-  end
-
-  defp closeness_presentation(%{band: :miss}) do
-    %{
-      container_class: "border border-base-300 bg-base-200/30",
-      number_class: "text-base-content/85",
-      badge_class: "bg-base-300 text-base-content/80 font-bold"
     }
   end
 
   defp closeness_presentation(_reveal) do
     %{
-      container_class: "border border-base-300 bg-base-200/30",
+      container_class: "border band-tint",
       number_class: "text-base-content",
-      badge_class: "bg-base-300 text-base-content/70 font-bold"
+      badge_class: "band-badge font-bold"
     }
+  end
+
+  # The one place the sequence's numbers live is the config Pacing reads when it
+  # arms the hold: the performance is absorbed by the hold rather than added to
+  # it, and two readings of that would be two answers.
+  defp reveal_sequence, do: Application.fetch_env!(:thereish, :reveal_sequence_ms)
+
+  # Calls, each wearing the colour its Seat wears everywhere else — the Beat's
+  # row and the Rail's pins read the same list. The Game says who called which
+  # band and nothing about how a Seat looks, so the colour is read off the
+  # roster the screen already has.
+  defp coloured_calls(room, calls) do
+    colours = Map.new(room[:seats] || [], &{&1.id, seat_colour(&1)})
+
+    for call <- calls || [] do
+      Map.put(call, :colour, colours[call.seat_id])
+    end
   end
 
   defp chosen_opinion_class("too_harsh"),
@@ -1253,6 +1771,22 @@ defmodule ThereishWeb.RoomComponents do
           </label>
         </div>
         <div class="flex flex-col gap-2">
+          <p class="text-xs uppercase tracking-wide opacity-60">This device</p>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input
+              id="buzz-switch"
+              phx-hook=".VoicePref"
+              type="checkbox"
+              data-role="buzz-switch"
+              data-pref="juice:haptics"
+              data-default="on"
+              data-active="true"
+              class="checkbox checkbox-xs"
+            />
+            <span>Buzz</span>
+          </label>
+        </div>
+        <div class="flex flex-col gap-2">
           <p class="text-xs uppercase tracking-wide opacity-60">This Room</p>
           <label class="flex items-center gap-1.5 cursor-pointer">
             <input
@@ -1283,6 +1817,19 @@ defmodule ThereishWeb.RoomComponents do
           >
             Matters from three Seats
           </p>
+          <label class="flex items-start gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              data-role="split-readings-switch"
+              data-active={to_string(Map.get(@room, :split_readings, true))}
+              checked={Map.get(@room, :split_readings, true)}
+              phx-click="toggle_split_readings"
+              class="checkbox checkbox-xs mt-0.5"
+            />
+            <span>
+              Split readings: when the Assayer's two readings of the same Bridges disagree, show the table both
+            </span>
+          </label>
         </div>
         <div class="flex flex-col gap-2">
           <p class="text-xs uppercase tracking-wide opacity-60">Music</p>
@@ -1354,9 +1901,13 @@ defmodule ThereishWeb.RoomComponents do
               localStorage.setItem(key, next ? "on" : "off")
             } catch (_) {}
             this.syncUI()
-            document.dispatchEvent(
-              new CustomEvent("thereish:voice-pref", { detail: { enabled: next, kind } })
-            )
+            // A switch with no kind is a plain device preference — the Buzz is
+            // one — and has nothing to tell the Voice about.
+            if (kind) {
+              document.dispatchEvent(
+                new CustomEvent("thereish:voice-pref", { detail: { enabled: next, kind } })
+              )
+            }
           }
 
           this.el.addEventListener("change", this.handleChange)
@@ -1414,6 +1965,137 @@ defmodule ThereishWeb.RoomComponents do
     end
   end
 
+  attr :room, :map, default: nil
+  attr :floats, :boolean, default: false, doc: "whether reactions lift off the Seats' Masks"
+
+  @doc """
+  Juice: the buzz in the hand, and the reactions lifting off the Stage.
+
+  Both read the same diff the sound does — one buzz per Cue the Room pushed,
+  one float per Reaction that is new since the last render — so a phone that
+  slept and came back does not replay the night at its owner. Nothing here is
+  counted or kept.
+  """
+  def juice_hook(assigns) do
+    assigns =
+      assigns
+      |> assign(:signature, reaction_signature(assigns.room))
+      |> assign(:attempt, assigns.room && get_in(assigns.room, [:attempt, :number]))
+
+    ~H"""
+    <div
+      id="juice-container"
+      phx-hook=".Juice"
+      data-floats={to_string(@floats)}
+      data-attempt={@attempt}
+      data-reactions={@signature}
+      class="hidden"
+    >
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".Juice">
+      export default {
+        mounted() {
+          // What this device has already answered for. A Stage or a phone that
+          // arrives mid-reveal records what is there and floats none of it,
+          // the same rule the Cues keep for a screen's first render.
+          this.floated = new Map()
+          this.attempt = this.el.dataset.attempt
+
+          this.reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          this.buzzOn = () => {
+            try {
+              return localStorage.getItem("juice:haptics") !== "off"
+            } catch (_) {
+              return true
+            }
+          }
+
+          // Feature detection and nothing more: a laptop and an iPhone have no
+          // vibrator, so the buzz is a silent no-op there. The device this is
+          // for is the phone in a hand.
+          this.handleEvent("juice:haptic", ({pattern}) => {
+            if (!navigator.vibrate || !Array.isArray(pattern) || !this.buzzOn()) return
+            try {
+              navigator.vibrate(pattern)
+            } catch (_) {}
+          })
+
+          this.sync(true)
+        },
+
+        updated() {
+          this.sync(false)
+        },
+
+        sync(first) {
+          if (this.el.dataset.attempt !== this.attempt) {
+            this.attempt = this.el.dataset.attempt
+            this.floated = new Map()
+          }
+
+          const pairs = (this.el.dataset.reactions || "")
+            .split(" ")
+            .filter(Boolean)
+            .map((pair) => pair.split(":"))
+
+          pairs.forEach(([seat, reaction], i) => {
+            if (this.floated.get(seat) === reaction) return
+            this.floated.set(seat, reaction)
+            if (first || this.el.dataset.floats !== "true") return
+            this.float(seat, reaction, i)
+          })
+        },
+
+        // The word lifts off whoever shouted it: their Mask on the Stage, and
+        // their own Bridge card once the Masks have gone.
+        float(seat, reaction, i) {
+          const anchor =
+            document.querySelector('[data-role="stage-mask"][data-seat="' + CSS.escape(seat) + '"]') ||
+            document.querySelector('[data-bridge="' + CSS.escape(seat) + '"]')
+          if (!anchor) return
+
+          const box = anchor.getBoundingClientRect()
+          const node = document.createElement("div")
+          node.dataset.role = "reaction-float"
+          node.textContent = reaction.replace(/_/g, " ").toUpperCase()
+          node.style.cssText =
+            "position:fixed;z-index:60;pointer-events:none;white-space:nowrap;" +
+            "font-weight:800;letter-spacing:0.15em;font-size:1.5rem;" +
+            "left:" + (box.left + box.width / 2) + "px;top:" + box.top + "px;" +
+            "transform:translate(-50%, 0);"
+          document.body.appendChild(node)
+
+          if (this.reduced()) {
+            setTimeout(() => node.remove(), 1200)
+            return
+          }
+
+          const anim = node.animate(
+            [
+              {opacity: 1, transform: "translate(-50%, 0)"},
+              {opacity: 0, transform: "translate(-50%, -80px)"}
+            ],
+            {duration: 1600, delay: i * 120, easing: "cubic-bezier(.16,1,.3,1)", fill: "backwards"}
+          )
+          anim.onfinish = () => node.remove()
+          anim.oncancel = () => node.remove()
+        }
+      }
+    </script>
+    """
+  end
+
+  # The Reactions as the hook reads them: one `seat:word` pair per Seat, which
+  # is a list of who shouted what and never a tally of how many did.
+  defp reaction_signature(nil), do: nil
+
+  defp reaction_signature(room) do
+    case room[:reactions] || [] do
+      [] -> nil
+      reactions -> Enum.map_join(reactions, " ", &"#{&1.seat_id}:#{&1.reaction}")
+    end
+  end
+
   attr :speaker, :boolean, default: false
   attr :levels, :list, default: nil
   attr :meld_cue_delay_ms, :integer, default: nil
@@ -1444,13 +2126,17 @@ defmodule ThereishWeb.RoomComponents do
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Foley">
       export default {
         mounted() {
-          this.isReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
           this.speaker = this.el.dataset.speaker === "true"
           this.mode = this.el.dataset.mode || (this.speaker ? "speaker" : "local")
           // Read the speaker off the DOM rather than off the last `updated()`:
           // the tap that claims the Speaker is answered with the patch and the
           // first `foley:page` together, and a stale flag would swallow it.
-          this.canPlay = () => !this.isReducedMotion() && this.el.dataset.speaker === "true"
+          //
+          // Sound is the Speaker's business and nothing else's. This used to
+          // ask about reduced motion too, which silenced the music, the stings
+          // and every voice for anyone who had asked only for less movement —
+          // the richest part of the night, taken away by a motion setting.
+          this.canPlay = () => this.el.dataset.speaker === "true"
           this.ctx = null
           this.musicBus = null
           this.stingsBus = null
@@ -1899,7 +2585,6 @@ defmodule ThereishWeb.RoomComponents do
           }
 
           this.handleEvent("foley:commit", async () => {
-            if (this.isReducedMotion()) return
             await this.playCommitTick()
           })
 
@@ -1908,7 +2593,7 @@ defmodule ThereishWeb.RoomComponents do
             try {
               enabled = localStorage.getItem("foley:local-sounds") !== "off"
             } catch (_) {}
-            if (!enabled || this.isReducedMotion()) return
+            if (!enabled) return
             await this.playCommitTick()
           })
 

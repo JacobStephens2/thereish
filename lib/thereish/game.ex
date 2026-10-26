@@ -62,6 +62,11 @@ defmodule Thereish.Game do
   alias Thereish.Mask
   alias Thereish.Overrule
 
+  # The noise around a reveal, as a closed vocabulary. Four words and no more,
+  # because the moment they can be spelled they become comments and the
+  # punchline belongs to the Assayer's quip.
+  @reactions [:ooh, :how, :no_way, :yes]
+
   @enforce_keys [:seat_limit, :seats]
   defstruct [
     :seat_limit,
@@ -75,7 +80,9 @@ defmodule Thereish.Game do
     bookends_taps: %{},
     page_seat_ids: nil,
     masks: %{},
-    full_table: true
+    full_table: true,
+    nudges: [],
+    nudges_per_page: nil
   ]
 
   @type seat :: %{
@@ -110,6 +117,10 @@ defmodule Thereish.Game do
   @typedoc """
   `attempt` is the Attempt being played and `played` the ones this Page already
   played, kept whole so the Chronicle can have them.
+
+  `nudges` are the words this Page's Seats have spent, in the order they
+  landed, each with the Attempt it landed on. They belong to the Page rather
+  than to an Attempt: a Nudge is burned for the rest of the Page.
   """
   @type t :: %__MODULE__{
           seat_limit: pos_integer(),
@@ -123,8 +134,13 @@ defmodule Thereish.Game do
           bookends_taps: %{String.t() => String.t()},
           page_seat_ids: [String.t()] | nil,
           masks: %{String.t() => Mask.t() | :dot},
-          full_table: boolean()
+          full_table: boolean(),
+          nudges: [nudge()],
+          nudges_per_page: non_neg_integer() | nil
         }
+
+  @typedoc "One word a Seat spent, and the Attempt it was spent on."
+  @type nudge :: %{seat_id: String.t(), word: String.t(), attempt: pos_integer()}
 
   @type viewer :: String.t() | nil
 
@@ -152,6 +168,9 @@ defmodule Thereish.Game do
           | {:author_retried, %{required(:seat_id) => String.t()}}
           | {:gives_reset, %{required(:seat_id) => String.t()}}
           | {:bridge_committed, %{seat_id: String.t(), bridge: String.t()}}
+          | {:nudge_sent, %{seat_id: String.t(), word: String.t()}}
+          | {:call_made, %{seat_id: String.t(), band: atom()}}
+          | {:reacted, %{seat_id: String.t(), reaction: atom()}}
           | {:verdict_received,
              %{
                closeness: integer(),
@@ -221,6 +240,13 @@ defmodule Thereish.Game do
           | :no_grade_to_rate
           | :not_enough_gives
           | :not_playing_page
+          | :nudge_required
+          | :nudges_off
+          | :no_nudges_left
+          | :call_window_closed
+          | :invalid_band
+          | :invalid_reaction
+          | :no_split_reading
 
   @doc """
   Builds the state of a Room that holds `seat_limit` Seats, `seats` of them
@@ -257,7 +283,9 @@ defmodule Thereish.Game do
       author_failure: nil,
       page_seat_ids: page_seat_ids,
       masks: %{},
-      full_table: full_table == true
+      full_table: full_table == true,
+      nudges: [],
+      nudges_per_page: Application.fetch_env!(:thereish, :nudges_per_page)
     }
   end
 
@@ -269,6 +297,38 @@ defmodule Thereish.Game do
   def set_full_table(%__MODULE__{} = state, enabled) when is_boolean(enabled) do
     %{state | full_table: enabled}
   end
+
+  @doc """
+  Sets how many Nudges one Seat may spend on a Page. Zero is the off switch,
+  and a Game with it is today's game exactly: no Seat may nudge and no word is
+  barred by one.
+
+  A knob rather than a constant, because what one public word does to an
+  Attempt is a question the couch answers — and because an Arm has to be able
+  to take it away for a Page (`Thereish.Experiments`). Nil is the configured
+  budget, which is how an Arm hands it back for the Page after.
+  """
+  @spec set_nudges_per_page(t(), non_neg_integer() | nil) :: t()
+  def set_nudges_per_page(%__MODULE__{} = state, nil), do: %{state | nudges_per_page: nil}
+
+  def set_nudges_per_page(%__MODULE__{} = state, budget)
+      when is_integer(budget) and budget >= 0 do
+    %{state | nudges_per_page: budget}
+  end
+
+  @doc """
+  The bands a Seat may Call, lowest first.
+
+  `:deep_meld` is left out: it is the same word twice, a thing that happens
+  rather than a reading anyone calls. One list feeds the guard and the screens,
+  so a button that renders is a Call the rules take.
+  """
+  @spec callable_bands() :: [atom()]
+  def callable_bands, do: Ladder.band_names() -- [:deep_meld]
+
+  @doc "The four words a Seat may send at a reveal."
+  @spec reactions() :: [atom()]
+  def reactions, do: @reactions
 
   @doc """
   How many attempts one Page gets before it closes unmelded.
@@ -419,7 +479,15 @@ defmodule Thereish.Game do
 
   def apply(%__MODULE__{} = state, {:gives_reset, %{seat_id: seat_id}}) do
     with :ok <- may_reset_gives(state, seat_id) do
-      {:ok, %{state | gives: %{}, masks: %{}, author_failure: nil, page_seat_ids: nil}, []}
+      {:ok,
+       %{
+         state
+         | gives: %{},
+           masks: %{},
+           author_failure: nil,
+           page_seat_ids: nil,
+           nudges: []
+       }, []}
     end
   end
 
@@ -434,6 +502,49 @@ defmodule Thereish.Game do
           :ok -> committed(put_attempt(state, :bridges, Map.put(bridges(state), seat_id, bridge)))
           {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
         end
+      end
+    end
+  end
+
+  # A Nudge is checked for legality exactly as a Bridge is, against the same
+  # barred words, because it is about to join them: the word a Seat points at
+  # is a word nobody may then write.
+  def apply(%__MODULE__{} = state, {:nudge_sent, %{seat_id: seat_id, word: word}}) do
+    word = Thereish.Steward.Legality.normalize_bridge(word)
+
+    with :ok <- may_nudge(state, seat_id) do
+      if word == "" do
+        {:error, :nudge_required}
+      else
+        case Thereish.Steward.Legality.check_bridge(word, barred_words(state)) do
+          :ok -> {:ok, nudged(state, seat_id, word), []}
+          {:illegal, reason} -> {:error, {:illegal_nudge, reason}}
+        end
+      end
+    end
+  end
+
+  # The latest Call wins: a Seat may change its mind until the Beat ends, and
+  # a Call that arrives after it is refused by the guard rather than by a clock.
+  def apply(%__MODULE__{} = state, {:call_made, %{seat_id: seat_id, band: band}}) do
+    with :ok <- may_call(state, seat_id) do
+      case callable_band(band) do
+        nil -> {:error, :invalid_band}
+        band -> {:ok, put_attempt(state, :calls, Map.put(calls(state), seat_id, band)), []}
+      end
+    end
+  end
+
+  # One Reaction per Seat per Attempt, latest wins. Nothing accumulates: there
+  # is no tally here and there is none anywhere downstream either.
+  def apply(%__MODULE__{} = state, {:reacted, %{seat_id: seat_id, reaction: reaction}}) do
+    with :ok <- may_react(state, seat_id) do
+      case reaction_word(reaction) do
+        nil ->
+          {:error, :invalid_reaction}
+
+        reaction ->
+          {:ok, put_attempt(state, :reactions, Map.put(reactions(state), seat_id, reaction)), []}
       end
     end
   end
@@ -472,9 +583,12 @@ defmodule Thereish.Game do
     end
   end
 
+  # A decline withdraws the proposal and says so for the rest of the Attempt.
+  # It used to empty the proposal and leave the screens showing nothing, which
+  # read as a bug on a couch: somebody tapped and the banner vanished.
   def apply(%__MODULE__{} = state, {:overrule_declined, %{seat_id: seat_id}}) do
     with :ok <- may_vote_overrule(state, seat_id) do
-      {:ok, put_attempt(state, :overrule, nil), []}
+      {:ok, state |> put_attempt(:overrule, nil) |> put_attempt(:declined, seat_id), []}
     end
   end
 
@@ -531,13 +645,15 @@ defmodule Thereish.Game do
   end
 
   # What every Page starts over, whether it is being written or the last one
-  # is being put away: its Attempts, its Bookends taps and the Author's failure.
+  # is being put away: its Attempts, its Nudges, its Bookends taps and the
+  # Author's failure. A Nudge is spent for a Page, so a Page is where it ends.
   defp reset_page(state, page) do
     %{
       state
       | page: page,
         attempt: first_attempt(page),
         played: [],
+        nudges: [],
         bookends_taps: %{},
         author_failure: nil
     }
@@ -548,6 +664,16 @@ defmodule Thereish.Game do
 
   defp put_attempt(state, field, value),
     do: %{state | attempt: Map.replace!(state.attempt, field, value)}
+
+  # A Nudge joins the Page's list rather than the Attempt's, because it is spent
+  # for the rest of the Page. The Attempt it landed on rides with it, so the
+  # Chronicle and the screens can tell this Attempt's Nudge from an earlier
+  # one's without either of them keeping a second list.
+  defp nudged(state, seat_id, word) do
+    nudge = %{seat_id: seat_id, word: word, attempt: attempt_number(state)}
+
+    %{state | nudges: state.nudges ++ [nudge]}
+  end
 
   # The current Attempt's fields, read as an Attempt with nothing in it when
   # no Page is open.
@@ -562,6 +688,12 @@ defmodule Thereish.Game do
 
   defp opinions(%{attempt: nil}), do: %{}
   defp opinions(%{attempt: attempt}), do: attempt.opinions
+
+  defp calls(%{attempt: nil}), do: %{}
+  defp calls(%{attempt: attempt}), do: attempt.calls
+
+  defp reactions(%{attempt: nil}), do: %{}
+  defp reactions(%{attempt: attempt}), do: attempt.reactions
 
   @doc """
   Projects what one viewer may see: a Seat by its id, or `nil` for a viewer that
@@ -620,20 +752,35 @@ defmodule Thereish.Game do
       closed: closed(state, phase),
       played: Enum.map(state.played, &attempt_view(state, &1)),
       overrule: overrule_view(state, viewer),
+      overrule_declined: declined_view(state),
       your_tap: Map.get(opinions, viewer),
       fairness_taps: opinions,
       your_bookends_tap: Map.get(state.bookends_taps || %{}, viewer),
       bookends_taps: state.bookends_taps || %{},
       barred_words: if(phase != :waiting, do: barred_words(state)),
       gives: if(first_revealed?(state), do: gives_view(state)),
-      full_table: page_full_table(state.page, state.full_table)
+      full_table: page_full_table(state.page, state.full_table),
+      # One projection for both screens. A Nudge and a Reaction are public the
+      # moment they land; a Call made while others are still writing is the
+      # caller's own until the Beat, so a confident band cannot steer a Bridge.
+      nudges: nudges_view(state),
+      your_nudges_left: nudges_left(state, viewer),
+      calling?: may_call(state, viewer) == :ok,
+      calls: calls_view(state, viewer),
+      callable_bands: callable_bands(),
+      reactions: reactions_view(state)
     }
   end
 
   @doc """
   All words and phrases barred from being played as a Bridge on this Page:
-  the Bookends of every Attempt so far and every Bridge committed in earlier
-  attempts of this Page.
+  the Bookends of every Attempt so far, every Bridge committed in earlier
+  attempts of this Page, and every Nudge this Page has spent.
+
+  The Nudges belong here and nowhere else, which is what makes a Nudge
+  unwritable everywhere for free: at commit, in the phone's live validation,
+  in the view's own `barred_words`, and — by its absence — in the Assayer's
+  request, which does not and must not carry a Nudge.
   """
   @spec barred_words(t()) :: [String.t()]
   def barred_words(%__MODULE__{} = state) do
@@ -641,7 +788,7 @@ defmodule Thereish.Game do
     past_bridges = Enum.flat_map(state.played, &Map.values(&1.bridges))
     current_bookends = attempt_bookends(state) || []
 
-    (current_bookends ++ past_bookends ++ past_bridges)
+    (current_bookends ++ past_bookends ++ past_bridges ++ Enum.map(state.nudges, & &1.word))
     |> Enum.map(&to_string/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
@@ -693,7 +840,27 @@ defmodule Thereish.Game do
   end
 
   defp bookend_count(%{full_table: false}, _seats), do: 2
-  defp bookend_count(_state, seats), do: length(seats)
+
+  # A Full table's width is Bookends per Give, not one Bookend each. At two
+  # Seats "one per Give" and "the two that landed furthest apart" name the same
+  # two words, so Full table was a no-op there and a Meld on Attempt 2 was the
+  # rule working as written; the fix is a count (ADR-0022, amending ADR-0016).
+  #
+  # The clamp order is the promise. The ceiling stops a large table being
+  # drowned in words, and the floor outranks it, because a Full table says every
+  # Seat sees a word of its own whatever `max_bookends` says: at eight Seats the
+  # count is eight, not six.
+  defp bookend_count(_state, seats) do
+    seats
+    |> length()
+    |> then(&(&1 * bookends_per_give()))
+    |> min(max(max_bookends(), length(seats)))
+    |> max(length(seats))
+  end
+
+  defp bookends_per_give, do: Application.fetch_env!(:thereish, :bookends_per_give)
+
+  defp max_bookends, do: Application.fetch_env!(:thereish, :max_bookends)
 
   # A Page keeps the rule it was written under. A Room that has not written
   # one yet, or a Page from before the rule, reads as the Room's current rule.
@@ -859,17 +1026,19 @@ defmodule Thereish.Game do
 
   # One reveal for every Seat: every Bridge, one number in its band, one quip,
   # and the two words that landed furthest apart, named inside the same Verdict
-  # (ADR-0010). Reasoning is kept in the Chronicle and kept off the screen.
+  # (ADR-0010). Reasoning is kept in the Chronicle and kept off the screen —
+  # except in a Split reading, the one carve-out (ADR-0024).
   defp reveal(state, phase, _viewer) when phase in [:reveal, :closed] do
     gives = gives_view(state)
+    graded = verdict(state) |> verdict_view() |> Map.delete(:reasoning)
 
-    verdict(state)
-    |> verdict_view()
-    |> Map.delete(:reasoning)
-    |> Map.merge(%{
+    Map.merge(graded, %{
       bridges: bridges_view(state, bridges(state)),
       furthest: furthest_view(state, verdict(state)),
-      gives: gives
+      gives: gives,
+      calls: reveal_calls(state, graded.band),
+      gap: gap(graded),
+      split: split(verdict(state))
     })
   end
 
@@ -885,6 +1054,112 @@ defmodule Thereish.Game do
       }
     end)
   end
+
+  # Every Nudge this Page has spent, in the order they landed, each wearing the
+  # name of the Seat that spent it so the Stage needs no join.
+  defp nudges_view(state) do
+    Enum.map(state.nudges, fn nudge ->
+      seat = find_seat(state, nudge.seat_id)
+
+      %{seat_id: nudge.seat_id, name: seat && seat.name, word: nudge.word, attempt: nudge.attempt}
+    end)
+  end
+
+  # The Calls and the Reactions in roster order — the order the reveal puts the
+  # Seats in, so the pins and the Bridges read down the screen together.
+  defp calls_view(state, viewer) do
+    calls = calls(state)
+    public? = phase(state) != :bridging
+
+    for seat <- page_seats(state), Map.has_key?(calls, seat.id), public? or seat.id == viewer do
+      %{seat_id: seat.id, name: seat.name, band: calls[seat.id]}
+    end
+  end
+
+  defp reactions_view(state) do
+    reactions = reactions(state)
+
+    for seat <- page_seats(state), Map.has_key?(reactions, seat.id) do
+      %{seat_id: seat.id, name: seat.name, reaction: reactions[seat.id]}
+    end
+  end
+
+  # What each Call turned out to be worth, which is nothing: whether it named
+  # the band the grade landed in, and how many rungs away it was if not. An
+  # Attempt the Assayer could not grade settles no Call either way.
+  defp reveal_calls(state, graded_band) do
+    bands = Ladder.band_names()
+    graded = Enum.find_index(bands, &(&1 == graded_band))
+
+    Enum.map(calls_view(state, nil), fn call ->
+      Map.merge(call, %{
+        right?: call.band == graded_band,
+        bands_off: graded && abs(Enum.find_index(bands, &(&1 == call.band)) - graded)
+      })
+    end)
+  end
+
+  # How far short of a Meld this Attempt landed — "seven short", the unit the
+  # table actually feels. A Meld is short of nothing, and an Attempt with no
+  # grade is short of nothing anyone knows.
+  defp gap(%{melded?: true}), do: nil
+  defp gap(%{closeness: nil}), do: nil
+  defp gap(%{closeness: closeness}), do: Ladder.meld_threshold() - closeness
+
+  # The Assayer's two readings of the same Bridges, shown when they contradict
+  # each other far enough that the table is being asked to rule rather than to
+  # read a grade (ADR-0024). Both numbers were always computed, averaged and
+  # thrown away; the recorded Verdict is still the mean, and the only thing that
+  # rewrites it is a unanimous Overrule, exactly as before.
+  #
+  # Rare on purpose: the threshold is the whole safety argument, because a
+  # grader shown disagreeing with itself every Page is not drama, it is a
+  # grader nobody believes. A Verdict from before the disagreement was
+  # measured carries no spread and so shows nothing, and a Verdict the table
+  # has already overruled has nothing left to settle.
+  defp split(nil), do: nil
+
+  defp split(%{graded?: false}), do: nil
+
+  defp split(verdict) do
+    meta = Map.get(verdict, :meta) || %{}
+    spread = meta_number(meta, :spread)
+    forward = meta_number(meta, :forward)
+    reverse = meta_number(meta, :reverse)
+
+    cond do
+      is_nil(spread) or is_nil(forward) or is_nil(reverse) ->
+        nil
+
+      spread < split_decision_at() ->
+        nil
+
+      Overrule.overruled?(verdict) ->
+        nil
+
+      true ->
+        %{
+          forward: forward,
+          reverse: reverse,
+          reasoning: Map.get(verdict, :reasoning),
+          reasoning_reverse: meta_value(meta, :reasoning_reverse),
+          generous: max(forward, reverse)
+        }
+    end
+  end
+
+  # Meta travels through Postgres and back as JSON, so the key it arrives under
+  # may be a string. Both are read here and nowhere else.
+  defp meta_value(meta, key), do: Map.get(meta, key) || Map.get(meta, to_string(key))
+
+  defp meta_number(meta, key) do
+    case meta_value(meta, key) do
+      number when is_number(number) -> number
+      _not_a_number -> nil
+    end
+  end
+
+  defp split_decision_at, do: Application.get_env(:thereish, :split_decision_at, 20)
 
   # The Page's number is the Verdict's, and an Attempt the Assayer could not
   # grade has no number rather than a zero: "we don't know" is not "you missed".
@@ -1026,9 +1301,25 @@ defmodule Thereish.Game do
     end
   end
 
+  # Who declined an overrule on this Attempt, so the screens can say it instead
+  # of simply showing one fewer banner. A declining Seat is answering for the
+  # table, and the table should hear who did it.
+  defp declined_view(%{attempt: %{declined: seat_id}} = state) when is_binary(seat_id) do
+    seat = find_seat(state, seat_id)
+
+    %{seat_id: seat_id, name: seat && seat.name}
+  end
+
+  defp declined_view(_state), do: nil
+
   # Holds the proposal while a Seat playing the Page has still to agree, and
   # rules it once every one of them has.
   defp resolve_overrule(state, proposal) do
+    # A fresh proposal, and the ruling that may follow it, clear the last
+    # decline: the Attempt holds only the live state, so no screen can say the
+    # grade stands beside a Verdict the table has just rewritten.
+    state = put_attempt(state, :declined, nil)
+
     if Overrule.unanimous?(proposal, Enum.map(page_seats(state), & &1.id)) do
       rule_overrule(state, proposal)
     else
@@ -1072,6 +1363,21 @@ defmodule Thereish.Game do
       bridges:
         for seat <- page_seats(state), Map.has_key?(attempt.bridges, seat.id) do
           %{seat_id: seat.id, bridge: attempt.bridges[seat.id]}
+        end,
+      # The Nudges belong to the Page, so each Attempt's row takes only the
+      # ones that landed on it; the Calls and the Reactions are the Attempt's
+      # own and come straight off it.
+      nudges:
+        for nudge <- state.nudges, nudge.attempt == attempt.number do
+          %{seat_id: nudge.seat_id, word: nudge.word}
+        end,
+      calls:
+        for seat <- page_seats(state), Map.has_key?(attempt.calls, seat.id) do
+          %{seat_id: seat.id, band: attempt.calls[seat.id]}
+        end,
+      reactions:
+        for seat <- page_seats(state), Map.has_key?(attempt.reactions, seat.id) do
+          %{seat_id: seat.id, reaction: attempt.reactions[seat.id]}
         end,
       verdicts: if(attempt.verdict, do: [chronicle_verdict(state, attempt)], else: [])
     }
@@ -1151,7 +1457,11 @@ defmodule Thereish.Game do
     %{
       give: may_give(state, viewer) == :ok,
       bridge: may_bridge(state, viewer) == :ok,
+      nudge: may_nudge(state, viewer) == :ok,
+      call: may_call(state, viewer) == :ok,
+      react: may_react(state, viewer) == :ok,
       propose_overrule: may_propose_overrule(state, viewer) == :ok,
+      propose_split_overrule: may_propose_split_overrule(state, viewer) == :ok,
       vote_overrule: may_vote_overrule(state, viewer) == :ok,
       tap_fairness: may_tap_fairness(state, viewer) == :ok,
       advance: may_advance(state, viewer) == :ok,
@@ -1186,6 +1496,47 @@ defmodule Thereish.Game do
     end
   end
 
+  # A Nudge is spent while a Seat is still thinking. A Seat that has committed
+  # could otherwise nudge the word it has just written and hand the table the
+  # answer, which is the one thing a Nudge must not be able to do.
+  defp may_nudge(state, seat_id) do
+    cond do
+      phase(state) != :bridging -> {:error, :not_bridging}
+      not seated?(state, seat_id) -> {:error, :no_such_seat}
+      playing_page_seat(state, seat_id) != :ok -> {:error, :not_playing_page}
+      committed?(state, seat_id) -> {:error, :already_committed}
+      not nudges_enabled?(state) -> {:error, :nudges_off}
+      nudges_left(state, seat_id) == 0 -> {:error, :no_nudges_left}
+      true -> :ok
+    end
+  end
+
+  # The Call window opens on a Seat's own commit and closes when the number
+  # arrives: the wait for the others is the time to make up your mind, and the
+  # Beat alone was too short to read four Bookends and a Bridge and choose. A
+  # late Call is refused here rather than by a clock, so the Beat stays the
+  # fixed theatre it is (design law 10) and Pacing is left alone.
+  defp may_call(state, seat_id) do
+    case phase(state) do
+      :assaying ->
+        with :ok <- taken_by_a_seat(state, seat_id), do: playing_page_seat(state, seat_id)
+
+      :bridging ->
+        if committed?(state, seat_id), do: :ok, else: {:error, :call_window_closed}
+
+      _phase ->
+        {:error, :call_window_closed}
+    end
+  end
+
+  defp may_react(state, seat_id) do
+    if phase(state) in [:reveal, :closed] do
+      with :ok <- taken_by_a_seat(state, seat_id), do: playing_page_seat(state, seat_id)
+    else
+      {:error, :not_revealed}
+    end
+  end
+
   defp may_propose_overrule(state, seat_id) do
     with :ok <- taken_by_a_seat(state, seat_id),
          :ok <- playing_page_seat(state, seat_id),
@@ -1195,6 +1546,16 @@ defmodule Thereish.Game do
         Overrule.overruled?(verdict(state)) -> {:error, :already_overruled}
         true -> :ok
       end
+    end
+  end
+
+  # The one-tap Overrule a Split reading makes reachable: the same proposal as
+  # any other, at a number the table has already been shown. No new event and no
+  # weaker vote — only a reason to reach for the authority the players have had
+  # all along, which until now meant typing a number nobody had been given.
+  defp may_propose_split_overrule(state, seat_id) do
+    with :ok <- may_propose_overrule(state, seat_id) do
+      if split(verdict(state)), do: :ok, else: {:error, :no_split_reading}
     end
   end
 
@@ -1297,6 +1658,32 @@ defmodule Thereish.Game do
   end
 
   defp committed?(state, seat_id), do: Map.has_key?(bridges(state), seat_id)
+
+  # How many Nudges this Seat still holds on this Page, and whether the Room
+  # deals any at all. A budget of zero is today's game exactly: no Seat may
+  # nudge, so no word is barred by one.
+  defp nudges_left(state, seat_id),
+    do: nudge_budget(state) - Enum.count(state.nudges, &(&1.seat_id == seat_id))
+
+  defp nudge_budget(%{nudges_per_page: nil}),
+    do: Application.fetch_env!(:thereish, :nudges_per_page)
+
+  defp nudge_budget(%{nudges_per_page: budget}), do: budget
+
+  defp nudges_enabled?(state), do: nudge_budget(state) > 0
+
+  # A band and a Reaction arrive from a phone as a string. Each is matched
+  # against its closed list rather than turned into an atom, so no tap can mint
+  # one the rules have never heard of.
+  defp callable_band(band), do: one_of(callable_bands(), band)
+
+  defp reaction_word(reaction), do: one_of(@reactions, reaction)
+
+  defp one_of(vocabulary, word) do
+    wanted = word |> to_string() |> String.trim() |> String.downcase()
+
+    Enum.find(vocabulary, &(Atom.to_string(&1) == wanted))
+  end
 
   defp find_seat(state, seat_id), do: Enum.find(state.seats, &(&1.id == seat_id))
 

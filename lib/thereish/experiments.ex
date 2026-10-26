@@ -1,12 +1,15 @@
 defmodule Thereish.Experiments do
   @moduledoc """
-  Experiment definitions, alternating Author assignments and qualitative readouts.
+  Experiment definitions, alternating assignments and qualitative readouts.
 
-  The live Experiment is the Author model, Flash against Astra: each Page in a
-  Room is assigned the next Arm in strict alternation when the Author is asked
-  for it, starting with Flash. Assignment is deterministic, with no randomization
-  or Chapter stratification. Bait against plain, ADR-0004's misdirection test,
-  is retired, and its rows stay readable.
+  Two Experiments are live. The Author model, Flash against Astra, decides
+  which model writes the Page's Bookends; the channel, Nudge on against off,
+  decides whether the Page has a Nudge in it at all (ADR-0020). Each Page is
+  assigned an Arm of both when the Author is asked for it, each alternating
+  strictly on its own rows, so the two never line up and neither confounds the
+  other. Assignment is deterministic, with no randomization or Chapter
+  stratification. Bait against plain, ADR-0004's misdirection test, is retired,
+  and its rows stay readable.
 
   This module owns the harness: the Experiments' definitions, each declaring
   its outcomes and its sample (20 Pages) up front; a Page's Assignment; a
@@ -47,6 +50,7 @@ defmodule Thereish.Experiments do
 
   @bait_against_plain_id "bait_against_plain"
   @author_model_id "author_model"
+  @channel_id "channel"
 
   @bait_against_plain_experiment %{
     id: @bait_against_plain_id,
@@ -79,48 +83,87 @@ defmodule Thereish.Experiments do
     ]
   }
 
+  @channel_experiment %{
+    id: @channel_id,
+    name: "The channel: Nudge on against off",
+    description:
+      "ADR-0020: Tests whether one spendable, public, burned word between Seats makes an Attempt harder and a Page better — read from the meld rate, the attempts it took, where the Page closed, and the tap on the Bookends.",
+    sample_size: 20,
+    arms: [:nudge_on, :nudge_off],
+    declared_outcomes: [
+      :meld_rate,
+      :attempts_to_meld,
+      :closing_band,
+      :bookends_preferences
+    ]
+  }
+
   @doc """
   Returns the declared experiment definition.
+
+  An id nothing declares raises rather than answering with whichever
+  Experiment happens to be live: a readout filed under a name the harness does
+  not know is a measurement of nothing.
   """
   @spec definition(atom() | String.t()) :: map()
   def definition(:bait_against_plain), do: @bait_against_plain_experiment
   def definition(@bait_against_plain_id), do: @bait_against_plain_experiment
   def definition(:author_model), do: @author_model_experiment
   def definition(@author_model_id), do: @author_model_experiment
-  def definition(_), do: @author_model_experiment
+  def definition(:channel), do: @channel_experiment
+  def definition(@channel_id), do: @channel_experiment
+
+  def definition(experiment_id),
+    do: raise(ArgumentError, "no Experiment is declared as #{inspect(experiment_id)}")
+
+  # The Experiments a Page is assigned an Arm of when the Author is asked for
+  # it, the Author model first because its Arm is the one the Room is handed
+  # and the one the book files a Page under.
+  @live_experiments [@author_model_experiment, @channel_experiment]
 
   # The Arm a Page plays under when it has no Assignment of its own: Flash,
   # under the Author-model Experiment, with no row to link.
   @default_assignment %Assignment{id: nil, experiment_id: @author_model_id, arm: :flash}
 
   @doc """
-  Assigns the next Page in a Room its Author-model arm, strictly alternating
-  Flash and Astra from the Room's past assignment rows, records its row
-  blind, and answers it as the Page's Assignment.
+  Assigns the next Page in a Room an Arm of every live Experiment, each
+  strictly alternating from that Experiment's own past rows in the Room,
+  records a row for each blind, and answers the Author-model one as the Page's
+  Assignment with the rest beside it (`Assignment.arm/2`).
 
   When no row can be read or written, that is logged and the Page plays under
-  the default Arm, Flash, with no row: a lost row must not stop the Author
-  being asked.
+  the default Arm, Flash, with no row and no other Experiment: a lost row must
+  not stop the Author being asked, and a Page whose Arms are unknown is a Page
+  that measures nothing rather than one that plays a guess.
   """
   @spec assign(Ecto.UUID.t() | String.t()) :: Assignment.t()
   def assign(room_id_or_slug) do
     room_id = resolve_room_id(room_id_or_slug)
-    past_arms = room_id |> assignments(@author_model_experiment.id) |> Enum.map(& &1.arm)
-    arm = next_arm(past_arms)
+    past = Enum.group_by(assignments(room_id), & &1.experiment_id, & &1.arm)
+    # Every row names the Page the same way, so a Page's Arms read as one Page.
+    identifier = "page-#{length(Map.get(past, @author_model_id, [])) + 1}"
+    at = DateTime.utc_now()
 
-    row =
-      %ExperimentAssignment{}
-      |> ExperimentAssignment.changeset(%{
-        room_id: room_id,
-        page_identifier: "page-#{length(past_arms) + 1}",
-        experiment_id: @author_model_experiment.id,
-        arm: to_string(arm),
-        chapter: "table",
-        assigned_at: DateTime.utc_now()
-      })
-      |> Repo.insert!()
+    made =
+      for experiment <- @live_experiments do
+        %Assignment{
+          id: Ecto.UUID.generate(),
+          experiment_id: experiment.id,
+          arm: next_arm(experiment, Map.get(past, experiment.id, []))
+        }
+      end
 
-    %Assignment{id: row.id, experiment_id: row.experiment_id, arm: arm}
+    # One read and one write however many Experiments are live: the Room asks
+    # for this in the seconds between the last Give and the Author's answer,
+    # and every row still passes the changeset's gate on the way in.
+    {_count, _} =
+      Repo.insert_all(
+        ExperimentAssignment,
+        Enum.map(made, &assignment_row(&1, room_id, identifier, at))
+      )
+
+    [author | rest] = made
+    %{author | also: rest}
   rescue
     error ->
       Logger.error(
@@ -131,14 +174,40 @@ defmodule Thereish.Experiments do
       @default_assignment
   end
 
-  defp next_arm([]), do: @default_assignment.arm
-  defp next_arm(past_arms), do: if(List.last(past_arms) == "flash", do: :astra, else: :flash)
+  # One row for `Repo.insert_all`, built through the changeset so that an Arm
+  # the schema does not know raises here rather than reaching Postgres.
+  defp assignment_row(%Assignment{} = assignment, room_id, identifier, at) do
+    %ExperimentAssignment{}
+    |> ExperimentAssignment.changeset(%{
+      room_id: room_id,
+      page_identifier: identifier,
+      experiment_id: assignment.experiment_id,
+      arm: to_string(assignment.arm),
+      chapter: "table",
+      assigned_at: at
+    })
+    |> Ecto.Changeset.apply_action!(:insert)
+    |> Map.take([:room_id, :page_identifier, :experiment_id, :arm, :chapter, :assigned_at])
+    |> Map.merge(%{id: assignment.id, inserted_at: at})
+  end
+
+  # The Arm after the last one this Room recorded of that Experiment, and the
+  # first Arm when it has recorded none. Each Experiment declares two.
+  defp next_arm(experiment, past_arms) do
+    [first, second] = experiment.arms
+
+    if List.last(past_arms) == to_string(first), do: second, else: first
+  end
 
   @doc """
   Records the experiment outcome of a closed Page from its Entry, once the
   Entry is written as `page`, under the Experiment and Arm of the Entry's
   Assignment, and links the Page to that Assignment's own row, unless the row
   is already linked.
+
+  A Page played under more than one Experiment is recorded under each of them,
+  one row per Arm it carried, and answers with the outcome of the Assignment
+  the Room was handed.
 
   An Entry with no Assignment is recorded under the default Arm and links no
   row, as does an Assignment that has no row.
@@ -149,40 +218,50 @@ defmodule Thereish.Experiments do
     room_id = resolve_room_id(room_id)
     assignment = entry.assignment || @default_assignment
 
-    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
+    arms = [assignment | assignment.also]
 
-    outcome =
-      %ExperimentOutcome{}
-      |> ExperimentOutcome.changeset(%{
-        room_id: room_id,
-        page_id: page.id,
-        page_identifier: page.id,
-        experiment_id: assignment.experiment_id,
-        arm: to_string(assignment.arm),
-        melded: entry.melded?,
-        closeness: entry.closeness,
-        closing_band: closing_band,
-        attempts_count: length(entry.attempts),
-        closed_because: to_string(entry.closed_because),
-        trap_converged: any_verdict_meta?(entry, :trap_sprung),
-        deep_converged: any_verdict_meta?(entry, :deep_convergence),
-        taps: %{}
-      })
-      |> Repo.insert()
+    [outcome | _] = for one <- arms, do: insert_outcome(room_id, page, entry, one)
 
     # A Page with no outcome links no row.
-    with {:ok, _} <- outcome, do: link_assignment(room_id, assignment, page)
+    with {:ok, _} <- outcome, do: link_assignments(room_id, arms, page)
 
     outcome
   end
 
-  defp link_assignment(_room_id, %Assignment{id: nil}, _page), do: :ok
+  defp insert_outcome(room_id, %Page{} = page, %Entry{} = entry, %Assignment{} = assignment) do
+    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
 
-  defp link_assignment(room_id, %Assignment{id: id}, page) do
-    from(a in ExperimentAssignment,
-      where: a.id == ^id and a.room_id == ^room_id and is_nil(a.page_id)
-    )
-    |> Repo.update_all(set: [page_id: page.id])
+    %ExperimentOutcome{}
+    |> ExperimentOutcome.changeset(%{
+      room_id: room_id,
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: assignment.experiment_id,
+      arm: to_string(assignment.arm),
+      melded: entry.melded?,
+      closeness: entry.closeness,
+      closing_band: closing_band,
+      attempts_count: length(entry.attempts),
+      closed_because: to_string(entry.closed_because),
+      trap_converged: any_verdict_meta?(entry, :trap_sprung),
+      deep_converged: any_verdict_meta?(entry, :deep_convergence),
+      taps: %{}
+    })
+    |> Repo.insert()
+  end
+
+  # Every row of the Page's Assignments at once, in one write. An Assignment
+  # with no row of its own links nothing, and a row already linked to another
+  # Page is left alone.
+  defp link_assignments(room_id, assignments, page) do
+    ids = for %Assignment{id: id} <- assignments, id != nil, do: id
+
+    if ids != [] do
+      from(a in ExperimentAssignment,
+        where: a.id in ^ids and a.room_id == ^room_id and is_nil(a.page_id)
+      )
+      |> Repo.update_all(set: [page_id: page.id])
+    end
 
     :ok
   end
@@ -240,20 +319,22 @@ defmodule Thereish.Experiments do
           dynamic([o], o.page_identifier == ^identifier or o.page_id == ^page_id)
       end
 
-    outcome =
-      of_tap &&
-        Repo.one(
-          from(o in ExperimentOutcome,
-            where: o.room_id == ^room_id,
-            where: ^of_tap,
-            order_by: [desc: o.inserted_at],
-            limit: 1
-          )
-        )
+    # The Page's latest outcome in each Experiment it played under, because a
+    # tap is about the Bookends rather than about an Arm and every Experiment's
+    # readout may read it. A tap with no outcome of its own is recorded alone
+    # rather than attached to whichever Page happens to be latest.
+    outcomes =
+      (of_tap &&
+         from(o in ExperimentOutcome,
+           where: o.room_id == ^room_id,
+           where: ^of_tap,
+           order_by: [asc: o.inserted_at, asc: o.id]
+         )
+         |> Repo.all()
+         |> Enum.group_by(& &1.experiment_id)
+         |> Enum.map(fn {_experiment_id, rows} -> List.last(rows) end)) || []
 
-    # A tap with no outcome of its own is recorded alone rather than attached
-    # to whichever Page happens to be latest.
-    if outcome do
+    for outcome <- outcomes do
       updated_taps = Map.put(outcome.taps || %{}, to_string(tap.seat_id), to_string(tap.label))
       outcome |> Ecto.Changeset.change(taps: updated_taps) |> Repo.update()
     end
@@ -322,9 +403,11 @@ defmodule Thereish.Experiments do
   One Page view's experiment fields, read from its Room's `page_arms/1`.
 
   A Page's assignment and outcome are matched by its id or by its document's
-  own id. Its experiment is that of its assignment, else of its outcome, else
-  Bait against plain. Its arm, trap convergence and deep convergence stay nil
-  until that experiment is unblinded in the Room.
+  own id. A Page plays under every live Experiment at once, so the book files
+  it under the one that wrote its Bookends and falls back to whatever row it
+  has. Its experiment is that of its assignment, else of its outcome, else Bait
+  against plain. Its arm, trap convergence and deep convergence stay nil until
+  that experiment is unblinded in the Room.
   """
   @spec page_arm(page_arms(), Page.t()) :: %{
           experiment_id: String.t(),
@@ -341,9 +424,9 @@ defmodule Thereish.Experiments do
         (row.room_id == page.room_id and to_string(row.page_identifier) == page_ident)
     end
 
-    outcome = Enum.find(page_arms.outcomes, of_page?)
+    outcome = filed_under(page_arms.outcomes, of_page?)
     # Every assignment and outcome names its Experiment and Arm.
-    row = Enum.find(page_arms.assignments, of_page?) || outcome
+    row = filed_under(page_arms.assignments, of_page?) || outcome
     experiment_id = if row, do: row.experiment_id, else: @bait_against_plain_experiment.id
     unblinded? = MapSet.member?(page_arms.unblinded, experiment_id)
     revealed_outcome = if unblinded?, do: outcome
@@ -355,6 +438,14 @@ defmodule Thereish.Experiments do
       trap_converged: revealed_outcome && revealed_outcome.trap_converged,
       deep_converged: revealed_outcome && revealed_outcome.deep_converged
     }
+  end
+
+  # The one row of a Page the book reads it by: the Author model's, which wrote
+  # its Bookends, or whatever row the Page has when it has no such row.
+  defp filed_under(rows, of_page?) do
+    matching = Enum.filter(rows, of_page?)
+
+    Enum.find(matching, &(&1.experiment_id == @author_model_id)) || List.first(matching)
   end
 
   defp of_experiment(query, nil), do: query
@@ -527,10 +618,10 @@ defmodule Thereish.Experiments do
 
   Returns `%{experiment: definition, <arm>: summary, summary_narrative: text}`.
   Every Arm's summary carries its meld rate, longest and current meld streaks
-  and mean attempts to meld. An Author-model Arm adds its Bookends taps and
-  closing bands; a Bait-against-plain Arm adds the tally of its current
-  participant Opinions (`Opinion.tally/1`), its overrules and its trap and deep
-  convergence.
+  and mean attempts to meld. An Author-model or channel Arm adds its Bookends
+  taps and closing bands, which is what both declare; a Bait-against-plain Arm
+  adds the tally of its current participant Opinions (`Opinion.tally/1`), its
+  overrules and its trap and deep convergence.
 
   Strictly avoids p-values or significance tests: the sample is two people.
   """
@@ -541,8 +632,8 @@ defmodule Thereish.Experiments do
           views: [Thereish.Chronicle.PageView.t()]
         }) :: map()
   def summarize(@author_model_id, %{outcomes: outcomes}) do
-    flash = summarize_author_arm(of_arm(outcomes, "flash"))
-    astra = summarize_author_arm(of_arm(outcomes, "astra"))
+    flash = summarize_tapped_arm(of_arm(outcomes, "flash"))
+    astra = summarize_tapped_arm(of_arm(outcomes, "astra"))
 
     %{
       experiment: @author_model_experiment,
@@ -554,8 +645,26 @@ defmodule Thereish.Experiments do
     }
   end
 
-  # Any Experiment but the Author model reads as Bait against plain, as any
-  # other Arm belongs to it.
+  # The channel's question is whether a Page with a word spent in it is harder,
+  # so its readout is the arc — meld rate and the attempts it took — with the
+  # tap on the Bookends beside it. Nothing counts the Nudges themselves
+  # (ADR-0023).
+  def summarize(@channel_id, %{outcomes: outcomes}) do
+    nudge_on = summarize_tapped_arm(of_arm(outcomes, "nudge_on"))
+    nudge_off = summarize_tapped_arm(of_arm(outcomes, "nudge_off"))
+
+    %{
+      experiment: @channel_experiment,
+      nudge_on: nudge_on,
+      nudge_off: nudge_off,
+      summary_narrative:
+        "#{meld_sentence("Pages with a Nudge", nudge_on)} with #{nudge_on.preferences_summary}. " <>
+          "#{meld_sentence("Pages without one", nudge_off)} with #{nudge_off.preferences_summary}."
+    }
+  end
+
+  # Any Experiment but the Author model and the channel reads as Bait against
+  # plain, as any other Arm belongs to it.
   def summarize(_bait_against_plain_id, %{outcomes: outcomes} = rows) do
     bait_outcomes = of_arm(outcomes, "bait")
     plain_outcomes = of_arm(outcomes, "plain")
@@ -591,7 +700,9 @@ defmodule Thereish.Experiments do
 
   defp of_arm(outcomes, arm), do: Enum.filter(outcomes, &(&1.arm == arm))
 
-  defp summarize_author_arm(outcomes) do
+  # An Arm read from the arc and the tap on the Bookends. The Author model and
+  # the channel declare the same outcomes, so they read out the same way.
+  defp summarize_tapped_arm(outcomes) do
     taps =
       outcomes
       |> Enum.flat_map(&Map.values(&1.taps || %{}))
