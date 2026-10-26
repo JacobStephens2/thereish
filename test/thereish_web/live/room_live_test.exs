@@ -80,6 +80,16 @@ defmodule ThereishWeb.RoomLiveTest do
   end
 
   describe "joining" do
+    test "a returning Seat sees Give guidance in the initial page before the Scribe answers" do
+      slug = open_room()
+      token = device_token()
+      {:ok, _} = Rooms.join(slug, "Mara", token)
+      {:ok, _} = Rooms.join(slug, "Jacob", device_token())
+
+      conn = build_conn() |> init_test_session(%{"device_token" => token}) |> get(~p"/r/#{slug}")
+      assert html_response(conn, 200) =~ "Give a"
+    end
+
     test "a phone types a name and is in the Room" do
       slug = open_room()
       {:ok, mara, html} = live(phone(slug))
@@ -293,11 +303,19 @@ defmodule ThereishWeb.RoomLiveTest do
     end
 
     test "a phone whose socket dies mid-Room comes back to the identical view" do
+      # Hold the Scribe's wording fixed here: this test compares the Room's
+      # play state across reconnects; fresh guidance is covered below.
+      steward = Application.fetch_env!(:thereish, :steward)
+      on_exit(fn -> Application.put_env(:thereish, :steward, steward) end)
+      fake = Keyword.put(steward[:fake] || [], :guidance_text, "Give a feeling or a memory.")
+      Application.put_env(:thereish, :steward, Keyword.put(steward, :fake, fake))
+
       slug = open_room()
       conn = get(build_conn(), ~p"/r/#{slug}")
       {:ok, mara, _} = live(conn)
       join(mara, "Mara")
       {:ok, _} = Rooms.join(slug, "Jacob", device_token())
+      render_async(mara)
       before = rendered_room(mara)
 
       # The phone locks and the socket dies, taking the view process with it.
@@ -308,6 +326,7 @@ defmodule ThereishWeb.RoomLiveTest do
 
       # It wakes: same URL, same cookie, same view, nothing retyped.
       {:ok, again, _} = live(get(conn, ~p"/r/#{slug}"))
+      render_async(again)
 
       assert rendered_room(again) == before
     end
@@ -1480,16 +1499,55 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.mara, "[data-role=give-examples]")
 
       examples = element(ctx.mara, "[data-role=give-examples]") |> render()
-      assert examples =~ "restless"
-      assert examples =~ "can of worms"
-      assert examples =~ "first snow"
-      assert examples =~ "Kiss Heavy Metal"
+      assert examples =~ "Give"
+      assert examples =~ " · "
+      assert examples =~ ~r/feeling|idea|memory|mood|moment/
 
       stage = render(ctx.stage)
       assert stage =~ "Waiting for Gives"
       refute stage =~ "Waiting for settings"
 
       give_setting(ctx.mara, "   ")
+      assert has_element?(ctx.mara, "[data-role=give-error]", "Type a Give first.")
+    end
+
+    test "slow failed guidance leaves the Give form and its validation usable", ctx do
+      fake = Keyword.merge(ctx.steward[:fake] || [], author_mode: :unavailable)
+      Application.put_env(:thereish, :steward, Keyword.put(ctx.steward, :fake, fake))
+      give_setting(ctx.mara, "setting one")
+      give_setting(ctx.jacob, "setting two")
+      eventually(fn -> has_element?(ctx.mara, "[data-role=author-failure]") end)
+
+      fake = Keyword.merge(fake, guidance_delay_ms: 100, guidance_mode: :unavailable)
+      Application.put_env(:thereish, :steward, Keyword.put(ctx.steward, :fake, fake))
+      ctx.mara |> element("[data-role=reset-gives]") |> render_click()
+      fallback = element(ctx.mara, "[data-role=give-examples]") |> render()
+      assert fallback =~ "Give a"
+
+      give_setting(ctx.mara, "   ")
+      render_async(ctx.mara)
+      assert has_element?(ctx.mara, "[data-role=give-error]", "Type a Give first.")
+      assert element(ctx.mara, "[data-role=give-examples]") |> render() == fallback
+    end
+
+    test "the next Give request gets fresh guidance that stays steady while typing", ctx do
+      initial = element(ctx.mara, "[data-role=give-examples]") |> render()
+      play_to_bridging(ctx.mara, ctx.jacob, ctx.slug)
+      commit(ctx.mara, "cairn")
+      commit(ctx.jacob, "cairns")
+      await_reveal_on(ctx.mara)
+
+      fresh = "Give a sound, a feeling, or an unlikely idea: brass rain · homesick · a loose end."
+      fake = Keyword.put(ctx.steward[:fake] || [], :guidance_text, fresh)
+      Application.put_env(:thereish, :steward, Keyword.put(ctx.steward, :fake, fake))
+
+      ctx.mara |> element("[data-role=one-more]") |> render_click()
+      eventually(fn -> has_element?(ctx.mara, "[data-role=give-examples]", fresh) end)
+      refute element(ctx.mara, "[data-role=give-examples]") |> render() == initial
+
+      render_hook(ctx.mara, "resync", %{})
+      give_setting(ctx.mara, "   ")
+      assert has_element?(ctx.mara, "[data-role=give-examples]", fresh)
       assert has_element?(ctx.mara, "[data-role=give-error]", "Type a Give first.")
     end
 
@@ -1839,11 +1897,16 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(ctx.jacob, "[data-role=author-failure]")
 
       # Mara clicks New settings
+      fresh = "Give an idea or a feeling: a lucky break · awestruck · a midnight train."
+      fake_config = Keyword.merge(fake_config, guidance_text: fresh, author_mode: :refused)
+      Application.put_env(:thereish, :steward, Keyword.put(ctx.steward, :fake, fake_config))
       ctx.mara |> element("[data-role=reset-gives]", "New Gives") |> render_click()
 
       # Both phones return to giving form
       eventually(fn -> has_element?(ctx.mara, "[data-role=setting-form]") end)
       assert has_element?(ctx.jacob, "[data-role=setting-form]")
+      eventually(fn -> has_element?(ctx.mara, "[data-role=give-examples]", fresh) end)
+      eventually(fn -> has_element?(ctx.jacob, "[data-role=give-examples]", fresh) end)
 
       # Each phone is prefilled with its own last give
       assert render(ctx.mara) =~ "value=\"setting mara\""

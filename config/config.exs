@@ -206,6 +206,14 @@ config :thereish, :steward,
           timeout_ms: 2_500,
           deadline_ms: 5_000
         ],
+        guidance: [
+          provider: Thereish.Steward.Gemini,
+          model: "gemini-3.8-flash",
+          effort: "low",
+          max_tokens: 400,
+          timeout_ms: 2_500,
+          deadline_ms: 5_000
+        ],
         title: [
           # Gemini 3.8 Flash at low effort, a one-field schema, a short timeout
           # and deadline in the naming job's class (spec: The Scribe titles the Track).

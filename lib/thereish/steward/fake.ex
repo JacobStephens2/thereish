@@ -515,6 +515,28 @@ defmodule Thereish.Steward.Fake do
   end
 
   @impl true
+  def give_guidance(_digest, previous) do
+    delay = config_get(:guidance_delay_ms, 0)
+    if delay > 0, do: Process.sleep(delay)
+
+    case config_get(:guidance_mode, :ok) do
+      :ok ->
+        {:ok,
+         %{
+           text:
+             config_get(:guidance_text, nil) || Thereish.Steward.GiveGuidance.fallback(previous),
+           meta: %{model: "fake-scribe", cost_usd: 0.0}
+         }}
+
+      :raise ->
+        raise "this Scribe is having a moment"
+
+      :unavailable ->
+        {:error, :guidance_unavailable}
+    end
+  end
+
+  @impl true
   def title_track(gives, opts \\ []) do
     delay = title_delay_ms()
     if delay > 0, do: Process.sleep(delay)

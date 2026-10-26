@@ -48,6 +48,7 @@ defmodule ThereishWeb.RoomLive do
      |> assign(:page_error, nil)
      |> assign(:give_input, "")
      |> assign(:give_error, nil)
+     |> assign(:give_guidance, Thereish.Steward.GiveGuidance.fallback(nil))
      |> assign(:seat, seat_for_device(slug, device_token))
      |> assign(:room, nil)
      |> resync()}
@@ -322,6 +323,16 @@ defmodule ThereishWeb.RoomLive do
     {:noreply, ThereishWeb.Foley.push_voice(socket, attempt, :bookends)}
   end
 
+  @impl true
+  def handle_async(:give_guidance, {:ok, {:ok, %{meta: %{fallback: true}}}}, socket),
+    do: {:noreply, socket}
+
+  def handle_async(:give_guidance, {:ok, {:ok, %{text: text}}}, socket) do
+    {:noreply, assign(socket, :give_guidance, text)}
+  end
+
+  def handle_async(:give_guidance, {:exit, _reason}, socket), do: {:noreply, socket}
+
   defp seat_for_device(slug, device_token) do
     case Rooms.rejoin(slug, device_token) do
       {:ok, seat} -> seat
@@ -340,6 +351,27 @@ defmodule ThereishWeb.RoomLive do
     |> assign(:seat, seat)
     |> assign(:stage_present?, ThereishWeb.Presence.stage_present?(socket.assigns.slug))
     |> ThereishWeb.Foley.play_cues(old_room, new_room, :phone)
+    |> refresh_give_guidance(old_room, new_room)
+  end
+
+  defp refresh_give_guidance(socket, old_room, new_room) do
+    cond do
+      connected?(socket) and may?(new_room, :give) and not may?(old_room, :give) ->
+        chronicle = Thereish.Chronicle.page_views(socket.assigns.slug, :asc)
+        previous = socket.assigns.give_guidance
+
+        socket
+        |> assign(:give_guidance, Thereish.Steward.GiveGuidance.fallback(previous))
+        |> start_async(:give_guidance, fn ->
+          Thereish.Steward.give_guidance(chronicle, previous)
+        end)
+
+      not may?(new_room, :give) ->
+        cancel_async(socket, :give_guidance)
+
+      true ->
+        socket
+    end
   end
 
   # A Bridge barred by a Nudge says so, rather than "shares a root with" a word
@@ -458,13 +490,11 @@ defmodule ThereishWeb.RoomLive do
           name="give"
           value={if(@give_input != "", do: @give_input, else: @room.your_last_give)}
           label="Your Give"
-          placeholder="e.g. restless, first snow, Kiss Heavy Metal"
           autocomplete="off"
           autofocus
         />
         <p data-role="give-examples" class="text-sm opacity-70">
-          A feeling, an idea, a night you remember, a kind of music — not only a place.
-          restless · a can of worms · first snow · Kiss Heavy Metal
+          {@give_guidance}
         </p>
         <p :if={@give_error} data-role="give-error" class="text-sm text-error">
           {@give_error}

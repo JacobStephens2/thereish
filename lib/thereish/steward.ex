@@ -163,11 +163,35 @@ defmodule Thereish.Steward do
   @callback name_room([String.t()], [String.t()]) ::
               {:ok, %{word: String.t(), quip: String.t() | nil}} | {:error, term()}
   @callback quip_code(String.t()) :: {:ok, String.t() | nil} | {:error, term()}
+  @callback give_guidance(String.t(), String.t() | nil) :: {:ok, map()} | {:error, term()}
   @callback speak(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback score([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   @callback vamp([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   @callback title_track([String.t() | map()], keyword()) :: {:ok, map()} | {:error, term()}
   @callback draw(String.t() | map(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+
+  @doc "A fresh invitation to Give, reading only recent closed Pages, with a fallback on failure."
+  @spec give_guidance([map()], String.t() | nil) :: {:ok, map()}
+  def give_guidance(chronicle, previous \\ nil) do
+    digest = chronicle |> Enum.take(-5) |> Digest.scribe()
+
+    measure_call(fn ->
+      with {:ok, %{text: text} = answer} <-
+             await_task(role(:scribe, :guidance), fn ->
+               adapter().give_guidance(digest, previous)
+             end),
+           :ok <- Thereish.Steward.GiveGuidance.check(%{"text" => text}, previous) do
+        {:ok, answer}
+      else
+        _ ->
+          {:ok,
+           %{
+             text: Thereish.Steward.GiveGuidance.fallback(previous),
+             meta: %{fallback: true, cost_usd: 0.0}
+           }}
+      end
+    end)
+  end
 
   @doc """
   Titles one instrumental Track from its Gives, answering %{title: title, meta: meta}.
