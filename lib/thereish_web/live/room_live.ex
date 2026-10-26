@@ -342,7 +342,7 @@ defmodule ThereishWeb.RoomLive do
   defp nudged(bridge, room) do
     Enum.find_value(room[:nudges] || [], fn nudge ->
       if Thereish.Steward.Legality.check_bridge(bridge, [nudge.word]) != :ok,
-        do: "#{nudge.name} nudged \"#{nudge.word}\" — nobody may write it."
+        do: "#{nudge.name} nudged \"#{nudge.word}\" — nobody can use it as a bridge."
     end)
   end
 
@@ -539,9 +539,9 @@ defmodule ThereishWeb.RoomLive do
         phx-submit="send_nudge"
         class="flex flex-col gap-2 rounded-lg border border-base-300 p-4"
       >
-        <.input name="nudge" value={nil} label="Nudge one word" autocomplete="off" />
+        <.input name="nudge" value={nil} label="Nudge the table" autocomplete="off" />
         <p data-role="nudge-cost" class="text-sm opacity-70">
-          One word, out loud. Nobody may write it — not even you. {@room.your_nudges_left} left on this Page.
+          Send one word to every screen to point the table toward a meaning. Then nobody can use it as a bridge. {@room.your_nudges_left} left on this Page.
         </p>
         <.button data-role="send-nudge">Nudge</.button>
       </form>

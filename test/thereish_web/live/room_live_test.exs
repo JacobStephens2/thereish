@@ -4582,7 +4582,14 @@ defmodule ThereishWeb.RoomLiveTest do
 
     test "a Seat spends its one word and both phones wear the chip", ctx do
       assert has_element?(ctx.mara, "[data-role=nudge-form]")
-      assert render(ctx.mara) =~ "Nobody may write it"
+      assert has_element?(ctx.mara, "label", "Nudge the table")
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=nudge-cost]",
+               "point the table toward a meaning. Then nobody can use it as a bridge"
+             )
+
       assert has_element?(ctx.mara, "[data-role=nudge-cost]", "1 left on this Page")
 
       nudge(ctx.mara, "rope")
@@ -4630,7 +4637,11 @@ defmodule ThereishWeb.RoomLiveTest do
       |> form("[data-role=bridge-form]", %{"bridge" => "rope"})
       |> render_change()
 
-      assert has_element?(ctx.mara, "[data-role=bridge-error]", "Bram nudged")
+      assert has_element?(
+               ctx.mara,
+               "[data-role=bridge-error]",
+               ~s(Bram nudged "rope" — nobody can use it as a bridge.)
+             )
 
       commit(ctx.mara, "rope")
 
