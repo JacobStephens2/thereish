@@ -541,7 +541,7 @@ defmodule ThereishWeb.RoomLive do
       >
         <.input name="nudge" value={nil} label="Nudge the table" autocomplete="off" />
         <p data-role="nudge-cost" class="text-sm opacity-70">
-          Send one word to every screen to point the table toward a meaning. Then nobody can use it as a bridge — not even you. {@room.your_nudges_left} left on this Page.
+          Send one word to every screen to point the table toward a meaning. Then nobody can use it as a bridge. {@room.your_nudges_left} left on this Page.
         </p>
         <.button data-role="send-nudge">Nudge</.button>
       </form>
