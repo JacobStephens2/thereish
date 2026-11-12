@@ -80,6 +80,16 @@ defmodule ThereishWeb.RoomLiveTest do
   end
 
   describe "joining" do
+    test "a Bridge preview arriving while waiting tolerates the absent barred list" do
+      slug = open_room()
+      {:ok, view, _html} = live(phone(slug))
+
+      render_change(view, "validate_bridge", %{"bridge" => "cairn"})
+
+      assert has_element?(view, "form[phx-submit=join]")
+      assert Rooms.snapshot(slug, nil).phase == :waiting
+    end
+
     test "a returning Seat sees Give guidance in the initial page before the Scribe answers" do
       slug = open_room()
       token = device_token()

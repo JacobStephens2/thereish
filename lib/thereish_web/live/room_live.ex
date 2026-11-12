@@ -73,7 +73,7 @@ defmodule ThereishWeb.RoomLive do
 
     error =
       bridge
-      |> Legality.validate_bridge(room.barred_words, room.nudges)
+      |> Legality.validate_bridge(room.barred_words || [], room.nudges)
       |> preview_error()
 
     {:noreply, assign(socket, :bridge_error, error)}

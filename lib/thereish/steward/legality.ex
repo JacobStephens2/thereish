@@ -2,10 +2,10 @@ defmodule Thereish.Steward.Legality do
   @moduledoc """
   Deterministic clue-legality gate (design law 14).
 
-  Player Bridges and Nudges may be short phrases; the Author must supply
-  dictionary words free of profanity. Both use the same lexical and root
-  checks. Contextual player validation owns normalization, required input,
-  and Nudge attribution before ordinary barred-word collisions.
+  Player input is checked for lexical shape and root collisions. The Author
+  also requires single dictionary words free of profanity. Contextual player
+  validation owns normalization, required input, and Nudge attribution before
+  ordinary barred-word collisions.
 
   Used on the phone before commit and on commit, and on the Author's output
   before any Page enters the pool.
