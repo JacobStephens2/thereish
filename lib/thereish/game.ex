@@ -61,6 +61,7 @@ defmodule Thereish.Game do
   alias Thereish.Ladder
   alias Thereish.Mask
   alias Thereish.Overrule
+  alias Thereish.Steward.Legality
 
   # The noise around a reveal, as a closed vocabulary. Four words and no more,
   # because the moment they can be spelled they become comments and the
@@ -492,16 +493,16 @@ defmodule Thereish.Game do
   end
 
   def apply(%__MODULE__{} = state, {:bridge_committed, %{seat_id: seat_id, bridge: bridge}}) do
-    bridge = Thereish.Steward.Legality.normalize_bridge(bridge)
-
     with :ok <- may_bridge(state, seat_id) do
-      if bridge == "" do
-        {:error, :bridge_required}
-      else
-        case Thereish.Steward.Legality.check_bridge(bridge, barred_words(state)) do
-          :ok -> committed(put_attempt(state, :bridges, Map.put(bridges(state), seat_id, bridge)))
-          {:illegal, reason} -> {:error, {:illegal_bridge, reason}}
-        end
+      case Legality.validate_bridge(bridge, barred_words(state), nudges_view(state)) do
+        {:ok, bridge} ->
+          committed(put_attempt(state, :bridges, Map.put(bridges(state), seat_id, bridge)))
+
+        {:required, _reason} ->
+          {:error, :bridge_required}
+
+        {:illegal, reason} ->
+          {:error, {:illegal_bridge, reason}}
       end
     end
   end
@@ -510,16 +511,11 @@ defmodule Thereish.Game do
   # barred words, because it is about to join them: the word a Seat points at
   # is a word nobody may then write.
   def apply(%__MODULE__{} = state, {:nudge_sent, %{seat_id: seat_id, word: word}}) do
-    word = Thereish.Steward.Legality.normalize_bridge(word)
-
     with :ok <- may_nudge(state, seat_id) do
-      if word == "" do
-        {:error, :nudge_required}
-      else
-        case Thereish.Steward.Legality.check_bridge(word, barred_words(state)) do
-          :ok -> {:ok, nudged(state, seat_id, word), []}
-          {:illegal, reason} -> {:error, {:illegal_nudge, reason}}
-        end
+      case Legality.validate_bridge(word, barred_words(state)) do
+        {:ok, word} -> {:ok, nudged(state, seat_id, word), []}
+        {:required, _reason} -> {:error, :nudge_required}
+        {:illegal, reason} -> {:error, {:illegal_nudge, reason}}
       end
     end
   end

@@ -2577,6 +2577,66 @@ defmodule Thereish.GameTest do
 
     defp nudges(view), do: Enum.map(view.nudges, &{&1.name, &1.word, &1.attempt})
 
+    test "authorization governs malformed or missing Bridge and Nudge input" do
+      playing = Game.init(seat_limit: 3, seats: [seat("Mara"), seat("Jacob")], page: @page)
+      {:ok, late, []} = Game.apply(playing, {:seat_joined, seat("Ada")})
+      {:ok, committed, []} = commit(playing, "Mara", "cairn")
+
+      for {state, name, error} <- [
+            {Game.init(seat_limit: 2), "Mara", :not_bridging},
+            {playing, "Nobody", :no_such_seat},
+            {late, "Ada", :not_playing_page},
+            {committed, "Mara", :already_committed}
+          ],
+          input <- [nil, "  ", "abc!"] do
+        assert {:error, ^error} = commit(state, name, input)
+        assert {:error, ^error} = nudge(state, name, input)
+      end
+
+      {:ok, spent, []} = nudge(playing, "Mara", "rope")
+      off = Game.set_nudges_per_page(playing, 0)
+
+      for input <- [nil, "  ", "abc!"] do
+        assert {:error, :no_nudges_left} = nudge(spent, "Mara", input)
+        assert {:error, :nudges_off} = nudge(off, "Mara", input)
+      end
+    end
+
+    test "rejected input commits nothing and spends no Nudge; accepted text is normalized" do
+      {:ok, state, []} = nudge(bridging(), "Jacob", " ROPE ")
+
+      assert {:error, {:illegal_bridge, ~s(Jacob nudged "rope" — nobody can use it as a bridge.)}} =
+               commit(state, "Mara", "ropes")
+
+      assert {:error, {:illegal_nudge, ~s("ropes" shares a root with "rope".)}} =
+               nudge(state, "Mara", " ROPES ")
+
+      assert {:error, {:illegal_nudge, _reason}} = nudge(state, "Mara", "abc!")
+      view = Game.view(state, "seat-Mara")
+      assert view.your_bridge == nil
+      assert view.your_nudges_left == 1
+      assert nudges(view) == [{"Jacob", "rope", 1}]
+
+      {:ok, state, []} = nudge(state, "Mara", "  APOLLO\t11's   ICE-CREAM ")
+
+      assert nudges(Game.view(state, nil)) == [
+               {"Jacob", "rope", 1},
+               {"Mara", "apollo 11's ice-cream", 1}
+             ]
+
+      {:ok, state, []} = commit(state, "Mara", "  GOLD\tRUSH ")
+      assert Game.view(state, "seat-Mara").your_bridge == "gold rush"
+    end
+
+    test "a Nudge remains attributed and barred on a later Attempt" do
+      {:ok, state, []} = nudge(bridging(), "Mara", "rope")
+      {state, _effects} = attempt(state, [{"Mara", "cairn"}, {"Jacob", "wharf"}], 10)
+      state = again(state)
+
+      assert {:error, {:illegal_bridge, ~s(Mara nudged "rope" — nobody can use it as a bridge.)}} =
+               commit(state, "Jacob", "ropes")
+    end
+
     test "a Nudge lands wearing its Seat's name and its Attempt, for everyone" do
       {:ok, state, effects} = nudge(bridging(), "Mara", "beacon")
 
