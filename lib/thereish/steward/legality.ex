@@ -2,9 +2,10 @@ defmodule Thereish.Steward.Legality do
   @moduledoc """
   Deterministic clue-legality gate (design law 14).
 
-  Runs in pure Elixir: checks that every clue or bridge is a single word of
-  letters only, present in the ENABLE dictionary, free of profanity, and
-  does not share a stem, prefix, or inflection root with either bookend.
+  Player input is checked for lexical shape and root collisions. The Author
+  also requires single dictionary words free of profanity. Contextual player
+  validation owns normalization, required input, and Nudge attribution before
+  ordinary barred-word collisions.
 
   Used on the phone before commit and on commit, and on the Author's output
   before any Page enters the pool.
@@ -79,6 +80,31 @@ defmodule Thereish.Steward.Legality do
   def normalize_bridge(other), do: other |> to_string() |> normalize_bridge()
 
   @doc """
+  Validates raw player input, returning normalized text or a display reason.
+
+  Empty input is distinguished so previews can stay quiet and submissions
+  can ask for a Bridge or Nudge. Lexical errors come before root collisions;
+  a colliding public Nudge takes precedence over ordinary barred words, with
+  the first Nudge in Page arrival order supplying its Seat and spent word.
+  Omit Nudges for their own validation to keep generic collision wording.
+  """
+  @spec validate_bridge(term(), [term()], [%{name: String.t(), word: String.t()}]) ::
+          {:ok, String.t()} | {:required, String.t()} | {:illegal, String.t()}
+  def validate_bridge(bridge, barred_words, nudges \\ []) do
+    clean = normalize_bridge(bridge)
+
+    if clean == "" do
+      {:required, "Write a word first."}
+    else
+      with :ok <- check_shape(clean, clean),
+           :ok <- check_nudges(clean, nudges),
+           :ok <- check_against_barred(clean, barred_words) do
+        {:ok, clean}
+      end
+    end
+  end
+
+  @doc """
   Validates a player bridge against barred words and phrases (the bookends of
   every Attempt so far and every bridge committed in earlier attempts of this Page).
 
@@ -94,6 +120,12 @@ defmodule Thereish.Steward.Legality do
     clean = normalize_bridge(bridge)
     candidate = bridge |> to_string() |> String.trim()
 
+    with :ok <- check_shape(clean, candidate) do
+      check_against_barred(clean, barred_words)
+    end
+  end
+
+  defp check_shape(clean, candidate) do
     cond do
       clean == "" or String.match?(clean, ~r/^[^a-z0-9]+$/) ->
         {:illegal, "Write a word first."}
@@ -105,8 +137,20 @@ defmodule Thereish.Steward.Legality do
         {:illegal, "Too long to fit on a card."}
 
       true ->
-        check_against_barred(clean, barred_words)
+        :ok
     end
+  end
+
+  defp check_nudges(clean, nudges) do
+    Enum.find_value(nudges, :ok, fn nudge ->
+      case check_against_barred(clean, [nudge.word]) do
+        :ok ->
+          nil
+
+        {:illegal, _reason} ->
+          {:illegal, "#{nudge.name} nudged \"#{nudge.word}\" — nobody can use it as a bridge."}
+      end
+    end)
   end
 
   @doc """

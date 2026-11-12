@@ -192,6 +192,110 @@ defmodule Thereish.Steward.LegalityTest do
     end
   end
 
+  describe "validate_bridge/3" do
+    test "returns the normalized Bridge" do
+      assert {:ok, "apollo 11's ice-cream"} =
+               Legality.validate_bridge("  APOLLO\t11's   ICE-CREAM \n", ["lantern", "harbour"])
+    end
+
+    test "attributes an actual Nudge collision after checking lexical shape" do
+      nudges = [%{name: "Bram", word: "rope"}]
+
+      assert {:illegal, ~s(Bram nudged "rope" — nobody can use it as a bridge.)} =
+               Legality.validate_bridge(" ROPES ", ["lantern", "rope"], nudges)
+
+      assert {:illegal, ~s|Letters, digits, spaces, hyphens and apostrophes only ("abc!").|} =
+               Legality.validate_bridge(" ABC! ", ["rope"], nudges)
+    end
+
+    test "distinguishes required input from malformed input even with Nudges" do
+      nudges = [%{name: "Bram", word: "rope"}]
+
+      for input <- [nil, "", " \t\n "] do
+        assert {:required, "Write a word first."} = Legality.validate_bridge(input, [], nudges)
+      end
+
+      for input <- ["- -", "'", "!!!"] do
+        assert {:illegal, "Write a word first."} = Legality.validate_bridge(input, [], nudges)
+      end
+
+      assert {:illegal, "Too long to fit on a card."} =
+               Legality.validate_bridge(String.duplicate("a", 41), [], nudges)
+
+      forty = String.duplicate("a", 40)
+      assert {:ok, ^forty} = Legality.validate_bridge("  #{forty}  ", [], nudges)
+    end
+
+    test "an unrelated Nudge leaves ordinary collision reasons and order intact" do
+      nudges = [%{name: "Bram", word: "rope"}]
+
+      for {input, barred, reason} <- [
+            {" LANTERNS ", ["lantern", "rope"], ~s("lanterns" shares a root with "lantern".)},
+            {"earlier bridges", ["earlier bridge", "rope"],
+             ~s("earlier bridges" shares a root with "earlier".)},
+            {"lava rock", ["rock", "lava", "rope"], ~s("lava rock" shares a root with "rock".)}
+          ] do
+        assert {:illegal, ^reason} = Legality.validate_bridge(input, barred, nudges)
+      end
+    end
+
+    test "Nudge identity, inflections, phrases and function words use the existing root rules" do
+      for {input, word} <- [
+            {"rope", "rope"},
+            {"ran", "run"},
+            {"children", "child"},
+            {"rocky road", "lava rock"},
+            {"beaches", "viking beaches"},
+            {"the", "the"}
+          ] do
+        assert {:illegal, reason} =
+                 Legality.validate_bridge(input, [word], [%{name: "Bram", word: word}])
+
+        assert reason == ~s(Bram nudged "#{word}" — nobody can use it as a bridge.)
+      end
+
+      assert {:ok, "the meaning of life"} =
+               Legality.validate_bridge("the meaning of life", ["theology"], [
+                 %{name: "Bram", word: "theology"}
+               ])
+    end
+
+    test "a real Nudge collision precedes ordinary collisions and the first arrival wins" do
+      nudges = [%{name: "Bram", word: "rope"}, %{name: "Mara", word: "beach"}]
+
+      assert {:illegal, ~s(Bram nudged "rope" — nobody can use it as a bridge.)} =
+               Legality.validate_bridge(
+                 "lava ropes on beaches",
+                 ["lava", "beach", "rope"],
+                 nudges
+               )
+
+      assert {:illegal, ~s(Mara nudged "beach" — nobody can use it as a bridge.)} =
+               Legality.validate_bridge(
+                 "lava ropes on beaches",
+                 ["lava", "rope", "beach"],
+                 Enum.reverse(nudges)
+               )
+    end
+
+    test "omitting attribution keeps generic Nudge checks and player language" do
+      assert {:illegal, ~s("ropes" shares a root with "rope".)} =
+               Legality.validate_bridge(" ROPES ", ["rope"])
+
+      for input <- [
+            "viking beaches",
+            "ice-cream",
+            "rock 'n' roll",
+            "apollo 11",
+            "123",
+            "xyzzyq",
+            "damn"
+          ] do
+        assert {:ok, ^input} = Legality.validate_bridge(input, ["lantern", "harbour"])
+      end
+    end
+  end
+
   describe "shared_root?/2" do
     test "still answers true for inflection, stem, and identity" do
       assert Legality.shared_root?("runner", "run")
@@ -201,6 +305,22 @@ defmodule Thereish.Steward.LegalityTest do
   end
 
   describe "check_author_bridge/2" do
+    test "bare validation preserves display casing and only the Author requires dictionary and clean words" do
+      assert {:illegal, ~s|Letters, digits, spaces, hyphens and apostrophes only ("ABC!").|} =
+               Legality.check_bridge("  ABC!  ", [])
+
+      assert {:illegal, "Not in this Room."} = Legality.check_author_bridge("damn", [])
+
+      assert {:illegal, ~s|One word, letters only ("apollo 11").|} =
+               Legality.check_author_bridge("Apollo 11", [])
+
+      assert {:illegal, ~s|"xyzzyq" is not in the dictionary.|} =
+               Legality.check_author_bridge("xyzzyq", [])
+
+      assert :ok = Legality.check_bridge("damn xyzzyq 11", [])
+      assert Legality.normalize_bridge("  Gold\tRUSH ") == "gold rush"
+    end
+
     test "still gates the Author's bookends through the same root check" do
       assert :ok = Legality.check_author_bridge("beacon", ["lantern", "harbour"])
 

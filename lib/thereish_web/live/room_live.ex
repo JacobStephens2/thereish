@@ -24,6 +24,7 @@ defmodule ThereishWeb.RoomLive do
   alias Thereish.Rooms
   alias Thereish.Rooms.Code
   alias Thereish.Rooms.Seat
+  alias Thereish.Steward.Legality
   alias ThereishWeb.DeviceToken
 
   @impl true
@@ -68,19 +69,12 @@ defmodule ThereishWeb.RoomLive do
   end
 
   def handle_event("validate_bridge", %{"bridge" => bridge}, socket) do
-    barred = (socket.assigns.room && socket.assigns.room.barred_words) || []
-
-    trimmed = String.trim(bridge)
+    room = socket.assigns.room || %{barred_words: [], nudges: []}
 
     error =
-      if trimmed == "" do
-        nil
-      else
-        case Thereish.Steward.Legality.check_bridge(bridge, barred) do
-          :ok -> nil
-          {:illegal, why} -> nudged(bridge, socket.assigns.room) || why
-        end
-      end
+      bridge
+      |> Legality.validate_bridge(room.barred_words || [], room.nudges)
+      |> preview_error()
 
     {:noreply, assign(socket, :bridge_error, error)}
   end
@@ -106,14 +100,9 @@ defmodule ThereishWeb.RoomLive do
     barred = (socket.assigns.room && socket.assigns.room.barred_words) || []
 
     error =
-      if String.trim(word) == "" do
-        nil
-      else
-        case Thereish.Steward.Legality.check_bridge(word, barred) do
-          :ok -> nil
-          {:illegal, why} -> why
-        end
-      end
+      word
+      |> Legality.validate_bridge(barred)
+      |> preview_error()
 
     {:noreply, assign(socket, :nudge_error, error)}
   end
@@ -374,14 +363,9 @@ defmodule ThereishWeb.RoomLive do
     end
   end
 
-  # A Bridge barred by a Nudge says so, rather than "shares a root with" a word
-  # the writer never saw among the Bookends.
-  defp nudged(bridge, room) do
-    Enum.find_value(room[:nudges] || [], fn nudge ->
-      if Thereish.Steward.Legality.check_bridge(bridge, [nudge.word]) != :ok,
-        do: "#{nudge.name} nudged \"#{nudge.word}\" — nobody can use it as a bridge."
-    end)
-  end
+  defp preview_error({:ok, _text}), do: nil
+  defp preview_error({:required, _reason}), do: nil
+  defp preview_error({:illegal, reason}), do: reason
 
   defp message(:give_required), do: "Type a Give first."
   defp message(:name_required), do: "Type a name first."

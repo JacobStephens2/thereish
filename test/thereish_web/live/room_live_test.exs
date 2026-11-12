@@ -80,6 +80,16 @@ defmodule ThereishWeb.RoomLiveTest do
   end
 
   describe "joining" do
+    test "a Bridge preview arriving while waiting tolerates the absent barred list" do
+      slug = open_room()
+      {:ok, view, _html} = live(phone(slug))
+
+      render_change(view, "validate_bridge", %{"bridge" => "cairn"})
+
+      assert has_element?(view, "form[phx-submit=join]")
+      assert Rooms.snapshot(slug, nil).phase == :waiting
+    end
+
     test "a returning Seat sees Give guidance in the initial page before the Scribe answers" do
       slug = open_room()
       token = device_token()
@@ -4701,6 +4711,13 @@ defmodule ThereishWeb.RoomLiveTest do
       |> form("[data-role=bridge-form]", %{"bridge" => "rope"})
       |> render_change()
 
+      preview =
+        ctx.mara
+        |> element("[data-role=bridge-error]")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.text()
+
       assert has_element?(
                ctx.mara,
                "[data-role=bridge-error]",
@@ -4709,8 +4726,34 @@ defmodule ThereishWeb.RoomLiveTest do
 
       commit(ctx.mara, "rope")
 
-      assert has_element?(ctx.mara, "[data-role=bridge-error]")
+      committed =
+        ctx.mara
+        |> element("[data-role=bridge-error]")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.text()
+
+      assert committed == preview
       assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
+    end
+
+    test "malformed Bridges keep their lexical reason with a Nudge present", ctx do
+      nudge(ctx.bram, "rope")
+      eventually(fn -> has_element?(ctx.mara, "[data-role=nudge-chip]", "rope") end)
+
+      ctx.mara
+      |> form("[data-role=bridge-form]", %{"bridge" => " ABC! "})
+      |> render_change()
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=bridge-error]",
+               ~s|Letters, digits, spaces, hyphens and apostrophes only ("abc!").|
+             )
+
+      preview = ctx.mara |> element("[data-role=bridge-error]") |> render()
+      commit(ctx.mara, " ABC! ")
+      assert ctx.mara |> element("[data-role=bridge-error]") |> render() == preview
     end
 
     test "a Seat that has committed may no longer nudge", ctx do
@@ -4718,6 +4761,54 @@ defmodule ThereishWeb.RoomLiveTest do
 
       refute has_element?(ctx.mara, "[data-role=nudge-form]")
       assert has_element?(ctx.bram, "[data-role=nudge-form]")
+    end
+
+    test "a Nudge arriving after preview is checked at commit using the current Page", ctx do
+      ctx.mara |> form("[data-role=bridge-form]", %{"bridge" => "ropes"}) |> render_change()
+      refute has_element?(ctx.mara, "[data-role=bridge-error]")
+
+      nudge(ctx.bram, "rope")
+      eventually(fn -> has_element?(ctx.mara, "[data-role=nudge-chip]", "rope") end)
+      commit(ctx.mara, "ropes")
+
+      assert has_element?(
+               ctx.mara,
+               "[data-role=bridge-error]",
+               ~s(Bram nudged "rope" — nobody can use it as a bridge.)
+             )
+
+      assert Rooms.snapshot(ctx.slug, nil).phase == :bridging
+      assert has_element?(ctx.mara, "[data-role=bridge-form]")
+    end
+
+    test "blank previews stay quiet and each submission keeps its required wording", ctx do
+      ctx.mara |> form("[data-role=bridge-form]", %{"bridge" => " \t "}) |> render_change()
+      refute has_element?(ctx.mara, "[data-role=bridge-error]")
+      commit(ctx.mara, " \t ")
+      assert has_element?(ctx.mara, "[data-role=bridge-error]", "Write a word first.")
+
+      ctx.mara |> form("[data-role=nudge-form]", %{"nudge" => " \t "}) |> render_change()
+      refute has_element?(ctx.mara, "[data-role=nudge-error]")
+      nudge(ctx.mara, " \t ")
+      assert has_element?(ctx.mara, "[data-role=nudge-error]", "Write one word first.")
+    end
+
+    test "Nudge preview and submission keep the same normalized generic rejections", ctx do
+      nudge(ctx.bram, "rope")
+      eventually(fn -> has_element?(ctx.mara, "[data-role=nudge-chip]", "rope") end)
+
+      for {input, reason} <- [
+            {" ROPES ", ~s("ropes" shares a root with "rope".)},
+            {" ABC! ", ~s|Letters, digits, spaces, hyphens and apostrophes only ("abc!").|}
+          ] do
+        ctx.mara |> form("[data-role=nudge-form]", %{"nudge" => input}) |> render_change()
+        assert has_element?(ctx.mara, "[data-role=nudge-error]", reason)
+        preview = ctx.mara |> element("[data-role=nudge-error]") |> render()
+        nudge(ctx.mara, input)
+        assert ctx.mara |> element("[data-role=nudge-error]") |> render() == preview
+      end
+
+      assert has_element?(ctx.mara, "[data-role=nudge-cost]", "1 left on this Page")
     end
 
     test "a Seat that has committed may Call while the others write, and only it sees the Call",
