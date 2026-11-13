@@ -1291,6 +1291,17 @@ defmodule ThereishWeb.RoomLiveTest do
       assert has_element?(stage, "header h1 a[href='/']", "Thereish")
       assert has_element?(stage, "[data-mode=stage]")
       refute has_element?(stage, "[data-bridge][data-you=true]")
+
+      # The Stage's presence quiets the phones; all consume the Room's schedule.
+      eventually(fn -> has_element?(ctx.mara, "[data-role=reveal][data-mode=quiet]") end)
+      sequence = Rooms.snapshot(ctx.slug, nil).reveal_sequence
+
+      encoded =
+        sequence |> Jason.encode!() |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+      for screen <- [ctx.mara, ctx.jacob, stage] do
+        assert render(screen) =~ ~s(data-sequence="#{encoded}")
+      end
     end
 
     test "an almost grade lands in the almost band and next attempt is offered", ctx do

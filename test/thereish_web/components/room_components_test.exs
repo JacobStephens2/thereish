@@ -247,13 +247,11 @@ defmodule ThereishWeb.RoomComponentsTest do
       refute html =~ "ClimbNumber"
     end
 
-    test "the reveal carries the numbers the hold was armed with", %{meld_room: room} do
+    test "a snapshot without a schedule leaves a readable final reveal", %{meld_room: room} do
       html = render_component(&reveal/1, room: room)
-      sequence = Application.fetch_env!(:thereish, :reveal_sequence_ms)
-
-      assert html =~ ~s(data-stagger="#{sequence[:stagger]}")
-      assert html =~ ~s(data-cap="#{sequence[:cap]}")
-      assert html =~ ~s(data-settle="#{sequence[:settle]}")
+      assert html =~ ~s(data-sequence="null")
+      assert html =~ ~s(data-target="80")
+      assert html =~ "cairn"
     end
 
     test "the closeness card wears its band, and three near misses wear three", %{miss_room: room} do

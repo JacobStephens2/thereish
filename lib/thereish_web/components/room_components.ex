@@ -740,12 +740,10 @@ defmodule ThereishWeb.RoomComponents do
 
   defp standard_reveal(assigns) do
     presentation = assigns.room.reveal && closeness_presentation(assigns.room.reveal)
-    sequence = reveal_sequence()
 
     assigns =
       assigns
       |> assign(:presentation, presentation)
-      |> assign(:sequence, sequence)
 
     ~H"""
     <section
@@ -755,10 +753,16 @@ defmodule ThereishWeb.RoomComponents do
       data-role="reveal"
       data-arrival={reveal_arrival(@room.reveal)}
       data-mode={@mode}
-      data-stagger={@sequence[:stagger]}
-      data-cap={@sequence[:cap]}
-      data-settle={@sequence[:settle]}
-      data-melded={to_string(@room.reveal[:melded?] == true)}
+      data-sequence={Jason.encode!(@room[:reveal_sequence])}
+      data-presentation={
+        Jason.encode!(%{
+          mode: @mode,
+          closeness: @room.reveal.closeness,
+          band: @room.reveal.band,
+          overruled: @room.reveal[:overruled?],
+          split: split_shown(@room) != nil
+        })
+      }
       class={[
         "flex flex-col items-center w-full mx-auto",
         if(@mode == :stage, do: "gap-[clamp(0.5rem,1.8vh,1.5rem)] max-w-4xl", else: "gap-8 max-w-xl")
@@ -968,170 +972,185 @@ defmodule ThereishWeb.RoomComponents do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".RevealSequence">
         export default {
           mounted() {
-            // One hook for the whole performance. The cards, the marker and the
-            // number cannot drift apart if there is only one clock, and the run
-            // is sized from the numbers Pacing used to arm the hold, so the
-            // button never comes alive in the middle of the punchline.
-            const el = this.el
-            const dataset = (name, fallback) => {
-              const parsed = parseInt(el.dataset[name], 10)
-              return isNaN(parsed) ? fallback : parsed
+            this.animations = []
+            this.timers = new Set()
+            this.flashes = new Set()
+            this.startSequence()
+          },
+
+          updated() {
+            const sequence = this.readSequence()
+            if (sequence?.id !== this.sequence?.id) {
+              this.cancelWork()
+              this.startSequence()
+            } else if (this.presentation !== this.el.dataset.presentation) {
+              // A ruling or a newly shown presentation lands immediately.
+              // The stored schedule's identity and origin stay untouched.
+              this.cancelWork()
+              this.presentation = this.el.dataset.presentation
+              this.settled = true
+              this.setFinalState()
+            } else if (this.countStep && !this.settled) {
+              // LiveView may patch the number back to its rendered target.
+              this.drawNumber(this.countStep)
             }
+          },
 
-            this.cards = Array.from(el.querySelectorAll("[data-bridge]"))
-            this.names = this.cards.map((card) => card.querySelector('[data-role="bridge-name"]'))
-            this.number = el.querySelector('[data-role="closeness"]')
-            this.display = el.querySelector('[data-role="closeness-display"]')
-            this.badge = el.querySelector('[data-role="band"]')
-            this.rail = el.querySelector('[data-role="ladder-rail"]')
-            this.marker = el.querySelector('[data-role="rail-marker"]')
-            this.pins = Array.from(el.querySelectorAll('[data-role="call-pin"]'))
-            this.marks = Array.from(el.querySelectorAll('[data-role="rail-mark"]'))
-            this.split = el.querySelector('[data-role="split-reading"]')
-            this.shortBy = el.querySelector('[data-role="short-by"]')
-            this.target = this.number ? parseInt(this.number.dataset.target, 10) : NaN
+          destroyed() {
+            this.cancelWork()
+          },
 
-            // Reduced motion is about motion and nothing else: every element
-            // ends in its final, legible place, it simply never travels there.
-            // A Stage that is not being looked at gets no animation frames, so
-            // its performance would start whenever someone looks; it lands in
-            // its final state instead.
-            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.hidden) {
+          readSequence() {
+            return this.el.dataset.sequence ? JSON.parse(this.el.dataset.sequence) : null
+          },
+
+          startSequence() {
+            this.sequence = this.readSequence()
+            this.presentation = this.el.dataset.presentation
+            this.countStep = null
+            this.settled = false
+            const sequence = this.sequence
+
+            // Pacing supplies every delay and endpoint; absent data has no
+            // local timing fallback. Motion preferences do not affect Foley.
+            if (!sequence || JSON.parse(this.presentation).overruled || window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+                document.hidden || sequence.elapsed >= sequence.duration) {
+              this.settled = true
               this.setFinalState()
               return
             }
 
-            const cap = dataset("cap", 1400)
-            const settle = dataset("settle", 900)
-            const seats = Math.max(1, this.cards.length)
-            // The whole flip run fits under the cap at any Seat count: eight
-            // Seats wait no longer for the number than two do.
-            const stagger = Math.min(dataset("stagger", 260), cap / seats)
-            const flip = stagger * seats
+            this.origin = performance.now() - sequence.elapsed
+            this.cards = Array.from(this.el.querySelectorAll('[data-bridge]'))
+            this.names = this.cards.map(card => card.querySelector('[data-role="bridge-name"]'))
+            this.pins = Array.from(this.el.querySelectorAll('[data-role="call-pin"]'))
+            this.marks = Array.from(this.el.querySelectorAll('[data-role="rail-mark"]'))
+            sequence.steps.forEach(step => this.perform(step))
+          },
 
-            this.cards.forEach((card, i) => {
-              this.play(card, [{opacity: 0, transform: "rotateY(180deg)"}, {opacity: 1}], {
-                duration: 360,
-                delay: i * stagger
-              })
-            })
+          elapsed() {
+            return performance.now() - this.origin
+          },
 
-            // The word lands before its author — the guess-whose beat, bought
-            // with no extra input from anybody.
-            this.names.forEach((name, i) => {
-              this.play(name, [{opacity: 0}, {opacity: 1}], {
-                duration: 220,
-                delay: i * stagger + 180
-              })
-            })
+          node(role) {
+            return this.el.querySelector(`[data-role="${role}"]`)
+          },
 
-            this.play(this.display, [{opacity: 0, transform: "translateY(8px)"}, {opacity: 1}], {
-              duration: Math.max(160, settle * 0.25),
-              delay: flip
-            })
-            this.play(this.rail, [{opacity: 0, transform: "scaleX(0.97)"}, {opacity: 1}], {
-              duration: Math.max(160, settle * 0.25),
-              delay: flip
-            })
-            this.pins.forEach((pin, i) => {
-              this.play(pin, [{opacity: 0, transform: "translate(-50%, -0.5rem) scale(0.6)"}, {opacity: 1}], {
-                duration: 240,
-                delay: flip + 120 * (i + 1)
-              })
-            })
-
-            const launch = flip + settle * 0.1
-            const climb = Math.max(260, settle * 0.7)
-
-            if (this.marker) {
-              const place = this.marker.dataset.target
-              const over = Math.min(100, parseFloat(place) + 3)
-              this.play(this.marker, [{left: "0%"}, {left: over + "%"}, {left: place + "%"}], {
-                duration: climb,
-                delay: launch
-              })
+          perform(step) {
+            if (this.elapsed() >= step.delay + step.duration) return
+            const fade = [{opacity: 0}, {opacity: 1}]
+            switch (step.role) {
+              case "bridge_card":
+                return this.play(this.cards[step.index], [{opacity: 0, transform: "rotateY(180deg)"}, {opacity: 1}], step)
+              case "bridge_name":
+                return this.play(this.names[step.index], fade, step)
+              case "closeness_display":
+                return this.play(this.node("closeness-display"), [{opacity: 0, transform: "translateY(8px)"}, {opacity: 1}], step)
+              case "rail":
+                return this.play(this.node("ladder-rail"), [{opacity: 0, transform: "scaleX(0.97)"}, {opacity: 1}], step)
+              case "call_pin":
+                return this.play(this.pins[step.index], [{opacity: 0, transform: "translate(-50%, -0.5rem) scale(0.6)"}, {opacity: 1}], step)
+              case "climb": {
+                const marker = this.node("rail-marker")
+                if (marker) {
+                  const place = marker.dataset.target
+                  const over = Math.min(100, parseFloat(place) + 3)
+                  this.play(marker, [{left: "0%"}, {left: over + "%"}, {left: place + "%"}], step)
+                }
+                if (this.node("closeness")) this.count(step)
+                return
+              }
+              case "band":
+                return this.play(this.node("band"), [{opacity: 0, transform: "scale(0.9)"}, {opacity: 1}], step)
+              case "gap":
+                return this.play(this.node("short-by"), fade, step)
+              case "split_mark":
+                return this.play(this.marks[step.index], fade, step)
+              case "split_text":
+                return this.play(this.node("split-reading"), fade, step)
+              case "meld_flash":
+                return this.flash(step)
             }
-            if (!isNaN(this.target)) this.count(launch, climb)
-
-            this.play(this.badge, [{opacity: 0, transform: "scale(0.9)"}, {opacity: 1}], {
-              duration: 240,
-              delay: launch + climb * 0.6
-            })
-            this.play(this.shortBy, [{opacity: 0}, {opacity: 1}], {
-              duration: Math.max(140, settle * 0.2),
-              delay: flip + settle * 0.8
-            })
-
-            // A Split reading is the aftermath and never the headline: the two
-            // ghost pins land once the grade has parked, and the sentences
-            // after them.
-            this.marks.forEach((mark, i) => {
-              this.play(mark, [{opacity: 0}, {opacity: 1}], {
-                duration: 240,
-                delay: launch + climb + 120 * (i + 1)
-              })
-            })
-            this.play(this.split, [{opacity: 0}, {opacity: 1}], {
-              duration: 240,
-              delay: launch + climb + 120 * (this.marks.length + 1)
-            })
-
-            if (el.dataset.melded === "true") this.flash(launch + climb * 0.75)
           },
 
-          destroyed() {
-            if (this.flashTimer) clearTimeout(this.flashTimer)
-            if (this.landTimer) clearTimeout(this.landTimer)
-          },
-
-          // Every step is the same shape: hold the element where it starts until
-          // its moment, then let the CSS it already carries be where it lands.
-          play(node, frames, timing) {
+          play(node, frames, step, easing = "cubic-bezier(.16,1,.3,1)") {
             if (!node) return
-            node.animate(frames, Object.assign({easing: "cubic-bezier(.16,1,.3,1)", fill: "backwards"}, timing))
+            const animation = node.animate(frames, {
+              duration: step.duration, delay: step.delay, easing, fill: "backwards"
+            })
+            animation.currentTime = this.elapsed()
+            this.animations.push(animation)
+            return animation
           },
 
-          count(delay, duration) {
-            const node = this.number
-            const target = this.target
-            node.textContent = "0"
-            let start = null
+          later(delay, callback) {
+            const timer = setTimeout(() => {
+              this.timers.delete(timer)
+              callback()
+            }, Math.max(0, delay))
+            this.timers.add(timer)
+          },
 
-            const tick = (now) => {
-              if (start === null) start = now + delay
-              if (now < start) return requestAnimationFrame(tick)
+          drawNumber(step) {
+            const node = this.node("closeness")
+            if (!node) return
+            const target = Number(node.dataset.target)
+            const progress = Math.min(1, Math.max(0, (this.elapsed() - step.delay) / step.duration))
+            node.textContent = Math.round((1 - Math.pow(1 - progress, 3)) * target)
+          },
 
-              const progress = Math.min((now - start) / duration, 1)
-              const eased = 1 - Math.pow(1 - progress, 3)
-              node.textContent = Math.round(eased * target)
-
-              if (progress < 1) requestAnimationFrame(tick)
-              else node.textContent = target
+          count(step) {
+            this.countStep = step
+            const tick = () => {
+              this.drawNumber(step)
+              this.frame = requestAnimationFrame(tick)
             }
-            requestAnimationFrame(tick)
-            // Frames can be throttled; the clock cannot. The number is the
-            // grade by the time the climb is over, whatever the frames did.
-            this.landTimer = setTimeout(() => (node.textContent = target), delay + duration + 50)
+            this.drawNumber(step)
+            this.frame = requestAnimationFrame(tick)
+            // The timer and the marker land at the very same endpoint, even
+            // if the browser throttles animation frames.
+            this.later(step.delay + step.duration - this.elapsed(), () => {
+              cancelAnimationFrame(this.frame)
+              this.frame = null
+              this.countStep = null
+              this.setFinalState()
+            })
           },
 
-          // A Meld is the one arrival the whole room gets: one flash, over the
-          // whole screen, touching nothing.
-          flash(delay) {
-            this.flashTimer = setTimeout(() => {
+          flash(step) {
+            const show = () => {
+              if (this.elapsed() >= step.delay + step.duration) return
               const flash = document.createElement("div")
               flash.dataset.role = "meld-flash"
               flash.style.cssText =
                 "position:fixed;inset:0;z-index:50;pointer-events:none;" +
                 "background:radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--color-primary) 40%, transparent), transparent 65%);"
               document.body.appendChild(flash)
-              const anim = flash.animate([{opacity: 0}, {opacity: 1}, {opacity: 0}], {duration: 420, easing: "ease-out"})
-              anim.onfinish = () => flash.remove()
-              anim.oncancel = () => flash.remove()
-            }, delay)
+              this.flashes.add(flash)
+              const animation = this.play(flash, [{opacity: 0}, {opacity: 1}, {opacity: 0}], step, "ease-out")
+              const remove = () => {flash.remove(); this.flashes.delete(flash)}
+              animation.onfinish = remove
+              animation.oncancel = remove
+            }
+            if (this.elapsed() >= step.delay) show()
+            else this.later(step.delay - this.elapsed(), show)
+          },
+
+          cancelWork() {
+            this.animations.forEach(animation => animation.cancel())
+            this.animations = []
+            this.timers.forEach(timer => clearTimeout(timer))
+            this.timers.clear()
+            if (this.frame != null) cancelAnimationFrame(this.frame)
+            this.frame = null
+            this.countStep = null
+            this.flashes.forEach(flash => flash.remove())
+            this.flashes.clear()
           },
 
           setFinalState() {
-            if (!isNaN(this.target)) this.number.textContent = this.target
+            const node = this.node("closeness")
+            if (node) node.textContent = node.dataset.target
           }
         }
       </script>
@@ -1524,7 +1543,6 @@ defmodule ThereishWeb.RoomComponents do
   # The one place the sequence's numbers live is the config Pacing reads when it
   # arms the hold: the performance is absorbed by the hold rather than added to
   # it, and two readings of that would be two answers.
-  defp reveal_sequence, do: Application.fetch_env!(:thereish, :reveal_sequence_ms)
 
   # Calls, each wearing the colour its Seat wears everywhere else — the Beat's
   # row and the Rail's pins read the same list. The Game says who called which

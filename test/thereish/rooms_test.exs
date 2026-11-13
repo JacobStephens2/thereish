@@ -885,6 +885,21 @@ defmodule Thereish.RoomsTest do
     end
   end
 
+  test "a Room with missing sequence settings reveals immediately without a performance" do
+    settings = Application.fetch_env!(:thereish, :reveal_sequence_ms)
+    on_exit(fn -> Application.put_env(:thereish, :reveal_sequence_ms, settings) end)
+    Application.delete_env(:thereish, :reveal_sequence_ms)
+    slug = open_room()
+    {:ok, mara} = Rooms.join(slug, "Mara", device_token())
+    {:ok, jacob} = Rooms.join(slug, "Jacob", device_token())
+    :ok = Rooms.give(slug, mara.id, "setting one")
+    :ok = Rooms.give(slug, jacob.id, "setting two")
+    await_phase(slug, :bridging)
+    view = play(%{slug: slug, mara: mara, jacob: jacob}, "cairn", "beacon")
+    assert %{duration: 0, steps: [], elapsed: 0} = view.reveal_sequence
+    assert view.can_advance?
+  end
+
   describe "the Assayer remembers its Quips (ticket 11)" do
     test "the assay request carries the Room's last five Quips, oldest dropped" do
       slug = open_room()

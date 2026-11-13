@@ -45,9 +45,9 @@ defmodule Thereish.Rooms.Pacing do
 
   The reveal's performance — the Bridges flipping one by one, the marker
   climbing the Rail, the number counting with it — runs inside that hold rather
-  than on top of it. Pacing holds no part of the theatre; it only makes sure
-  the hold it arms is never shorter than `sequence_ms/2`, so the button never
-  comes alive in the middle of the punchline.
+  than on top of it. Pacing builds and retains the complete schedule on entry
+  to the reveal. Its last endpoint determines the minimum positive hold;
+  every screen consumes the same steps and elapsed time through the view.
 
   A Verdict is never waited on inline. The Room stays answerable while the
   Assayer thinks, because a phone asking what it missed must not be stuck
@@ -91,6 +91,7 @@ defmodule Thereish.Rooms.Pacing do
             assayer: nil,
             author: nil,
             hold: nil,
+            reveal_sequence: nil,
             opened_at: nil,
             times: %{gives: %{}, attempts: %{}}
 
@@ -102,21 +103,42 @@ defmodule Thereish.Rooms.Pacing do
   moment its wait began.
   """
   @type durations :: %{
+          optional(:sequence) =>
+            [
+              stagger: non_neg_integer(),
+              cap: non_neg_integer(),
+              settle: non_neg_integer()
+            ]
+            | nil,
           beat: non_neg_integer(),
           hold: non_neg_integer(),
           assayer: [slow: pos_integer(), unavailable: pos_integer()],
-          author: [still_writing: pos_integer(), deadline: pos_integer()],
-          sequence: [
-            stagger: non_neg_integer(),
-            cap: non_neg_integer(),
-            settle: non_neg_integer()
-          ]
+          author: [still_writing: pos_integer(), deadline: pos_integer()]
         }
 
   @attempt_times [:started_at, :assaying_started_at, :revealed_at, :advanced_at]
 
   @type name :: :beat | :assayer | :author | :hold
   @type token :: non_neg_integer()
+
+  @type step :: %{
+          optional(:index) => non_neg_integer(),
+          role:
+            :bridge_card
+            | :bridge_name
+            | :closeness_display
+            | :rail
+            | :call_pin
+            | :climb
+            | :band
+            | :gap
+            | :split_mark
+            | :split_text
+            | :meld_flash,
+          delay: non_neg_integer(),
+          duration: non_neg_integer()
+        }
+  @type sequence :: %{id: token(), duration: non_neg_integer(), steps: [step()]}
 
   @type t :: %__MODULE__{
           durations: durations(),
@@ -126,6 +148,7 @@ defmodule Thereish.Rooms.Pacing do
           assayer: %{step: :grading | :slow, token: token()} | nil,
           author: %{ref: reference(), step: :writing | :still_writing, token: token()} | nil,
           hold: %{revealed_ms: integer(), ms: non_neg_integer(), token: token() | nil} | nil,
+          reveal_sequence: map() | nil,
           opened_at: DateTime.t() | nil,
           times: %{
             gives: %{String.t() => DateTime.t()},
@@ -146,7 +169,8 @@ defmodule Thereish.Rooms.Pacing do
   @type view :: %{
           assayer_step: :grading | :slow | nil,
           author_step: :writing | :still_writing | nil,
-          can_advance?: boolean()
+          can_advance?: boolean(),
+          reveal_sequence: map() | nil
         }
 
   @doc "A Pacing waiting on nothing, with these durations."
@@ -169,9 +193,14 @@ defmodule Thereish.Rooms.Pacing do
       |> record_times(old_game, new_game, {old_phase, new_phase}, now)
 
     cond do
-      old_phase == :assaying and revealed?(new_phase) -> hold(pacing, new_game, now)
-      revealed?(old_phase) and not revealed?(new_phase) -> {%{pacing | hold: nil}, []}
-      true -> {pacing, []}
+      old_phase == :assaying and revealed?(new_phase) ->
+        hold(pacing, new_game, now)
+
+      revealed?(old_phase) and not revealed?(new_phase) ->
+        {%{pacing | hold: nil, reveal_sequence: nil}, []}
+
+      true ->
+        {pacing, []}
     end
   end
 
@@ -328,25 +357,6 @@ defmodule Thereish.Rooms.Pacing do
   end
 
   @doc """
-  How long the reveal's performance runs for this many Seats: the staggered
-  flip of the Bridges, capped so eight Seats cannot stretch it, plus the time
-  the number and the marker need to settle after it.
-
-  It is pure arithmetic about time, which is why it lives here rather than in
-  the hook that performs it. The hold absorbs this rather than adding to it —
-  design law 10's ceiling is on the whole reveal, not on the theatre alone — so
-  a Room that waits at all never lifts its hold mid-performance.
-  """
-  @spec sequence_ms(durations(), non_neg_integer()) :: non_neg_integer()
-  def sequence_ms(durations, seats) do
-    sequence = Map.get(durations, :sequence) || []
-    stagger = Keyword.get(sequence, :stagger, 0)
-    cap = Keyword.get(sequence, :cap, 0)
-
-    min(stagger * seats, cap) + Keyword.get(sequence, :settle, 0)
-  end
-
-  @doc """
   What every screen is told about the waits in `game` at `now`. Nothing about
   the Assayer once it has answered: a Page still in its Beat is a Page whose
   grade is in.
@@ -356,11 +366,20 @@ defmodule Thereish.Rooms.Pacing do
     %{
       assayer_step: pacing.assayer && pacing.assayer.step,
       author_step: pacing.author && pacing.author.step,
-      can_advance?: revealed?(Game.phase(game)) and may_advance(pacing, now) == :ok
+      can_advance?: revealed?(Game.phase(game)) and may_advance(pacing, now) == :ok,
+      reveal_sequence: sequence_view(pacing.reveal_sequence, now)
     }
   end
 
   defp revealed?(phase), do: phase in [:reveal, :closed]
+
+  defp sequence_view(nil, _now), do: nil
+
+  defp sequence_view(sequence, now) do
+    sequence
+    |> Map.delete(:started_ms)
+    |> Map.put(:elapsed, min(sequence.duration, max(0, now.ms - sequence.started_ms)))
+  end
 
   defp forget_page(pacing) do
     %{pacing | author: nil, opened_at: nil, times: %{gives: %{}, attempts: %{}}}
@@ -420,9 +439,15 @@ defmodule Thereish.Rooms.Pacing do
   # has turned off stays off: the sequence is absorbed by a hold, never the
   # reason for one.
   defp hold(pacing, game, now) do
+    {pacing, id} = mint(pacing)
+    steps = reveal_steps(pacing.durations[:sequence] || [], Game.view(game, nil).reveal)
+    duration = Enum.reduce(steps, 0, &max(&1.delay + &1.duration, &2))
+    sequence = %{id: id, started_ms: now.ms, duration: duration, steps: steps}
+    pacing = %{pacing | reveal_sequence: sequence}
+
     case pacing.durations.hold do
       ms when is_integer(ms) and ms > 0 ->
-        ms = max(ms, sequence_ms(pacing.durations, length(game.seats)))
+        ms = max(ms, duration)
         {pacing, token} = mint(pacing)
 
         {%{pacing | hold: %{revealed_ms: now.ms, ms: ms, token: token}},
@@ -432,6 +457,73 @@ defmodule Thereish.Rooms.Pacing do
         {%{pacing | hold: %{revealed_ms: now.ms, ms: 0, token: nil}}, []}
     end
   end
+
+  # All timing policy lives here. Indices follow the public reveal's Bridge,
+  # Call and Split-mark order; missing nodes on a quiet screen change nothing.
+  defp reveal_steps(settings, reveal) do
+    stagger = Keyword.get(settings, :stagger, 0)
+    cap = Keyword.get(settings, :cap, 0)
+    settle = Keyword.get(settings, :settle, 0)
+
+    if stagger == 0 and cap == 0 and settle == 0 do
+      []
+    else
+      count = length(reveal.bridges)
+      stagger = min(stagger, cap / max(1, count))
+      flip = stagger * count
+      launch = flip + settle * 0.1
+      climb = max(260, settle * 0.7)
+
+      cards =
+        reveal.bridges
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {_bridge, i} ->
+          [step(:bridge_card, i * stagger, 360, i), step(:bridge_name, i * stagger + 180, 220, i)]
+        end)
+
+      calls =
+        reveal.calls
+        |> Enum.with_index()
+        |> Enum.map(fn {_call, i} -> step(:call_pin, flip + 120 * (i + 1), 240, i) end)
+
+      grade =
+        if reveal.closeness != nil do
+          [
+            step(:closeness_display, flip, max(160, settle * 0.25)),
+            step(:climb, launch, climb),
+            step(:band, launch + climb * 0.6, 240)
+          ]
+        else
+          []
+        end
+
+      gap =
+        if reveal.gap && reveal.gap > 0 && reveal.gap <= 15,
+          do: [step(:gap, flip + settle * 0.8, max(140, settle * 0.2))],
+          else: []
+
+      split =
+        if reveal.split do
+          [
+            step(:split_mark, launch + climb + 120, 240, 0),
+            step(:split_mark, launch + climb + 240, 240, 1),
+            step(:split_text, launch + climb + 360, 240)
+          ]
+        else
+          []
+        end
+
+      meld = if reveal.melded?, do: [step(:meld_flash, launch + climb * 0.75, 420)], else: []
+
+      cards ++
+        [step(:rail, flip, max(160, settle * 0.25))] ++ calls ++ grade ++ gap ++ split ++ meld
+    end
+  end
+
+  defp step(role, delay, duration),
+    do: %{role: role, delay: round(delay), duration: round(duration)}
+
+  defp step(role, delay, duration, index), do: Map.put(step(role, delay, duration), :index, index)
 
   defp assayer_step(pacing, step) do
     {pacing, token} = mint(pacing)
