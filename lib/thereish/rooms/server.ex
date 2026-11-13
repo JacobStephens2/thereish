@@ -404,7 +404,7 @@ defmodule Thereish.Rooms.Server do
       hold: Application.fetch_env!(:thereish, :reveal_hold_ms),
       assayer: Application.fetch_env!(:thereish, :assayer_escalation_ms),
       author: Application.fetch_env!(:thereish, :author_escalation_ms),
-      sequence: Application.fetch_env!(:thereish, :reveal_sequence_ms)
+      sequence: Application.get_env(:thereish, :reveal_sequence_ms)
     }
   end
 

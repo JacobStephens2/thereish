@@ -55,9 +55,9 @@ config :thereish, reveal_hold_ms: 0
 
 # The couch is promised the performance; a test suite is not. A Room that holds
 # its reveal at all holds it for at least the sequence, so the suite's sequence
-# is small enough that the holds a test sets are the holds it gets. Tests about
-# the sequence itself hand Pacing their own durations.
-config :thereish, reveal_sequence_ms: [stagger: 1, cap: 2, settle: 1]
+# is disabled so the holds a test sets are the holds it gets. Tests about
+# the sequence itself hand Pacing their own durations, including short ones.
+config :thereish, reveal_sequence_ms: [stagger: 0, cap: 0, settle: 0]
 
 # Suppress missing-key warnings during test suite boots.
 config :thereish, boot_warnings: false

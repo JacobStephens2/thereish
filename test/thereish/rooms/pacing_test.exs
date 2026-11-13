@@ -380,16 +380,16 @@ defmodule Thereish.Rooms.PacingTest do
     test "a hold shorter than the performance is stretched to hold all of it" do
       {pacing, game, effects} = performed(@sequenced, 2)
 
-      assert {_token, 1_420} = timer(effects, :hold)
-      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(1_419))
-      refute view(pacing, game, at(1_419)).can_advance?
-      assert :ok = Pacing.may_advance(pacing, at(1_420))
+      assert {_token, 1_240} = timer(effects, :hold)
+      assert {:error, :reveal_held} = Pacing.may_advance(pacing, at(1_239))
+      refute view(pacing, game, at(1_239)).can_advance?
+      assert :ok = Pacing.may_advance(pacing, at(1_240))
     end
 
     test "a big table flips inside the cap, so the hold grows no further than it" do
       {_pacing, _game, effects} = performed(@sequenced, 6)
 
-      assert {_token, 2_300} = timer(effects, :hold)
+      assert {_token, 2_120} = timer(effects, :hold)
     end
 
     test "a hold longer than the performance is the hold, unchanged" do
@@ -407,13 +407,9 @@ defmodule Thereish.Rooms.PacingTest do
       assert view(pacing, game, at(0)).can_advance?
     end
 
-    test "sequence_ms/2 is the flip run under its cap plus the settle" do
-      assert Pacing.sequence_ms(@sequenced, 2) == 1_420
-      assert Pacing.sequence_ms(@sequenced, 8) == 2_300
-    end
-
-    test "durations that name no sequence ask for nothing, which is today's game" do
-      assert Pacing.sequence_ms(@durations, 8) == 0
+    test "durations that name no sequence perform immediately" do
+      {pacing, game, _effects} = performed(@durations, 6)
+      assert %{steps: [], duration: 0, elapsed: 0} = view(pacing, game).reveal_sequence
     end
   end
 
@@ -605,7 +601,12 @@ defmodule Thereish.Rooms.PacingTest do
 
   describe "the view" do
     test "a fresh Pacing is waiting on nobody, and nothing advances outside a reveal" do
-      assert view(pacing()) == %{assayer_step: nil, author_step: nil, can_advance?: false}
+      assert view(pacing()) == %{
+               assayer_step: nil,
+               author_step: nil,
+               can_advance?: false,
+               reveal_sequence: nil
+             }
     end
   end
 

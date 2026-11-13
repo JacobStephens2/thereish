@@ -682,6 +682,36 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   describe "the reveal hold" do
+    test "every device and a reconnect see the same retained performance" do
+      durations =
+        Map.put(%{@durations | hold: 1}, :sequence, stagger: 260, cap: 1_400, settle: 900)
+
+      {play, _page_ref, _giving} = written(new(durations: durations))
+      {play, bridged} = bridges(play, "cairn", "cairo")
+      {play, effects} = assayed(play, bridged, 83, [])
+      assert {:timer, :hold, token, 1_420} = find(effects, :timer)
+      sequence = view(play, "mara", "phone").reveal_sequence
+      assert view(play, nil, "stage").reveal_sequence == sequence
+      assert view(play, "jacob", "quiet-phone").reveal_sequence == sequence
+
+      {play, _} = run(play, {:react, "mara", :ooh})
+      {play, _} = run(play, {:room_fact, {:set, :split_readings, false}})
+      assert view(play).reveal_sequence == sequence
+
+      resumed =
+        Play.view(play, "mara", "reconnected", %{now: %{@now | ms: 750}, has_chronicle?: false})
+
+      assert resumed.reveal_sequence == %{sequence | elapsed: 750}
+
+      assert {:error, :reveal_held} =
+               Play.apply(play, {:next_attempt, "mara"}, %{@now | ms: 1_419})
+
+      {:ok, play, [:broadcast]} = Play.apply(play, {:pacing, :hold, token}, %{@now | ms: 1_420})
+      assert view(play).reveal_sequence.id == sequence.id
+      assert {:ok, play, _} = Play.apply(play, {:next_attempt, "mara"}, %{@now | ms: 1_420})
+      assert view(play).reveal_sequence == nil
+    end
+
     test "holds Next Attempt and Next Page alike until it is over" do
       play = new(durations: %{@durations | hold: 5_000})
 
