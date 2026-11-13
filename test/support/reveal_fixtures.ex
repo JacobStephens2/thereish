@@ -4,6 +4,19 @@ defmodule Thereish.RevealFixtures do
 
   def now(ms), do: %{ms: ms, at: DateTime.add(~U[2026-10-03 20:00:00Z], ms, :millisecond)}
 
+  def scenarios do
+    for count <- 2..Thereish.Steward.seat_cap(),
+        opts <- [
+          [],
+          [calls: true],
+          [split: true],
+          [ungraded: true],
+          [closeness: 95],
+          [calls: true, split: true, sequence: [stagger: 1, cap: 2, settle: 1]]
+        ],
+        do: [count: count] ++ opts
+  end
+
   def perform(opts \\ []) do
     seats =
       ~w(Mara Bram Esme Cole Sid Rafe Ada Ida)

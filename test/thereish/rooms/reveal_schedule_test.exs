@@ -14,16 +14,9 @@ defmodule Thereish.Rooms.RevealScheduleTest do
   end
 
   test "every applicable endpoint fits the hold, from two through the Seat cap" do
-    for count <- 2..Thereish.Steward.seat_cap(),
-        opts <- [
-          [],
-          [calls: true],
-          [split: true],
-          [ungraded: true],
-          [closeness: 95],
-          [calls: true, split: true, sequence: [stagger: 1, cap: 2, settle: 1]]
-        ] do
-      %{pacing: pacing, effects: effects, room: room} = perform([count: count] ++ opts)
+    for opts <- scenarios() do
+      count = Keyword.fetch!(opts, :count)
+      %{pacing: pacing, effects: effects, room: room} = perform(opts)
       sequence = room.reveal_sequence
       assert [{:timer, :hold, _, hold}] = effects
       assert hold == sequence.duration

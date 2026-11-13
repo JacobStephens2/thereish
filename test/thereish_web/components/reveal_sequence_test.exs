@@ -4,18 +4,7 @@ defmodule ThereishWeb.RevealSequenceTest do
   import Phoenix.LiveViewTest
 
   test "the real adapter respects Pacing's deadlines and mounted lifetime" do
-    rooms =
-      for count <- 2..Thereish.Steward.seat_cap(),
-          opts <- [
-            [],
-            [split: true],
-            [calls: true],
-            [closeness: 95],
-            [ungraded: true],
-            [split: true, calls: true, sequence: [stagger: 1, cap: 2, settle: 1]]
-          ] do
-        perform([count: count] ++ opts).room
-      end
+    rooms = for opts <- scenarios(), do: perform(opts).room
 
     rooms = rooms ++ [perform(sequence: []).room]
 
