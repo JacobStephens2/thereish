@@ -9,8 +9,6 @@ defmodule Thereish.Foley.VoiceTest do
 
   alias Thereish.Foley.Voice
 
-  import Thereish.EntryFixtures
-
   @bookends ["harbour", "lantern"]
   @clip %{audio: "audio-bytes", format: :mp3, meta: %{provider: "fake", voice: "v1"}}
   @failure %{
@@ -27,12 +25,10 @@ defmodule Thereish.Foley.VoiceTest do
     )
   end
 
-  defp closed_entry(numbers) do
-    entry(attempts: Enum.map(numbers, &%{number: &1, verdicts: [%{band: :miss}]}))
-  end
-
   defp line(voice, verdict, table) do
-    {_voice, [{:speak, _n, :verdict, line}]} = Voice.verdict_received(voice, verdict, table)
+    {_voice, [{:verdict_pending, n}, {:speak, n, :verdict, line}]} =
+      Voice.verdict_received(voice, verdict, table)
+
     line
   end
 
@@ -158,8 +154,16 @@ defmodule Thereish.Foley.VoiceTest do
     test "is announced and served for its Attempt" do
       voice = verdict_in_flight()
 
-      assert {voice, [{:broadcast, {:voice_ready, 1}}]} =
+      assert {voice, [{:verdict_spoken, 1, meta}, {:broadcast, {:voice_ready, 1}}]} =
                Voice.spoken(voice, 1, :verdict, {:ok, @clip}, table(phase: :reveal))
+
+      assert meta == %{
+               "provider" => "fake",
+               "voice" => "v1",
+               "model" => "v1",
+               "cost_usd" => nil,
+               "latency_ms" => nil
+             }
 
       assert {:ok, "audio-bytes", :mp3} = Voice.clip(voice, 1, :verdict, table(phase: :reveal))
       assert {:ok, "audio-bytes", :mp3} = Voice.clip(voice, 1, "verdict", table(phase: :reveal))
@@ -230,61 +234,20 @@ defmodule Thereish.Foley.VoiceTest do
     end
   end
 
-  describe "the Chronicle hold" do
-    test "a Page with no Verdict being spoken is committed at once" do
-      assert {_voice, [{:commit_chronicle, %{attempts: [%{number: 1}]}}]} =
-               Voice.page_closed(Voice.new(), closed_entry([1]))
-    end
+  test "failed Verdict speech reports unchanged metadata after its log" do
+    assert {_voice, [{:log, :warning, _}, {:verdict_spoken, 1, meta}]} =
+             Voice.spoken(verdict_in_flight(), 1, :verdict, {:error, @failure}, table())
 
-    test "a Page whose Verdict is being spoken waits, and is committed before voice_ready" do
-      {voice, effects} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
-      assert effects == []
+    assert meta == @failure
+  end
 
-      assert {_voice, [{:commit_chronicle, committed}, {:broadcast, {:voice_ready, 1}}]} =
-               Voice.spoken(voice, 1, :verdict, {:ok, @clip}, table(phase: :closed))
+  test "turning the Page forgets clips and allows fresh synthesis" do
+    {voice, _} = Voice.spoken(verdict_in_flight(), 1, :verdict, {:ok, @clip}, table())
+    {voice, []} = Voice.page_turned(voice)
+    assert {:error, :not_found} = Voice.clip(voice, 1, :verdict, table())
 
-      [%{verdicts: [verdict]}] = committed.attempts
-      assert verdict.voice_meta["provider"] == "fake"
-      assert verdict.voice_meta["voice"] == "v1"
-      assert verdict.voice_meta["model"] == "v1"
-    end
-
-    test "a failed synthesis records its failure metadata on the held Page" do
-      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
-
-      assert {_voice, [{:log, :warning, _message}, {:commit_chronicle, committed}]} =
-               Voice.spoken(voice, 1, :verdict, {:error, @failure}, table(phase: :closed))
-
-      [%{verdicts: [verdict]}] = committed.attempts
-      assert verdict.voice_meta == @failure
-    end
-
-    test "a Page closing after its Verdict metadata landed is committed with it" do
-      {voice, _} = Voice.spoken(verdict_in_flight(), 1, :verdict, {:ok, @clip}, table())
-
-      assert {_voice, [{:commit_chronicle, committed}]} =
-               Voice.page_closed(voice, closed_entry([1]))
-
-      [%{verdicts: [verdict]}] = committed.attempts
-      assert verdict.voice_meta["provider"] == "fake"
-    end
-
-    test "turning the Page flushes a held Page with what has landed" do
-      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
-
-      assert {voice, [{:commit_chronicle, committed}]} = Voice.page_turned(voice)
-      [%{verdicts: [verdict]}] = committed.attempts
-      assert verdict.voice_meta == nil
-
-      assert {_voice, []} = Voice.page_turned(voice)
-    end
-
-    test "turning the Page forgets the Verdict in flight and its clips" do
-      voice = verdict_in_flight()
-      {voice, []} = Voice.page_turned(voice)
-
-      assert {_voice, [{:commit_chronicle, _entry}]} = Voice.page_closed(voice, closed_entry([1]))
-    end
+    assert {_voice, [{:verdict_pending, 1}, {:speak, 1, :verdict, _}]} =
+             Voice.verdict_received(voice, %{band: :miss}, table())
   end
 
   describe "provider metadata" do
@@ -296,14 +259,10 @@ defmodule Thereish.Foley.VoiceTest do
         latency: 120
       }
 
-      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
+      {_voice, [{:verdict_spoken, 1, meta}, _ready]} =
+        Voice.spoken(verdict_in_flight(), 1, :verdict, {:ok, %{@clip | meta: raw}}, table())
 
-      {_voice, [{:commit_chronicle, committed}, _ready]} =
-        Voice.spoken(voice, 1, :verdict, {:ok, %{@clip | meta: raw}}, table())
-
-      [%{verdicts: [verdict]}] = committed.attempts
-
-      assert verdict.voice_meta == %{
+      assert meta == %{
                "provider" => "hume",
                "voice" => "v9",
                "model" => "v9",
@@ -313,16 +272,13 @@ defmodule Thereish.Foley.VoiceTest do
     end
 
     test "defaults with none" do
-      {voice, []} = Voice.page_closed(verdict_in_flight(), closed_entry([1]))
       clip = Map.delete(@clip, :meta)
 
-      {_voice, [{:commit_chronicle, committed}, _ready]} =
-        Voice.spoken(voice, 1, :verdict, {:ok, clip}, table())
-
-      [%{verdicts: [verdict]}] = committed.attempts
+      {_voice, [{:verdict_spoken, 1, meta}, _ready]} =
+        Voice.spoken(verdict_in_flight(), 1, :verdict, {:ok, clip}, table())
 
       assert %{"provider" => nil, "voice" => "default", "model" => "default"} =
-               verdict.voice_meta
+               meta
     end
   end
 end

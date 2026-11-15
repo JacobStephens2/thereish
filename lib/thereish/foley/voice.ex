@@ -4,7 +4,7 @@ defmodule Thereish.Foley.Voice do
 
   It is a pure reducer in the shape of Occupancy. The Room tells it what
   happened (the table moved, the Speaker was claimed, a Verdict arrived, a
-  line was spoken, a Page closed, the Page turned) and gets back a new Voice
+  line was spoken, the Page turned) and gets back a new Voice
   and a list of effects to carry out. It does no I/O and sends no messages.
 
   It never stores what the Room or the Game already knows. The current attempt
@@ -17,8 +17,8 @@ defmodule Thereish.Foley.Voice do
     * `{:speak, attempt, kind, line}`: answer with `spoken/5`
     * `{:broadcast, {:bookends_ready, attempt}}`
     * `{:broadcast, {:voice_ready, attempt}}`
-    * `{:commit_chronicle, entry}`: the Entry already carries its voice
-      metadata
+    * `{:verdict_pending, attempt}`: Verdict synthesis was requested
+    * `{:verdict_spoken, attempt, meta}`: accepted success or failure metadata
     * `{:log, level, message}`
 
   ## Stale clips
@@ -28,23 +28,19 @@ defmodule Thereish.Foley.Voice do
   together, and a clip that arrives for an earlier Attempt is dropped and
   logged. That rule lives in `track/2` and nowhere else.
 
-  ## The Chronicle hold
+  ## Recording speech
 
-  ADR-0003 writes a Verdict row once. A closed Page whose Verdict is still
-  being spoken is held until that Verdict's voice metadata lands, success or
-  failure, and is committed before `voice_ready` goes out, so a screen that
-  reads the Page on `voice_ready` finds it. Turning the Page releases whatever
-  is held, so a Page cannot vanish.
+  Voice reports synthesis requests and normalized completion metadata. Room
+  play folds those facts through Pages before forwarding the remaining
+  effects, so Pages can submit an Entry before `voice_ready`. Voice keeps
+  only speech and clips; a Page turn forgets them.
   """
 
-  alias Thereish.Chronicle.Entry
   alias Thereish.Ladder
 
   defstruct attempt: nil,
             clips: %{},
-            speaking: %{bookends: nil, verdict: nil},
-            voice_meta: %{},
-            held_page: nil
+            speaking: %{bookends: nil, verdict: nil}
 
   @type kind :: :bookends | :verdict
   @type clip :: %{audio: binary(), format: atom() | String.t()}
@@ -52,9 +48,7 @@ defmodule Thereish.Foley.Voice do
   @type t :: %__MODULE__{
           attempt: integer() | nil,
           clips: %{optional(kind()) => clip()},
-          speaking: %{bookends: integer() | nil, verdict: integer() | nil},
-          voice_meta: %{optional(integer()) => map()},
-          held_page: Entry.t() | nil
+          speaking: %{bookends: integer() | nil, verdict: integer() | nil}
         }
 
   @typedoc """
@@ -64,7 +58,8 @@ defmodule Thereish.Foley.Voice do
   @type effect ::
           {:speak, integer(), kind(), String.t()}
           | {:broadcast, {:bookends_ready | :voice_ready, integer()}}
-          | {:commit_chronicle, Entry.t()}
+          | {:verdict_pending, integer()}
+          | {:verdict_spoken, integer(), map()}
           | {:log, Logger.level(), String.t()}
 
   @typedoc "The Room's and the Game's facts for this call."
@@ -127,7 +122,8 @@ defmodule Thereish.Foley.Voice do
   @doc """
   A `{:speak, ...}` effect was answered: `{:ok, %{audio: ..., format: ...,
   meta: ...}}`, or `{:error, failure_meta}` with the failure metadata the
-  Chronicle records. A Verdict's metadata releases a held Page.
+  Chronicle records. Accepted Verdict results report metadata before the
+  existing ready notification; failures keep their metadata unchanged.
   """
   @spec spoken(t(), integer(), kind(), {:ok, map()} | {:error, map()}, table()) ::
           {t(), [effect()]}
@@ -156,37 +152,15 @@ defmodule Thereish.Foley.Voice do
        "Voice synthesis failed for attempt #{attempt} (#{kind}): #{failure_meta["failure"]}"}
 
     if kind == :verdict do
-      {voice, release} =
-        release(%{voice | voice_meta: Map.put(voice.voice_meta, attempt, failure_meta)})
-
-      {voice, [log | release]}
+      {voice, [log, {:verdict_spoken, attempt, failure_meta}]}
     else
       {voice, [log]}
     end
   end
 
-  @doc """
-  A Page closed with this Chronicle Entry. It is committed now, or held while
-  one of its Attempts' Verdict is still being spoken.
-  """
-  @spec page_closed(t(), Entry.t()) :: {t(), [effect()]}
-  def page_closed(%__MODULE__{} = voice, %Entry{} = entry) do
-    if waiting?(voice, entry) do
-      {%{voice | held_page: entry}, []}
-    else
-      {voice, [commit(voice, entry)]}
-    end
-  end
-
-  @doc """
-  The Page turned. A held Page is committed with whatever voice metadata has
-  landed, and everything else is forgotten.
-  """
+  @doc "The Page turned: forget speech in flight and clips."
   @spec page_turned(t()) :: {t(), [effect()]}
-  def page_turned(%__MODULE__{} = voice) do
-    {_voice, effects} = release(voice)
-    {new(), effects}
-  end
+  def page_turned(%__MODULE__{}), do: {new(), []}
 
   @doc """
   The clip of `kind` for `attempt`, which must be the table's. `kind` may be
@@ -219,7 +193,10 @@ defmodule Thereish.Foley.Voice do
   end
 
   defp speak(voice, attempt, kind, line) do
-    {%{voice | speaking: Map.put(voice.speaking, kind, attempt)}, [{:speak, attempt, kind, line}]}
+    pending = if kind == :verdict, do: [{:verdict_pending, attempt}], else: []
+
+    {%{voice | speaking: Map.put(voice.speaking, kind, attempt)},
+     pending ++ [{:speak, attempt, kind, line}]}
   end
 
   defp done_speaking(voice, attempt, kind) do
@@ -232,8 +209,7 @@ defmodule Thereish.Foley.Voice do
 
   defp landed(voice, attempt, :verdict, result, _table) do
     meta = provider_meta(result[:meta] || %{})
-    {voice, release} = release(%{voice | voice_meta: Map.put(voice.voice_meta, attempt, meta)})
-    {voice, release ++ [{:broadcast, {:voice_ready, attempt}}]}
+    {voice, [{:verdict_spoken, attempt, meta}, {:broadcast, {:voice_ready, attempt}}]}
   end
 
   defp landed(voice, attempt, :bookends, _result, table) do
@@ -295,36 +271,5 @@ defmodule Thereish.Foley.Voice do
   # The first key present, each tried as an atom and then as a string.
   defp pick(raw, keys) do
     Enum.find_value(keys, fn key -> raw[key] || raw[Atom.to_string(key)] end)
-  end
-
-  # -- the Chronicle hold ------------------------------------------------------
-
-  defp waiting?(voice, entry) do
-    pending = voice.speaking.verdict
-
-    pending != nil and is_nil(Map.get(voice.voice_meta, pending)) and
-      Enum.any?(entry.attempts, &(&1.number == pending))
-  end
-
-  defp release(%{held_page: nil} = voice), do: {voice, []}
-
-  defp release(%{held_page: entry} = voice),
-    do: {%{voice | held_page: nil}, [commit(voice, entry)]}
-
-  defp commit(voice, entry), do: {:commit_chronicle, attach_meta(entry, voice.voice_meta)}
-
-  defp attach_meta(%Entry{} = entry, meta) do
-    attempts =
-      Enum.map(entry.attempts, fn %Entry.Attempt{} = attempt ->
-        case Map.get(meta, attempt.number) do
-          nil ->
-            attempt
-
-          v_meta ->
-            %{attempt | verdicts: Enum.map(attempt.verdicts, &%{&1 | voice_meta: v_meta})}
-        end
-      end)
-
-    %{entry | attempts: attempts}
   end
 end
