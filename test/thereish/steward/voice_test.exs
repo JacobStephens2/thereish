@@ -7,8 +7,6 @@ defmodule Thereish.Steward.VoiceTest do
   alias Thereish.Steward.Live
   alias Thereish.Foley.Voice
 
-  import Thereish.EntryFixtures
-
   @sample_mp3 Fake.mp3_fixture()
 
   setup do
@@ -234,8 +232,8 @@ defmodule Thereish.Steward.VoiceTest do
     end
   end
 
-  describe "the provenance a Verdict's voice leaves in the Chronicle" do
-    test "a landed clip and a failed clip of the same provider record the same provider" do
+  describe "the provenance a Verdict's voice reports" do
+    test "a landed clip and a failed clip of the same provider report the same provider" do
       Req.Test.stub(Hume, fn conn ->
         conn
         |> Plug.Conn.put_resp_header("content-type", "application/json")
@@ -251,14 +249,13 @@ defmodule Thereish.Steward.VoiceTest do
       assert {:ok, clip} = Thereish.Steward.speak("Meld. Two minds at once.")
       failure = Thereish.Steward.voice_failure(:timeout)
 
-      assert chronicled({:ok, clip})["provider"] == "hume"
-      assert chronicled({:error, failure})["provider"] == "hume"
+      assert reported({:ok, clip})["provider"] == "hume"
+      assert reported({:error, failure})["provider"] == "hume"
     end
   end
 
-  # What Foley's Voice writes on a held Page once the Verdict's clip, or its
-  # failure, comes back.
-  defp chronicled(result) do
+  # The normalized speech fact Pages receives, whether synthesis succeeds or fails.
+  defp reported(result) do
     table = %{
       attempt: 1,
       phase: :closed,
@@ -269,17 +266,11 @@ defmodule Thereish.Steward.VoiceTest do
 
     {voice, _} = Voice.verdict_received(Voice.new(), %{band: :miss}, %{table | phase: :assaying})
 
-    {voice, []} =
-      Voice.page_closed(voice, entry(attempts: [%{number: 1, verdicts: [%{band: :miss}]}]))
-
     {_voice, effects} = Voice.spoken(voice, 1, :verdict, result, table)
 
-    [%{verdicts: [verdict]}] =
-      Enum.find_value(effects, fn
-        {:commit_chronicle, committed} -> committed.attempts
-        _ -> nil
-      end)
-
-    verdict.voice_meta
+    Enum.find_value(effects, fn
+      {:verdict_spoken, 1, meta} -> meta
+      _ -> nil
+    end)
   end
 end

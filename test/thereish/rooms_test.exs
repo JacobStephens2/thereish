@@ -2423,6 +2423,19 @@ defmodule Thereish.RoomsTest do
       await_phase(ctx.slug, :giving)
 
       assert {:error, :not_found} = Rooms.voice_audio(ctx.slug, 1)
+
+      :ok = Rooms.release_speaker(ctx.slug, ctx.token_a)
+      :ok = Rooms.give(ctx.slug, ctx.mara.id, "deep canyon")
+      :ok = Rooms.give(ctx.slug, ctx.jacob.id, "echoing wind")
+      await_phase(ctx.slug, :bridging)
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.mara.id, "cairn")
+      :ok = Rooms.commit_bridge(ctx.slug, ctx.jacob.id, "cairn")
+      await_phase(ctx.slug, :closed)
+
+      room = Repo.get_by!(Thereish.Rooms.Room, slug: ctx.slug)
+      assert [first, second] = Chronicle.pages(room.id)
+      assert [%{verdicts: [%{voice_meta: %{"provider" => "fake"}}]}] = first.attempts
+      assert [%{verdicts: [%{voice_meta: nil}]}] = second.attempts
     end
   end
 

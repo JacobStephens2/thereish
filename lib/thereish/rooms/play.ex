@@ -17,19 +17,17 @@ defmodule Thereish.Rooms.Play do
 
   ## The orderings
 
-    * A turned Page is passed to Voice first, so a Chronicle write Voice was
-      holding is released, then to Pacing, Pages and Occupancy, then the
-      Game's move is taken. The write lands after the turn has been decided,
-      so the Pages of the turned Page are kept until it does: its
-      `{:chronicle_written, page_id}` still binds that Page and releases what
-      was held for it.
+    * Pages releases a held Entry before the turn's ordinary effects. Pacing,
+      Voice and Occupancy reset, then the Game's move is taken. Pages keeps
+      the submitted refs and deferred writes until `{:chronicle_written,
+      page_id}` binds them, without replacing the next Page's state.
     * A reset of Gives reaches Pacing, Occupancy and Pages only once the Game
       accepts it, so a late tap after the Author has written the Page leaves
       that Page's music and times alone.
     * The Entry closing a Page carries Occupancy's music for the Room's music
-      setting, the Page's Assignment and Pacing's times. Pages then holds
-      results for it, and Voice decides whether it is written now or once the
-      Verdict has been spoken.
+      setting, the Page's Assignment and Pacing's times. Pages owns its hold,
+      speech metadata and deferred writes. Voice's speech facts are folded
+      through Pages in effect order, before the ready notification.
 
   ## Broadcasts
 
@@ -97,9 +95,7 @@ defmodule Thereish.Rooms.Play do
   alias Thereish.Rooms.Pages
   alias Thereish.Rooms.Room
 
-  # `pages_before_turn` is Pages as it stood before a turn that released the
-  # Chronicle write, kept until that write's Page id comes back.
-  defstruct [:game, :pacing, :pages, :occupancy, :voice, :facts, :pages_before_turn]
+  defstruct [:game, :pacing, :pages, :occupancy, :voice, :facts]
 
   @type t :: %__MODULE__{
           game: Game.t(),
@@ -107,8 +103,7 @@ defmodule Thereish.Rooms.Play do
           pages: Pages.t(),
           occupancy: Occupancy.t(),
           voice: Voice.t(),
-          facts: Facts.t(),
-          pages_before_turn: Pages.t() | nil
+          facts: Facts.t()
         }
 
   @type seat_id :: String.t()
@@ -279,23 +274,18 @@ defmodule Thereish.Rooms.Play do
     end
   end
 
-  # A closed Page must not vanish if Foley is still speaking when the Seats
-  # tap next: Voice releases whatever Page it is holding before Pacing, Pages
-  # and Occupancy forget the Page in play. That write lands after this
-  # command, so the Pages it closed with are kept for its
-  # `{:chronicle_written, page_id}`.
+  # Only an accepted turn releases the Entry; Pages owns its acknowledgement
+  # context while all current-Page modules start fresh.
   def apply(%__MODULE__{} = play, {:next_page, seat_id, members}, now) do
     with :ok <- Pacing.may_advance(play.pacing, now),
          {:ok, game, effects} <- Game.apply(play.game, {:next_page, %{seat_id: seat_id}}) do
-      {play, released} = voice(play, &Voice.page_turned/1)
-      writes? = Enum.any?(released, &match?({:write_chronicle, _entry}, &1))
+      {play, released} = pages(play, &Pages.page_turned/1)
+      {play, []} = voice(play, &Voice.page_turned/1)
 
       play = %{
         play
         | pacing: Pacing.page_turned(play.pacing),
-          pages: Pages.page_turned(play.pages),
-          occupancy: Occupancy.page_turned(play.occupancy, members),
-          pages_before_turn: if(writes?, do: play.pages)
+          occupancy: Occupancy.page_turned(play.occupancy, members)
       }
 
       {play, moved} = advance(play, game, effects, now)
@@ -426,18 +416,9 @@ defmodule Thereish.Rooms.Play do
   end
 
   # The outcome is in, so a tap released here finds it.
-  def apply(%__MODULE__{pages_before_turn: nil} = play, {:chronicle_written, page_id}, _now) do
-    {pages, writes} = Pages.written(play.pages, page_id)
-    {:ok, %{play | pages: pages}, page_writes(writes)}
-  end
-
-  # The write a turn released answers here, before any other command, so
-  # nothing has told Pages anything since the turn: the turned Page's Pages is
-  # bound to its Chronicle Page and turned again, which is the whole of what
-  # the turn did to Pages.
-  def apply(%__MODULE__{pages_before_turn: turned} = play, {:chronicle_written, page_id}, _now) do
-    {pages, writes} = Pages.written(turned, page_id)
-    {:ok, %{play | pages: Pages.page_turned(pages), pages_before_turn: nil}, page_writes(writes)}
+  def apply(%__MODULE__{} = play, {:chronicle_written, page_id}, _now) do
+    {play, effects} = pages(play, &Pages.written(&1, page_id))
+    {:ok, play, effects}
   end
 
   # -- reads ------------------------------------------------------------------
@@ -516,7 +497,7 @@ defmodule Thereish.Rooms.Play do
   defp game_effect(play, :beat, now), do: pace(play, &Pacing.beat_owed(&1, now), now)
 
   # The Entry takes the Page's Assignment here, at the close, so a held write
-  # still records the Assignment the Page was played under. Voice decides
+  # still records the Assignment the Page was played under. Pages decides
   # whether the write waits for the closing Verdict's speech: ADR-0003 forbids
   # updating the Verdict row afterwards.
   defp game_effect(play, {:chronicle, %Entry{} = entry}, _now) do
@@ -526,8 +507,7 @@ defmodule Thereish.Rooms.Play do
       |> struct!(assignment: Pages.assignment(play.pages))
       |> then(&Pacing.stamp(play.pacing, &1))
 
-    play = %{play | pages: Pages.page_closed(play.pages), pages_before_turn: nil}
-    voice(play, &Voice.page_closed(&1, entry))
+    pages(play, &Pages.page_closed(&1, entry))
   end
 
   defp game_effect(play, {:overrule, overrule}, _now), do: {play, [{:record_overrule, overrule}]}
@@ -536,7 +516,7 @@ defmodule Thereish.Rooms.Play do
     do: {play, [{:record_fairness_tap, data}]}
 
   # A tap is made on a closed Page, so it belongs to the Page in play, which
-  # Voice may not have let into the Chronicle yet, and is recorded under that
+  # Pages may not have let into the Chronicle yet, and is recorded under that
   # Page's Assignment.
   defp game_effect(play, {:bookends_tap, data}, _now) do
     data = Map.put(data, :assignment, Pages.assignment(play.pages))
@@ -656,13 +636,19 @@ defmodule Thereish.Rooms.Play do
 
   # -- Pages --------------------------------------------------------------------
 
-  defp write_page(play, ref, write) do
-    {pages, writes} = Pages.write(play.pages, ref, write)
-    {%{play | pages: pages}, page_writes(writes)}
-  end
+  defp write_page(play, ref, write), do: pages(play, &Pages.write(&1, ref, write))
 
-  defp page_writes(writes),
-    do: Enum.map(writes, fn {:write, id, write} -> {:write_page, id, write} end)
+  defp pages(play, transition) do
+    {pages, effects} = transition.(play.pages)
+
+    effects =
+      Enum.map(effects, fn
+        {:commit_chronicle, entry} -> {:write_chronicle, entry}
+        {:write, id, write} -> {:write_page, id, write}
+      end)
+
+    {%{play | pages: pages}, effects}
+  end
 
   # -- Voice --------------------------------------------------------------------
 
@@ -675,13 +661,16 @@ defmodule Thereish.Rooms.Play do
   defp voice(play, transition) do
     {voice, effects} = transition.(play.voice)
 
-    effects =
-      Enum.map(effects, fn
-        {:commit_chronicle, entry} -> {:write_chronicle, entry}
-        effect -> effect
-      end)
+    each(%{play | voice: voice}, effects, fn
+      play, {:verdict_pending, attempt} ->
+        pages(play, &Pages.verdict_pending(&1, attempt))
 
-    {%{play | voice: voice}, effects}
+      play, {:verdict_spoken, attempt, meta} ->
+        pages(play, &Pages.verdict_spoken(&1, attempt, meta))
+
+      play, effect ->
+        {play, [effect]}
+    end)
   end
 
   # The Room's and the Game's facts Voice is told on each call.

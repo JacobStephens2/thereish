@@ -496,7 +496,7 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   describe "a turned Page" do
-    test "a Page whose write Voice held is still written, with what was held for it" do
+    test "a Page whose Entry Pages held is still written, with what was held for it" do
       {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
       {play, _page_ref, giving} = written(play)
 
@@ -524,14 +524,41 @@ defmodule Thereish.Rooms.PlayTest do
         run(play, {:mask_landed, "mara", giving, %Mask{url: "/m.png", meta: %{}}})
 
       assert {:write_page, "page-1", {:mask, "mara", _mask}} = find(landed, :write_page)
+      assert view(play, "mara").your_mask == nil
+
+      {play, spoken} = run(play, {:voice_spoken, 1, :verdict, {:ok, %{audio: "late"}}})
+      assert find(spoken, :write_chronicle) == nil
 
       {_play, given} = run(play, {:give, "mara", "harbour"})
       assert {:draw_mask, "mara", new_giving, _give, _colour} = find(given, :draw_mask)
       refute new_giving == giving
     end
+
+    test "an unacknowledged turn releases no FIFO and cannot bind it to the next Page" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+      {play, old_ref, giving} = written(play)
+      {play, _} = meld(play)
+      {play, _} = run(play, {:tap_bookends, "mara", "great"})
+
+      {play, turned} = run(play, {:next_page, "mara", @members})
+      assert [:write_chronicle | _] = tags(turned)
+      assert find(turned, :write_page) == nil
+      assert {:error, :page_open} = Play.apply(play, {:next_page, "mara", @members}, @now)
+
+      {play, _} = run(play, {:room_fact, {:release_speaker, @speaker}})
+      {play, _ref, _giving} = written(play)
+      {play, closed} = meld(play, written: "page-2")
+      assert {:write_chronicle, _} = find(closed, :write_chronicle)
+      assert find(closed, :write_page) == nil
+
+      {play, landed} = run(play, {:mask_landed, "mara", giving, %Mask{url: "/old", meta: %{}}})
+      assert find(landed, :write_page) == nil
+      {_play, scored} = run(play, {:scored, old_ref, {:ok, @track}})
+      assert find(scored, :write_page) == nil
+    end
   end
 
-  describe "results that land while Voice holds the write" do
+  describe "results that land while Pages holds the Entry" do
     test "a Bookends tap and a Track are written onto that Page, in the order they landed" do
       {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
       {play, page_ref, _giving} = written(play)

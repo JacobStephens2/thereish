@@ -7,8 +7,9 @@ defmodule Thereish.Chronicle.Entry do
   The Game builds it from its own state, and leaves nil what it cannot know:
   it keeps no clock and knows no Foley or experiment. Pacing stamps the times,
   the Room sets `music_meta` and `vamp_meta` from Occupancy and `assignment`
-  from Pages, and Voice attaches
-  each Verdict's `voice_meta`. Each sets its own fields by name.
+  from Pages. Pages retains the prepared Entry, attaches each Verdict's
+  `voice_meta` from Voice's speech facts and submits it once, on completion
+  or a Page turn. Each owner sets its own fields by name.
 
   It carries exactly what the Chronicle writes, and nothing a screen shows.
   `page` is the Page's `Thereish.Chronicle.Document`. `author_meta` and each
