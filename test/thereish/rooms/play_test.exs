@@ -148,7 +148,8 @@ defmodule Thereish.Rooms.PlayTest do
       assert {:ok, play, [{:persist_room, %{speaker: @speaker}}, :broadcast | voiced]} =
                Play.apply(play, {:room_fact, {:claim_speaker, @speaker}}, @now)
 
-      assert {:speak, 1, :bookends, _line} = find(voiced, :speak)
+      assert {:speak, request, _line} = find(voiced, :speak)
+      assert is_reference(request)
       assert view(play, nil, @speaker).speaker?
     end
 
@@ -496,13 +497,46 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   describe "a turned Page" do
+    for order <- [:before_current, :after_current] do
+      test "old Bookends delivered #{order} cannot become the next Page's clip" do
+        {play, _page_ref, _giving} = written(new())
+        {play, claimed} = run(play, {:room_fact, {:claim_speaker, @speaker}})
+        {:speak, old, "lighthouse. picnic"} = find(claimed, :speak)
+        {play, _} = meld(play)
+        {play, _} = run(play, {:next_page, "mara", @members}, written: "page-1")
+        {play, _} = run(play, {:room_fact, {:release_speaker, @speaker}})
+        {play, _page_ref, _giving} = written(play)
+        {play, claimed} = run(play, {:room_fact, {:claim_speaker, @speaker}})
+        {:speak, current, _line} = find(claimed, :speak)
+        refute old == current
+
+        if unquote(order) == :before_current do
+          assert {:ok, ^play, [{:log, :warning, _}]} =
+                   Play.apply(play, {:voice_spoken, old, {:ok, %{audio: "old"}}}, @now)
+
+          assert {:error, :not_found} = Play.clip(play, 1, :bookends)
+        end
+
+        assert {play, [{:broadcast, {:bookends_ready, 1}}]} =
+                 run(play, {:voice_spoken, current, {:ok, %{audio: "current"}}})
+
+        if unquote(order) == :after_current do
+          assert {:ok, ^play, [{:log, :warning, _}]} =
+                   Play.apply(play, {:voice_spoken, old, {:ok, %{audio: "old"}}}, @now)
+        end
+
+        assert {:ok, "current", :mp3} = Play.clip(play, 1, "bookends")
+        assert is_binary(Jason.encode!(view(play)))
+      end
+    end
+
     test "a Page whose Entry Pages held is still written, with what was held for it" do
       {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
       {play, _page_ref, giving} = written(play)
 
       # With a Speaker, the Verdict is spoken, so the close waits for it.
       {play, closed} = meld(play)
-      assert {:speak, 1, :verdict, _line} = find(closed, :speak)
+      assert {:speak, request, _line} = find(closed, :speak)
       assert find(closed, :write_chronicle) == nil
 
       {play, tapped} = run(play, {:tap_bookends, "mara", "great"})
@@ -526,7 +560,7 @@ defmodule Thereish.Rooms.PlayTest do
       assert {:write_page, "page-1", {:mask, "mara", _mask}} = find(landed, :write_page)
       assert view(play, "mara").your_mask == nil
 
-      {play, spoken} = run(play, {:voice_spoken, 1, :verdict, {:ok, %{audio: "late"}}})
+      {play, spoken} = run(play, {:voice_spoken, request, {:ok, %{audio: "late"}}})
       assert find(spoken, :write_chronicle) == nil
 
       {_play, given} = run(play, {:give, "mara", "harbour"})
@@ -559,20 +593,111 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   describe "results that land while Pages holds the Entry" do
+    for outcome <- [:ok, :error] do
+      test "old Page completions cannot release Attempt 1's Entry before its current #{outcome}" do
+        {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+        {play, _page_ref, _giving} = written(play)
+        {play, closed} = meld(play)
+        {:speak, old, _line} = find(closed, :speak)
+
+        {play, turned} = run(play, {:next_page, "mara", @members}, written: "page-1")
+        assert [:write_chronicle | _] = tags(turned)
+        {play, _page_ref, _giving} = written(play)
+        {play, closed} = meld(play)
+        {:speak, current, _line} = find(closed, :speak)
+        refute old == current
+        assert find(closed, :write_chronicle) == nil
+        {play, tapped} = run(play, {:tap_bookends, "mara", "great"})
+        assert find(tapped, :write_page) == nil
+
+        old_failure = %{"provider" => "old-page", "failure" => "old failure"}
+
+        for request <- [old, make_ref()],
+            result <- [{:ok, %{audio: "old"}}, {:error, old_failure}] do
+          assert {:ok, ^play, effects} =
+                   Play.apply(play, {:voice_spoken, request, result}, @now)
+
+          assert Enum.all?(effects, &match?({:log, _, _}, &1))
+          assert {:error, :not_found} = Play.clip(play, 1, :verdict)
+        end
+
+        failure = %{"provider" => "current-page", "failure" => "current failure"}
+
+        result =
+          if unquote(outcome) == :ok,
+            do: {:ok, %{audio: "current", meta: %{provider: "current-page"}}},
+            else: {:error, failure}
+
+        {play, completed} = run(play, {:voice_spoken, current, result}, written: "page-2")
+        {:write_chronicle, entry} = find(completed, :write_chronicle)
+        assert [%{number: 1, verdicts: [%{voice_meta: meta}]}] = entry.attempts
+        assert meta["provider"] == "current-page"
+
+        if unquote(outcome) == :ok do
+          assert [:write_chronicle, :write_page, :broadcast] = tags(completed)
+          assert List.last(completed) == {:broadcast, {:voice_ready, 1}}
+          assert {:ok, "current", :mp3} = Play.clip(play, 1, :verdict)
+        else
+          assert [:log, :write_chronicle, :write_page] = tags(completed)
+          assert meta == failure
+        end
+
+        assert {:write_page, "page-2", {:bookends_tap, %{label: "great"}}} =
+                 find(completed, :write_page)
+
+        for request <- [old, current],
+            duplicate <- [{:ok, %{audio: "duplicate"}}, {:error, old_failure}] do
+          assert {:ok, ^play, effects} =
+                   Play.apply(play, {:voice_spoken, request, duplicate}, @now)
+
+          assert Enum.all?(effects, &match?({:log, _, _}, &1))
+        end
+      end
+    end
+
+    test "an earlier Attempt's Verdict failure keeps its metadata without releasing the latest Entry" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+      {play, _page_ref, _giving} = written(play)
+      {play, bridged} = bridges(play, "cairn", "cairo")
+      {play, revealed} = assayed(play, bridged, 10, [])
+      {:speak, earlier, _line} = find(revealed, :speak)
+
+      {play, _} = run(play, {:next_attempt, "mara"})
+      {play, bridged} = bridges(play, "echo", "echo")
+      {play, closed} = assayed(play, bridged, 95, [])
+      {:speak, latest, _line} = find(closed, :speak)
+      assert find(closed, :write_chronicle) == nil
+
+      earlier_meta = %{"provider" => "earlier", "failure" => "timeout"}
+      {play, effects} = run(play, {:voice_spoken, earlier, {:error, earlier_meta}})
+      assert [{:log, :warning, _}] = effects
+      assert {:error, :not_found} = Play.clip(play, 2, :verdict)
+
+      {_play, completed} =
+        run(play, {:voice_spoken, latest, {:ok, %{audio: "latest", meta: %{provider: "latest"}}}},
+          written: "page-1"
+        )
+
+      assert [{:write_chronicle, entry}, {:broadcast, {:voice_ready, 2}}] = completed
+
+      assert [
+               %{number: 1, verdicts: [%{voice_meta: ^earlier_meta}]},
+               %{number: 2, verdicts: [%{voice_meta: %{"provider" => "latest"}}]}
+             ] = entry.attempts
+    end
+
     test "a Bookends tap and a Track are written onto that Page, in the order they landed" do
       {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
       {play, page_ref, _giving} = written(play)
       {play, closed} = meld(play)
-      {:speak, 1, :verdict, _line} = find(closed, :speak)
+      {:speak, request, _line} = find(closed, :speak)
 
       {play, tapped} = run(play, {:tap_bookends, "jacob", "flat"})
       {play, scored} = run(play, {:scored, page_ref, {:ok, @track}})
       assert find(tapped ++ scored, :write_page) == nil
 
       {_play, spoken} =
-        run(play, {:voice_spoken, 1, :verdict, {:ok, %{audio: "mp3", meta: %{}}}},
-          written: "page-1"
-        )
+        run(play, {:voice_spoken, request, {:ok, %{audio: "mp3", meta: %{}}}}, written: "page-1")
 
       assert [
                {:write_chronicle, entry},
@@ -587,10 +712,11 @@ defmodule Thereish.Rooms.PlayTest do
     test "a write that failed releases nothing: the results held for it stay held" do
       {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
       {play, _page_ref, _giving} = written(play)
-      {play, _} = meld(play)
+      {play, closed} = meld(play)
+      {:speak, request, _line} = find(closed, :speak)
       {play, _} = run(play, {:tap_bookends, "jacob", "flat"})
 
-      {_play, spoken} = run(play, {:voice_spoken, 1, :verdict, {:error, %{"failure" => "x"}}})
+      {_play, spoken} = run(play, {:voice_spoken, request, {:error, %{"failure" => "x"}}})
       assert {:write_chronicle, _entry} = find(spoken, :write_chronicle)
       assert find(spoken, :write_page) == nil
     end

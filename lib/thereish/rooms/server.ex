@@ -115,8 +115,8 @@ defmodule Thereish.Rooms.Server do
   # The failure metadata reads the Steward's adapter config, so it is made
   # here and Play decides where it goes.
   @impl true
-  def handle_info({:voice_spoken, attempt, kind, {:error, reason}}, state) do
-    heard(state, {:voice_spoken, attempt, kind, {:error, Steward.voice_failure(reason)}})
+  def handle_info({:voice_spoken, request, {:error, reason}}, state) do
+    heard(state, {:voice_spoken, request, {:error, Steward.voice_failure(reason)}})
   end
 
   def handle_info({:author_completed, ref, {:error, reason}}, state) do
@@ -270,8 +270,8 @@ defmodule Thereish.Rooms.Server do
     state
   end
 
-  defp perform({:speak, attempt, kind, line}, state, _now) do
-    Steward.answer_later(fn -> Steward.speak(line) end, &{:voice_spoken, attempt, kind, &1})
+  defp perform({:speak, request, line}, state, _now) do
+    Steward.answer_later(fn -> Steward.speak(line) end, &{:voice_spoken, request, &1})
     state
   end
 

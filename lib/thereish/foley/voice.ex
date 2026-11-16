@@ -14,19 +14,26 @@ defmodule Thereish.Foley.Voice do
 
   ## Effects
 
-    * `{:speak, attempt, kind, line}`: answer with `spoken/5`
+    * `{:speak, request, line}`: echo the opaque request to `spoken/4`
     * `{:broadcast, {:bookends_ready, attempt}}`
     * `{:broadcast, {:voice_ready, attempt}}`
     * `{:verdict_pending, attempt}`: Verdict synthesis was requested
     * `{:verdict_spoken, attempt, meta}`: accepted success or failure metadata
     * `{:log, level, message}`
 
-  ## Stale clips
+  ## Speech identity and lifetime
 
-  Clips belong to the Attempt Voice is tracking. When the table's attempt
-  moves on, the clips and any Bookends still being spoken are forgotten
-  together, and a clip that arrives for an earlier Attempt is dropped and
-  logged. That rule lives in `track/2` and nowhere else.
+  Voice mints a fresh reference for each synthesis and keeps its Attempt and
+  kind here. Callers carry only that reference and the line, and echo the
+  reference with either result. Replacement retires the previous request for
+  the same Attempt and kind; the first completion consumes a known request.
+  Unknown, replaced and consumed requests change nothing.
+
+  Clips belong to the Attempt Voice is tracking. `track/2` forgets clips and
+  earlier Bookends requests when the Attempt changes. Outstanding Verdict
+  requests survive within a Page so earlier failures can report their own
+  Attempt's metadata; earlier successes are dropped. A Page turn forgets
+  every request and clip, even when the next Page reuses Attempt 1.
 
   ## Recording speech
 
@@ -40,15 +47,17 @@ defmodule Thereish.Foley.Voice do
 
   defstruct attempt: nil,
             clips: %{},
-            speaking: %{bookends: nil, verdict: nil}
+            requests: %{}
 
   @type kind :: :bookends | :verdict
   @type clip :: %{audio: binary(), format: atom() | String.t()}
+  @opaque request :: reference()
+  @type result :: {:ok, map()} | {:error, map()}
 
   @type t :: %__MODULE__{
           attempt: integer() | nil,
           clips: %{optional(kind()) => clip()},
-          speaking: %{bookends: integer() | nil, verdict: integer() | nil}
+          requests: %{optional(request()) => {integer(), kind()}}
         }
 
   @typedoc """
@@ -56,7 +65,7 @@ defmodule Thereish.Foley.Voice do
   of them.
   """
   @type effect ::
-          {:speak, integer(), kind(), String.t()}
+          {:speak, request(), String.t()}
           | {:broadcast, {:bookends_ready | :voice_ready, integer()}}
           | {:verdict_pending, integer()}
           | {:verdict_spoken, integer(), map()}
@@ -120,19 +129,29 @@ defmodule Thereish.Foley.Voice do
   end
 
   @doc """
-  A `{:speak, ...}` effect was answered: `{:ok, %{audio: ..., format: ...,
-  meta: ...}}`, or `{:error, failure_meta}` with the failure metadata the
-  Chronicle records. Accepted Verdict results report metadata before the
-  existing ready notification; failures keep their metadata unchanged.
+  A `{:speak, request, line}` effect was answered with that same opaque
+  request and `{:ok, %{audio: ..., format: ..., meta: ...}}`, or
+  `{:error, failure_meta}` with the failure metadata the Chronicle records.
+  Voice recovers the Attempt and kind, consuming the request once. Unknown
+  requests are rejected before any state change. Accepted current Verdict
+  results report metadata before readiness; failures keep metadata unchanged.
   """
-  @spec spoken(t(), integer(), kind(), {:ok, map()} | {:error, map()}, table()) ::
-          {t(), [effect()]}
-  def spoken(%__MODULE__{} = voice, attempt, kind, {:ok, result}, table) do
-    voice = track(voice, table.attempt)
+  @spec spoken(t(), request(), result(), table()) :: {t(), [effect()]}
+  def spoken(%__MODULE__{} = voice, request, result, table) do
+    case Map.pop(voice.requests, request) do
+      {nil, _requests} ->
+        {voice, [{:log, :warning, "Unknown or completed Voice request, dropping"}]}
 
+      {{attempt, kind}, requests} ->
+        voice = %{voice | requests: requests} |> track(table.attempt)
+        completed(voice, attempt, kind, result, table)
+    end
+  end
+
+  defp completed(voice, attempt, kind, {:ok, result}, table) do
     if attempt == voice.attempt do
       clip = %{audio: result.audio, format: Map.get(result, :format, :mp3)}
-      voice = %{voice | clips: Map.put(voice.clips, kind, clip)} |> done_speaking(attempt, kind)
+      voice = %{voice | clips: Map.put(voice.clips, kind, clip)}
       landed(voice, attempt, kind, result, table)
     else
       {voice,
@@ -144,9 +163,7 @@ defmodule Thereish.Foley.Voice do
     end
   end
 
-  def spoken(%__MODULE__{} = voice, attempt, kind, {:error, failure_meta}, table) do
-    voice = voice |> track(table.attempt) |> done_speaking(attempt, kind)
-
+  defp completed(voice, attempt, kind, {:error, failure_meta}, _table) do
     log =
       {:log, :warning,
        "Voice synthesis failed for attempt #{attempt} (#{kind}): #{failure_meta["failure"]}"}
@@ -183,29 +200,27 @@ defmodule Thereish.Foley.Voice do
   defp track(%{attempt: attempt} = voice, attempt), do: voice
 
   defp track(voice, attempt) do
-    %{voice | attempt: attempt, clips: %{}, speaking: %{voice.speaking | bookends: nil}}
+    requests = Map.filter(voice.requests, fn {_ref, {_attempt, kind}} -> kind == :verdict end)
+    %{voice | attempt: attempt, clips: %{}, requests: requests}
   end
 
   defp speak_bookends?(voice, table) do
     table.speaker? and table.phase == :bridging and is_list(table.bookends) and
       table.bookends != [] and not clip?(voice, :bookends) and
-      voice.speaking.bookends != table.attempt
+      not requested?(voice, table.attempt, :bookends)
   end
 
   defp speak(voice, attempt, kind, line) do
+    request = make_ref()
+    requests = Map.reject(voice.requests, fn {_ref, work} -> work == {attempt, kind} end)
+    requests = Map.put(requests, request, {attempt, kind})
     pending = if kind == :verdict, do: [{:verdict_pending, attempt}], else: []
 
-    {%{voice | speaking: Map.put(voice.speaking, kind, attempt)},
-     pending ++ [{:speak, attempt, kind, line}]}
+    {%{voice | requests: requests}, pending ++ [{:speak, request, line}]}
   end
 
-  defp done_speaking(voice, attempt, kind) do
-    if voice.speaking[kind] == attempt do
-      %{voice | speaking: Map.put(voice.speaking, kind, nil)}
-    else
-      voice
-    end
-  end
+  defp requested?(voice, attempt, kind),
+    do: Enum.any?(voice.requests, fn {_ref, work} -> work == {attempt, kind} end)
 
   defp landed(voice, attempt, :verdict, result, _table) do
     meta = provider_meta(result[:meta] || %{})
