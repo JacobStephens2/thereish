@@ -8,7 +8,8 @@ defmodule Thereish.Rooms.Play do
   gets back the new Play and one flat list of effects to perform in order. It
   touches no database, process, PubSub or Steward, and reads no clock: `now`
   is the `%{ms, at}` map Pacing already takes. Its one impurity is the one
-  Pages already has: it mints fresh refs for the Author and for a Page.
+  Pages and Voice already have: they mint fresh refs for a Page, the Author
+  and speech. Voice alone owns each speech request's Attempt and kind.
 
   Refusals answer `{:error, reason}` and change nothing: the Game's reasons,
   `:reveal_held` from Pacing, `:refused` from Occupancy and
@@ -71,8 +72,9 @@ defmodule Thereish.Rooms.Play do
     * `{:ask_assayer, request}`: answer with `{:assayed, event}`
     * `{:draw_mask, seat_id, giving_ref, give, colour}`: answer with
       `{:mask_landed, seat_id, giving_ref, mask_or_dot}`
-    * `{:speak, attempt, kind, line}`: answer with
-      `{:voice_spoken, attempt, kind, result}`
+    * `{:speak, request, line}`: echo Voice's opaque request on success or
+      failure with `{:voice_spoken, request, result}`; Play passes it to
+      Voice without reconstructing the Page, Attempt or kind
     * `{:start_vamp, ...}`, `{:enqueue_track, ...}`, `{:start_title, ...}`,
       `{:look_up_track, ...}`, `{:cache_track, ...}`, `{:record_never, path}`
       and `{:log, page_ref, event, gives_landed_at}`, as Occupancy names them
@@ -132,7 +134,7 @@ defmodule Thereish.Rooms.Play do
           | {:author_completed, reference(), {:ok, map()} | {:error, String.t()}}
           | {:assayed, Game.event()}
           | {:pacing, Pacing.name(), Pacing.token()}
-          | {:voice_spoken, integer(), Voice.kind(), {:ok, map()} | {:error, map()}}
+          | {:voice_spoken, Voice.request(), Voice.result()}
           | {:vamped | :scored | :titled, reference(), {:ok, map()} | {:error, term()}}
           | {:mask_landed, seat_id(), reference(), Mask.t() | :dot}
           | {:page_opened, map(), atom(), map() | nil}
@@ -150,7 +152,7 @@ defmodule Thereish.Rooms.Play do
           | {:ask_author, reference(), map(), atom()}
           | {:ask_assayer, map()}
           | {:draw_mask, seat_id(), reference(), String.t(), String.t()}
-          | {:speak, integer(), Voice.kind(), String.t()}
+          | {:speak, Voice.request(), String.t()}
           | {:start_vamp, reference(), [String.t()]}
           | {:enqueue_track, reference(), [String.t()], integer()}
           | {:start_title, reference(), [String.t()]}
@@ -344,8 +346,8 @@ defmodule Thereish.Rooms.Play do
     {:ok, play, effects}
   end
 
-  def apply(%__MODULE__{} = play, {:voice_spoken, attempt, kind, result}, _now) do
-    {play, effects} = voice(play, &Voice.spoken(&1, attempt, kind, result, voice_table(play)))
+  def apply(%__MODULE__{} = play, {:voice_spoken, request, result}, _now) do
+    {play, effects} = voice(play, &Voice.spoken(&1, request, result, voice_table(play)))
     {:ok, play, effects}
   end
 

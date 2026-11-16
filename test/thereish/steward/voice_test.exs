@@ -264,9 +264,10 @@ defmodule Thereish.Steward.VoiceTest do
       quips?: true
     }
 
-    {voice, _} = Voice.verdict_received(Voice.new(), %{band: :miss}, %{table | phase: :assaying})
+    {voice, [{:verdict_pending, 1}, {:speak, request, _line}]} =
+      Voice.verdict_received(Voice.new(), %{band: :miss}, %{table | phase: :assaying})
 
-    {_voice, effects} = Voice.spoken(voice, 1, :verdict, result, table)
+    {_voice, effects} = Voice.spoken(voice, request, result, table)
 
     Enum.find_value(effects, fn
       {:verdict_spoken, 1, meta} -> meta
