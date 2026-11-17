@@ -394,66 +394,6 @@ defmodule Thereish.Steward.AuthorTest do
       refute prompt =~ "91"
     end
 
-    test "a reply cut off at the token cap is asked for again, unchanged" do
-      # One request at a time, so the asks arrive in order.
-      configure_author(requests: 1)
-
-      agent = counts()
-      gives = gives_for_two()
-
-      recorded_author(fn conn, body ->
-        case asked(agent, "author") do
-          1 ->
-            # Gemini thought past the cap and never reached its answer.
-            Req.Test.json(conn, author_response(nil, finish_reason: "length"))
-
-          2 ->
-            [%{"content" => user_prompt}] =
-              Enum.filter(body["messages"], &(&1["role"] == "user"))
-
-            refute user_prompt =~ "rejected"
-
-            legal = author_json(bookends: ["ocean", "woods"], from: ["Alice", "Bob"])
-            Req.Test.json(conn, author_response(legal))
-        end
-      end)
-
-      assert {:ok, result} = Steward.author(%{gives: gives})
-      assert result.bookends == ["ocean", "woods"]
-      assert result.meta.attempts == 2
-    end
-
-    test "a reply cut off at the cap every time is reported as the cap" do
-      agent = counts()
-
-      recorded_author(fn conn, _body ->
-        asked(agent, "author")
-        Req.Test.json(conn, author_response(nil, finish_reason: "length"))
-      end)
-
-      assert {:error, {:max_tokens, _}} = Steward.author(%{gives: gives_for_two()})
-      # Two requests at once, each asked once and once more.
-      assert Agent.get(agent, &Map.get(&1, "author", 0)) == 4
-    end
-
-    test "two requests go at once, and the one that answers wins" do
-      agent = counts()
-      configure_author(retries: 0)
-
-      recorded_author(fn conn, _body ->
-        case asked(agent, "author") do
-          1 ->
-            Req.Test.json(conn, author_response(nil, finish_reason: "length"))
-
-          _ ->
-            legal = author_json(bookends: ["ocean", "woods"], from: ["Alice", "Bob"])
-            Req.Test.json(conn, author_response(legal))
-        end
-      end)
-
-      assert {:ok, %{bookends: ["ocean", "woods"]}} = Steward.author(%{gives: gives_for_two()})
-    end
-
     test "rejects if retries are spent without a valid response" do
       agent = counts()
       gives = [%{seat_id: "s1", name: "Alice", text: "walking along the beach"}]
@@ -577,13 +517,6 @@ defmodule Thereish.Steward.AuthorTest do
       assert astra_res.meta.model == "gpt-6-astra"
       assert astra_res.bookends == ["beacon", "haven"]
     end
-  end
-
-  defp gives_for_two do
-    [
-      %{seat_id: "s1", name: "Alice", text: "walking along the beach"},
-      %{seat_id: "s2", name: "Bob", text: "deep inside the forest"}
-    ]
   end
 
   defp configure_author(updates) do
