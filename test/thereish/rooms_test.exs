@@ -1837,9 +1837,10 @@ defmodule Thereish.RoomsTest do
       refute Map.has_key?(view, :arm)
       refute Map.has_key?(view, :current_arm)
 
-      json = Jason.encode!(view)
-      refute json =~ ~r/"arm"\s*:\s*"bait"/
-      refute json =~ ~r/"arm"\s*:\s*"plain"/
+      # A snapshot contains domain structs such as Mask and is not a JSON
+      # document. Inspect the whole value, without truncating nested metadata.
+      snapshot = inspect(view, limit: :infinity, printable_limit: :infinity)
+      refute snapshot =~ ~r/(?:\barm:|"arm"\s*=>)\s*"(?:bait|plain|flash|astra)"/
     end
 
     test "author_model assigns alternating arms and allows bookends taps at closed", ctx do
