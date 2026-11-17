@@ -11,14 +11,17 @@ defmodule Thereish.Steward.Live do
   deadline on the pair and reconciling them into one Verdict in front of this
   adapter. Here the Assayer grades one ordering at a time, the Scribe's Recaps
   pass through Vale, and media jobs use their configured providers and caches.
-  The hedging policy below applies to each Assayer ordering.
+  Each language job asks `Thereish.Steward.Gate.answer/3` directly; the Gate owns
+  concurrent requests, validation, retries and winning-answer provenance.
 
   ## Hedging, because the tail is the network
 
-  Each ordering is asked as `requests` identical requests to the **same** model
-  and the first answer wins. Identical, and one model: racing two different
-  models would make the grade a coin toss between two distributions, which is
-  the opposite of the consistency the cache exists to protect (design law 11).
+  The Gate asks each ordering as `requests` identical requests to the **same**
+  model and the first accepted answer wins. It also applies that policy to the
+  Author's Bookends, using each role's configuration. Identical, and one model:
+  racing two different models would make the grade a coin toss between two
+  distributions, which is the opposite of the consistency the cache exists to
+  protect (design law 11).
   It shortens the tail where the tail is queueing rather than generation, which
   on the fast tier is where the tail is — the prototype measured GLM's P95 total
   falling from 1.52 s to 1.17 s.
@@ -55,7 +58,7 @@ defmodule Thereish.Steward.Live do
     prompt = Assay.prompt(request, ordering)
     check = &Assay.check(&1, ordering)
 
-    case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
+    case Gate.answer(role, prompt, check) do
       {:ok, answer} ->
         {:ok,
          Map.merge(Assay.verdict(answer.json, ordering), Map.take(answer, [:model, :cost_usd]))}
@@ -106,7 +109,7 @@ defmodule Thereish.Steward.Live do
 
     check = &Thereish.Steward.Author.check(&1, gives, count)
 
-    case first_answer(role.requests, fn -> Gate.answer(role, prompt, check) end) do
+    case Gate.answer(role, prompt, check) do
       {:ok, answer} ->
         bookends = answer.json["bookends"]
         why = answer.json["why"]
@@ -452,45 +455,6 @@ defmodule Thereish.Steward.Live do
       with :ok <- Vale.check(recap) do
         if callback, do: Vale.check(callback), else: :ok
       end
-    end
-  end
-
-  # One request is not a race, and asking for a race of one should not cost a
-  # process.
-  defp first_answer(requests, ask) when requests <= 1, do: ask.()
-
-  defp first_answer(requests, ask) do
-    tasks = for _ <- 1..requests, do: Task.async(ask)
-    {answer, losers} = race(tasks, nil)
-
-    Enum.each(losers, &Task.shutdown(&1, :brutal_kill))
-
-    answer
-  end
-
-  # First answer wins — unless it is not an answer. A request that came back
-  # with an error has not answered anything, and the whole point of having sent
-  # a second one is that it might. The first failure is what is reported if
-  # every one of them fails.
-  defp race([], first_error), do: {first_error || {:error, :no_answer}, []}
-
-  defp race(tasks, first_error) do
-    refs = Map.new(tasks, &{&1.ref, &1})
-
-    receive do
-      {ref, result} when is_map_key(refs, ref) ->
-        Process.demonitor(ref, [:flush])
-        rest = List.delete(tasks, Map.fetch!(refs, ref))
-
-        case result do
-          {:ok, _answer} -> {result, rest}
-          error -> race(rest, first_error || error)
-        end
-
-      {:DOWN, ref, :process, _pid, reason} when is_map_key(refs, ref) ->
-        rest = List.delete(tasks, Map.fetch!(refs, ref))
-
-        race(rest, first_error || {:error, {:exit, reason}})
     end
   end
 end

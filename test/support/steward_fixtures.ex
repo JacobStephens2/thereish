@@ -122,28 +122,6 @@ defmodule Thereish.StewardFixtures do
   end
 
   @doc """
-  Holds an answer back until `wanted` requests for this ordering have arrived.
-
-  What makes hedging hedging is that both requests are in flight at once, and a
-  test that answered the first one immediately would be asserting on whether the
-  second had got out of the gate yet.
-  """
-  def once_asked(counts, ordering, wanted, deadline \\ 1_000)
-
-  def once_asked(_counts, ordering, wanted, deadline) when deadline <= 0 do
-    flunk("only one request for #{ordering} arrived; expected #{wanted}")
-  end
-
-  def once_asked(counts, ordering, wanted, deadline) do
-    if Agent.get(counts, &Map.get(&1, ordering, 0)) >= wanted do
-      :ok
-    else
-      Process.sleep(5)
-      once_asked(counts, ordering, wanted, deadline - 5)
-    end
-  end
-
-  @doc """
   Changes what answers the Assayer for one test — how many identical requests,
   how many retries, how long it waits.
 

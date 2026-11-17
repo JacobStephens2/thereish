@@ -4,9 +4,10 @@ defmodule Thereish.StewardTest do
 
   Everything here asks the same question the couch asks — grade this Attempt's
   Bridges — and checks the things that are true of a grade whatever the model
-  said: that both orderings were asked and both were kept, that a malformed
-  answer was sent back rather than shown, that a hedged pair of requests was one
-  question asked twice, and that a failure is a failure rather than a number.
+  said: that both orderings were asked and both were kept, that role-specific
+  rejections were sent back rather than shown, and that a failure is a failure
+  rather than a number. Shared request, retry and provenance policy is tested
+  through `Thereish.Steward.Gate.answer/3` in `GateTest`.
 
   The two orderings, their deadline and how they are reconciled are the
   Steward's, in front of the seam, so the tests of them ask
@@ -15,9 +16,7 @@ defmodule Thereish.StewardTest do
 
   Nothing here asserts on what the Assayer is asked. The words of the question
   are going to move as the couple calibrate it, and a test that froze them would
-  turn every calibration into a test failure. The one thing any of this compares
-  is that two hedged requests are byte-identical to each other, which is a fact
-  about hedging rather than about the wording.
+  turn every calibration into a test failure.
 
   The Precedent is the Steward's, not the live adapter's, so the tests of it ask
   `Thereish.Steward.assay/2`: with the live adapter where they watch what the
@@ -186,95 +185,6 @@ defmodule Thereish.StewardTest do
     end
   end
 
-  describe "the validator has the last word" do
-    setup do
-      assayer(requests: 1, retries: 2)
-    end
-
-    test "an answer the schema rejects is asked for again rather than shown" do
-      counts = counts()
-
-      recorded(fn conn, body ->
-        case asked(counts, ordering(body)) do
-          # A closeness the ladder has no rung for. The schema catches it, and
-          # what the players see is the corrected answer.
-          1 -> Req.Test.json(conn, response(verdict(closeness: 4000)))
-          _ -> Req.Test.json(conn, response(verdict(closeness: 55)))
-        end
-      end)
-
-      assert {:ok, verdict} = Live.assay(@pair, @pair.bridges)
-      assert verdict.closeness == 55
-      assert Agent.get(counts, &Map.values/1) == [2]
-    end
-
-    test "an answer that is not JSON at all is asked for again" do
-      counts = counts()
-
-      recorded(fn conn, body ->
-        case asked(counts, ordering(body)) do
-          1 -> Req.Test.json(conn, response("These two words are pretty close, I'd say."))
-          _ -> Req.Test.json(conn, response(verdict(closeness: 55)))
-        end
-      end)
-
-      assert {:ok, verdict} = Live.assay(@pair, @pair.bridges)
-      assert verdict.closeness == 55
-    end
-
-    test "a model that never produces a valid answer is no verdict, not a crash" do
-      assayer(requests: 1, retries: 1)
-
-      recorded(fn conn, _body -> Req.Test.json(conn, response(verdict(closeness: 4000))) end)
-
-      assert {:error, {:rejected, why}} = Live.assay(@pair, @pair.bridges)
-      assert why =~ "schema"
-    end
-  end
-
-  describe "hedging" do
-    setup do
-      assayer(requests: 2, retries: 0)
-    end
-
-    test "fires two identical requests to one model and takes the first answer" do
-      counts = counts()
-      test = self()
-
-      recorded(fn conn, body ->
-        ordering = ordering(body)
-        send(test, {:asked, ordering, body})
-
-        case asked(counts, ordering) do
-          1 ->
-            # Both requests are in flight before either is answered, which is
-            # what makes this hedging rather than a retry.
-            once_asked(counts, ordering, 2)
-            Req.Test.json(conn, response(verdict(closeness: 80)))
-
-          _ ->
-            # The straggler. It answers differently so that a reveal built on it
-            # would be visible, and late enough that taking it would be a choice
-            # rather than a race.
-            Process.sleep(300)
-            Req.Test.json(conn, response(verdict(closeness: 20)))
-        end
-      end)
-
-      {:ok, verdict} = Live.assay(@pair, @pair.bridges)
-
-      assert verdict.closeness == 80
-
-      # Identical requests, not a race between two different questions: hedging
-      # against a second question would make the grade a coin toss between two
-      # distributions (design law 11).
-      assert_receive {:asked, "beacon", first}
-      assert_receive {:asked, "beacon", second}
-      assert first == second
-      refute_received {:asked, "cairn", _}
-    end
-  end
-
   describe "when the Assayer cannot answer" do
     setup do
       assayer(requests: 1, retries: 0)
@@ -293,7 +203,7 @@ defmodule Thereish.StewardTest do
     # request's socket timeout. That is the one that has to hold: the escalation
     # ladder gives up at ten seconds, and it can only do that if the Steward has.
     test "a provider that never answers gives up before the game does" do
-      assayer(adapter: Live, requests: 1, retries: 0, deadline_ms: 50)
+      assayer(adapter: Live, requests: 2, retries: 0, deadline_ms: 50)
 
       recorded(fn conn, _body ->
         Process.sleep(5_000)
@@ -806,15 +716,33 @@ defmodule Thereish.StewardTest do
     end
 
     test "its quip is not asked again when it fails, whatever the role's retries" do
-      counts = counts()
+      assayer(requests: 3, retries: 2)
 
-      recorded(fn conn, _body ->
-        asked(counts, :quip)
-        Plug.Conn.send_resp(conn, 500, "quip model failed")
-      end)
+      for failure <- [:provider, :schema, :role, :cap] do
+        counts = counts()
 
-      assert {:error, _reason} = Live.quip(@pair)
-      assert Agent.get(counts, &Map.get(&1, :quip)) == 1
+        recorded(fn conn, _body ->
+          asked(counts, :quip)
+
+          case failure do
+            :provider ->
+              Plug.Conn.send_resp(conn, 500, "quip model failed")
+
+            :schema ->
+              Req.Test.json(conn, response("{}"))
+
+            :role ->
+              Req.Test.json(conn, quip_response(" "))
+
+            :cap ->
+              capped = put_in(response(nil), ["choices", Access.at(0), "finish_reason"], "length")
+              Req.Test.json(conn, capped)
+          end
+        end)
+
+        assert {:error, _reason} = Live.quip(@pair)
+        assert Agent.get(counts, &Map.get(&1, :quip)) == 1
+      end
     end
   end
 
