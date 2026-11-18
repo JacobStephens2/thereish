@@ -336,8 +336,6 @@ defmodule Thereish.Rooms.Server do
   defp perform({:write_chronicle, entry}, state, now) do
     {:ok, page} = Chronicle.write(state.room.id, entry)
 
-    _ = Experiments.record_outcome(state.room.id, page, entry)
-
     Scribe.write_about(state.room, page)
 
     follow_up(state, {:chronicle_written, page.id}, now)

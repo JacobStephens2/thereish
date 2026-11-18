@@ -3,23 +3,43 @@ defmodule Thereish.ExperimentFixtures do
   Seeds the A/B harness's rows straight into Postgres, for tests that need an
   assignment or an outcome the Room did not play.
 
-  The game only ever writes these through `Thereish.Experiments`, which
-  assigns an arm when the Author is asked and records an outcome from a
-  closed Page's Entry. A test that wants twenty completed outcomes, or an
-  assignment of the retired Bait against plain experiment, inserts the schema
-  rows here instead.
+  `Thereish.Experiments` assigns an Arm when the Author is asked;
+  `Thereish.Chronicle.write/2` records the closed Entry's outcomes and links
+  its Assignments in the same transaction as its play. Current-play tests use
+  that complete write. Tests needing historical Pages without outcomes,
+  retired rows, or twenty completed outcomes insert schema rows here instead.
 
-  It also reads the rows back, so a test can see what `Thereish.Experiments`
-  recorded without the harness keeping its queries public for it.
+  It also reads the rows back, so a test can observe recorded outcomes and
+  Assignment links without exposing the harness's private queries.
   """
 
   import Ecto.Query
 
-  alias Thereish.Chronicle.ExperimentAssignment
   alias Thereish.Chronicle.BookendsTap
+  alias Thereish.Chronicle.Document
+  alias Thereish.Chronicle.ExperimentAssignment
   alias Thereish.Chronicle.ExperimentOutcome
   alias Thereish.Chronicle.ExperimentUnblinding
+  alias Thereish.Chronicle.Page
   alias Thereish.Repo
+
+  @doc "A historical Page, before complete Entry writes, with no Experiment outcome."
+  def insert_historical_page(room_id, attrs \\ %{}) do
+    now = DateTime.utc_now()
+
+    defaults = %{
+      document: %Document{bookends: ["lantern", "harbour"]},
+      closed_because: "meld",
+      melded: true,
+      closeness: 80,
+      opened_at: now,
+      closed_at: now
+    }
+
+    %Page{}
+    |> Page.changeset(defaults |> Map.merge(Map.new(attrs)) |> Map.put(:room_id, room_id))
+    |> Repo.insert!()
+  end
 
   @doc """
   Inserts one arm assignment. Every field but the Room has a default.

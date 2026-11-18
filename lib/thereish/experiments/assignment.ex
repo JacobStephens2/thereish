@@ -25,6 +25,10 @@ defmodule Thereish.Experiments.Assignment do
           also: [t()]
         }
 
+  @doc "The default Author-model Flash Arm, with no row or additional Arms."
+  @spec default() :: t()
+  def default, do: %__MODULE__{experiment_id: "author_model", arm: :flash}
+
   @doc """
   The Arm a Page plays under in one named Experiment, or nil when that
   Experiment did not assign the Page — which is what a Page from before an

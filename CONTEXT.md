@@ -229,7 +229,7 @@ The Page as it was written at the table: its opening Bookends and where each cam
 _Avoid_: page map, payload, JSON, page data
 
 **Entry**:
-One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the Page's Assignment. Built when the Page closes and written once (ADR-0003).
+One closed Page as the Room hands it to the Chronicle: its Gives, Attempts, Bridges and Verdicts, the times Pacing recorded, the music Foley played and the Page's Assignment. Built when the Page closes; the Chronicle writes its play, Experiment outcomes and eligible Assignment links together, once (ADR-0003).
 _Avoid_: record, row, payload, closed-page map
 
 **Experiment**:
