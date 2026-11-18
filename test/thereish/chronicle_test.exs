@@ -798,28 +798,28 @@ defmodule Thereish.ChronicleTest do
       room = Repo.get_by!(Room, slug: ctx.slug)
       now = DateTime.utc_now()
 
-      {:ok, author_page} =
-        Chronicle.write(
+      author_page =
+        insert_historical_page(
           room.id,
-          entry(
-            page: %Document{
+          %{
+            document: %Document{
               identifier: "author-page",
               bookends: ["lantern", "harbour"]
             },
             opened_at: now
-          )
+          }
         )
 
-      {:ok, bait_page} =
-        Chronicle.write(
+      bait_page =
+        insert_historical_page(
           room.id,
-          entry(
-            page: %Document{
+          %{
+            document: %Document{
               identifier: "bait-page",
               bookends: ["lantern", "harbour"]
             },
             opened_at: DateTime.add(now, 60, :second)
-          )
+          }
         )
 
       insert_assignment(room.id, %{

@@ -1,7 +1,9 @@
 defmodule Thereish.EntryFixtures do
   @moduledoc """
   Builds a `Thereish.Chronicle.Entry` the way the Room hands one over, for
-  tests that write a closed Page into the Chronicle.
+  tests that write a closed Page, its Experiment outcomes and eligible
+  Assignment links through `Thereish.Chronicle.write/2`. Historical Pages
+  without outcomes use `Thereish.ExperimentFixtures.insert_historical_page/2`.
 
   Every field has a default, and any field can be overridden. Gives, Attempts
   and Verdicts may be given as plain maps or keyword lists; they are built into

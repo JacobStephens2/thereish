@@ -3483,6 +3483,16 @@ defmodule Thereish.RoomsTest do
       assert page_before.music_meta.failure == "unfinished"
       assert [%{track: nil} | _] = Thereish.Chronicle.page_views(ctx.slug)
 
+      for experiment_id <- ["author_model", "channel"] do
+        assert [%{page_id: page_id}] =
+                 ExperimentFixtures.outcomes(page_before.room_id, experiment_id)
+
+        assert page_id == page_before.id
+
+        assert [%{page_id: ^page_id}] =
+                 ExperimentFixtures.assignments(page_before.room_id, experiment_id)
+      end
+
       eventually(
         fn ->
           [page_after | _] = page_rows(ctx.slug)
@@ -3493,6 +3503,7 @@ defmodule Thereish.RoomsTest do
       )
 
       [page_after | _] = page_rows(ctx.slug)
+      assert page_after.id == page_before.id
       assert is_nil(page_after.music_meta.failure)
       assert [%{track: track} | _] = Thereish.Chronicle.page_views(ctx.slug)
       assert track
@@ -4047,6 +4058,7 @@ defmodule Thereish.RoomsTest do
 
     test "a Page played under an assigned arm records its outcome under that arm", ctx do
       meld(ctx)
+      assert :ok = Rooms.tap_bookends(ctx.slug, ctx.mara.id, "great")
       :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
       meld(ctx)
 
@@ -4059,6 +4071,53 @@ defmodule Thereish.RoomsTest do
         Map.new(ExperimentFixtures.outcomes(ctx.room.id, "author_model"), &{&1.page_id, &1.arm})
 
       assert outcomes == %{first.id => "flash", second.id => "astra"}
+
+      assert Map.new(ExperimentFixtures.outcomes(ctx.room.id, "channel"), &{&1.page_id, &1.arm}) ==
+               %{first.id => "nudge_on", second.id => "nudge_off"}
+
+      for experiment_id <- ["author_model", "channel"] do
+        assert Enum.map(ExperimentFixtures.assignments(ctx.room.id, experiment_id), & &1.page_id) ==
+                 [first.id, second.id]
+
+        [first_outcome, second_outcome] = ExperimentFixtures.outcomes(ctx.room.id, experiment_id)
+        assert first_outcome.taps == %{ctx.mara.id => "great"}
+        assert second_outcome.taps == %{}
+      end
+    end
+
+    test "a database rejection leaves the Room playing without a Page acknowledgement or Recap",
+         ctx do
+      pid = GenServer.whereis(Server.via(ctx.slug))
+
+      Repo.query!("""
+      ALTER TABLE chronicle_experiment_outcomes ADD CONSTRAINT reject_channel_outcome
+      CHECK (experiment_id != 'channel') NOT VALID
+      """)
+
+      try do
+        log = capture_log(fn -> meld(ctx) end)
+        assert log =~ "the Chronicle could not be written"
+        assert GenServer.whereis(Server.via(ctx.slug)) == pid
+        assert Rooms.snapshot(ctx.slug, ctx.mara.id).phase == :closed
+        assert Chronicle.pages(ctx.room.id) == []
+
+        for experiment_id <- ["author_model", "channel"] do
+          assert ExperimentFixtures.outcomes(ctx.room.id, experiment_id) == []
+          assert [%{page_id: nil}] = ExperimentFixtures.assignments(ctx.room.id, experiment_id)
+        end
+
+        # A Page write waits for acknowledgement, which the rejected Entry never got.
+        assert :ok = Rooms.tap_bookends(ctx.slug, ctx.mara.id, "great")
+        assert ExperimentFixtures.bookends_taps(ctx.room.id) == []
+        await_scribe()
+        assert Chronicle.recaps(ctx.room.id) == []
+        assert :ok = Rooms.next_page(ctx.slug, ctx.mara.id)
+        assert Rooms.snapshot(ctx.slug, ctx.mara.id).phase == :giving
+      after
+        Repo.query!(
+          "ALTER TABLE chronicle_experiment_outcomes DROP CONSTRAINT reject_channel_outcome"
+        )
+      end
     end
   end
 

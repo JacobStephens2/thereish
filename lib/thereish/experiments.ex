@@ -14,11 +14,13 @@ defmodule Thereish.Experiments do
 
   This module owns the harness: the Experiments' definitions, each declaring
   its outcomes and its sample (20 Pages) up front; a Page's Assignment; a
-  closed Page's outcome recorded from its Entry and linked to the Entry's own
-  Assignment; a Bookends tap synced onto
+  Bookends tap synced onto
   its Page's outcome; each Experiment's blinded progress toward its sample;
   its unblinding, which the admin asks for deliberately and which is refused
   until the sample is recorded; the admin's `overview/0`; and the readout.
+
+  The Chronicle owns recording a closed Entry's outcomes and eligible
+  Assignment links together with its play rows in `Thereish.Chronicle.write/2`.
 
   It also owns Page blinding. Arm labels stay hidden during play on stage and
   phones, and in the Chronicle, so neither player can play the label: the
@@ -39,7 +41,6 @@ defmodule Thereish.Experiments do
 
   alias Thereish.Chronicle
   alias Thereish.Chronicle.BookendsTap
-  alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.ExperimentAssignment
   alias Thereish.Chronicle.ExperimentOutcome
   alias Thereish.Chronicle.ExperimentUnblinding
@@ -122,10 +123,6 @@ defmodule Thereish.Experiments do
   # and the one the book files a Page under.
   @live_experiments [@author_model_experiment, @channel_experiment]
 
-  # The Arm a Page plays under when it has no Assignment of its own: Flash,
-  # under the Author-model Experiment, with no row to link.
-  @default_assignment %Assignment{id: nil, experiment_id: @author_model_id, arm: :flash}
-
   @doc """
   Assigns the next Page in a Room an Arm of every eligible live Experiment, each
   strictly alternating from that Experiment's own past rows in the Room,
@@ -173,11 +170,11 @@ defmodule Thereish.Experiments do
   rescue
     error ->
       Logger.error(
-        "no experiment arm could be assigned, so the Page plays under #{@default_assignment.arm}: " <>
+        "no experiment arm could be assigned, so the Page plays under #{Assignment.default().arm}: " <>
           Exception.message(error)
       )
 
-      @default_assignment
+      Assignment.default()
   end
 
   # One row for `Repo.insert_all`, built through the changeset so that an Arm
@@ -203,81 +200,6 @@ defmodule Thereish.Experiments do
     [first, second] = experiment.arms
 
     if List.last(past_arms) == to_string(first), do: second, else: first
-  end
-
-  @doc """
-  Records the experiment outcome of a closed Page from its Entry, once the
-  Entry is written as `page`, under the Experiment and Arm of the Entry's
-  Assignment, and links the Page to that Assignment's own row, unless the row
-  is already linked.
-
-  A Page played under more than one Experiment is recorded under each of them,
-  one row per Arm it carried, and answers with the outcome of the Assignment
-  the Room was handed.
-
-  An Entry with no Assignment is recorded under the default Arm and links no
-  row, as does an Assignment that has no row.
-  """
-  @spec record_outcome(Ecto.UUID.t() | String.t(), Page.t(), Entry.t()) ::
-          {:ok, ExperimentOutcome.t()} | {:error, Ecto.Changeset.t()}
-  def record_outcome(room_id, %Page{} = page, %Entry{} = entry) do
-    room_id = resolve_room_id(room_id)
-    assignment = entry.assignment || @default_assignment
-
-    arms = [assignment | assignment.also]
-
-    [outcome | _] = for one <- arms, do: insert_outcome(room_id, page, entry, one)
-
-    # A Page with no outcome links no row.
-    with {:ok, _} <- outcome, do: link_assignments(room_id, arms, page)
-
-    outcome
-  end
-
-  defp insert_outcome(room_id, %Page{} = page, %Entry{} = entry, %Assignment{} = assignment) do
-    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
-
-    %ExperimentOutcome{}
-    |> ExperimentOutcome.changeset(%{
-      room_id: room_id,
-      page_id: page.id,
-      page_identifier: page.id,
-      experiment_id: assignment.experiment_id,
-      arm: to_string(assignment.arm),
-      melded: entry.melded?,
-      closeness: entry.closeness,
-      closing_band: closing_band,
-      attempts_count: length(entry.attempts),
-      closed_because: to_string(entry.closed_because),
-      trap_converged: any_verdict_meta?(entry, :trap_sprung),
-      deep_converged: any_verdict_meta?(entry, :deep_convergence),
-      taps: %{}
-    })
-    |> Repo.insert()
-  end
-
-  # Every row of the Page's Assignments at once, in one write. An Assignment
-  # with no row of its own links nothing, and a row already linked to another
-  # Page is left alone.
-  defp link_assignments(room_id, assignments, page) do
-    ids = for %Assignment{id: id} <- assignments, id != nil, do: id
-
-    if ids != [] do
-      from(a in ExperimentAssignment,
-        where: a.id in ^ids and a.room_id == ^room_id and is_nil(a.page_id)
-      )
-      |> Repo.update_all(set: [page_id: page.id])
-    end
-
-    :ok
-  end
-
-  # Nothing has set these since ADR-0011; the columns stay until a schema
-  # change removes them.
-  defp any_verdict_meta?(%Entry{} = entry, key) do
-    Enum.any?(entry.attempts, fn attempt ->
-      Enum.any?(attempt.verdicts, &((&1.meta || %{})[key] == true))
-    end)
   end
 
   @doc """

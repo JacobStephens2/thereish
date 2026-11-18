@@ -23,25 +23,6 @@ defmodule Thereish.ExperimentsTest do
     %{room: Repo.get_by!(Room, slug: slug), mara: mara, jacob: jacob}
   end
 
-  # Writes an Entry and records its outcome, as the Room does when a Page closes.
-  defp record_outcome(room, attrs) do
-    entry = entry(attrs)
-    {:ok, page} = Chronicle.write(room.id, entry)
-    {:ok, outcome} = Experiments.record_outcome(room.id, page, entry)
-    {page, outcome}
-  end
-
-  # Writes a closed Page whose document carries its own id, as the Author does.
-  defp write_page(room, document_id) do
-    {:ok, page} =
-      Chronicle.write(
-        room.id,
-        entry(page: %Document{identifier: document_id, bookends: ["lantern", "harbour"]})
-      )
-
-    page
-  end
-
   describe "experiment declaration" do
     test "declares author_model experiment" do
       exp = Experiments.definition(:author_model)
@@ -149,7 +130,7 @@ defmodule Thereish.ExperimentsTest do
       assert Assignment.arm(skipped, :channel) == nil
       assert [%{arm: "nudge_on"}] = ExperimentFixtures.assignments(room.id, "channel")
 
-      {_page, _outcome} = record_outcome(room, assignment: skipped)
+      {:ok, _page} = Chronicle.write(room.id, entry(assignment: skipped))
       assert ExperimentFixtures.outcomes(room.id, "channel") == []
       assert Experiments.progress(room.id, "channel").recorded == 0
       assert Experiments.progress(room.id, "author_model").recorded == 1
@@ -181,18 +162,21 @@ defmodule Thereish.ExperimentsTest do
     end
   end
 
-  describe "recording a Page's outcome" do
+  describe "the Chronicle's complete Entry write" do
     test "stores the arm of the Entry's Assignment", %{room: room} do
-      {_page, outcome} = record_outcome(room, assignment: Experiments.assign(room.id))
-      {_page, outcome2} = record_outcome(room, assignment: Experiments.assign(room.id))
+      {:ok, first} = Chronicle.write(room.id, entry(assignment: Experiments.assign(room.id)))
+      {:ok, second} = Chronicle.write(room.id, entry(assignment: Experiments.assign(room.id)))
+      [outcome, outcome2] = ExperimentFixtures.outcomes(room.id, "author_model")
 
       assert {outcome.arm, outcome2.arm} == {"flash", "astra"}
+      assert {outcome.page_id, outcome2.page_id} == {first.id, second.id}
     end
 
     test "records the Page under every Experiment it played under, linking each row",
          %{room: room} do
       assignment = Experiments.assign(room.id)
-      {page, outcome} = record_outcome(room, assignment: assignment)
+      {:ok, page} = Chronicle.write(room.id, entry(assignment: assignment))
+      assert [outcome] = ExperimentFixtures.outcomes(room.id, "author_model")
 
       assert {outcome.experiment_id, outcome.arm} == {"author_model", "flash"}
 
@@ -200,42 +184,130 @@ defmodule Thereish.ExperimentsTest do
       assert {channel.arm, channel.page_id} == {"nudge_on", page.id}
 
       assert Enum.all?(
-               ExperimentFixtures.assignments(room.id, "channel"),
+               ExperimentFixtures.assignments(room.id, "author_model") ++
+                 ExperimentFixtures.assignments(room.id, "channel"),
                &(&1.page_id == page.id)
              )
+
+      assert Experiments.progress(room.id, "author_model").recorded == 1
+      assert Experiments.progress(room.id, "channel").recorded == 1
+      assert outcome.taps == %{}
+      assert channel.taps == %{}
     end
 
-    test "files the outcome under the Assignment's own Experiment", %{room: room} do
+    test "writes and reads retired Arms with their legacy convergence values", %{room: room} do
       assignment = %Assignment{id: nil, experiment_id: "bait_against_plain", arm: :plain}
 
-      {_page, outcome} = record_outcome(room, assignment: assignment)
+      {:ok, page} =
+        Chronicle.write(
+          room.id,
+          entry(
+            assignment: assignment,
+            attempts: [%{verdicts: [%{meta: %{trap_sprung: true, deep_convergence: true}}]}]
+          )
+        )
+
+      assert [outcome] = ExperimentFixtures.outcomes(room.id, "bait_against_plain")
 
       assert {outcome.experiment_id, outcome.arm} == {"bait_against_plain", "plain"}
+      assert outcome.page_id == page.id
+      assert outcome.trap_converged
+      assert outcome.deep_converged
+      assert ExperimentFixtures.outcomes(room.id, "author_model") == []
+
+      refute Experiments.page_arm(Experiments.page_arms(room.id), page).experiment_unblinded
+      insert_outcomes(room.id, "bait_against_plain", 19)
+
+      {:ok, _} =
+        Experiments.unblind(room.id, "bait_against_plain", %{unblinded_at: DateTime.utc_now()})
+
+      assert %{arm: "plain", trap_converged: true, deep_converged: true} =
+               Experiments.page_arm(Experiments.page_arms(room.id), page)
     end
 
     test "records an Entry with no Assignment under the default, linking no row",
          %{room: room} do
       unlinked = insert_assignment(room.id, arm: "flash")
 
-      {_page, outcome} = record_outcome(room, assignment: nil)
+      {:ok, _page} = Chronicle.write(room.id, entry(assignment: nil))
+      assert [outcome] = ExperimentFixtures.outcomes(room.id, "author_model")
 
       assert {outcome.experiment_id, outcome.arm} == {"author_model", "flash"}
       assert Repo.reload!(unlinked).page_id == nil
+      assert ExperimentFixtures.outcomes(room.id, "channel") == []
+    end
+
+    for row <- [:lost, :missing] do
+      test "a retained Assignment with a #{row} row records its Arms without borrowing", %{
+        room: room
+      } do
+        orphan = Experiments.assign(room.id)
+        id = if unquote(row) == :missing, do: Ecto.UUID.generate()
+
+        assignment = %Assignment{
+          id: id,
+          experiment_id: "author_model",
+          arm: :astra,
+          also: [%Assignment{experiment_id: "channel", arm: :nudge_off}]
+        }
+
+        # Current Room facts do not replace the Entry's retained play facts.
+        :ok = Rooms.toggle(room.slug, :nudges)
+        {:ok, page} = Chronicle.write(room.id, entry(assignment: assignment))
+
+        assert [%{arm: "astra", page_id: page_id}] =
+                 ExperimentFixtures.outcomes(room.id, "author_model")
+
+        assert page_id == page.id
+
+        assert [%{arm: "nudge_off", page_id: ^page_id}] =
+                 ExperimentFixtures.outcomes(room.id, "channel")
+
+        assert [%{id: orphan_id, page_id: nil}] =
+                 ExperimentFixtures.assignments(room.id, "author_model")
+
+        assert orphan_id == orphan.id
+        assert Enum.all?(ExperimentFixtures.assignments(room.id, "channel"), &is_nil(&1.page_id))
+      end
+    end
+
+    test "links only retained rows of the same Room", %{room: room} do
+      other = Repo.get_by!(Room, slug: open_room())
+      foreign = Experiments.assign(other.id)
+      retained = Experiments.assign(room.id)
+      [channel] = retained.also
+      assignment = %{retained | id: foreign.id}
+
+      {:ok, page} = Chronicle.write(room.id, entry(assignment: assignment))
+
+      assert [%{page_id: nil}] = ExperimentFixtures.assignments(other.id, "author_model")
+      assert [%{page_id: nil}] = ExperimentFixtures.assignments(room.id, "author_model")
+
+      assert [%{id: channel_id, page_id: page_id}] =
+               ExperimentFixtures.assignments(room.id, "channel")
+
+      assert {channel_id, page_id} == {channel.id, page.id}
+      assert [%{page_id: ^page_id}] = ExperimentFixtures.outcomes(room.id, "author_model")
     end
 
     test "reads melded, Closeness, closing band, Attempts and closed-because from the Entry",
          %{room: room} do
-      {page, outcome} =
-        record_outcome(room,
-          closed_because: :attempts_spent,
-          melded?: false,
-          closeness: 55,
-          attempts: [
-            %{number: 1, melded?: false, closeness: 30},
-            %{number: 2, melded?: false, closeness: 45},
-            %{number: 3, melded?: false, closeness: 55}
-          ]
+      {:ok, page} =
+        Chronicle.write(
+          room.id,
+          entry(
+            closed_because: :attempts_spent,
+            melded?: false,
+            closeness: 55,
+            attempts: [
+              %{number: 1, melded?: false, closeness: 30},
+              %{number: 2, melded?: false, closeness: 45},
+              %{number: 3, melded?: false, closeness: 55}
+            ]
+          )
         )
+
+      assert [outcome] = ExperimentFixtures.outcomes(room.id, "author_model")
 
       assert outcome.melded == false
       assert outcome.closeness == 55
@@ -252,7 +324,7 @@ defmodule Thereish.ExperimentsTest do
       orphan = Experiments.assign(room.id)
       assignment = Experiments.assign(room.id)
 
-      {page, _outcome} = record_outcome(room, assignment: assignment)
+      {:ok, page} = Chronicle.write(room.id, entry(assignment: assignment))
 
       [orphan_row, row] = ExperimentFixtures.assignments(room.id, "author_model")
       assert {orphan_row.id, orphan_row.page_id} == {orphan.id, nil}
@@ -266,8 +338,8 @@ defmodule Thereish.ExperimentsTest do
 
     test "leaves a row already linked to another Page alone", %{room: room} do
       assignment = Experiments.assign(room.id)
-      {first, _outcome} = record_outcome(room, assignment: assignment)
-      {_second, _outcome} = record_outcome(room, assignment: assignment)
+      {:ok, first} = Chronicle.write(room.id, entry(assignment: assignment))
+      {:ok, _second} = Chronicle.write(room.id, entry(assignment: assignment))
 
       assert [%{page_id: page_id}] = ExperimentFixtures.assignments(room.id, "author_model")
       assert page_id == first.id
@@ -320,7 +392,8 @@ defmodule Thereish.ExperimentsTest do
     end
 
     test "finds its outcome by the Page's id", ctx do
-      {page, outcome} = record_outcome(ctx.room, assignment: Experiments.assign(ctx.room.id))
+      {:ok, page} =
+        Chronicle.write(ctx.room.id, entry(assignment: Experiments.assign(ctx.room.id)))
 
       assert {:ok, _} =
                Experiments.record_bookends_tap(ctx.room.id, %{
@@ -329,7 +402,10 @@ defmodule Thereish.ExperimentsTest do
                  label: "flat"
                })
 
-      assert Repo.reload!(outcome).taps == %{to_string(ctx.mara.id) => "flat"}
+      for experiment_id <- ["author_model", "channel"] do
+        assert [outcome] = ExperimentFixtures.outcomes(ctx.room.id, experiment_id)
+        assert outcome.taps == %{to_string(ctx.mara.id) => "flat"}
+      end
     end
 
     test "with no outcome of its own is recorded alone and updates no other Page's outcome",
@@ -449,7 +525,10 @@ defmodule Thereish.ExperimentsTest do
 
   describe "a Page's arm" do
     test "is hidden until its experiment is unblinded, then shown with its convergence", ctx do
-      page = write_page(ctx.room, "doc-1")
+      page =
+        insert_historical_page(ctx.room.id,
+          document: %Document{identifier: "doc-1", bookends: ["lantern", "harbour"]}
+        )
 
       insert_assignment(ctx.room.id,
         page_id: page.id,
@@ -486,7 +565,11 @@ defmodule Thereish.ExperimentsTest do
     end
 
     test "is matched by the Page's own identifier when its rows name no Page id", ctx do
-      page = write_page(ctx.room, "doc-2")
+      page =
+        insert_historical_page(ctx.room.id,
+          document: %Document{identifier: "doc-2", bookends: ["lantern", "harbour"]}
+        )
+
       insert_assignment(ctx.room.id, page_identifier: "doc-2", arm: "astra")
       insert_outcomes(ctx.room.id, "author_model", 20)
       {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
@@ -496,7 +579,11 @@ defmodule Thereish.ExperimentsTest do
     end
 
     test "takes the arm of an outcome when the Page has no assignment", ctx do
-      page = write_page(ctx.room, "doc-3")
+      page =
+        insert_historical_page(ctx.room.id,
+          document: %Document{identifier: "doc-3", bookends: ["lantern", "harbour"]}
+        )
+
       insert_outcome(ctx.room.id, page_identifier: "doc-3", arm: "astra", trap_converged: true)
       insert_outcomes(ctx.room.id, "author_model", 19)
       {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
@@ -506,7 +593,11 @@ defmodule Thereish.ExperimentsTest do
     end
 
     test "of an unmatched Page is Bait against plain, blinded", ctx do
-      page = write_page(ctx.room, "doc-4")
+      page =
+        insert_historical_page(ctx.room.id,
+          document: %Document{identifier: "doc-4", bookends: ["lantern", "harbour"]}
+        )
+
       insert_assignment(ctx.room.id, page_identifier: "someone-else", arm: "flash")
       insert_outcomes(ctx.room.id, "author_model", 20)
       {:ok, _} = Experiments.unblind(ctx.room.id, "author_model", unblind_attrs(ctx.jacob))
@@ -557,8 +648,7 @@ defmodule Thereish.ExperimentsTest do
     end
 
     test "summarizes Bait against plain from its outcomes and its Pages' fairness taps", ctx do
-      entry = entry()
-      {:ok, page} = Chronicle.write(ctx.room.id, entry)
+      page = insert_historical_page(ctx.room.id)
 
       insert_outcome(ctx.room.id,
         page_id: page.id,
@@ -589,7 +679,7 @@ defmodule Thereish.ExperimentsTest do
     end
 
     test "counts each Seat's current opinion of a Page, leaving out the admin's", ctx do
-      {:ok, page} = Chronicle.write(ctx.room.id, entry())
+      page = insert_historical_page(ctx.room.id)
 
       insert_outcome(ctx.room.id,
         page_id: page.id,

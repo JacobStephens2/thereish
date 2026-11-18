@@ -9,6 +9,10 @@ defmodule Thereish.Chronicle do
   an Assayer grade append; they do not rewrite Verdicts or Precedents (ADR-0019).
   Historical correction rows remain readable.
 
+  `write/2` commits the Entry's play rows, every retained Experiment outcome
+  and eligible Assignment links together. A failed outcome or link rejects the
+  complete Entry; the Room receives a saved Page only after commit.
+
   Rows reference Seats and never Accounts. A Seat is permanent and claimable, so
   a history written against one comes with it whenever an Account claims it
   (ADR-0007).
@@ -28,6 +32,8 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Bridge
   alias Thereish.Chronicle.Correction
   alias Thereish.Chronicle.Entry
+  alias Thereish.Chronicle.ExperimentAssignment
+  alias Thereish.Chronicle.ExperimentOutcome
   alias Thereish.Chronicle.FairnessTap
   alias Thereish.Chronicle.Give
   alias Thereish.Chronicle.Markdown
@@ -40,6 +46,7 @@ defmodule Thereish.Chronicle do
   alias Thereish.Chronicle.Timing
   alias Thereish.Chronicle.Verdict
   alias Thereish.Experiments
+  alias Thereish.Experiments.Assignment
   alias Thereish.Foley.Track
   alias Thereish.Foley.Vamp
   alias Thereish.Mask
@@ -48,7 +55,8 @@ defmodule Thereish.Chronicle do
   alias Thereish.Steward.TrackCache
 
   @doc """
-  Writes one closed Page, with its attempts, its Bridges and its verdicts.
+  Writes one closed Page, its play rows, every retained Experiment outcome and
+  eligible Assignment links together, returning the saved Page after commit.
 
   `entry` is the `Thereish.Chronicle.Entry` the Game built when the Page
   closed, stamped with the times Pacing recorded, including `opened_at`, when
@@ -64,6 +72,7 @@ defmodule Thereish.Chronicle do
       page = insert_page(room_id, entry)
 
       Enum.each(entry.attempts, &insert_attempt(page, &1))
+      insert_outcomes(page, entry)
 
       page
     end)
@@ -608,6 +617,57 @@ defmodule Thereish.Chronicle do
       order_by: [desc: p.closed_at, desc: p.id],
       preload: [:gives, :attempts, :room]
     )
+  end
+
+  defp insert_outcomes(page, %Entry{} = entry) do
+    assignment = entry.assignment || Assignment.default()
+    arms = [assignment | assignment.also]
+
+    Enum.each(arms, &insert_outcome(page, entry, &1))
+    link_assignments(page, arms)
+  end
+
+  defp insert_outcome(page, %Entry{} = entry, %Assignment{} = assignment) do
+    closing_band = entry.closeness && to_string(Thereish.Ladder.read(entry.closeness).band)
+
+    %ExperimentOutcome{}
+    |> ExperimentOutcome.changeset(%{
+      room_id: page.room_id,
+      page_id: page.id,
+      page_identifier: page.id,
+      experiment_id: assignment.experiment_id,
+      arm: to_string(assignment.arm),
+      melded: entry.melded?,
+      closeness: entry.closeness,
+      closing_band: closing_band,
+      attempts_count: length(entry.attempts),
+      closed_because: to_string(entry.closed_because),
+      trap_converged: any_verdict_meta?(entry, :trap_sprung),
+      deep_converged: any_verdict_meta?(entry, :deep_convergence),
+      taps: %{}
+    })
+    |> Repo.insert!()
+  end
+
+  # Link only the Entry's retained rows in this Room, after every outcome was
+  # inserted. Missing rows and rows already linked to a Page stay as they are.
+  defp link_assignments(page, assignments) do
+    ids = for %Assignment{id: id} <- assignments, id != nil, do: id
+
+    if ids != [] do
+      from(a in ExperimentAssignment,
+        where: a.id in ^ids and a.room_id == ^page.room_id and is_nil(a.page_id)
+      )
+      |> Repo.update_all(set: [page_id: page.id])
+    end
+  end
+
+  # Nothing has set these since ADR-0011; the columns stay until a schema
+  # change removes them.
+  defp any_verdict_meta?(%Entry{} = entry, key) do
+    Enum.any?(entry.attempts, fn attempt ->
+      Enum.any?(attempt.verdicts, &((&1.meta || %{})[key] == true))
+    end)
   end
 
   defp insert_page(room_id, %Entry{} = entry) do
