@@ -16,6 +16,10 @@ defmodule Thereish.Rooms.Pacing do
 
     * `{:timer, name, token, ms}` — arm a timer that answers with
       `elapsed(pacing, name, token, now)` after `ms` milliseconds
+    * `{:ask_assayer, request_id, request}` — ask the Steward and echo the
+      request identity and raw answer in `assayed(pacing, request_id, result)`
+    * `{:prepare_verdict_voice, verdict}` — prepare Voice for an accepted
+      Verdict before applying its Game event
     * `{:apply, events}` — apply these Game events, in order
     * `:broadcast` — what every screen says about the wait has changed
 
@@ -34,10 +38,11 @@ defmodule Thereish.Rooms.Pacing do
 
   ## It owns time, and the rules do not
 
-  The rules answer the last commit with two things owed: one assay carrying
-  every Bridge, and a Beat. The Room performs both — a Task for the Assayer, a
-  timer for the Beat — and Pacing holds the Verdict that comes back until the
-  Beat is over. After the reveal is up, it holds advancement the same way: a
+  The rules answer the last commit with one assay carrying every Bridge.
+  Pacing starts the Beat and the Assayer's wait together. It accepts one
+  answer carrying that wait's request identity, prepares Voice for a
+  successful answer, and holds the Game event until the Beat is over.
+  After the reveal is up, it holds advancement the same way: a
   shared deadline every screen reads, which a reconnect cannot restart and a
   second device cannot skip. That is the whole of the reveal's theatre, and it
   is why the Game itself can be driven in a test as a list of events with no
@@ -61,10 +66,9 @@ defmodule Thereish.Rooms.Pacing do
   seconds, a provisional reading at eight, and at ten the game states it has no
   Verdict. Pacing runs that ladder, because it is made of time. Each step moves
   what every screen says; the last one is not a step but the end of the wait —
-  the Verdict still outstanding is recorded as absent and the call goes to the
-  players, which is design law 3's joint authority arriving by the back door
-  rather than an invented number. A Verdict that turns up after that is
-  dropped: an Attempt is graded once (ADR-0010).
+  the Verdict still outstanding is recorded as absent even if the Beat is
+  still open, and the call goes to the players. A Verdict that turns up after
+  that is dropped: an Attempt is graded once (ADR-0010).
 
   The ladder is armed when the Assayer is asked and stood down when it answers,
   not when the reveal appears. Those differ by the Beat, and an Assayer that
@@ -76,19 +80,19 @@ defmodule Thereish.Rooms.Pacing do
   wait it is still running. A timer that fires after its wait ended — a rung
   whose Assayer answered in the same instant, a Beat from a Page that moved on
   — carries a token Pacing no longer holds, and changes nothing. So the Room
-  never cancels a timer, and nothing depends on the order of its mailbox. That
-  rule lives in `elapsed/4` and nowhere else.
+  never cancels a timer. Pacing handles matching messages in receipt order.
+  Giving reset and Page turn retire the wait and preserve the counter that
+  allocates request identities and timer tokens.
   """
 
   alias Thereish.Chronicle.Entry
   alias Thereish.Chronicle.Timing
   alias Thereish.Game
+  alias Thereish.Steward
 
   defstruct durations: nil,
             tokens: 0,
-            beat: nil,
-            held: [],
-            assayer: nil,
+            assay: nil,
             author: nil,
             hold: nil,
             reveal_sequence: nil,
@@ -117,9 +121,20 @@ defmodule Thereish.Rooms.Pacing do
         }
 
   @attempt_times [:started_at, :assaying_started_at, :revealed_at, :advanced_at]
+  @unavailable {:verdict_unavailable, %{}}
 
   @type name :: :beat | :assayer | :author | :hold
   @type token :: non_neg_integer()
+
+  @typedoc "The opaque identity echoed with the Steward's answer to one assay."
+  @opaque assay_id :: token()
+  @type assay_result :: {:ok, Steward.verdict()} | {:error, term()}
+
+  @typep verdict_event :: {:verdict_received, Steward.verdict()} | {:verdict_unavailable, %{}}
+  @typep assay_wait :: %{
+           beat: token() | nil,
+           verdict: {:awaiting, assay_id(), :grading | :slow, token()} | {:held, verdict_event()}
+         }
 
   @type step :: %{
           optional(:index) => non_neg_integer(),
@@ -143,9 +158,7 @@ defmodule Thereish.Rooms.Pacing do
   @type t :: %__MODULE__{
           durations: durations(),
           tokens: token(),
-          beat: token() | nil,
-          held: [Game.event()],
-          assayer: %{step: :grading | :slow, token: token()} | nil,
+          assay: assay_wait() | nil,
           author: %{ref: reference(), step: :writing | :still_writing, token: token()} | nil,
           hold: %{revealed_ms: integer(), ms: non_neg_integer(), token: token() | nil} | nil,
           reveal_sequence: map() | nil,
@@ -162,6 +175,8 @@ defmodule Thereish.Rooms.Pacing do
   """
   @type effect ::
           {:timer, name(), token(), non_neg_integer()}
+          | {:ask_assayer, assay_id(), Steward.request()}
+          | {:prepare_verdict_voice, Steward.verdict()}
           | {:apply, [Game.event()]}
           | :broadcast
 
@@ -204,32 +219,43 @@ defmodule Thereish.Rooms.Pacing do
     end
   end
 
-  @doc "The Game owes a Beat: Verdicts are held until it is over."
-  @spec beat_owed(t(), now()) :: {t(), [effect()]}
-  def beat_owed(%__MODULE__{} = pacing, _now) do
-    {pacing, token} = mint(pacing)
-    {%{pacing | beat: token, held: []}, [{:timer, :beat, token, pacing.durations.beat}]}
-  end
+  @doc "Starts the Beat, the assay and the first Assayer rung, in that order."
+  @spec start_assay(t(), Steward.request()) :: {t(), [effect()]}
+  def start_assay(%__MODULE__{} = pacing, request) do
+    {pacing, beat} = mint(pacing)
+    {pacing, request_id} = mint(pacing)
+    {pacing, awaiting, rung} = assayer_rung(pacing, request_id, :grading)
 
-  @doc "The Assayer was asked: its ladder starts at grading."
-  @spec assayer_asked(t(), now()) :: {t(), [effect()]}
-  def assayer_asked(%__MODULE__{} = pacing, _now), do: assayer_step(pacing, :grading)
+    {%{pacing | assay: %{beat: beat, verdict: awaiting}},
+     [{:timer, :beat, beat, pacing.durations.beat}, {:ask_assayer, request_id, request}, rung]}
+  end
 
   @doc """
-  The Assayer answered with `event`. That stands its ladder down. The event is
-  held while the Beat runs, applied at once after it, and dropped when no
-  Assayer is being waited on.
+  Consumes an answer only while its request is awaited and stands its ladder
+  down. A success prepares Voice immediately. The Game event is held during
+  the Beat and applied at once after it, including on Steward error.
   """
-  @spec assayed(t(), Game.event()) :: {t(), [effect()]}
-  def assayed(%__MODULE__{assayer: nil} = pacing, _event), do: {pacing, []}
+  @spec assayed(t(), assay_id(), assay_result()) :: {t(), [effect()]}
+  def assayed(
+        %__MODULE__{assay: %{beat: beat, verdict: {:awaiting, request_id, _, _}}} = pacing,
+        request_id,
+        result
+      ) do
+    {event, effects} = assay_outcome(result)
 
-  def assayed(%__MODULE__{beat: nil} = pacing, event) do
-    {%{pacing | assayer: nil}, [{:apply, [event]}]}
+    if is_nil(beat) do
+      {%{pacing | assay: nil}, effects ++ [{:apply, [event]}]}
+    else
+      {%{pacing | assay: %{beat: beat, verdict: {:held, event}}}, effects}
+    end
   end
 
-  def assayed(%__MODULE__{} = pacing, event) do
-    {%{pacing | assayer: nil, held: pacing.held ++ [event]}, []}
-  end
+  def assayed(%__MODULE__{} = pacing, _request_id, _result), do: {pacing, []}
+
+  defp assay_outcome({:ok, verdict}),
+    do: {{:verdict_received, verdict}, [{:prepare_verdict_voice, verdict}]}
+
+  defp assay_outcome({:error, _reason}), do: {@unavailable, []}
 
   @doc """
   The Author was asked to write, under `ref`. Any earlier Author wait is stood
@@ -251,15 +277,15 @@ defmodule Thereish.Rooms.Pacing do
   def author_answered(%__MODULE__{}, _ref), do: :stale
 
   @doc """
-  The Gives were reset: the Author is no longer waited on, and the Page's
-  opened time and occurrence times are forgotten.
+  The Gives were reset: retire the Author and Assayer waits, and forget the
+  Page's opened time and occurrence times.
   """
   @spec gives_reset(t()) :: t()
   def gives_reset(%__MODULE__{} = pacing), do: forget_page(pacing)
 
   @doc """
-  The Page was turned: the Author is no longer waited on, and the closed
-  Page's opened time and occurrence times are forgotten.
+  The Page was turned: retire the Author and Assayer waits, and forget the
+  closed Page's opened time and occurrence times.
   """
   @spec page_turned(t()) :: t()
   def page_turned(%__MODULE__{} = pacing), do: forget_page(pacing)
@@ -298,23 +324,34 @@ defmodule Thereish.Rooms.Pacing do
   holds changes nothing.
   """
   @spec elapsed(t(), name(), token(), now()) :: {t(), [effect()]}
-  def elapsed(%__MODULE__{beat: token} = pacing, :beat, token, _now) when token != nil do
-    held = pacing.held
-    pacing = %{pacing | beat: nil, held: []}
-
-    if held == [], do: {pacing, []}, else: {pacing, [{:apply, held}]}
+  def elapsed(%__MODULE__{assay: %{beat: token} = assay} = pacing, :beat, token, _now)
+      when token != nil do
+    case assay.verdict do
+      {:held, event} -> {%{pacing | assay: nil}, [{:apply, [event]}]}
+      {:awaiting, _, _, _} -> {%{pacing | assay: %{assay | beat: nil}}, []}
+    end
   end
 
   # Ten seconds is where the game stops waiting and says so. The Verdict is
   # recorded as absent, which the rules already answer by revealing without a
   # number and handing the ruling to the players.
-  def elapsed(%__MODULE__{assayer: %{token: token, step: :slow}} = pacing, :assayer, token, _now) do
-    {%{pacing | assayer: nil}, [{:apply, [{:verdict_unavailable, %{}}]}]}
+  def elapsed(
+        %__MODULE__{assay: %{verdict: {:awaiting, _, :slow, token}}} = pacing,
+        :assayer,
+        token,
+        _now
+      ) do
+    {%{pacing | assay: nil}, [{:apply, [@unavailable]}]}
   end
 
-  def elapsed(%__MODULE__{assayer: %{token: token, step: :grading}} = pacing, :assayer, token, _) do
-    {pacing, effects} = assayer_step(pacing, :slow)
-    {pacing, effects ++ [:broadcast]}
+  def elapsed(
+        %__MODULE__{assay: %{verdict: {:awaiting, request_id, :grading, token}} = assay} = pacing,
+        :assayer,
+        token,
+        _now
+      ) do
+    {pacing, awaiting, rung} = assayer_rung(pacing, request_id, :slow)
+    {%{pacing | assay: %{assay | verdict: awaiting}}, [rung, :broadcast]}
   end
 
   def elapsed(
@@ -364,12 +401,15 @@ defmodule Thereish.Rooms.Pacing do
   @spec view(t(), Game.t(), now()) :: view()
   def view(%__MODULE__{} = pacing, game, now) do
     %{
-      assayer_step: pacing.assayer && pacing.assayer.step,
+      assayer_step: assayer_step(pacing.assay),
       author_step: pacing.author && pacing.author.step,
       can_advance?: revealed?(Game.phase(game)) and may_advance(pacing, now) == :ok,
       reveal_sequence: sequence_view(pacing.reveal_sequence, now)
     }
   end
+
+  defp assayer_step(%{verdict: {:awaiting, _, step, _}}), do: step
+  defp assayer_step(_assay), do: nil
 
   defp revealed?(phase), do: phase in [:reveal, :closed]
 
@@ -382,7 +422,7 @@ defmodule Thereish.Rooms.Pacing do
   end
 
   defp forget_page(pacing) do
-    %{pacing | author: nil, opened_at: nil, times: %{gives: %{}, attempts: %{}}}
+    %{pacing | assay: nil, author: nil, opened_at: nil, times: %{gives: %{}, attempts: %{}}}
   end
 
   defp open_page(%{opened_at: nil} = pacing, phase, now) when phase != :waiting do
@@ -525,11 +565,11 @@ defmodule Thereish.Rooms.Pacing do
 
   defp step(role, delay, duration, index), do: Map.put(step(role, delay, duration), :index, index)
 
-  defp assayer_step(pacing, step) do
+  defp assayer_rung(pacing, request_id, step) do
     {pacing, token} = mint(pacing)
-    pacing = %{pacing | assayer: %{step: step, token: token}}
 
-    {pacing, [{:timer, :assayer, token, rung_ms(pacing.durations, step)}]}
+    {pacing, {:awaiting, request_id, step, token},
+     {:timer, :assayer, token, rung_ms(pacing.durations, step)}}
   end
 
   defp author_step(pacing, ref, step) do

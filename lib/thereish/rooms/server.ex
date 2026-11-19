@@ -240,14 +240,12 @@ defmodule Thereish.Rooms.Server do
     state
   end
 
-  # An Assayer that blows up has failed to grade, which is a thing the game has
-  # a rule for. It is not a thing the Room should die of.
-  defp perform({:ask_assayer, request}, state, _now) do
+  defp perform({:ask_assayer, request_id, request}, state, _now) do
     chronicle = Chronicle.page_views(state.room.id, :asc)
 
     Steward.answer_later(
       fn -> Steward.assay(request, chronicle: chronicle) end,
-      &{:assayed, verdict_event(&1)}
+      &{:assayed, request_id, &1}
     )
 
     state
@@ -418,12 +416,6 @@ defmodule Thereish.Rooms.Server do
   end
 
   defp wall_clock, do: DateTime.utc_now()
-
-  defp verdict_event({:ok, verdict}), do: {:verdict_received, verdict}
-
-  # The Assayer failing is a rule, not an exception: the game says it has no
-  # verdict and the call goes to the players.
-  defp verdict_event({:error, _reason}), do: {:verdict_unavailable, %{}}
 
   defp broadcast(slug, message \\ :room_changed) do
     Phoenix.PubSub.broadcast(Thereish.PubSub, Thereish.Rooms.topic(slug), message)

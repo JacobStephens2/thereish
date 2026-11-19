@@ -703,7 +703,7 @@ defmodule Thereish.GameTest do
                Game.apply(s2, {:bridge_committed, %{seat_id: "seat-Ada", bridge: "shore"}})
 
       assert Game.view(assaying_state, nil).phase == :assaying
-      assert [:beat, {:assay, assay_req}] = effects
+      assert [{:assay, assay_req}] = effects
       assert assay_req.bridges == ["coast", "harbour", "shore"]
     end
 
@@ -1019,11 +1019,10 @@ defmodule Thereish.GameTest do
   end
 
   describe "the last commit" do
-    test "asks for exactly one assay and starts the beat" do
+    test "asks for exactly one assay" do
       {state, effects} = commit_all(bridging(), [{"Mara", "cairn"}, {"Jacob", "beacon"}])
 
-      assert :beat in effects
-      assert [{:assay, request}] = assays(effects)
+      assert [{:assay, request}] = effects
       assert request.bookends == ["lantern", "harbour"]
 
       # In roster order, the order the reveal shows them in, so that the

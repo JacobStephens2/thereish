@@ -43,10 +43,10 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   # Applies a command the Room's process would run, answering the asks that
-  # a real Room answers with a follow-up command. `writes` names the Chronicle
-  # Page id each `{:write_chronicle, _}` comes back with.
+  # a real Room answers with a follow-up command. `written` names the Chronicle
+  # Page id each `{:write_chronicle, _}` comes back with. `now` sets the clock.
   defp run(play, command, opts \\ []) do
-    {:ok, play, effects} = Play.apply(play, command, @now)
+    {:ok, play, effects} = Play.apply(play, command, opts[:now] || @now)
     follow_up(play, effects, opts)
   end
 
@@ -107,14 +107,21 @@ defmodule Thereish.Rooms.PlayTest do
   end
 
   defp verdict(closeness, quip \\ "a quip") do
-    {:verdict_received,
+    {:ok,
      %{closeness: closeness, reasoning: "r", quip: quip, furthest: ["cairn", "cairo"], meta: %{}}}
+  end
+
+  defp at(ms), do: %{ms: ms, at: DateTime.add(@now.at, ms, :millisecond)}
+
+  defp assay_reply(effects, result) do
+    {:ask_assayer, request_id, _request} = find(effects, :ask_assayer)
+    {:assayed, request_id, result}
   end
 
   # The Verdict lands during the Beat and is applied when the Beat ends.
   defp assayed(play, bridged, closeness, opts) do
     {:timer, :beat, token, _ms} = find(bridged, :timer)
-    {play, heard} = run(play, {:assayed, verdict(closeness)}, opts)
+    {play, heard} = run(play, assay_reply(bridged, verdict(closeness)), opts)
     {play, beat} = run(play, {:pacing, :beat, token}, opts)
     {play, heard ++ beat}
   end
@@ -301,12 +308,12 @@ defmodule Thereish.Rooms.PlayTest do
       assert view(play).bookends == ["lighthouse", "picnic"]
 
       {play, bridged} = bridges(play, "cairn", "cairn")
-      assert {:ask_assayer, %{bridges: _}} = find(bridged, :ask_assayer)
+      assert {:ask_assayer, _request_id, %{bridges: _}} = find(bridged, :ask_assayer)
       assert phase(play) == :assaying
 
       # The Verdict is held for the Beat, then applied.
       {:timer, :beat, token, 2_500} = find(bridged, :timer)
-      {play, heard} = run(play, {:assayed, verdict(95)})
+      {play, heard} = run(play, assay_reply(bridged, verdict(95)))
       assert find(heard, :write_chronicle) == nil
       assert phase(play) == :assaying
 
@@ -358,7 +365,7 @@ defmodule Thereish.Rooms.PlayTest do
       {play, _nudged} = run(play, {:nudge, "mara", "beacon"})
       {_play, bridged} = bridges(play, "cairn", "cairo")
 
-      assert {:ask_assayer, request} = find(bridged, :ask_assayer)
+      assert {:ask_assayer, _request_id, request} = find(bridged, :ask_assayer)
       refute inspect(request) =~ "beacon"
     end
 
@@ -814,21 +821,207 @@ defmodule Thereish.Rooms.PlayTest do
     end
   end
 
+  describe "the Assayer's wait" do
+    test "an expired answer leaves the next Attempt waiting for its own Verdict" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+      {play, _page_ref, _giving} = written(play)
+      {play, first} = bridges(play, "cairn", "cairo")
+
+      assert [
+               {:timer, :beat, beat, 2_500},
+               {:ask_assayer, request_id, %{bridges: ["cairn", "cairo"]}},
+               {:timer, :assayer, grading, 4_000},
+               :broadcast
+             ] = first
+
+      refute request_id in [beat, grading]
+
+      {:ok, play, []} = Play.apply(play, {:pacing, :beat, beat}, at(2_500))
+
+      {:ok, play, [{:timer, :assayer, slow, 6_000}, :broadcast]} =
+        Play.apply(play, {:pacing, :assayer, grading}, at(4_000))
+
+      {:ok, play, [:broadcast]} = Play.apply(play, {:pacing, :assayer, slow}, at(10_000))
+      assert %{phase: :reveal, reveal: %{graded?: false}} = view(play)
+
+      {play, _} = run(play, {:next_attempt, "mara"}, now: at(10_100))
+      {play, second} = bridges(play, "echo", "echo", now: at(10_500))
+      {:timer, :beat, second_beat, 2_500} = find(second, :timer)
+
+      for {name, token} <- [{:beat, beat}, {:assayer, grading}, {:assayer, slow}] do
+        assert {:ok, ^play, []} = Play.apply(play, {:pacing, name, token}, at(12_000))
+      end
+
+      {:ok, play, []} = Play.apply(play, {:pacing, :beat, second_beat}, at(13_000))
+      waiting = view(play)
+      assert %{phase: :assaying, attempt: %{number: 2}, assayer_step: :grading} = waiting
+
+      expired = assay_reply(first, verdict(10, "An expired Quip"))
+      {:ok, unchanged, effects} = Play.apply(play, expired, at(13_100))
+      assert effects == []
+      assert view(unchanged) == waiting
+
+      current = assay_reply(second, verdict(95, "The current Quip"))
+
+      assert {:ok, closed, [{:speak, speech, "meld. The current Quip"}, :broadcast]} =
+               Play.apply(unchanged, current, at(13_200))
+
+      assert %{phase: :closed, reveal: %{closeness: 95, quip: "The current Quip"}} = view(closed)
+
+      {_play, effects} =
+        run(
+          closed,
+          {:voice_spoken, speech, {:ok, %{audio: "current", meta: %{provider: "current"}}}},
+          now: at(13_300)
+        )
+
+      assert [{:write_chronicle, entry}, {:broadcast, {:voice_ready, 2}}] = effects
+
+      assert [
+               %{number: 1, verdicts: [%{graded?: false, voice_meta: nil}]},
+               %{number: 2, verdicts: [%{closeness: 95, voice_meta: %{"provider" => "current"}}]}
+             ] = entry.attempts
+    end
+
+    test "a previous Page's Attempt 1 cannot answer the current Page's Attempt 1" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+      {play, _page_ref, _giving} = written(play)
+      {play, first} = bridges(play, "cairn", "cairn")
+      {:timer, :beat, first_beat, 2_500} = find(first, :timer)
+      first_verdict = assay_reply(first, verdict(95, "The first Page"))
+
+      {:ok, play, [{:speak, _old_speech, "meld. The first Page"}]} =
+        Play.apply(play, first_verdict, at(500))
+
+      {:ok, play, [:broadcast]} = Play.apply(play, {:pacing, :beat, first_beat}, at(2_500))
+      assert %{phase: :closed, attempt: %{number: 1}} = view(play)
+
+      {play, _} = run(play, {:next_page, "mara", @members}, now: at(3_000), written: "page-1")
+      {play, _page_ref, _giving} = written(play, now: at(3_200))
+      {play, second} = bridges(play, "echo", "echo", now: at(3_300))
+      {:timer, :beat, second_beat, 2_500} = find(second, :timer)
+      waiting = view(play)
+      assert %{phase: :assaying, attempt: %{number: 1}, assayer_step: :grading} = waiting
+
+      for prior <- [first_verdict, assay_reply(first, {:error, :timeout})] do
+        assert {:ok, unchanged, []} = Play.apply(play, prior, at(4_000))
+        assert view(unchanged) == waiting
+      end
+
+      current = assay_reply(second, verdict(95, "The current Page"))
+
+      assert {:ok, held, [{:speak, speech, "meld. The current Page"}]} =
+               Play.apply(play, current, at(4_100))
+
+      assert {:ok, closed, [:broadcast]} =
+               Play.apply(held, {:pacing, :beat, second_beat}, at(5_800))
+
+      assert %{phase: :closed, reveal: %{quip: "The current Page"}} = view(closed)
+
+      reply =
+        {:voice_spoken, speech, {:ok, %{audio: "current", meta: %{provider: "second-page"}}}}
+
+      assert {:ok, _play, [{:write_chronicle, entry}, {:broadcast, {:voice_ready, 1}}]} =
+               Play.apply(closed, reply, at(5_900))
+
+      assert [%{number: 1, verdicts: [%{quip: "The current Page", voice_meta: meta}]}] =
+               entry.attempts
+
+      assert meta["provider"] == "second-page"
+    end
+
+    test "an answer on the slow rung prepares Voice once and holds the Verdict for the Beat" do
+      durations = %{@durations | beat: 5_500}
+      {play, _} = run(new(durations: durations), {:room_fact, {:claim_speaker, @speaker}})
+      {play, _page_ref, _giving} = written(play)
+      {play, asked} = bridges(play, "cairn", "cairo")
+
+      assert [
+               {:timer, :beat, beat, 5_500},
+               {:ask_assayer, _request_id, _request},
+               {:timer, :assayer, grading, 4_000},
+               :broadcast
+             ] = asked
+
+      assert {:ok, play, [{:timer, :assayer, slow, 6_000}, :broadcast]} =
+               Play.apply(play, {:pacing, :assayer, grading}, at(4_000))
+
+      assert view(play).assayer_step == :slow
+      reply = assay_reply(asked, verdict(10, "The accepted Quip"))
+      failure = assay_reply(asked, {:error, :timeout})
+
+      assert {:ok, held, [{:speak, _speech, "miss. The accepted Quip"}]} =
+               Play.apply(play, reply, at(4_200))
+
+      assert %{phase: :assaying, reveal: nil, assayer_step: nil} = view(held)
+
+      for duplicate <- [reply, failure] do
+        assert {:ok, ^held, []} = Play.apply(held, duplicate, at(4_300))
+      end
+
+      assert {:ok, revealed, [:broadcast]} = Play.apply(held, {:pacing, :beat, beat}, at(5_500))
+
+      assert %{phase: :reveal, reveal: %{closeness: 10, quip: "The accepted Quip"}} =
+               view(revealed)
+
+      for late <- [reply, failure, {:pacing, :beat, beat}, {:pacing, :assayer, slow}] do
+        assert {:ok, ^revealed, []} = Play.apply(revealed, late, at(10_000))
+      end
+    end
+
+    test "a Steward error during the Beat holds one ungraded reveal" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+      {play, _page_ref, _giving} = written(play)
+      {play, asked} = bridges(play, "cairn", "cairo")
+      {:timer, :beat, beat, 2_500} = find(asked, :timer)
+      failure = assay_reply(asked, {:error, :timeout})
+      success = assay_reply(asked, verdict(95))
+
+      assert {:ok, held, []} = Play.apply(play, failure, at(1_000))
+      assert %{phase: :assaying, reveal: nil, assayer_step: nil} = view(held)
+
+      for duplicate <- [failure, success] do
+        assert {:ok, ^held, []} = Play.apply(held, duplicate, at(1_500))
+      end
+
+      assert {:ok, revealed, [:broadcast]} = Play.apply(held, {:pacing, :beat, beat}, at(2_500))
+      assert %{phase: :reveal, reveal: %{graded?: false}} = view(revealed)
+
+      for duplicate <- [failure, success] do
+        assert {:ok, ^revealed, []} = Play.apply(revealed, duplicate, at(2_600))
+      end
+    end
+
+    test "a Steward error after the Beat reveals immediately" do
+      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+      {play, _page_ref, _giving} = written(play)
+      {play, asked} = bridges(play, "cairn", "cairo")
+      {:timer, :beat, beat, 2_500} = find(asked, :timer)
+
+      assert {:ok, play, []} = Play.apply(play, {:pacing, :beat, beat}, at(2_500))
+      assert %{phase: :assaying, assayer_step: :grading} = view(play)
+
+      reply = assay_reply(asked, {:error, :timeout})
+      assert {:ok, revealed, [:broadcast]} = Play.apply(play, reply, at(3_000))
+      assert %{phase: :reveal, reveal: %{graded?: false}, assayer_step: nil} = view(revealed)
+    end
+  end
+
   describe "the Assayer's prior Quips" do
     test "this Page's ride on the request's earlier Attempts" do
       {play, _page_ref, _giving} = written(new())
       {play, bridged} = bridges(play, "cairn", "cairo")
-      {:ask_assayer, %{earlier_attempts: []}} = find(bridged, :ask_assayer)
+      {:ask_assayer, _request_id, %{earlier_attempts: []}} = find(bridged, :ask_assayer)
 
       {:timer, :beat, token, _ms} = find(bridged, :timer)
-      {play, _} = run(play, {:assayed, verdict(10, "a first quip")})
+      {play, _} = run(play, assay_reply(bridged, verdict(10, "a first quip")))
       {play, _} = run(play, {:pacing, :beat, token})
       assert phase(play) == :reveal
 
       {play, _} = run(play, {:next_attempt, "mara"})
       {_play, bridged} = bridges(play, "harbour", "lantern")
 
-      assert {:ask_assayer, request} = find(bridged, :ask_assayer)
+      assert {:ask_assayer, _request_id, request} = find(bridged, :ask_assayer)
       assert [%{number: 1, quip: "a first quip"}] = request.earlier_attempts
       refute Map.has_key?(request, :prior_quips)
     end
@@ -871,7 +1064,7 @@ defmodule Thereish.Rooms.PlayTest do
       {play, _page_ref, _giving} = written(play)
       {play, bridged} = bridges(play, "cairn", "cairo")
       {:timer, :beat, token, _ms} = find(bridged, :timer)
-      {play, _} = run(play, {:assayed, verdict(10)})
+      {play, _} = run(play, assay_reply(bridged, verdict(10)))
       {play, revealed} = run(play, {:pacing, :beat, token})
       assert {:timer, :hold, _token, 5_000} = find(revealed, :timer)
 

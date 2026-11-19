@@ -203,14 +203,12 @@ defmodule Thereish.Game do
 
   @typedoc """
   What the Room is asked to do next. Effects are descriptions, never actions:
-  this module neither waits out a beat nor calls an Assayer nor writes to
-  Postgres, it says that one is owed. `:beat` carries no duration for the same
-  reason — how long the theatre runs is the Room's business, and a description
-  that carried it would make this module read the clock's configuration.
+  the last Bridge asks for one assay of every Bridge. The Room starts the
+  Beat and the Assayer wait together, and writes to Postgres when the Game
+  asks it to record an Entry.
   """
   @type effect ::
-          :beat
-          | {:author, %{gives: [map()], count: pos_integer()}}
+          {:author, %{gives: [map()], count: pos_integer()}}
           | {:assay, %{bookends: [String.t()], bridges: [String.t()]}}
           | {:chronicle, Entry.t()}
           | {:overrule, Overrule.ruling()}
@@ -865,12 +863,10 @@ defmodule Thereish.Game do
 
   defp page_full_table(_page, default), do: default == true
 
-  # The last Bridge in is the moment the Page turns: the Assayer is asked once,
-  # about every Bridge together, and the beat starts alongside rather than
-  # after, so the theatre and the grading run in parallel.
+  # The last Bridge asks the Assayer to grade every Bridge together.
   defp committed(state) do
     if phase(state) == :assaying do
-      {:ok, state, [:beat, assay(state)]}
+      {:ok, state, [{:assay, assay_request_overall(state)}]}
     else
       {:ok, state, []}
     end
@@ -888,8 +884,6 @@ defmodule Thereish.Game do
   #
   # assay-4 carries Bookends of two or more, Bridges with player names in roster
   # order, earlier Attempts with their Quips, and Gives.
-  defp assay(state), do: {:assay, assay_request_overall(state)}
-
   defp assay_request_overall(state) do
     seats = page_seats(state)
 
@@ -961,9 +955,8 @@ defmodule Thereish.Game do
     }
   end
 
-  # An Attempt is graded once. The Room can deliver the same verdict twice — a
-  # retry, a message that outlived the attempt it was about — and the second one
-  # must not be able to change a number the players are already looking at.
+  # An Attempt is graded once. Reapplying a Verdict to a graded Attempt
+  # leaves its first Verdict in place.
   defp record(state, verdict) do
     cond do
       verdict(state) != nil -> {:ok, state, []}

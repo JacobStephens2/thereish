@@ -94,23 +94,24 @@ defmodule Thereish.Foley.CuesTest do
     run(play, {:commit_bridge, seat_id, bridge})
   end
 
-  # Both Bridges in. Answers the Play at the Beat and the Beat's timer token.
+  # Both Bridges in. Returns the IDs for the Assayer's answer and the Beat.
   defp bridged(play, a \\ "cairn", b \\ "cairn") do
     {play, _} = commit(play, "mara", a)
     {play, effects} = commit(play, "jacob", b)
-    {:timer, :beat, token, _ms} = find(effects, :timer)
-    {play, token}
+    {:timer, :beat, beat, _ms} = find(effects, :timer)
+    {:ask_assayer, request_id, _request} = find(effects, :ask_assayer)
+    {play, {request_id, beat}}
   end
 
-  # The Assayer's event lands during the Beat and is applied when it ends.
-  defp assayed(play, token, event) do
-    {play, _} = run(play, {:assayed, event})
-    {play, _} = run(play, {:pacing, :beat, token})
+  # The Assayer's answer lands during the Beat and is applied when it ends.
+  defp assayed(play, {request_id, beat}, result) do
+    {play, _} = run(play, {:assayed, request_id, result})
+    {play, _} = run(play, {:pacing, :beat, beat})
     play
   end
 
   defp verdict(closeness) do
-    {:verdict_received,
+    {:ok,
      %{closeness: closeness, reasoning: "r", quip: "q", furthest: ["cairn", "cairo"], meta: %{}}}
   end
 
@@ -190,8 +191,8 @@ defmodule Thereish.Foley.CuesTest do
     test "a held-over Track is not cued again when the next Page's Gives are in" do
       {play, page_ref} = written(claimed())
       {play, _} = run(play, {:scored, page_ref, {:ok, %{path: "/media/track.mp3", meta: %{}}}})
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
       {turned, _} = run(closed, {:next_page, "mara", @members})
       {writing, _} = given(turned)
 
@@ -241,8 +242,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "does not play across Attempts" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play, "cairn", "cairo")
-      revealed = assayed(play, token, verdict(10))
+      {play, assay} = bridged(play, "cairn", "cairo")
+      revealed = assayed(play, assay, verdict(10))
       {next, _} = run(revealed, {:next_attempt, "mara"})
       {committed, _} = commit(next, "mara", "harbour")
 
@@ -261,8 +262,8 @@ defmodule Thereish.Foley.CuesTest do
   describe "the reveal" do
     test "a miss stings with its band" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play, "cairn", "cairo")
-      revealed = assayed(play, token, verdict(10))
+      {play, assay} = bridged(play, "cairn", "cairo")
+      revealed = assayed(play, assay, verdict(10))
 
       assert view(revealed).phase == :reveal
       assert sounds(Cues.between(view(play), view(revealed), :phone)) == [{:sting, :miss}]
@@ -270,8 +271,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "a Verdict with no band stings as a miss" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play, "cairn", "cairo")
-      revealed = assayed(play, token, {:verdict_unavailable, %{meta: %{}}})
+      {play, assay} = bridged(play, "cairn", "cairo")
+      revealed = assayed(play, assay, {:error, :unavailable})
 
       assert view(revealed).reveal.band == nil
       assert sounds(Cues.between(view(play), view(revealed), :phone)) == [{:sting, :miss}]
@@ -279,8 +280,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "the next Attempt stops the last Attempt's Voice clip" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play, "cairn", "cairo")
-      revealed = assayed(play, token, verdict(10))
+      {play, assay} = bridged(play, "cairn", "cairo")
+      revealed = assayed(play, assay, verdict(10))
       {next, _} = run(revealed, {:next_attempt, "mara"})
 
       assert Cues.between(view(revealed), view(next), :phone) == [{:stop_voice, 2}]
@@ -290,8 +291,8 @@ defmodule Thereish.Foley.CuesTest do
   describe "the ending" do
     test "a meld stings and ends as a meld" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
 
       assert sounds(Cues.between(view(play), view(closed), :phone)) == [
                {:sting, :meld},
@@ -301,8 +302,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "a deep meld ends as a deep meld" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(100))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(100))
 
       assert sounds(Cues.between(view(play), view(closed), :phone)) == [
                {:sting, :deep_meld},
@@ -324,8 +325,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "a closed Page ends once" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
       {tapped, _} = run(closed, {:tap_bookends, "mara", "great"})
 
       assert Cues.between(view(closed), view(tapped), :phone) == []
@@ -333,8 +334,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "is not heard without the Speaker" do
       {play, _} = written(new())
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
 
       assert sounds(Cues.between(view(play), view(closed), :phone)) == []
     end
@@ -345,8 +346,8 @@ defmodule Thereish.Foley.CuesTest do
     attempts = Thereish.Game.attempt_cap()
 
     Enum.reduce(1..attempts, {play, nil}, fn n, {play, _} ->
-      {play, token} = bridged(play, "cairn#{n}", "cairo#{n}")
-      done = assayed(play, token, verdict(10))
+      {play, assay} = bridged(play, "cairn#{n}", "cairo#{n}")
+      done = assayed(play, assay, verdict(10))
 
       if n == attempts do
         {play, done}
@@ -360,9 +361,9 @@ defmodule Thereish.Foley.CuesTest do
   describe "the Speaker" do
     test "a device that loses it only stops all sound" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play)
+      {play, assay} = bridged(play)
       {lost, _} = run(play, {:room_fact, {:claim_speaker, "phone-token"}})
-      closed = assayed(lost, token, verdict(95))
+      closed = assayed(lost, assay, verdict(95))
 
       assert sounds(Cues.between(view(play), view(closed), :phone)) == [:stop]
     end
@@ -413,8 +414,8 @@ defmodule Thereish.Foley.CuesTest do
     test "the reveal is felt as its band" do
       for {closeness, pattern} <- [{10, :sting_miss}, {83, :sting_almost}, {95, :sting_meld}] do
         {play, _} = written(claimed())
-        {play, token} = bridged(play, "cairn", "cairo")
-        revealed = assayed(play, token, verdict(closeness))
+        {play, assay} = bridged(play, "cairn", "cairo")
+        revealed = assayed(play, assay, verdict(closeness))
 
         assert Haptics.pattern(pattern) in buzzes(
                  Cues.between(view(play, "mara"), view(revealed, "mara"), :phone)
@@ -434,8 +435,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "another Seat's Reaction is felt, and your own shout is not" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play, "cairn", "cairo")
-      revealed = assayed(play, token, verdict(83))
+      {play, assay} = bridged(play, "cairn", "cairo")
+      revealed = assayed(play, assay, verdict(83))
       {reacted, _} = run(revealed, {:react, "jacob", "no_way"})
 
       # A Room of phones and no Stage has nowhere to show the word, so the
@@ -458,8 +459,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "the ending is felt once, after the sting" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
 
       assert buzzes(Cues.between(view(play, "mara"), view(closed, "mara"), :phone)) ==
                [Haptics.pattern(:sting_meld), Haptics.pattern(:ending)]
@@ -470,8 +471,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "a phone with no Speaker still feels everything it cannot hear" do
       {play, _} = written(new())
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
 
       cues = Cues.between(view(play, "mara"), view(closed, "mara"), :phone)
 
@@ -482,8 +483,8 @@ defmodule Thereish.Foley.CuesTest do
     test "the Stage feels nothing — it has no hand to feel with" do
       {play, _} = written(claimed())
       {committed, _} = commit(play, "jacob", "cairn")
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
 
       assert buzzes(Cues.between(view(play), view(committed), :stage)) == []
       assert buzzes(Cues.between(view(play), view(closed), :stage)) == []
@@ -491,8 +492,8 @@ defmodule Thereish.Foley.CuesTest do
 
     test "a screen's first render feels nothing" do
       {play, _} = written(claimed())
-      {play, token} = bridged(play)
-      closed = assayed(play, token, verdict(95))
+      {play, assay} = bridged(play)
+      closed = assayed(play, assay, verdict(95))
 
       assert buzzes(Cues.between(nil, view(closed, "mara"), :phone)) == []
       assert buzzes(Cues.between(nil, view(closed), :stage)) == []
