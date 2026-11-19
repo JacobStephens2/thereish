@@ -131,9 +131,10 @@ defmodule Thereish.Rooms.Pacing do
   @type assay_result :: {:ok, Steward.verdict()} | {:error, term()}
 
   @typep verdict_event :: {:verdict_received, Steward.verdict()} | {:verdict_unavailable, %{}}
+  @typep assayer_rung :: %{request_id: assay_id(), step: :grading | :slow, token: token()}
   @typep assay_wait :: %{
            beat: token() | nil,
-           verdict: {:awaiting, assay_id(), :grading | :slow, token()} | {:held, verdict_event()}
+           progress: {:awaiting, assayer_rung()} | {:held, verdict_event()}
          }
 
   @type step :: %{
@@ -224,9 +225,9 @@ defmodule Thereish.Rooms.Pacing do
   def start_assay(%__MODULE__{} = pacing, request) do
     {pacing, beat} = mint(pacing)
     {pacing, request_id} = mint(pacing)
-    {pacing, awaiting, rung} = assayer_rung(pacing, request_id, :grading)
+    {pacing, progress, rung} = assayer_rung(pacing, request_id, :grading)
 
-    {%{pacing | assay: %{beat: beat, verdict: awaiting}},
+    {%{pacing | assay: %{beat: beat, progress: progress}},
      [{:timer, :beat, beat, pacing.durations.beat}, {:ask_assayer, request_id, request}, rung]}
   end
 
@@ -237,7 +238,8 @@ defmodule Thereish.Rooms.Pacing do
   """
   @spec assayed(t(), assay_id(), assay_result()) :: {t(), [effect()]}
   def assayed(
-        %__MODULE__{assay: %{beat: beat, verdict: {:awaiting, request_id, _, _}}} = pacing,
+        %__MODULE__{assay: %{beat: beat, progress: {:awaiting, %{request_id: request_id}}}} =
+          pacing,
         request_id,
         result
       ) do
@@ -246,7 +248,7 @@ defmodule Thereish.Rooms.Pacing do
     if is_nil(beat) do
       {%{pacing | assay: nil}, effects ++ [{:apply, [event]}]}
     else
-      {%{pacing | assay: %{beat: beat, verdict: {:held, event}}}, effects}
+      {%{pacing | assay: %{beat: beat, progress: {:held, event}}}, effects}
     end
   end
 
@@ -326,9 +328,9 @@ defmodule Thereish.Rooms.Pacing do
   @spec elapsed(t(), name(), token(), now()) :: {t(), [effect()]}
   def elapsed(%__MODULE__{assay: %{beat: token} = assay} = pacing, :beat, token, _now)
       when token != nil do
-    case assay.verdict do
+    case assay.progress do
       {:held, event} -> {%{pacing | assay: nil}, [{:apply, [event]}]}
-      {:awaiting, _, _, _} -> {%{pacing | assay: %{assay | beat: nil}}, []}
+      {:awaiting, _rung} -> {%{pacing | assay: %{assay | beat: nil}}, []}
     end
   end
 
@@ -336,7 +338,7 @@ defmodule Thereish.Rooms.Pacing do
   # recorded as absent, which the rules already answer by revealing without a
   # number and handing the ruling to the players.
   def elapsed(
-        %__MODULE__{assay: %{verdict: {:awaiting, _, :slow, token}}} = pacing,
+        %__MODULE__{assay: %{progress: {:awaiting, %{step: :slow, token: token}}}} = pacing,
         :assayer,
         token,
         _now
@@ -345,13 +347,17 @@ defmodule Thereish.Rooms.Pacing do
   end
 
   def elapsed(
-        %__MODULE__{assay: %{verdict: {:awaiting, request_id, :grading, token}} = assay} = pacing,
+        %__MODULE__{
+          assay:
+            %{progress: {:awaiting, %{request_id: request_id, step: :grading, token: token}}} =
+              assay
+        } = pacing,
         :assayer,
         token,
         _now
       ) do
-    {pacing, awaiting, rung} = assayer_rung(pacing, request_id, :slow)
-    {%{pacing | assay: %{assay | verdict: awaiting}}, [rung, :broadcast]}
+    {pacing, progress, rung} = assayer_rung(pacing, request_id, :slow)
+    {%{pacing | assay: %{assay | progress: progress}}, [rung, :broadcast]}
   end
 
   def elapsed(
@@ -408,7 +414,7 @@ defmodule Thereish.Rooms.Pacing do
     }
   end
 
-  defp assayer_step(%{verdict: {:awaiting, _, step, _}}), do: step
+  defp assayer_step(%{progress: {:awaiting, %{step: step}}}), do: step
   defp assayer_step(_assay), do: nil
 
   defp revealed?(phase), do: phase in [:reveal, :closed]
@@ -568,7 +574,7 @@ defmodule Thereish.Rooms.Pacing do
   defp assayer_rung(pacing, request_id, step) do
     {pacing, token} = mint(pacing)
 
-    {pacing, {:awaiting, request_id, step, token},
+    {pacing, {:awaiting, %{request_id: request_id, step: step, token: token}},
      {:timer, :assayer, token, rung_ms(pacing.durations, step)}}
   end
 

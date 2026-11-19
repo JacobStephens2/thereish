@@ -848,9 +848,13 @@ defmodule Thereish.Rooms.PlayTest do
       {play, second} = bridges(play, "echo", "echo", now: at(10_500))
       {:timer, :beat, second_beat, 2_500} = find(second, :timer)
 
-      for {name, token} <- [{:beat, beat}, {:assayer, grading}, {:assayer, slow}] do
-        assert {:ok, ^play, []} = Play.apply(play, {:pacing, name, token}, at(12_000))
-      end
+      late_timers = [
+        {:pacing, :beat, beat},
+        {:pacing, :assayer, grading},
+        {:pacing, :assayer, slow}
+      ]
+
+      play = assert_ignored(play, late_timers, at(12_000))
 
       {:ok, play, []} = Play.apply(play, {:pacing, :beat, second_beat}, at(13_000))
       waiting = view(play)
@@ -883,38 +887,51 @@ defmodule Thereish.Rooms.PlayTest do
              ] = entry.attempts
     end
 
-    test "a previous Page's Attempt 1 cannot answer the current Page's Attempt 1" do
-      {play, _} = run(new(), {:room_fact, {:claim_speaker, @speaker}})
+    test "an expired answer from a previous Page's Attempt 1 is dropped during the new Attempt 1" do
+      durations = %{@durations | beat: 12_000}
+      {play, _} = run(new(durations: durations), {:room_fact, {:claim_speaker, @speaker}})
       {play, _page_ref, _giving} = written(play)
       {play, first} = bridges(play, "cairn", "cairn")
-      {:timer, :beat, first_beat, 2_500} = find(first, :timer)
-      first_verdict = assay_reply(first, verdict(95, "The first Page"))
 
-      {:ok, play, [{:speak, _old_speech, "meld. The first Page"}]} =
-        Play.apply(play, first_verdict, at(500))
+      assert [
+               {:timer, :beat, first_beat, 12_000},
+               {:ask_assayer, _request_id, _request},
+               {:timer, :assayer, grading, 4_000},
+               :broadcast
+             ] = first
 
-      {:ok, play, [:broadcast]} = Play.apply(play, {:pacing, :beat, first_beat}, at(2_500))
+      assert {:ok, play, [{:timer, :assayer, slow, 6_000}, :broadcast]} =
+               Play.apply(play, {:pacing, :assayer, grading}, at(4_000))
+
+      assert {:ok, play, [:broadcast]} = Play.apply(play, {:pacing, :assayer, slow}, at(10_000))
+      assert %{phase: :reveal, reveal: %{graded?: false}} = view(play)
+
+      {play, _} = run(play, {:propose_overrule, "mara", closeness: 95}, now: at(10_100))
+      {play, closed} = run(play, {:agree_overrule, "jacob"}, now: at(10_200), written: "page-1")
+      assert {:write_chronicle, _entry} = find(closed, :write_chronicle)
       assert %{phase: :closed, attempt: %{number: 1}} = view(play)
 
-      {play, _} = run(play, {:next_page, "mara", @members}, now: at(3_000), written: "page-1")
-      {play, _page_ref, _giving} = written(play, now: at(3_200))
-      {play, second} = bridges(play, "echo", "echo", now: at(3_300))
-      {:timer, :beat, second_beat, 2_500} = find(second, :timer)
-      waiting = view(play)
-      assert %{phase: :assaying, attempt: %{number: 1}, assayer_step: :grading} = waiting
+      {play, _} = run(play, {:next_page, "mara", @members}, now: at(10_300))
+      {play, _page_ref, _giving} = written(play, now: at(10_400))
+      {play, second} = bridges(play, "echo", "echo", now: at(10_500))
+      {:timer, :beat, second_beat, 12_000} = find(second, :timer)
+      assert %{phase: :assaying, attempt: %{number: 1}, assayer_step: :grading} = view(play)
 
-      for prior <- [first_verdict, assay_reply(first, {:error, :timeout})] do
-        assert {:ok, unchanged, []} = Play.apply(play, prior, at(4_000))
-        assert view(unchanged) == waiting
-      end
+      prior = [
+        {:pacing, :beat, first_beat},
+        assay_reply(first, verdict(95, "The first Page")),
+        assay_reply(first, {:error, :timeout})
+      ]
+
+      play = assert_ignored(play, prior, at(12_000))
 
       current = assay_reply(second, verdict(95, "The current Page"))
 
       assert {:ok, held, [{:speak, speech, "meld. The current Page"}]} =
-               Play.apply(play, current, at(4_100))
+               Play.apply(play, current, at(12_100))
 
       assert {:ok, closed, [:broadcast]} =
-               Play.apply(held, {:pacing, :beat, second_beat}, at(5_800))
+               Play.apply(held, {:pacing, :beat, second_beat}, at(22_500))
 
       assert %{phase: :closed, reveal: %{quip: "The current Page"}} = view(closed)
 
@@ -922,7 +939,7 @@ defmodule Thereish.Rooms.PlayTest do
         {:voice_spoken, speech, {:ok, %{audio: "current", meta: %{provider: "second-page"}}}}
 
       assert {:ok, _play, [{:write_chronicle, entry}, {:broadcast, {:voice_ready, 1}}]} =
-               Play.apply(closed, reply, at(5_900))
+               Play.apply(closed, reply, at(22_600))
 
       assert [%{number: 1, verdicts: [%{quip: "The current Page", voice_meta: meta}]}] =
                entry.attempts
@@ -955,18 +972,15 @@ defmodule Thereish.Rooms.PlayTest do
 
       assert %{phase: :assaying, reveal: nil, assayer_step: nil} = view(held)
 
-      for duplicate <- [reply, failure] do
-        assert {:ok, ^held, []} = Play.apply(held, duplicate, at(4_300))
-      end
+      held = assert_ignored(held, [reply, failure], at(4_300))
 
       assert {:ok, revealed, [:broadcast]} = Play.apply(held, {:pacing, :beat, beat}, at(5_500))
 
       assert %{phase: :reveal, reveal: %{closeness: 10, quip: "The accepted Quip"}} =
                view(revealed)
 
-      for late <- [reply, failure, {:pacing, :beat, beat}, {:pacing, :assayer, slow}] do
-        assert {:ok, ^revealed, []} = Play.apply(revealed, late, at(10_000))
-      end
+      late = [reply, failure, {:pacing, :beat, beat}, {:pacing, :assayer, slow}]
+      assert_ignored(revealed, late, at(10_000))
     end
 
     test "a Steward error during the Beat holds one ungraded reveal" do
@@ -980,16 +994,12 @@ defmodule Thereish.Rooms.PlayTest do
       assert {:ok, held, []} = Play.apply(play, failure, at(1_000))
       assert %{phase: :assaying, reveal: nil, assayer_step: nil} = view(held)
 
-      for duplicate <- [failure, success] do
-        assert {:ok, ^held, []} = Play.apply(held, duplicate, at(1_500))
-      end
+      held = assert_ignored(held, [failure, success], at(1_500))
 
       assert {:ok, revealed, [:broadcast]} = Play.apply(held, {:pacing, :beat, beat}, at(2_500))
       assert %{phase: :reveal, reveal: %{graded?: false}} = view(revealed)
 
-      for duplicate <- [failure, success] do
-        assert {:ok, ^revealed, []} = Play.apply(revealed, duplicate, at(2_600))
-      end
+      assert_ignored(revealed, [failure, success], at(2_600))
     end
 
     test "a Steward error after the Beat reveals immediately" do
@@ -1005,6 +1015,14 @@ defmodule Thereish.Rooms.PlayTest do
       assert {:ok, revealed, [:broadcast]} = Play.apply(play, reply, at(3_000))
       assert %{phase: :reveal, reveal: %{graded?: false}, assayer_step: nil} = view(revealed)
     end
+  end
+
+  defp assert_ignored(play, commands, now) do
+    Enum.reduce(commands, play, fn command, play ->
+      assert {:ok, unchanged, []} = Play.apply(play, command, now)
+      assert view(unchanged) == view(play)
+      unchanged
+    end)
   end
 
   describe "the Assayer's prior Quips" do

@@ -127,7 +127,8 @@ defmodule Thereish.Rooms.PacingTest do
                Pacing.elapsed(pacing, :assayer, slow, at(10_000))
 
       assert view(pacing, game).assayer_step == nil
-      assert {^pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(12_000))
+      assert {after_beat, []} = Pacing.elapsed(pacing, :beat, beat, at(12_000))
+      assert view(after_beat, game) == view(pacing, game)
     end
 
     test "a Verdict that arrives after the ladder gave up is dropped" do
@@ -137,7 +138,8 @@ defmodule Thereish.Rooms.PacingTest do
       {slow, _ms} = timer(effects, :assayer)
       {pacing, _effects} = Pacing.elapsed(pacing, :assayer, slow, at(10_000))
 
-      assert {^pacing, []} = Pacing.assayed(pacing, request_id, {:ok, @verdict})
+      assert {after_answer, []} = Pacing.assayed(pacing, request_id, {:ok, @verdict})
+      assert view(after_answer) == view(pacing)
     end
 
     for reset <- [:gives_reset, :page_turned] do
@@ -147,13 +149,18 @@ defmodule Thereish.Rooms.PacingTest do
         {grading, _ms} = timer(effects, :assayer)
         pacing = apply(Pacing, unquote(reset), [pacing])
 
-        assert {^pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
-        assert {^pacing, []} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
-        assert {^pacing, []} = Pacing.assayed(pacing, old_request, {:ok, @verdict})
+        assert {pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
+        assert {pacing, []} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
+        assert {pacing, []} = Pacing.assayed(pacing, old_request, {:ok, @verdict})
+        assert view(pacing).assayer_step == nil
 
         {pacing, new_request, _effects} = start_assay(pacing)
         refute new_request == old_request
-        assert {^pacing, []} = Pacing.assayed(pacing, old_request, {:ok, @verdict})
+        assert {pacing, []} = Pacing.assayed(pacing, old_request, {:ok, @verdict})
+        assert view(pacing).assayer_step == :grading
+
+        assert {_pacing, [{:prepare_verdict_voice, @verdict}]} =
+                 Pacing.assayed(pacing, new_request, {:ok, @verdict})
       end
     end
 
