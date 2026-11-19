@@ -23,14 +23,15 @@ defmodule Thereish.Rooms.PacingTest do
   }
 
   @page %Document{bookends: ["lantern", "harbour"]}
-
-  @verdict {:verdict_received,
-            %{
-              closeness: 0,
-              reasoning: "because",
-              furthest: ["cairn", "beacon"],
-              meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
-            }}
+  @assay_request %{bookends: ["lantern", "harbour"], bridges: ["cairn", "beacon"]}
+  @verdict %{
+    closeness: 0,
+    reasoning: "because",
+    quip: "a quip",
+    furthest: ["cairn", "beacon"],
+    meta: %{model: "test", prompt_version: "v1", latency_ms: 12, cost_usd: 0.0001}
+  }
+  @received {:verdict_received, @verdict}
 
   defp pacing(durations \\ @durations), do: Pacing.new(durations)
 
@@ -55,9 +56,15 @@ defmodule Thereish.Rooms.PacingTest do
     |> play({:bridge_committed, %{seat_id: "seat-Jacob", bridge: jacob}})
   end
 
-  defp graded(closeness) do
-    {:verdict_received, verdict} = @verdict
-    {:verdict_received, %{verdict | closeness: closeness}}
+  defp graded(closeness), do: {:verdict_received, %{@verdict | closeness: closeness}}
+
+  defp start_assay(pacing) do
+    {pacing, effects} = Pacing.start_assay(pacing, @assay_request)
+
+    [{:ask_assayer, request_id, @assay_request}] =
+      Enum.filter(effects, &match?({:ask_assayer, _, _}, &1))
+
+    {pacing, request_id, effects}
   end
 
   # The one timer an effect list arms under `name`: its token and its length.
@@ -72,30 +79,30 @@ defmodule Thereish.Rooms.PacingTest do
 
   describe "the Beat" do
     test "a Verdict that arrives during the Beat is held and released when it is over" do
-      {pacing, effects} = Pacing.beat_owed(pacing(), at(0))
+      {pacing, request_id, effects} = start_assay(pacing())
       {beat, 2_500} = timer(effects, :beat)
-      {pacing, _effects} = Pacing.assayer_asked(pacing, at(0))
 
-      assert {pacing, []} = Pacing.assayed(pacing, @verdict)
+      assert {pacing, [{:prepare_verdict_voice, @verdict}]} =
+               Pacing.assayed(pacing, request_id, {:ok, @verdict})
 
-      assert {_pacing, [{:apply, [@verdict]}]} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
+      assert {_pacing, [{:apply, [@received]}]} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
     end
 
     test "a Verdict that arrives after the Beat is applied at once" do
-      {pacing, effects} = Pacing.beat_owed(pacing(), at(0))
+      {pacing, request_id, effects} = start_assay(pacing())
       {beat, _ms} = timer(effects, :beat)
-      {pacing, _effects} = Pacing.assayer_asked(pacing, at(0))
 
       assert {pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
-      assert {_pacing, [{:apply, [@verdict]}]} = Pacing.assayed(pacing, @verdict)
+
+      assert {_pacing, [{:prepare_verdict_voice, @verdict}, {:apply, [@received]}]} =
+               Pacing.assayed(pacing, request_id, {:ok, @verdict})
     end
 
     test "an Assayer that answers is never called slow, however long the Beat runs" do
-      {pacing, _effects} = Pacing.beat_owed(pacing(%{@durations | beat: 60_000}), at(0))
-      {pacing, effects} = Pacing.assayer_asked(pacing, at(0))
+      {pacing, request_id, effects} = start_assay(pacing(%{@durations | beat: 60_000}))
       {rung, _ms} = timer(effects, :assayer)
 
-      {pacing, []} = Pacing.assayed(pacing, @verdict)
+      {pacing, _effects} = Pacing.assayed(pacing, request_id, {:ok, @verdict})
 
       assert {pacing, []} = Pacing.elapsed(pacing, :assayer, rung, at(4_000))
       assert view(pacing, assaying()).assayer_step == nil
@@ -105,7 +112,8 @@ defmodule Thereish.Rooms.PacingTest do
   describe "the Assayer's ladder" do
     test "steps from grading to slow at its first rung and gives up at its last" do
       game = assaying()
-      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {pacing, _request_id, effects} = start_assay(pacing(%{@durations | beat: 12_000}))
+      {beat, 12_000} = timer(effects, :beat)
       {grading, 4_000} = timer(effects, :assayer)
 
       assert view(pacing, game).assayer_step == :grading
@@ -119,42 +127,57 @@ defmodule Thereish.Rooms.PacingTest do
                Pacing.elapsed(pacing, :assayer, slow, at(10_000))
 
       assert view(pacing, game).assayer_step == nil
+      assert {after_beat, []} = Pacing.elapsed(pacing, :beat, beat, at(12_000))
+      assert view(after_beat, game) == view(pacing, game)
     end
 
     test "a Verdict that arrives after the ladder gave up is dropped" do
-      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {pacing, request_id, effects} = start_assay(pacing())
       {grading, _ms} = timer(effects, :assayer)
       {pacing, effects} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
       {slow, _ms} = timer(effects, :assayer)
       {pacing, _effects} = Pacing.elapsed(pacing, :assayer, slow, at(10_000))
 
-      assert {_pacing, []} = Pacing.assayed(pacing, @verdict)
+      assert {after_answer, []} = Pacing.assayed(pacing, request_id, {:ok, @verdict})
+      assert view(after_answer) == view(pacing)
     end
 
-    test "a Verdict that arrives with no Assayer asked is dropped, Beat or not" do
-      assert {_pacing, []} = Pacing.assayed(pacing(), @verdict)
+    for reset <- [:gives_reset, :page_turned] do
+      test "#{reset} retires the wait and preserves the request counter" do
+        {pacing, old_request, effects} = start_assay(pacing())
+        {beat, _ms} = timer(effects, :beat)
+        {grading, _ms} = timer(effects, :assayer)
+        pacing = apply(Pacing, unquote(reset), [pacing])
 
-      {pacing, effects} = Pacing.beat_owed(pacing(), at(0))
-      {beat, _ms} = timer(effects, :beat)
-      {pacing, []} = Pacing.assayed(pacing, @verdict)
+        assert {pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
+        assert {pacing, []} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
+        assert {pacing, []} = Pacing.assayed(pacing, old_request, {:ok, @verdict})
+        assert view(pacing).assayer_step == nil
 
-      assert {_pacing, []} = Pacing.elapsed(pacing, :beat, beat, at(2_500))
+        {pacing, new_request, _effects} = start_assay(pacing)
+        refute new_request == old_request
+        assert {pacing, []} = Pacing.assayed(pacing, old_request, {:ok, @verdict})
+        assert view(pacing).assayer_step == :grading
+
+        assert {_pacing, [{:prepare_verdict_voice, @verdict}]} =
+                 Pacing.assayed(pacing, new_request, {:ok, @verdict})
+      end
     end
 
     test "a rung that fires after its Assayer answered changes nothing" do
-      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {pacing, request_id, effects} = start_assay(pacing())
       {grading, _ms} = timer(effects, :assayer)
-      {pacing, _effects} = Pacing.assayed(pacing, @verdict)
+      {pacing, _effects} = Pacing.assayed(pacing, request_id, {:ok, @verdict})
 
       assert {pacing, []} = Pacing.elapsed(pacing, :assayer, grading, at(4_000))
       assert view(pacing, assaying()).assayer_step == nil
     end
 
     test "a rung from an earlier ladder changes nothing once a fresh one is armed" do
-      {pacing, effects} = Pacing.assayer_asked(pacing(), at(0))
+      {pacing, request_id, effects} = start_assay(pacing())
       {first, _ms} = timer(effects, :assayer)
-      {pacing, _effects} = Pacing.assayed(pacing, @verdict)
-      {pacing, _effects} = Pacing.assayer_asked(pacing, at(20_000))
+      {pacing, _effects} = Pacing.assayed(pacing, request_id, {:ok, @verdict})
+      {pacing, _request_id, _effects} = start_assay(pacing)
 
       assert {pacing, []} = Pacing.elapsed(pacing, :assayer, first, at(24_000))
       assert view(pacing, assaying()).assayer_step == :grading
@@ -337,7 +360,7 @@ defmodule Thereish.Rooms.PacingTest do
     end
 
     test "the Beat before the reveal is not the hold" do
-      {pacing, _effects} = Pacing.beat_owed(pacing(), at(0))
+      {pacing, _request_id, _effects} = start_assay(pacing())
 
       assert :ok = Pacing.may_advance(pacing, at(0))
       refute view(pacing, assaying(), at(0)).can_advance?
@@ -613,7 +636,6 @@ defmodule Thereish.Rooms.PacingTest do
   test "a timer name Pacing never armed changes nothing" do
     assert {pacing, []} = Pacing.elapsed(pacing(), :beat, 0, at(0))
     assert {pacing, []} = Pacing.elapsed(pacing, :hold, 0, at(0))
-    assert {pacing, []} = Pacing.assayed(pacing, @verdict)
     assert :ok = Pacing.may_advance(pacing, at(0))
   end
 end

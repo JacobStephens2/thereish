@@ -25,6 +25,9 @@ defmodule Thereish.Rooms.Play do
     * A reset of Gives reaches Pacing, Occupancy and Pages only once the Game
       accepts it, so a late tap after the Author has written the Page leaves
       that Page's music and times alone.
+    * Pacing admits the Assayer's answer. Play prepares Voice and lets Pages
+      mark the speech pending before applying a Verdict that might close
+      the Page.
     * The Entry closing a Page carries Occupancy's music for the Room's music
       setting, the Page's Assignment and Pacing's times. Pages owns its hold,
       speech metadata and deferred writes. Voice's speech facts are folded
@@ -69,7 +72,8 @@ defmodule Thereish.Rooms.Play do
     * `{:ask_author, ref, request, arm}`, the Arm being the Author's job:
       answer with
       `{:author_completed, ref, result}`
-    * `{:ask_assayer, request}`: answer with `{:assayed, event}`
+    * `{:ask_assayer, request_id, request}`: echo the opaque identity with
+      the raw Steward result in `{:assayed, request_id, result}`
     * `{:draw_mask, seat_id, giving_ref, give, colour}`: answer with
       `{:mask_landed, seat_id, giving_ref, mask_or_dot}`
     * `{:speak, request, line}`: echo Voice's opaque request on success or
@@ -96,6 +100,7 @@ defmodule Thereish.Rooms.Play do
   alias Thereish.Rooms.Pacing
   alias Thereish.Rooms.Pages
   alias Thereish.Rooms.Room
+  alias Thereish.Steward
 
   defstruct [:game, :pacing, :pages, :occupancy, :voice, :facts]
 
@@ -132,7 +137,7 @@ defmodule Thereish.Rooms.Play do
           | {:next, device_token()}
           | {:never, device_token()}
           | {:author_completed, reference(), {:ok, map()} | {:error, String.t()}}
-          | {:assayed, Game.event()}
+          | {:assayed, Pacing.assay_id(), Pacing.assay_result()}
           | {:pacing, Pacing.name(), Pacing.token()}
           | {:voice_spoken, Voice.request(), Voice.result()}
           | {:vamped | :scored | :titled, reference(), {:ok, map()} | {:error, term()}}
@@ -150,7 +155,7 @@ defmodule Thereish.Rooms.Play do
           | {:timer, Pacing.name(), Pacing.token(), non_neg_integer()}
           | {:open_page, map(), atom() | nil}
           | {:ask_author, reference(), map(), atom()}
-          | {:ask_assayer, map()}
+          | {:ask_assayer, Pacing.assay_id(), Steward.request()}
           | {:draw_mask, seat_id(), reference(), String.t(), String.t()}
           | {:speak, Voice.request(), String.t()}
           | {:start_vamp, reference(), [String.t()]}
@@ -333,12 +338,9 @@ defmodule Thereish.Rooms.Play do
     end
   end
 
-  # Pacing decides whether the Verdict is held for the Beat, applied or
-  # dropped; Voice hears it as it arrives, so its line is ready by the reveal.
-  def apply(%__MODULE__{} = play, {:assayed, event}, now) do
-    {play, heard} = verdict_heard(play, event)
-    {play, paced} = pace(play, &Pacing.assayed(&1, event), now)
-    {:ok, play, heard ++ paced}
+  def apply(%__MODULE__{} = play, {:assayed, request_id, result}, now) do
+    {play, effects} = pace(play, &Pacing.assayed(&1, request_id, result), now)
+    {:ok, play, effects}
   end
 
   def apply(%__MODULE__{} = play, {:pacing, name, token}, now) do
@@ -474,8 +476,6 @@ defmodule Thereish.Rooms.Play do
     end
   end
 
-  # A Verdict for a Page that has moved on is nothing to act on and nothing
-  # to crash over.
   defp apply_events(play, events, now) do
     each(play, events, fn play, event ->
       case Game.apply(play.game, event) do
@@ -495,8 +495,6 @@ defmodule Thereish.Rooms.Play do
 
     {play, paced ++ performed ++ voiced ++ [:broadcast]}
   end
-
-  defp game_effect(play, :beat, now), do: pace(play, &Pacing.beat_owed(&1, now), now)
 
   # The Entry takes the Page's Assignment here, at the close, so a held write
   # still records the Assignment the Page was played under. Pages decides
@@ -528,10 +526,8 @@ defmodule Thereish.Rooms.Play do
   defp game_effect(play, {:author, request}, _now),
     do: {play, [{:open_page, request, Pages.assignment(play.pages)}]}
 
-  defp game_effect(play, {:assay, request}, now) do
-    {play, paced} = pace(play, &Pacing.assayer_asked(&1, now), now)
-    {play, [{:ask_assayer, request} | paced]}
-  end
+  defp game_effect(play, {:assay, request}, now),
+    do: pace(play, &Pacing.start_assay(&1, request), now)
 
   # A retry keeps this Page's budget, just as it keeps its Assignment. The
   # Room's choice and the blinded channel Arm can each take the Nudge away
@@ -567,8 +563,14 @@ defmodule Thereish.Rooms.Play do
     {pacing, effects} = transition.(play.pacing)
 
     each(%{play | pacing: pacing}, effects, fn
-      play, {:apply, events} -> apply_events(play, events, now)
-      play, effect -> {play, [effect]}
+      play, {:prepare_verdict_voice, verdict} ->
+        voice(play, &Voice.verdict_received(&1, verdict, voice_table(play)))
+
+      play, {:apply, events} ->
+        apply_events(play, events, now)
+
+      play, effect ->
+        {play, [effect]}
     end)
   end
 
@@ -653,11 +655,6 @@ defmodule Thereish.Rooms.Play do
   end
 
   # -- Voice --------------------------------------------------------------------
-
-  defp verdict_heard(play, {:verdict_received, verdict}),
-    do: voice(play, &Voice.verdict_received(&1, verdict, voice_table(play)))
-
-  defp verdict_heard(play, _event), do: {play, []}
 
   # A held Chronicle write lands before the voice_ready that follows it.
   defp voice(play, transition) do
