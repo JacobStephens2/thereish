@@ -35,7 +35,6 @@ defmodule Thereish.StewardTest do
   alias Thereish.Rooms.Store
   alias Thereish.Steward
   alias Thereish.Steward.Live
-  alias Thereish.Steward.Precedent
 
   @pair %{bookends: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
 
@@ -68,6 +67,28 @@ defmodule Thereish.StewardTest do
 
   # Which way round this request asked, named by the Bridge it put first.
   defp ordering(body), do: first_bridge(body, @pair.bridges)
+
+  defp hold_grading(test_pid, room, ordering) do
+    token = make_ref()
+    send(test_pid, {:grading, room, ordering, self(), token})
+
+    receive do
+      {:finish_grading, ^token} -> :ok
+    after
+      5_000 -> flunk("the test did not release #{room}'s #{ordering} grading")
+    end
+  end
+
+  defp await_gradings(room, orderings) do
+    Enum.map(orderings, fn ordering ->
+      assert_receive {:grading, ^room, ^ordering, grader, token}, 2_000
+      {grader, token}
+    end)
+  end
+
+  defp finish_gradings(gradings) do
+    Enum.each(gradings, fn {grader, token} -> send(grader, {:finish_grading, token}) end)
+  end
 
   describe "grading a pair" do
     setup do
@@ -167,8 +188,7 @@ defmodule Thereish.StewardTest do
       end)
 
       assert {:error, {:http, 503, _body}} = Steward.assay(@pair)
-      role = Steward.role(:assayer)
-      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
+      assert_fresh_grade(@pair)
     end
 
     test "when both orderings fail, the forward ordering's reason is the one reported" do
@@ -388,6 +408,166 @@ defmodule Thereish.StewardTest do
   describe "the verdict cache is the precedent" do
     setup do
       assayer(adapter: Live, requests: 1, retries: 0)
+    end
+
+    test "overlapping Assays share the stored Verdict and keep their own Spend" do
+      assayer(deadline_ms: 10_000, prompt_version: "assay-overlap")
+      test_pid = self()
+
+      first_request = Map.put(@table, :gives, ["First Room's Give"])
+
+      second_request = %{
+        bookends: [" HARBOUR ", "Lantern"],
+        bridges: [" SEAGULL ", " LAMP ", " CAIRN ", " BEACON "],
+        gives: ["Second Room's Give"]
+      }
+
+      recorded(fn conn, body ->
+        case body["response_format"]["json_schema"]["name"] do
+          "quip" ->
+            send(test_pid, :fresh_quip)
+            Req.Test.json(conn, quip_response("A fresh joke for the next Room."))
+
+          "verdict" ->
+            [%{"content" => user}] = Enum.filter(body["messages"], &(&1["role"] == "user"))
+
+            if user =~ "First Room's Give" do
+              ordering = table_ordering(body)
+              hold_grading(test_pid, :first, ordering)
+
+              {closeness, reasoning} =
+                case ordering do
+                  "beacon" -> {82, "First forward reading."}
+                  "seagull" -> {34, "First reverse reading."}
+                end
+
+              Req.Test.json(
+                conn,
+                response(
+                  verdict(
+                    closeness: closeness,
+                    reasoning: reasoning,
+                    quip: "The first Room's Quip.",
+                    furthest: ["beacon", "seagull"]
+                  )
+                )
+              )
+            else
+              ordering = first_bridge(body, second_request.bridges)
+              hold_grading(test_pid, :second, ordering)
+
+              {closeness, reasoning, prompt_tokens} =
+                case ordering do
+                  " SEAGULL " -> {21, "Second forward reading.", 400}
+                  " BEACON " -> {11, "Second reverse reading.", 500}
+                end
+
+              answer =
+                verdict(
+                  closeness: closeness,
+                  reasoning: reasoning,
+                  quip: "The second Room's Quip.",
+                  furthest: ["lamp", "cairn"]
+                )
+                |> response()
+                |> Map.put("model", "gpt-6-astra")
+                |> Map.put("usage", %{
+                  "prompt_tokens" => prompt_tokens,
+                  "total_tokens" => 2 * prompt_tokens
+                })
+
+              Req.Test.json(conn, answer)
+            end
+        end
+      end)
+
+      first_assay = Task.async(fn -> Steward.assay(first_request) end)
+      second_assay = Task.async(fn -> Steward.assay(second_request) end)
+
+      first_gradings = await_gradings(:first, ["beacon", "seagull"])
+      second_gradings = await_gradings(:second, [" SEAGULL ", " BEACON "])
+
+      finish_gradings(first_gradings)
+      assert {:ok, first} = Task.await(first_assay)
+      finish_gradings(second_gradings)
+      assert {:ok, second} = Task.await(second_assay)
+
+      stored = %{
+        closeness: 58,
+        reasoning: "First forward reading.",
+        quip: "The first Room's Quip.",
+        furthest: ["beacon", "seagull"],
+        meta: %{forward: 82, reverse: 34, reasoning_reverse: "First reverse reading.", spread: 48}
+      }
+
+      for verdict <- [first, second] do
+        assert Map.drop(verdict, [:meta]) == Map.drop(stored, [:meta])
+        assert Map.take(verdict.meta, Map.keys(stored.meta)) == stored.meta
+        assert verdict.meta.prompt_version == "assay-overlap"
+        assert is_integer(verdict.meta.latency_ms) and verdict.meta.latency_ms >= 0
+      end
+
+      refute Map.get(first.meta, :precedent_hit, false)
+      assert first.meta.model == "gemini-3.8-flash"
+      assert_in_delta first.meta.cost_usd, 0.0016305, 1.0e-10
+      assert second.meta.precedent_hit
+      assert second.meta.model == "gpt-6-astra"
+      assert_in_delta second.meta.cost_usd, 0.0045, 1.0e-10
+      refute_received :fresh_quip
+
+      assert {:ok, later} = Steward.assay(second_request)
+
+      assert Map.take(later, [:closeness, :reasoning, :furthest]) ==
+               Map.take(stored, [:closeness, :reasoning, :furthest])
+
+      assert Map.take(later.meta, Map.keys(stored.meta)) == stored.meta
+      assert later.quip == "A fresh joke for the next Room."
+      assert later.meta.precedent_hit
+      assert_in_delta later.meta.cost_usd, 0.00081525, 1.0e-10
+      assert_received :fresh_quip
+      refute_received :fresh_quip
+      refute_received {:grading, _, _, _, _}
+    end
+
+    test "an Overrule recorded during a cold Assay supplies its Verdict" do
+      assayer(deadline_ms: 10_000)
+      test_pid = self()
+
+      recorded(fn conn, body ->
+        assert body["response_format"]["json_schema"]["name"] == "verdict"
+        hold_grading(test_pid, :overruled, ordering(body))
+        Req.Test.json(conn, response(verdict(closeness: 41, reasoning: "Original grade.")))
+      end)
+
+      assay = Task.async(fn -> Steward.assay(@pair) end)
+      gradings = await_gradings(:overruled, ["beacon", "cairn"])
+
+      assert {room_id, {:ok, overrule}} = overrule(%{couple_closeness: 95})
+      assert [recorded] = Chronicle.overrules(room_id)
+      assert recorded.id == overrule.id
+      assert recorded.couple_closeness == 95
+      assert recorded.machine_closeness == 41
+
+      finish_gradings(gradings)
+      assert {:ok, verdict} = Task.await(assay)
+      assert verdict.closeness == 95
+      assert verdict.reasoning == "Overruled jointly across all Seats. Recorded as precedent."
+      assert verdict.quip == "House law."
+      assert verdict.furthest == nil
+      assert %{forward: nil, reverse: nil, reasoning_reverse: nil, spread: nil} = verdict.meta
+      assert verdict.meta.precedent_hit
+      assert_in_delta verdict.meta.cost_usd, 0.0016305, 1.0e-10
+    end
+
+    defp assert_fresh_grade(request) do
+      assayer(adapter: Live, requests: 1, retries: 0)
+
+      recorded(fn conn, body ->
+        assert body["response_format"]["json_schema"]["name"] == "verdict"
+        Req.Test.json(conn, response(verdict()))
+      end)
+
+      assert {:ok, %{meta: %{precedent_hit: false}}} = Steward.assay(request)
     end
 
     test "a Precedent hit's fresh-Quip request carries prior Quips in user content" do
@@ -661,16 +841,14 @@ defmodule Thereish.StewardTest do
       assert {room_id, {:error, %Ecto.Changeset{}}} = overrule(%{couple_quip: nil})
 
       assert Chronicle.overrules(room_id) == []
-      role = Steward.role(:assayer)
-      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
+      assert_fresh_grade(@pair)
     end
 
     test "a ruling whose Chronicle row fails leaves the Precedent alone" do
       assert {room_id, {:error, %Ecto.Changeset{}}} = overrule(%{couple_closeness: nil})
 
       assert Chronicle.overrules(room_id) == []
-      role = Steward.role(:assayer)
-      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
+      assert_fresh_grade(@pair)
     end
   end
 
@@ -692,8 +870,7 @@ defmodule Thereish.StewardTest do
 
       refute Map.has_key?(again, :precedent_hit)
       assert Agent.get(counts, &Map.values/1) == [2]
-      role = Steward.role(:assayer)
-      assert :miss = Precedent.get(role.model, Thereish.Steward.Assay.version(), @pair)
+      assert_fresh_grade(@pair)
     end
 
     test "its quip is one request that answers the Quip and what it cost" do
