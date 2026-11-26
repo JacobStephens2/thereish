@@ -35,7 +35,6 @@ defmodule Thereish.StewardTest do
   alias Thereish.Rooms.Store
   alias Thereish.Steward
   alias Thereish.Steward.Live
-  alias Thereish.Steward.Precedent
 
   @pair %{bookends: ["lantern", "harbour"], bridges: ["beacon", "cairn"]}
 
@@ -189,7 +188,7 @@ defmodule Thereish.StewardTest do
       end)
 
       assert {:error, {:http, 503, _body}} = Steward.assay(@pair)
-      assert_precedent_absent(@pair)
+      assert_fresh_grade(@pair)
     end
 
     test "when both orderings fail, the forward ordering's reason is the one reported" do
@@ -560,12 +559,15 @@ defmodule Thereish.StewardTest do
       assert_in_delta verdict.meta.cost_usd, 0.0016305, 1.0e-10
     end
 
-    defp assert_precedent_absent(request) do
-      role = Steward.role(:assayer)
-      version = Map.get(role, :prompt_version, Thereish.Steward.Assay.version())
+    defp assert_fresh_grade(request) do
+      assayer(adapter: Live, requests: 1, retries: 0)
 
-      assert {:error, :no_precedent} =
-               Precedent.resolve(role.model, version, request, fn -> {:error, :no_precedent} end)
+      recorded(fn conn, body ->
+        assert body["response_format"]["json_schema"]["name"] == "verdict"
+        Req.Test.json(conn, response(verdict()))
+      end)
+
+      assert {:ok, %{meta: %{precedent_hit: false}}} = Steward.assay(request)
     end
 
     test "a Precedent hit's fresh-Quip request carries prior Quips in user content" do
@@ -839,14 +841,14 @@ defmodule Thereish.StewardTest do
       assert {room_id, {:error, %Ecto.Changeset{}}} = overrule(%{couple_quip: nil})
 
       assert Chronicle.overrules(room_id) == []
-      assert_precedent_absent(@pair)
+      assert_fresh_grade(@pair)
     end
 
     test "a ruling whose Chronicle row fails leaves the Precedent alone" do
       assert {room_id, {:error, %Ecto.Changeset{}}} = overrule(%{couple_closeness: nil})
 
       assert Chronicle.overrules(room_id) == []
-      assert_precedent_absent(@pair)
+      assert_fresh_grade(@pair)
     end
   end
 
@@ -868,7 +870,7 @@ defmodule Thereish.StewardTest do
 
       refute Map.has_key?(again, :precedent_hit)
       assert Agent.get(counts, &Map.values/1) == [2]
-      assert_precedent_absent(@pair)
+      assert_fresh_grade(@pair)
     end
 
     test "its quip is one request that answers the Quip and what it cost" do

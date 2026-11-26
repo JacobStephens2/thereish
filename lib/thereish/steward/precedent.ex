@@ -120,6 +120,8 @@ defmodule Thereish.Steward.Precedent do
       nil -> resolve_cold(attrs, grade)
       %Precedent{} = stored -> {:ok, :hit, to_verdict(stored)}
     end
+  rescue
+    error in [Postgrex.Error, DBConnection.ConnectionError] -> {:error, error}
   end
 
   defp resolve_cold(attrs, grade) do

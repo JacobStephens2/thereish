@@ -75,7 +75,7 @@ defmodule Thereish.Steward do
           optional(:prior_quips) => [String.t()],
           optional(atom()) => term(),
           bookends: [String.t()],
-          bridges: [String.t()]
+          bridges: ordering()
         }
 
   @typedoc """
@@ -83,17 +83,20 @@ defmodule Thereish.Steward do
   cost, along with the two readings of the stored Verdict when present. On a
   cold Assay the model and cost describe this Assay's grading calls, including
   when it inherits a competing Verdict.
+
+  Precedent derives the spread from the stored readings. `assay/2` adds
+  latency after resolution.
   """
   @type meta :: %{
           optional(:precedent_hit) => boolean(),
+          optional(:latency_ms) => non_neg_integer(),
+          optional(:spread) => non_neg_integer() | nil,
           model: String.t(),
           prompt_version: String.t(),
           cost_usd: float() | nil,
-          latency_ms: non_neg_integer(),
           forward: integer() | nil,
           reverse: integer() | nil,
-          reasoning_reverse: String.t() | nil,
-          spread: non_neg_integer() | nil
+          reasoning_reverse: String.t() | nil
         }
 
   @typedoc """
@@ -634,9 +637,6 @@ defmodule Thereish.Steward do
   # have to be one pair rather than an average of two. The reverse ordering's own
   # grade and reasoning are kept beside them rather than thrown away: when the
   # players argue with a grade, the two arguments the model made are the evidence.
-  # How far apart they landed is measured here and kept with them, because that
-  # one number is what decides whether the table is ever shown the argument
-  # (ADR-0024): a grader that disagrees with itself is drama when it is rare.
   #
   # The cost is both orderings' answers, retries included — and not the hedged
   # requests that lost, whose usage nobody waited around to hear.
@@ -652,8 +652,7 @@ defmodule Thereish.Steward do
         cost_usd: forward.cost_usd + reverse.cost_usd,
         forward: forward.closeness,
         reverse: reverse.closeness,
-        reasoning_reverse: reverse.reasoning,
-        spread: abs(forward.closeness - reverse.closeness)
+        reasoning_reverse: reverse.reasoning
       }
     }
   end

@@ -105,6 +105,23 @@ defmodule Thereish.Steward.PrecedentTest do
              resolve(@request, fn -> {:ok, @verdict} end)
   end
 
+  test "returns an error when Postgres rejects the candidate" do
+    candidate = %{@verdict | quip: "Quip rejected by Postgres" <> <<0>>}
+    assert {:error, _} = resolve(@request, fn -> {:ok, candidate} end)
+  end
+
+  test "Precedent leaves Assay timing to Steward" do
+    candidate =
+      @verdict
+      |> put_in([:meta, :latency_ms], 1)
+      |> put_in([:meta, :spread], 30)
+
+    assert {:ok, :cold, %{meta: meta}} =
+             Precedent.resolve(@model, @version, @request, fn -> {:ok, candidate} end)
+
+    refute Map.has_key?(meta, :latency_ms)
+  end
+
   test "failed grading leaves a Precedent written during the Assay intact" do
     assert {:error, :grading_failed} =
              resolve(@request, fn ->
