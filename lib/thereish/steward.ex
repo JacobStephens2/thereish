@@ -37,11 +37,11 @@ defmodule Thereish.Steward do
   Quip, a title.
 
   - **The Precedent.** The grade shown is the precedent (ADR-0006). `assay/2`
-    reads `Thereish.Steward.Precedent` before asking the adapter, and writes the
-    adapter's grade down on a miss. A hit is the cached grade with a fresh Quip
-    from the adapter's `quip/1`, or the cached Quip if the fresh one fails or is
-    late. `overrule/2` writes the table's ruling under the same key, in one
-    transaction with the Chronicle's overrule row.
+    asks `Thereish.Steward.Precedent` to resolve the Verdict, grading only on a
+    miss. An initial hit gets a fresh Quip from the adapter's `quip/1`, with
+    the stored Quip as fallback. An Assay that graded uses the stored Verdict
+    and Quip visible after its insert attempt. `overrule/2` writes the table's
+    ruling under the same key, in one transaction with the Chronicle's overrule row.
   - **Both orderings.** Which Bridge is listed first changes a model's answer,
     and how much tracks the model's tier (design law 12): the Steward prototype
     caught an 85-point swing on one pair from reversing the players. So on a
@@ -80,10 +80,9 @@ defmodule Thereish.Steward do
 
   @typedoc """
   Which model answered, at what prompt version, how long it took and what it
-  cost — and, because every Attempt is graded in both orderings, what each
-  ordering said. Every verdict carries it and the Chronicle writes it down, so that the
-  model policy is measured rather than remembered and a grade that looks wrong
-  can be argued with in detail.
+  cost, along with the two readings of the stored Verdict when present. On a
+  cold Assay the model and cost describe this Assay's grading calls, including
+  when it inherits a competing Verdict.
   """
   @type meta :: %{
           optional(:precedent_hit) => boolean(),
@@ -91,9 +90,10 @@ defmodule Thereish.Steward do
           prompt_version: String.t(),
           cost_usd: float() | nil,
           latency_ms: non_neg_integer(),
-          forward: integer(),
-          reverse: integer(),
-          reasoning_reverse: String.t()
+          forward: integer() | nil,
+          reverse: integer() | nil,
+          reasoning_reverse: String.t() | nil,
+          spread: non_neg_integer() | nil
         }
 
   @typedoc """
@@ -106,7 +106,7 @@ defmodule Thereish.Steward do
           closeness: integer(),
           reasoning: String.t(),
           quip: String.t(),
-          furthest: [String.t()],
+          furthest: [String.t()] | nil,
           meta: meta()
         }
 
@@ -561,16 +561,15 @@ defmodule Thereish.Steward do
   On a Precedent miss both orderings are graded and reconciled here. Either
   ordering that errors, crashes, or is still running at the Assayer's
   `deadline_ms` makes the assay `{:error, _}` (`{:error, :timeout}` for the
-  deadline). An error is not a crash and not a zero: the Room turns it into
-  `:verdict_unavailable` and the game admits it has no verdict rather than
-  inventing one.
+  deadline). An unsuccessful Precedent write or readback also returns an error.
+  The Room turns these errors into `:verdict_unavailable`.
 
   The Room's Page views, oldest first, ride in as the `chronicle:` option, as
   they do for `author/2`. The adapter is handed the Assayer's reading of them
   and of the request's earlier Attempts as `prior_quips`
   (`Thereish.Steward.Digest.assayer/2`), so a request with no `chronicle:`
   reads as a Room with no Pages. A `prior_quips` the caller passes is replaced.
-  They are set before the Precedent is read, because a hit still asks the
+  They are set before the Precedent is read, because an initial hit asks the
   adapter for a fresh Quip, and that Quip needs them too.
   """
   @spec assay(request(), keyword()) :: {:ok, verdict()} | {:error, term()}
@@ -580,28 +579,21 @@ defmodule Thereish.Steward do
     chronicle = Keyword.get(opts, :chronicle, [])
     request = Map.put(request, :prior_quips, Digest.assayer(chronicle, request))
 
-    case precedent_or_graded(request) do
+    case resolve_assay(request) do
       {:ok, verdict} -> {:ok, timed(verdict, System.monotonic_time(:millisecond) - started)}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  # The grade the players are shown is the precedent (ADR-0006), whichever
-  # adapter is answering, so the Precedent is read and written here rather than
-  # inside one of them. A miss is graded by the adapter and written down; a hit
-  # is the cached grade with a fresh Quip.
-  defp precedent_or_graded(request) do
+  defp resolve_assay(request) do
     {model, prompt_version} = precedent_key()
 
-    case Precedent.get(model, prompt_version, request) do
-      {:ok, cached} ->
-        {:ok, fresh_quip_or_cached(request, cached)}
-
-      :miss ->
-        with {:ok, verdict} <- graded(request, prompt_version) do
-          Precedent.put(model, prompt_version, request, verdict)
-          {:ok, verdict}
-        end
+    case Precedent.resolve(model, prompt_version, request, fn ->
+           graded(request, prompt_version)
+         end) do
+      {:ok, :hit, verdict} -> {:ok, fresh_quip_or_cached(request, verdict)}
+      {:ok, :cold, verdict} -> {:ok, verdict}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -688,8 +680,7 @@ defmodule Thereish.Steward do
     }
   end
 
-  # The one place the Precedent's key is made, because an overrule written
-  # under a key the assay never reads would be a ruling nobody is shown.
+  # Assays and Overrules use the same configured model and prompt version.
   defp precedent_key do
     role = role(:assayer)
     {role.model, Map.get(role, :prompt_version, Assay.version())}
